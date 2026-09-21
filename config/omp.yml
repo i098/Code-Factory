@@ -1,3 +1,9 @@
+# NO ROUTERS. These ids reach the providers directly through omp's own provider
+# clients; nothing sits between omp and the API. Account rotation is native to
+# omp - it pools several accounts of the same provider itself - so needing more
+# than one account is never a reason to reintroduce a gateway. A router,
+# gateway, or gateway-prefixed model id comes back only by explicit operator
+# decision. Keep this note in agreement with config/crew-dispatch.json.
 modelRoles:
   designer: anthropic/claude-fable-5-1
   smol: cerebras/qwen-3.8-27b:high
