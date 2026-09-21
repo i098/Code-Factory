@@ -10,7 +10,7 @@ AI coding agents work best when their environment is deterministic and their ses
 
 - **Herdr** terminal workspace — pane management, presentation spaces, agent-aware desktops
 - **Firstmate** fleet orchestrator — task dispatch, spawn memory floor, brief-rule enforcement
-- **OMP/Pi** agent harness — model roles, mnemopi memory, chrome-devtools-axi browser integration. Every OMP model role resolves to an OmniRoute option generated from the running router by `scripts/sync_omniroute_models.py`; see [model selection](docs/omniroute-models.md) and, when a model "never works", [resilience gates](docs/omniroute-resilience.md)
+- **OMP/Pi** agent harness — model roles, mnemopi memory, chrome-devtools-axi browser integration. Model roles name provider ids directly (`anthropic/claude-*` in `config/omp.yml`); no router, gateway, or proxy sits in the request path
 - **Fleet guards** — one shared Supabase stack, Docker event guard, browser tier ladder, dev-server reaper, session cookie sync
 - **Pinned toolchain** — Node 24, Bun 1.4, uv, Rust 1.97, GitHub CLI, no-mistakes, treehouse — every binary sha256-locked in `toolchain.lock.json`
 
@@ -116,40 +116,15 @@ The `fleet_guards` profile provisions everything a multi-lane AI agent fleet nee
 
 See [docs/fleet-guards.md](docs/fleet-guards.md) for the incident that motivated it and the full design.
 
-## OmniRoute gateway
+## Model access
 
-Every OMP model role routes through OmniRoute, so the gateway is part of the
-recipe rather than a hand-built side service. Enable it with
-`factory_omniroute_bootstrap: true` (needs the `docker` profile):
-
-```bash
-maintenance/omniroute-bootstrap.sh            # create if absent, else verify + patch
-maintenance/omniroute-bootstrap.sh --recreate # replace the container (env changes)
-maintenance/omniroute-bootstrap.sh --check    # report configuration drift
-```
-
-It is idempotent: an existing container is verified and patched, never rotated,
-so a re-run cannot invalidate live API keys or the dashboard password. Secrets
-are minted into the account's own `super.env`; none live in this repository.
-
-The bootstrap owns three things the shipped image gets wrong for a coding fleet:
-
-- **Chat-admission headroom.** By default one "heavy" request (≥32k estimated
-  tokens) may be in flight router-wide, so every large-context agent turn
-  serializes and the losers get `503 chat_admission_busy`. The heavy bar moves to
-  45k and the lease count to 6, with the node heap raised to match — the gate
-  exists to protect that heap, so the two move together.
-- **Two writable-layer patches**, re-applied automatically because `docker rm`
-  and image pulls discard them: keeping `system` as `system` in the
-  chat→Responses translation, and keeping the pinned `claude-cli` identity in
-  step with the installed CLI.
-- **The model list**, regenerated from the running router by
-  `scripts/sync_omniroute_models.py` instead of hand-maintained.
-
-[docs/omniroute-resilience.md](docs/omniroute-resilience.md) maps each error
-string to the gate that produced it — three of them impersonate an upstream rate
-limit — and [docs/omniroute-models.md](docs/omniroute-models.md) covers model
-selection.
+OMP talks straight to the provider APIs. `config/omp.yml` maps every model role
+to a provider-prefixed id (`anthropic/claude-*`) and `retry.fallbackChains`
+names the same ids, so a fresh host needs no router, gateway, or proxy, and no
+extra port is bound. Account rotation is native to omp - it pools several
+accounts of the same provider itself - so more than one account is not a reason
+to add a gateway. Credentials are authenticated interactively on the account
+that runs the harness; none live in this repository.
 
 ## Docker worker
 

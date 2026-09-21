@@ -1,16 +1,22 @@
+# NO ROUTERS. These ids reach the providers directly through omp's own provider
+# clients; nothing sits between omp and the API. Account rotation is native to
+# omp - it pools several accounts of the same provider itself - so needing more
+# than one account is never a reason to reintroduce a gateway. A router,
+# gateway, or gateway-prefixed model id comes back only by explicit operator
+# decision. Keep this note in agreement with config/crew-dispatch.json.
 modelRoles:
-  designer: omniroute/cc/claude-fable-5-1
-  smol: omniroute/sonnet-5
-  slow: omniroute/cc/claude-opus-5
-  vision: omniroute/sonnet-5
-  plan: omniroute/cc/claude-fable-5-1
-  commit: omniroute/sonnet-5
-  tiny: omniroute/sonnet-5
-  advisor: omniroute/sonnet-5
+  designer: anthropic/claude-fable-5-1
+  smol: cerebras/qwen-3.8-27b:high
+  slow: anthropic/claude-fable-5-1:xhigh
+  vision: anthropic/claude-sonnet-5
+  plan: anthropic/claude-fable-5-1
+  commit: anthropic/claude-sonnet-5
+  tiny: anthropic/claude-sonnet-5
+  advisor: anthropic/claude-sonnet-5
   Kimi: kimi-code/k3
-  task: omniroute/cc/claude-opus-5
-  subagent: omniroute/cc/claude-opus-5
-  default: omniroute/cc/claude-opus-5
+  task: anthropic/claude-opus-5
+  subagent: anthropic/claude-opus-5
+  default: anthropic/claude-opus-5
 theme:
   dark: dark-rose-pine
 symbolPreset: nerd
@@ -58,12 +64,11 @@ mnemopi:
   noEmbeddings: true
 retry:
   fallbackChains:
-    omniroute/cc/claude-fable-5-1:
-    - omniroute/cc/claude-opus-5
-    - omniroute/auto/best-coding
+    anthropic/claude-fable-5-1:
+    - anthropic/claude-opus-5
+    anthropic/claude-sonnet-5:
+    - anthropic/claude-fable-5-1
+    - anthropic/claude-opus-5
     default:
-    - omniroute/auto/best-coding
-    omniroute/sonnet-5:
-    - omniroute/cc/claude-fable-5-1
-    - omniroute/auto/best-coding
+    - anthropic/claude-opus-5
   maxDelayMs: 60000
