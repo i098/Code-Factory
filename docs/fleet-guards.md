@@ -39,9 +39,9 @@ and sets `postgres`/`dashboard_user` to read-only transactions by default.
 Application traffic (anon/authenticated/service_role through PostgREST, GoTrue,
 Storage) is unaffected. There is never a migration on this database.
 
-The pinned Firstmate revision (`factory.firstmate.revision`) carries the last
-layer: `extensions/fm-swarms-platform-guard.ts`, a tool-call seatbelt loaded by
-every omp and pi crewmate that blocks `supabase start|stop|db reset|migration`,
+The Firstmate checkout, tracking `main` of `factory.firstmate.url`, carries the
+last layer: `extensions/fm-swarms-platform-guard.ts`, a tool-call seatbelt
+loaded by every omp and pi crewmate that blocks `supabase start|stop|db reset|migration`,
 `docker run ... postgres`, `psql` against the stack and edits to the shared
 containers, with the reason attached - so the agent learns why before the
 Docker guard has to act.

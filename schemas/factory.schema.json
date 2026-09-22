@@ -142,15 +142,10 @@
             "url": {
               "type": "string",
               "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
-            },
-            "revision": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{40}$"
             }
           },
           "required": [
-            "url",
-            "revision"
+            "url"
           ]
         },
         "desktop": {
