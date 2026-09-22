@@ -76,7 +76,7 @@
         - factory_cfg.browser_prune.enabled | bool
       tags: [agents, prune]
 
-    - name: Firstmate pinned checkout and dispatch settings
+    - name: Firstmate checkout tracking origin/main and dispatch settings
       ansible.builtin.import_tasks: tasks/firstmate.yml
       become: "{{ factory_become_target | bool }}"
       become_user: "{{ factory_cfg.user }}"

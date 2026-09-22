@@ -44,6 +44,14 @@ def test_firstmate_cannot_silently_omit_its_agent_dependencies(configuration):
         factory.validate_config(configuration)
 
 
+def test_firstmate_revision_pin_is_rejected(configuration):
+    # The checkout tracks the fork's main; a sha pin would silently freeze a
+    # host on an old Firstmate, so the schema refuses the key outright.
+    configuration["factory"]["firstmate"]["revision"] = "0" * 40
+    with pytest.raises(ValueError):
+        factory.validate_config(configuration)
+
+
 def test_fleet_guards_require_docker_and_firstmate(configuration):
     configuration["factory"]["profiles"]["fleet_guards"] = True
     configuration["factory"]["profiles"]["docker"] = False

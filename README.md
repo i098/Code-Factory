@@ -88,8 +88,9 @@ factory:
     fixture_archive: ""   # Path to DB volume tarball for fresh hosts
   firstmate:
     url: https://github.com/undeemed/firstmate.git
-    revision: 341e691d...
 ```
+
+The Firstmate checkout tracks the fork's default branch instead of a sha: the fork's `main` is maintained as latest upstream Firstmate plus the fork's own layer, so tracking it is how a host stays current - which is also why it must not be re-pinned to a sha. Each run resolves `origin/main` once and reports the sha it installed.
 
 All profiles default to `false` except `agents` and `development`. The recipe refuses conflicting unmanaged commands and independently advanced Firstmate checkouts instead of overwriting them. See [docs/](docs/) for architecture, security boundaries, and recovery procedures.
 
@@ -99,7 +100,7 @@ All profiles default to `false` except `agents` and `development`. The recipe re
 |---------|-----------------|
 | `agents` | Chrome autoprune, AXI tools, browser env defaults, agent harness config |
 | `development` | Rust toolchain, build essentials, development-mode npm packages |
-| `firstmate` | Pinned Firstmate clone, dispatch/harness config, spawn memory floor |
+| `firstmate` | Firstmate clone tracking the fork's `main`, dispatch/harness config, spawn memory floor |
 | `docker` | Docker engine + Compose v2. Group membership is opt-in (`docker_group_users`). |
 | `fleet_guards` | Shared Supabase stack, Docker event guard, browser tier ladder, session sync, dev-server reaper, env seeder |
 | `tailscale` | Tailscale daemon. Auth is manual. |
