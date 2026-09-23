@@ -178,7 +178,7 @@ Sources of truth: `fleet/browsers/fleet-browser` (runtime, `alive` probe), `flee
 
 Move down one layer only when the layer above cannot do the job; move back to `obscura` for the next task. Tiers 2 and 3 are stopped by `fleet-browser-gc.timer` (every 5 min) after 30 idle minutes (`FLEET_BROWSER_IDLE_MIN`, no CDP client connected). Tier 3 needs the `desktop` profile's TigerVNC/noVNC packages (`ConditionPathExists=/usr/bin/tigervncserver`); tiers 2 and 3 need a Chrome/Chromium binary (`FLEET_CHROME_BIN`, Google Chrome, Chromium, or a Playwright Chromium).
 
-All three tiers share one session: `cookie-sync.ts` keeps a canonical jar at `~/.fleet-browser/cookies.json` and converges every live tier to it over CDP. `fleet-browser-sync.timer` runs it every 2 minutes and `fleet-browser up` runs it before returning, so a login made in any tier is present in every tier within one sync. Cookies are the synced part; localStorage is engine-local and is not.
+All three tiers share one session: `cookie-sync.ts` keeps a canonical jar at `~/.fleet-browser/cookies.json` and converges every live tier to it over CDP. `fleet-browser-sync.timer` runs it every 2 minutes and `fleet-browser up chrome|vnc` runs it before returning (`up obscura` returns as soon as the tier answers, without a converge), so a login made in any tier is present in every tier within one sync. Cookies are the synced part; localStorage is engine-local and is not.
 
 Rule: an agent never launches its own Chrome, headless or not, and never uses a private `--user-data-dir`. A private profile has none of the fleet's logins and is outside the sync. Use the tier that is already running or bring one up with `fleet-browser up`.
 
