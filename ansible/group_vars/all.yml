@@ -253,6 +253,19 @@ factory_fleet_browsers_dir: "{{ factory_fleet_dir }}/browsers"
 factory_browser_obscura_url: "https://github.com/h4ckf0r0day/obscura/releases/download/v{{ factory_cfg.browsers.obscura_version }}/obscura-x86_64-linux.tar.gz"
 factory_browser_obscura_checksum: "sha256:{{ factory_cfg.browsers.obscura_sha256 }}"
 
+# Storage guard (fleet/doctor/storage-guard.sh, every 5 min). Use% of the
+# filesystems holding the home and Docker's data root: WARN alerts once per
+# episode, re-armed below WARN - hysteresis; CRIT prunes build cache, dangling
+# images and unused images older than image_age_hours, then alerts every
+# repeat_min while still over. A fill rate projecting full within
+# fill_horizon_hours alerts even below WARN.
+factory_storage_guard_warn_pct: 85
+factory_storage_guard_crit_pct: 92
+factory_storage_guard_hysteresis_pct: 3
+factory_storage_guard_image_age_hours: 168
+factory_storage_guard_fill_horizon_hours: 6
+factory_storage_guard_repeat_min: 30
+
 factory_fleet_units:
   - flotilla-shared-supabase.service
   - flotilla-shared-supabase-check.service
@@ -263,6 +276,8 @@ factory_fleet_units:
   - flotilla-worktree-env-seed.timer
   - flotilla-dev-server-reaper.service
   - flotilla-dev-server-reaper.timer
+  - flotilla-storage-guard.service
+  - flotilla-storage-guard.timer
   - fleet-browser-obscura.service
   - fleet-browser-sync.service
   - fleet-browser-sync.timer
@@ -275,6 +290,7 @@ factory_fleet_enabled_units:
   - { unit: flotilla-shared-supabase-check.timer, wants: timers.target.wants }
   - { unit: flotilla-worktree-env-seed.timer, wants: timers.target.wants }
   - { unit: flotilla-dev-server-reaper.timer, wants: timers.target.wants }
+  - { unit: flotilla-storage-guard.timer, wants: timers.target.wants }
   - { unit: fleet-browser-obscura.service, wants: default.target.wants }
   - { unit: fleet-browser-sync.timer, wants: timers.target.wants }
   - { unit: fleet-browser-gc.timer, wants: timers.target.wants }

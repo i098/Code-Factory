@@ -27,6 +27,7 @@ Every control below removes a cause, not a symptom.
 | `oss-fleet/doctor/docker-guard.sh` | `docker events` watcher. A container carrying `com.supabase.cli.project` other than an allowlisted project is removed on creation; bare Postgres-family images are logged and alerted, not killed (other projects may own them). `docker-guard-allow.txt` is written once and then operator-owned. |
 | `oss-fleet/doctor/worktree-env-seed.sh` | Installs the env file as `.env.local` in every `~/.treehouse/swarms-platform-*/*/swarms-platform` worktree and Firstmate's `projects/swarms-platform`. Files without the `# fleet-shared-supabase` marker are replaced with a backup left beside them. |
 | `oss-fleet/doctor/dev-server-reaper.sh` | Every 2 minutes: kills `next dev`/`next-server`/`tsc --noEmit` trees in treehouse worktrees whose lane last reported `done:`/`paused:`/`blocked:`/`failed:`, has no agent process, or whose agent transcript is idle >= 30 min (`REAPER_IDLE_MIN`). A dev server is 3-4 GB and restarts in 10 s; idle ones from finished lanes are what filled swap. One `next dev` per branch is inherent - Next compiles the whole app per process - so the fix is lifetime, not sharing. |
+| `oss-fleet/doctor/storage-guard.sh` | Every 5 minutes: use% of the filesystems holding the home and Docker's data root. WARN (85%) alerts once per episode, CRIT (92%) prunes only regenerable Docker data, and a fill rate projecting the disk full within 6 hours alerts even below WARN. See [Storage guard](#storage-guard). |
 | worktree `.npmrc` (seeded, git-excluded) | `node-options=--max-old-space-size=2048` (`FLEET_NODE_HEAP_MB`): pnpm passes it as `NODE_OPTIONS` to every script, so a runaway `next dev`/`tsc` fails fast with a heap error the agent sees instead of swapping the host. Hidden through the shared `.git/info/exclude`; never written when the repository tracks its own `.npmrc`. |
 | `.local/bin/supabase` | Shim: `status`/`--version` pass through; every lifecycle or schema subcommand is refused with the reason. `npx supabase` bypasses it, which is why the Docker guard exists. |
 | `.config/systemd/user/flotilla-*.{service,timer,path}` | Login start + 5-minute keeper for the stack; the guard as a restart-always service; the seeder on pool changes, every 2 minutes and at login. |
@@ -64,12 +65,48 @@ apply. With neither an existing volume nor an archive the play stops with that
 instruction rather than starting an empty, useless stack. Snapshots contain
 test users and marketplace content only; keep them out of this repository.
 
+## Storage guard
+
+On 2026-09-23 the root filesystem reached 95% used (9.8 GB free) and nothing
+alerted: docker-guard acts on container creation, mem-guardian on memory and
+swap, Firstmate's orphan sweep on aged litter. Docker held 45 GB of images, 22 GB
+of them reclaimable. The same day `/var/log/syslog` grew to 39 GB at about
+17 MB/s from one looping process and took `/` to 100%.
+
+`flotilla-storage-guard.timer` runs `storage-guard.sh` every 5 minutes. It
+measures the filesystem holding the home and the one holding Docker's data root
+(`docker info`), once when they are the same filesystem. Thresholds are the
+`factory_storage_guard_*` variables in `ansible/group_vars/all.yml`.
+
+| Tier | Trigger (default) | Action |
+| --- | --- | --- |
+| FILL | Growth since the previous run projects the filesystem full within 6 h | Alert at once, even below WARN; at most one every 30 min. |
+| WARN | 85% used | One log line, one `COMMS.md` line and one `notify-master.sh` alert per episode; re-armed only below 82%. |
+| CRIT | 92% used, on Docker's filesystem | `docker builder prune -f`, then `docker image prune -f` (dangling), then `docker image prune -af --filter until=168h` (images no container uses), re-measuring after each and stopping once under 92%. Every step is logged with what it freed. Still at 92% afterwards: a CRIT alert, at most one every 30 min. |
+
+Every alert names the top consumers: `docker system df` and the largest
+entries one level under the filesystem root, the home and `/var/log`, from one
+`du` walk capped at 300 s (it took about 3.5 minutes on the source host). A
+FILL alert also names the entry that grew most since the previous scan.
+
+The guard never deletes volumes, containers, repositories, worktrees, `/tmp`
+content, logs or anything under the home; it reports them. Firstmate's orphan
+sweep owns worktree and `/tmp` litter, and a runaway log needs whoever owns
+the process writing it. `storage-guard.sh --dry-run` prints the measurement,
+the tier, what each CRIT step would free and the alert a real run would send,
+and changes nothing. `tests/test_storage_guard.py` drives the tiers against
+stubbed `df`, `du` and `docker`.
+
+## Operating
 ## Operating
 
 ```
 systemctl --user status flotilla-shared-supabase flotilla-docker-guard flotilla-worktree-env-seed.path
+systemctl --user status flotilla-storage-guard.timer
+~/oss-fleet/doctor/storage-guard.sh --dry-run
 ~/oss-fleet/shared-supabase/node_modules/.bin/supabase status --workdir ~/oss-fleet/shared-supabase
 tail ~/oss-fleet/doctor/docker-guard.log ~/oss-fleet/shared-supabase/check.log ~/oss-fleet/doctor/worktree-env-seed.log
+tail ~/oss-fleet/doctor/storage-guard.log
 ```
 
 Tolerating a bare Postgres container someone else owns: add its name (glob)
