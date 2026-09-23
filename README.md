@@ -11,7 +11,7 @@ AI coding agents work best when their environment is deterministic and their ses
 - **Herdr** terminal workspace — pane management, presentation spaces, agent-aware desktops
 - **Firstmate** fleet orchestrator — task dispatch, spawn memory floor, brief-rule enforcement
 - **OMP/Pi** agent harness — model roles, mnemopi memory, chrome-devtools-axi browser integration. Model roles name provider ids directly (`anthropic/claude-*` in `config/omp.yml`); no router, gateway, or proxy sits in the request path
-- **Fleet guards** — one shared Supabase stack, Docker event guard, browser tier ladder, dev-server reaper, session cookie sync
+- **Fleet guards** — one shared Supabase stack, Docker event guard, [browser ladder](#browser-ladder), dev-server reaper
 - **Pinned toolchain** — Node 24, Bun 1.4, uv, Rust 1.97, GitHub CLI, no-mistakes, treehouse — every binary sha256-locked in `toolchain.lock.json`
 
 Not copied: credentials, browser profiles, account sessions, agent history, live pane/task state, private project working trees, database volumes. See [security boundaries](docs/security.md).
@@ -133,19 +133,25 @@ Everything the recipe installs, grouped by the file that pins it. Versions appea
 - `tailscale`: `tailscale` from pkgs.tailscale.com (stable track; `factory_tailscale_version` pins, empty by default).
 - Google Chrome: `google-chrome-stable` from dl.google.com (`ansible/tasks/browser.yml`), installed when `factory_chrome_install` is `true` or `auto` with the `desktop` profile; `factory_chrome_version` pins, empty by default.
 
-**Fleet guards** — `fleet_guards` profile
+**Fleet browsers and Supabase** — `fleet_guards` profile
 
-- Obscura `factory.browsers.obscura_version` (0.2.2 in `config/default.yml`) from github.com/h4ckf0r0day/obscura, sha256 `factory.browsers.obscura_sha256` (`ansible/tasks/fleet-browsers.yml`).
+- Obscura `factory.browsers.obscura_version` (0.2.2 in `config/default.yml`) from github.com/h4ckf0r0day/obscura, sha256 `factory.browsers.obscura_sha256` (`ansible/tasks/fleet-browsers.yml`). x86_64 only: `factory_browser_obscura_url` hardcodes the `obscura-x86_64-linux.tar.gz` asset and the sha256 pins it, so on aarch64 there is no tier 1 and agents start at `chrome`.
 - Supabase CLI 2.117.0 (`fleet/shared-supabase/package.json`, `npm ci` from its lockfile).
-- psutil 7.1.0, hash-pinned into a private venv for the Chrome autopruner (`maintenance/requirements.txt`, `ansible/tasks/browser_prune.yml`; `agents` profile).
-- Firstmate: `git clone` of `factory.firstmate.url`, tracking `origin/main`, never pinned (`ansible/tasks/firstmate.yml`).
+
+**Chrome autopruner** — `agents` profile with `browser_prune.enabled`
+
+- psutil 7.1.0, hash-pinned into a private venv (`maintenance/requirements.txt`, `ansible/tasks/browser_prune.yml`).
+
+**Firstmate** — `firstmate` profile
+
+- `git clone` of `factory.firstmate.url`, tracking `origin/main`, never pinned (`ansible/tasks/firstmate.yml`).
 
 **Container images** — `Dockerfile`, `compose.yml`
 
 - Worker base `ubuntu:24.04@sha256:224a1869…` plus apt: bash, build-essential, ca-certificates, curl, git, iproute2, jq, less, libssl-dev, openssh-client, pkg-config, procps, python3, python3-apt, python3-venv, sudo, tar, unzip, xz-utils, zstd.
 - Optional compose backing services (digest-pinned): `postgres:18-bookworm`, `redis:8-alpine`.
 
-**Assumed on the host, never installed by the recipe:** Ubuntu 24.04/26.04 on x86_64 or aarch64 with systemd and a sudo-capable account; Python 3.12+ (`bootstrap.sh` refuses to run without it; `cloud-init/user-data.yaml` can preinstall it and the base package set); `git` to clone this repository and an authenticated `gh` for the Quick start's first step (the recipe installs gh 2.97.0 later, under `agents`); membership in the `docker` group for the account that runs fleet guards (opt in via `docker_group_users`); `psmisc` (`fuser`) for `fleet-browser seed`; a VNC password created by the operator for the `desktop` profile.
+**Assumed on the host, never installed by the recipe:** Ubuntu 24.04/26.04 on x86_64 or aarch64 with systemd and a sudo-capable account; Python 3.12+ (`bootstrap.sh` refuses to run without it; `cloud-init/user-data.yaml` can preinstall it and the base package set); `git` to clone this repository and an authenticated `gh` for the Quick start's first step (the recipe installs gh 2.97.0 later, under `agents`); membership in the `docker` group for the account that runs fleet guards (opt in via `docker_group_users`); `psmisc` (`fuser`) for `fleet-browser seed` and `iproute2` (`ss`) for the CLIENTS column of `fleet-browser status` — without `ss` every tier reports 0 clients and gc can stop one in use (only the `desktop` profile installs `iproute2`); a VNC password created by the operator for the `desktop` profile.
 
 ## Fleet guards
 
@@ -166,7 +172,7 @@ Sources of truth: `fleet/browsers/fleet-browser` (runtime, `alive` probe), `flee
 
 | Tier | CDP port | Always on? | Use it when |
 |------|----------|------------|-------------|
-| 1 `obscura` | `127.0.0.1:9222` | Yes (`fleet-browser-obscura.service`) | Default for everything: clicks, screenshots, screencast. ~25 MB idle; ~5x less RAM per page than Chrome. |
+| 1 `obscura` | `127.0.0.1:9222` | Yes on x86_64 (`fleet-browser-obscura.service`; the pinned release asset is x86_64-only, so an aarch64 host has no tier 1) | Default for everything: clicks, screenshots, screencast. ~25 MB idle; ~5x less RAM per page than Chrome. |
 | 2 `chrome` | `127.0.0.1:9522` | On demand (`fleet-browser up chrome`) | Obscura misrenders the page, a site blocks it, or the maintainer needs pixel-exact before/after evidence. Headless Chromium, persistent profile. |
 | 3 `vnc` | `127.0.0.1:9523`, noVNC `http://127.0.0.1:6909/vnc.html` | On demand (`fleet-browser up vnc`) | A human must see or drive the browser: OAuth consent, second factors, captchas, native dialogs, sites such as Google that refuse any automated browser. TigerVNC display `:9` + headed Chromium. |
 
