@@ -1,8 +1,9 @@
 {{ ansible_managed | comment }}
 # Triggered by flotilla-storage-guard.timer; not enabled on its own.
-# Measures the filesystems holding the home and Docker's data root: alerts at
-# WARN once per episode and early when the fill rate projects full, prunes only
-# regenerable Docker data (build cache, dangling and old unused images) at CRIT.
+# Measures the filesystems holding /, /var/log, the home and Docker's data root:
+# alerts at WARN once per episode and early when the fill rate projects full,
+# prunes only regenerable Docker data (build cache, dangling and old unused
+# images) at CRIT.
 
 [Unit]
 Description=Fleet storage guard - alert on disk use, prune regenerable Docker data at CRIT (Code Factory managed)

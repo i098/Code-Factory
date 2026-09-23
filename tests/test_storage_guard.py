@@ -37,7 +37,7 @@ free() {
   echo "Total reclaimed space: ${g}GB"
 }
 case "$*" in
-  info*) echo /var/lib/docker ;;
+  info*) [ -e "$STUB/docker-down" ] && exit 1; echo /var/lib/docker ;;
   "system df -v"*) cat "$STUB/df-v.json" ;;
   "system df --format {{.Type}}|"*) echo "Build Cache|500MB" ;;
   "system df"*) echo "Images 10GB, reclaimable 5GB (50%)" ;;
@@ -137,6 +137,7 @@ def test_warn_alerts_once_per_episode_and_rearms_only_below_hysteresis(guard):
     [
         (95, {"builder": 1, "dangling": 2, "old": 5}, STEPS, 87),
         (93, {"builder": 2, "dangling": 9, "old": 9}, STEPS[:1], 91),
+        (95, {"builder": 1, "dangling": 2, "old": 8}, STEPS, 84),
     ],
 )
 def test_crit_reclaims_cheapest_first_and_stops_once_under_crit(guard, start, gib, calls, end):
@@ -146,9 +147,13 @@ def test_crit_reclaims_cheapest_first_and_stops_once_under_crit(guard, start, gi
     assert guard.prunes() == calls
     assert guard.pct() == end
     (alert,) = guard.alerts()
-    assert alert.startswith(f"WARN / {end}% used")
+    assert alert.startswith(f"CRIT / {end}% used")
     assert f"back to {end}% after reclaiming {start - end}.0G of regenerable Docker data" in alert
     assert "build cache" in (guard.doctor / "storage-guard.log").read_text()
+    guard.fs({"/": start})  # refilled by the next tick: reclaimed again, not re-alerted
+    guard.run()
+    assert guard.prunes() == calls * 2
+    assert guard.alerts() == [alert]
 
 
 def test_crit_that_reclaim_cannot_fix_alerts_loudly_rate_limited(guard):
@@ -174,6 +179,33 @@ def test_filesystem_without_docker_is_measured_separately_and_never_pruned(guard
     (alert,) = guard.alerts()
     assert alert.startswith("CRIT /home 95% used")
     assert "no Docker data here to reclaim" in alert
+
+
+@pytest.mark.parametrize(
+    ("fs", "docker_down", "expected"),
+    [
+        (
+            {"/": 95, "/home": 50},
+            True,
+            "CRIT / 95% used, 5.0G free: at 95% (CRIT 92%), Docker unreachable so nothing reclaimed",
+        ),
+        (
+            {"/": 50, "/home": 50, "/var/log": 96},
+            False,
+            "CRIT /var/log 96% used, 4.0G free: at 96% (CRIT 92%), no Docker data here to reclaim",
+        ),
+    ],
+)
+def test_root_and_var_log_are_measured_even_when_docker_is_elsewhere_or_down(
+    guard, fs, docker_down, expected
+):
+    guard.fs(fs)
+    if docker_down:
+        (guard.stub / "docker-down").touch()
+    guard.run()
+    assert guard.prunes() == []
+    (alert,) = guard.alerts()
+    assert alert.startswith(expected)
 
 
 def test_fill_rate_alarm_fires_below_warn_and_names_the_fastest_grower(guard):

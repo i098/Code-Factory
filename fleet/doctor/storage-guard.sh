@@ -8,8 +8,8 @@
 # reclaimable). Hours later /var/log/syslog grew to 39 GB at ~17 MB/s from one
 # looping process and took / to 100%, again with no alert.
 #
-# Measures use% of the filesystem holding $HOME and of Docker's data root
-# (`docker info`), once per filesystem. For each one:
+# Measures use% of the filesystems holding /, /var/log, $HOME and Docker's
+# data root (`docker info`), once per filesystem. For each one:
 #   FILL  growth since the previous run projects the filesystem full within
 #         STORAGE_FILL_HORIZON_HOURS (6): alert at once, even below WARN,
 #         naming the entry that grew most since the previous consumer scan.
@@ -20,8 +20,9 @@
 #         data cheapest first, re-measuring after each step and stopping once
 #         under CRIT: build cache, dangling images, then images no container
 #         (running or stopped) uses, created more than STORAGE_IMAGE_AGE_HOURS
-#         (168) ago. Still at CRIT afterwards: a loud alert on every run,
-#         rate-limited to one per STORAGE_REPEAT_MIN (30); FILL repeats likewise.
+#         (168) ago. A CRIT alert reports what the reclaim freed, or that a
+#         human is needed while still at CRIT, at most once per
+#         STORAGE_REPEAT_MIN (30); FILL repeats likewise.
 # Alerts name the top consumers: `docker system df` and the largest entries
 # one level under the filesystem root, the home and /var/log, from one du walk
 # bounded by STORAGE_SCAN_TIMEOUT seconds (300).
@@ -147,7 +148,7 @@ DOCKER_ROOT=$(timeout 20 docker info -f '{{.DockerRootDir}}' 2>/dev/null) || DOC
 DOCKER_MOUNT=
 declare -A holds=()
 mounts=()
-for p in "$HOME" ${DOCKER_ROOT:+"$DOCKER_ROOT"}; do
+for p in / /var/log "$HOME" ${DOCKER_ROOT:+"$DOCKER_ROOT"}; do
   m=$(mount_of "$p")
   [ -n "$m" ] || { say "cannot measure the filesystem holding $p"; continue; }
   [ "$p" = "$DOCKER_ROOT" ] && DOCKER_MOUNT=$m
@@ -220,25 +221,29 @@ for m in "${mounts[@]}"; do
     fi
   fi
 
-  if [ "$pct" -ge "$CRIT" ]; then
+  if [ "$pct" -ge "$CRIT" ] || [ -n "$reclaimed" ]; then
+    lvl=CRIT
     show "  tier CRIT: ${pct}% >= ${CRIT}%"
     if [ $((now - crit_at)) -ge $((REPEAT_MIN * 60)) ]; then
-      n="at ${pct}% (CRIT ${CRIT}%)"
-      if [ -n "$reclaimed" ]; then n="still $n after $reclaimed"
-      elif [ -z "$DOCKER_MOUNT" ]; then n+=", Docker unreachable so nothing reclaimed"
-      elif [ "$m" != "$DOCKER_MOUNT" ]; then n+=", no Docker data here to reclaim"; fi
-      notes+=("$n - needs a human"); crit_at=$now; warn_on=1
-    fi
-  else
-    [ -n "$reclaimed" ] && notes+=("back to ${pct}% after $reclaimed")
-    if [ "$pct" -ge "$WARN" ]; then
-      show "  tier WARN: ${pct}% >= ${WARN}%$([ "$warn_on" = 1 ] && echo ', episode already alerted')"
-      [ "$warn_on" = 1 ] || { notes+=("at ${pct}% (WARN ${WARN}%)"); warn_on=1; }
-    else
-      show "  tier OK: ${pct}% < ${WARN}%"
-      if [ "$warn_on" = 1 ] && [ "$pct" -lt $((WARN - HYST)) ]; then
-        say "  WARN episode over for $m at ${pct}% (< $((WARN - HYST))%); re-armed"; warn_on=0
+      if [ "$pct" -lt "$CRIT" ]; then n="back to ${pct}% after $reclaimed"
+      else
+        n="at ${pct}% (CRIT ${CRIT}%)"
+        if [ -n "$reclaimed" ]; then n="still $n after $reclaimed"
+        elif [ -z "$DOCKER_MOUNT" ]; then n+=", Docker unreachable so nothing reclaimed"
+        elif [ "$m" != "$DOCKER_MOUNT" ]; then n+=", no Docker data here to reclaim"; fi
+        n+=" - needs a human"
       fi
+      notes+=("$n"); crit_at=$now; warn_on=1
+    fi
+  elif [ "$pct" -ge "$WARN" ]; then
+    lvl=WARN
+    show "  tier WARN: ${pct}% >= ${WARN}%$([ "$warn_on" = 1 ] && echo ', episode already alerted')"
+    [ "$warn_on" = 1 ] || { notes+=("at ${pct}% (WARN ${WARN}%)"); warn_on=1; }
+  else
+    lvl=FILL
+    show "  tier OK: ${pct}% < ${WARN}%"
+    if [ "$warn_on" = 1 ] && [ "$pct" -lt $((WARN - HYST)) ]; then
+      say "  WARN episode over for $m at ${pct}% (< $((WARN - HYST))%); re-armed"; warn_on=0
     fi
   fi
 
@@ -260,7 +265,6 @@ for m in "${mounts[@]}"; do
   fi
 
   if [ ${#notes[@]} -gt 0 ]; then
-    if [ "$pct" -ge "$CRIT" ]; then lvl=CRIT; elif [ "$pct" -ge "$WARN" ]; then lvl=WARN; else lvl=FILL; fi
     msg="$lvl $m ${pct}% used, $(human "$avail") free: $(join '; ' "${notes[@]}"). $top"
     if [ "$DRY" = 1 ]; then
       show "  a real run would alert: $msg"
