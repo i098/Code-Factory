@@ -82,7 +82,7 @@ root (`docker info`), each filesystem once. Thresholds are the
 | --- | --- | --- |
 | FILL | Growth since the previous run projects the filesystem full within 6 h | Alert at once, even below WARN; at most one every 30 min. |
 | WARN | 85% used | One log line, one `COMMS.md` line and one `notify-master.sh` alert per episode; re-armed only below 82%. |
-| CRIT | 92% used, on Docker's filesystem | `docker builder prune -f`, then `docker image prune -f` (dangling), then `docker image prune -af --filter until=168h` (images no container uses), re-measuring after each and stopping once under 92%. Every step is logged with what it freed. A CRIT alert reports what the reclaim freed, or that a human is needed while still at 92%; at most one every 30 min. |
+| CRIT | 92% used | On Docker's filesystem only: `docker builder prune -f`, then `docker image prune -f` (dangling), then `docker image prune -af --filter until=168h` (images no container uses), re-measuring after each and stopping once under 92%. Every step is logged with what it freed. On every filesystem a CRIT alert reports what the reclaim freed, or that a human is needed while still at 92%; at most one every 30 min. |
 
 Every alert names the top consumers: `docker system df` and the largest
 entries one level under the filesystem root, the home and `/var/log`, from one

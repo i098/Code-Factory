@@ -16,13 +16,14 @@
 #   WARN  STORAGE_WARN_PCT (85): log, one COMMS.md line and one
 #         notify-master.sh alert per episode, re-armed only once usage falls
 #         below WARN - STORAGE_HYSTERESIS_PCT (3).
-#   CRIT  STORAGE_CRIT_PCT (92), Docker's filesystem only: reclaim regenerable
-#         data cheapest first, re-measuring after each step and stopping once
-#         under CRIT: build cache, dangling images, then images no container
-#         (running or stopped) uses, created more than STORAGE_IMAGE_AGE_HOURS
-#         (168) ago. A CRIT alert reports what the reclaim freed, or that a
-#         human is needed while still at CRIT, at most once per
-#         STORAGE_REPEAT_MIN (30); FILL repeats likewise.
+#   CRIT  STORAGE_CRIT_PCT (92). On Docker's filesystem only, reclaim
+#         regenerable data cheapest first, re-measuring after each step and
+#         stopping once under CRIT: build cache, dangling images, then images
+#         no container (running or stopped) uses, created more than
+#         STORAGE_IMAGE_AGE_HOURS (168) ago. On every filesystem a CRIT alert
+#         reports what the reclaim freed, or that a human is needed while
+#         still at CRIT, at most once per STORAGE_REPEAT_MIN (30); FILL
+#         repeats likewise.
 # Alerts name the top consumers: `docker system df` and the largest entries
 # one level under the filesystem root, the home and /var/log, from one du walk
 # bounded by STORAGE_SCAN_TIMEOUT seconds (300).
