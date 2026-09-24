@@ -11,7 +11,7 @@ AI coding agents work best when their environment is deterministic and their ses
 - **Herdr** terminal workspace — pane management, presentation spaces, agent-aware desktops
 - **Firstmate** fleet orchestrator — task dispatch, spawn memory floor, brief-rule enforcement
 - **OMP/Pi** agent harness — model roles, mnemopi memory, chrome-devtools-axi browser integration. Model roles name provider ids directly (`anthropic/claude-*` in `config/omp.yml`); no router, gateway, or proxy sits in the request path
-- **Fleet guards** — one shared Supabase stack, Docker event guard, [browser ladder](#browser-ladder), dev-server reaper, storage guard
+- **Fleet guards** — one shared Supabase stack, Docker event guard, [browser ladder](#browser-ladder), dev-server reaper, devtools-bridge reaper, storage guard
 - **Pinned toolchain** — Node 24, Bun 1.4, uv, Rust 1.97, GitHub CLI, no-mistakes, treehouse — every binary sha256-locked in `toolchain.lock.json`
 
 Not copied: credentials, browser profiles, account sessions, agent history, live pane/task state, private project working trees, database volumes. See [security boundaries](docs/security.md).
@@ -102,7 +102,7 @@ All profiles default to `false` except `agents` and `development`. The recipe re
 | `development` | Rust toolchain, build essentials, development-mode npm packages |
 | `firstmate` | Firstmate clone tracking the fork's `main`, dispatch/harness config, spawn memory floor |
 | `docker` | Docker engine + Compose v2. Group membership is opt-in (`docker_group_users`). |
-| `fleet_guards` | Shared Supabase stack, Docker event guard, [browser ladder](#browser-ladder), dev-server reaper, storage guard, env seeder |
+| `fleet_guards` | Shared Supabase stack, Docker event guard, [browser ladder](#browser-ladder), dev-server reaper, devtools-bridge reaper, storage guard, env seeder |
 | `tailscale` | Tailscale daemon. Auth is manual. |
 | `desktop` | XFCE + TigerVNC + noVNC operator desktop on `127.0.0.1:6080`. Requires an operator-created VNC password. Also supplies the TigerVNC/noVNC packages the ladder's `vnc` tier needs (see [Browser ladder](#browser-ladder)). |
 

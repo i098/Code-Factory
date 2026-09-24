@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Fleet devtools-bridge reaper every 10 min (Code Factory managed)
+
+[Timer]
+OnBootSec=6min
+OnUnitActiveSec=10min
+Unit=flotilla-devtools-bridge-reaper.service
+
+[Install]
+WantedBy=timers.target

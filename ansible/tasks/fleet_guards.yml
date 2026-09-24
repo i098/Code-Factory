@@ -18,6 +18,9 @@
 #     (WARN, fill rate) and at CRIT prunes only regenerable Docker data: build
 #     cache, dangling images, unused images created more than a week ago
 #     (image creation time, not last use).
+#   * ~/oss-fleet/doctor/devtools-bridge-reaper.sh - every 10 min, stops
+#     chrome-devtools-axi bridges whose tree used no CPU and whose session
+#     state did not change for 60 min. Nothing else ever stops one.
 #   * ~/.local/bin/supabase - shim refusing lifecycle subcommands.
 #
 # The database is a read-only test fixture. Its data cannot be provisioned from
@@ -65,6 +68,7 @@
     - { src: doctor/worktree-env-seed.sh, dest: "{{ factory_fleet_doctor_dir }}/worktree-env-seed.sh", mode: "0755" }
     - { src: doctor/dev-server-reaper.sh, dest: "{{ factory_fleet_doctor_dir }}/dev-server-reaper.sh", mode: "0755" }
     - { src: doctor/storage-guard.sh, dest: "{{ factory_fleet_doctor_dir }}/storage-guard.sh", mode: "0755" }
+    - { src: doctor/devtools-bridge-reaper.sh, dest: "{{ factory_fleet_doctor_dir }}/devtools-bridge-reaper.sh", mode: "0755" }
     - { src: shared-supabase/check.sh, dest: "{{ factory_shared_supabase_dir }}/check.sh", mode: "0755" }
     - { src: shared-supabase/guard.sql, dest: "{{ factory_shared_supabase_dir }}/guard.sql", mode: "0644" }
     - { src: shared-supabase/README.md, dest: "{{ factory_shared_supabase_dir }}/README.md", mode: "0644" }

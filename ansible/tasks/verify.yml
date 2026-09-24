@@ -68,6 +68,7 @@
                  factory_fleet_doctor_dir ~ '/docker-guard-allow.txt',
                  factory_fleet_doctor_dir ~ '/worktree-env-seed.sh',
                  factory_fleet_doctor_dir ~ '/storage-guard.sh',
+                 factory_fleet_doctor_dir ~ '/devtools-bridge-reaper.sh',
                  factory_local_bin ~ '/supabase']
                 + (factory_fleet_units
                    | map('regex_replace', '^', factory_user_units ~ '/')
