@@ -51,7 +51,7 @@ You need Ubuntu 24.04 or 26.04 on x86_64 or aarch64 with systemd, a non-root acc
 
    ```bash
    ./factory init
-   $EDITOR .local/host.yml
+   ${EDITOR:-nano} .local/host.yml
    ```
 
 5. Validate the config and preview the changes. `plan` is Ansible check mode and changes nothing:
