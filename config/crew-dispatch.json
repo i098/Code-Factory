@@ -1,5 +1,5 @@
 {
-  "_comment": "Captain order 2026-09-24: every crewmate spawn (ship and scout) defaults to opus 5.5 at high effort; its omp advisor (sonnet-5, thinking off) comes from config/omp-crew-overlay.yml. Supersedes the 2026-09-23 planner-on-fable split. NO ROUTERS: omp talks to Anthropic directly; account rotation is native to omp.",
+  "_comment": "Captain order 2026-09-24: every crewmate spawn (ship and scout) defaults to opus 5.5 at high effort; its omp advisor (fable 5.1 at low thinking, interrupting at most once per 10 turns) comes from config/omp-crew-overlay.yml. Supersedes the 2026-09-23 planner-on-fable split. NO ROUTERS: omp talks to Anthropic directly; account rotation is native to omp.",
   "default": {
     "harness": "omp",
     "model": "anthropic/claude-opus-5-5",

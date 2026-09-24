@@ -1,6 +1,8 @@
 # Captain-local omp overlay for crewmate and scout launches (bin/fm-spawn.sh).
-# Captain order 2026-09-24: every crewmate runs with a sonnet-5 advisor, thinking off.
+# Captain order 2026-09-24: every crewmate runs with a fable-5.1 advisor at low thinking
+# (its lowest level; `:off` is ignored on this model) that interrupts at most once per 10 turns.
 modelRoles:
-  advisor: anthropic/claude-sonnet-5:off
+  advisor: anthropic/claude-fable-5-1:low
 advisor:
   enabled: true
+  immuneTurns: 10

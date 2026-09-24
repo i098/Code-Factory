@@ -44,7 +44,7 @@ The `firstmate` profile copies each name in `factory_firstmate_config_names` (`a
 | --- | --- |
 | `crew-dispatch.json` | Default only, no rules: every crewmate spawn (ship and scout) is omp on `anthropic/claude-opus-5-5`, effort `high`, provider `anthropic`. |
 | `secondmate-harness` | `omp anthropic/claude-opus-5-5 xhigh`. |
-| `omp-crew-overlay.yml` | omp overlay Firstmate applies to crewmate and scout launches, never secondmates, ahead of its tracked worker overlay. It sets `modelRoles.advisor: anthropic/claude-sonnet-5:off` and `advisor.enabled: true`, so every omp crewmate runs a sonnet-5 advisor with thinking off. |
+| `omp-crew-overlay.yml` | omp overlay Firstmate applies to crewmate and scout launches, never secondmates, ahead of its tracked worker overlay. It sets `modelRoles.advisor: anthropic/claude-fable-5-1:low`, `advisor.enabled: true` and `advisor.immuneTurns: 10`, so every omp crewmate runs a fable-5.1 advisor at low thinking (its lowest level) that interrupts at most once per 10 turns. |
 | `spawn-memory-floor-mb` | `8000`; see [fleet guards](fleet-guards.md). |
 | `crew-harness`, `backend`, `startup-memory-budget` | Harness, Herdr backend, and startup memory budget. |
 

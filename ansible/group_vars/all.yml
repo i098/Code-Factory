@@ -218,7 +218,7 @@ factory_firstmate_config_names:
   # 24 GB RAM + 52 GB swap on the source host on 2026-09-17.
   - spawn-memory-floor-mb
   # omp overlay Firstmate layers onto crewmate and scout launches (never
-  # secondmates): the sonnet-5 advisor, thinking off, on every omp crew.
+  # secondmates): the fable-5.1 advisor, low thinking, interrupting at most once per 10 turns.
   - omp-crew-overlay.yml
 factory_firstmate_config_first_write: false
 
