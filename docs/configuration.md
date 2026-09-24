@@ -57,7 +57,7 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 
 | Profile | Default | What it installs |
 | --- | --- | --- |
-| `agents` | on | omp, Pi, Codex, pnpm, AXI tools, gh, no-mistakes, treehouse; safe omp/Pi presentation and model-role settings (see [omp configuration](omp.md)); browser env defaults; Chrome autoprune timer. |
+| `agents` | on | omp, Codex, pnpm, AXI tools, gh, no-mistakes, treehouse; safe omp presentation and model-role settings (see [omp configuration](omp.md)); browser env defaults; Chrome autoprune timer. |
 | `development` | on | Rust toolchain, build essentials, development-mode npm packages. |
 | `firstmate` | on | Firstmate clone tracking the fork's `main`, plus seeded Firstmate config: crew dispatch, harness and Herdr backend selection, the omp crew overlay (sonnet-5 advisor for crews), and the spawn memory floor. |
 | `docker` | on | Docker engine and Compose v2, with daemon defaults `init` (reaps orphaned children) and `live-restore`. Group membership is opt-in through the Ansible variable `factory_docker_group_users`. |

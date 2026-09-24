@@ -39,8 +39,8 @@ docker compose --profile worker --profile data up -d     # + example Postgres an
 
 - Ubuntu 26.04 LTS, x86_64. The recipe also targets Ubuntu 24.04 for the container/rebuild baseline.
 - Interactive Herdr was 0.9.0, while the user unit pointed at a separate 0.8.2 binary. Export selects one 0.9.0 executable and path.
-- OMP reported 18.1.13, but the Bun global manifest still declared 17.4.2. Pi reported 0.84.2 while an old cache held 0.82.1. Locks use the active CLI versions, not old cache contents.
-- Installed quota-axi was 0.1.28, below the pinned Firstmate checkout's 0.1.29 floor. Export deliberately selects 0.1.29. Other captured agent preferences, including Pi/Opus crews and OMP/Fable 5.1 secondmates, are preserved.
+- OMP reported 18.1.13, but the Bun global manifest still declared 17.4.2. Locks use the active CLI versions, not old cache contents.
+- Installed quota-axi was 0.1.28, below the pinned Firstmate checkout's 0.1.29 floor. Export deliberately selects 0.1.29. Other captured agent preferences are preserved.
 - Desktop helpers contained profile-copying behavior and two incompatible runtime registries. Neither is reproduced. Optional desktop setup has one persistent `~/.vnc-chrome-profile`, no seed copying, and no migration of login state.
 - Some current services and Compose files bind broadly or contain machine-specific network addresses. New templates use loopback and explicit opt-in roles instead of copying those bindings.
 - Host browser pruning, fleet emergency memory handling, and build-cache cleanup have different owners. The exported browser pruner handles only eligible idle AXI bridge processes. It does not delete Docker volumes, caches, worktrees, or active builds.

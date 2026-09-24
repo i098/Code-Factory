@@ -140,7 +140,6 @@ def doctor(document):
     if config["profiles"]["agents"]:
         tools += [
             "omp",
-            "pi",
             "codex",
             "gh",
             "no-mistakes",
@@ -191,7 +190,7 @@ def doctor(document):
             + ("present" if authenticated else "manual gh auth login required")
         )
         print(
-            "Provider access: authenticate OMP/Pi/Codex interactively; subscriptions/model availability are not inferred."
+            "Provider access: authenticate OMP/Codex interactively; subscriptions/model availability are not inferred."
         )
     if config["start_services"]:
         print(

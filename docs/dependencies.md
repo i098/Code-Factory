@@ -21,7 +21,7 @@ Everything the recipe installs, grouped by the file that pins it. A version appe
 
 `tools/npm/package.json`, installed with `npm ci` from `tools/npm/package-lock.json` under the `agents` profile.
 
-- omp (`@oh-my-pi/pi-coding-agent`) 18.1.13, pi (`@earendil-works/pi-coding-agent`) 0.84.2, codex (`@openai/codex`) 0.147.0, pnpm 10.33.2.
+- omp (`@oh-my-pi/pi-coding-agent`) 18.1.13, codex (`@openai/codex`) 0.147.0, pnpm 10.33.2.
 - chrome-devtools-axi 0.1.29, chrome-devtools-mcp 1.9.0, gh-axi 0.1.30, lavish-axi 0.1.52, quota-axi 0.1.29, tasks-axi 0.2.5.
 
 ## Ubuntu packages

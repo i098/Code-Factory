@@ -3,7 +3,7 @@
 #
 # These are sanitized preference files, not credential stores. They are written
 # once: an account that already has provider settings or an authenticated
-# harness keeps them (contract: "first-time writes only for OMP/Pi"). The
+# harness keeps them (contract: "first-time writes only for OMP"). The
 # harness binaries themselves come from the installer's --npm set, which also
 # carries the pinned gh / no-mistakes / treehouse support binaries.
 
