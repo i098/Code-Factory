@@ -90,13 +90,19 @@ listed so a rebuilt host can match it. Reinstall plugins with
 
 ### Running on the source host, not reproduced
 
-These are user units the source host added outside this recipe. A rebuilt
-host does not have them until they are exported.
+These user units run on the source host, but this recipe does not provision
+them. `launchpadlib-cache-clean.timer` ships with Ubuntu's `python3-launchpadlib`
+package; the rest were added by hand, and a rebuilt host does not have them
+until they are exported.
 
 | Unit | Runs | Removes |
 | --- | --- | --- |
 | `chrome-reaper.timer` → `~/.local/bin/chrome-automation-reaper.sh` | every 3 min | Leaked browser-automation Chrome profiles; never the VNC desktop. |
 | `flotilla-devtools-bridge-reaper.timer` → `devtools-bridge-reaper.sh` | every 10 min | chrome-devtools-axi bridges with no CPU use since the last run. Nine idle bridges held about 18 GB on 2026-09-24. |
 | `flotilla-mem-guardian.service` → `mem-guardian.sh` | polls every 15 s | Last-line memory defense on memory PSI or low `MemAvailable`. Kills, cheapest first: fleet build/test processes, then the fattest fleet lane (queued for restore), then stale idle Herdr agent panes. |
+| `flotilla-sentinel.timer` → `~/oss-fleet/doctor/sentinel.sh` | every 60 s | Nothing while healthy. On memory PSI `some avg60` ≥ 20, `MemAvailable` ≤ 5%, PSI ≥ 1 with `MemAvailable` ≤ 15%, load average ≥ 5 per core, or under 10 GB free on `/`, it starts a `pi` responder, at most once per 15 min. The responder may `kill -TERM` large processes on its KILLABLE list (never for a CPU storm). On a disk emergency it runs `doctor/clean-disk.sh`, which deletes cargo `target` dirs under `~/oss-fleet/repos`, the pip, npm, go-build, pre-commit, puppeteer and uv caches, Hugging Face models unmodified for 30 days, and user journal entries and `~/oss-fleet/logs` files older than 14 days, then runs `pnpm store prune`. |
+| `flotilla-worktree-manager.timer` → `~/oss-fleet/doctor/worktree-manager.sh` | daily at 04:00, up to 1 h random delay | `git worktree prune` in every repo under `~/oss-fleet/repos`, empty `/tmp/wt-*` and `/tmp/ra-wt-*` dirs, then `pnpm store prune`. Worktrees with uncommitted or unpushed work are only reported. |
+| `flotilla-doctor.timer` → `~/oss-fleet/doctor/run.sh` | every 4 h | Doctor `reports/snapshot-*.txt` older than 14 days and `reports/report-*.md` older than 90 days; trims `agent-run.log` to its last 200 KB. |
 | `tetanus-autoprune.timer` | inactive since 2026-09-17 | Stale cargo artifact generations in tetanus lane caches. |
 | `seer-logtrim.timer` | daily | Trims Seer service logs over 8 MB to their last 5000 lines. |
+| `launchpadlib-cache-clean.timer` | daily | Files in `~/.launchpadlib/api.launchpad.net/cache` older than 30 days. |
