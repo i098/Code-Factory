@@ -1,6 +1,6 @@
 # ⚡ Code Factory
 
-Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, and the omp/Pi agent fleet, provisioned by Ansible from a pinned, checksum-locked toolchain. No Nix, no chezmoi, no cloud dependencies.
+Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, and the omp agent fleet, provisioned by Ansible from a pinned, checksum-locked toolchain. No Nix, no chezmoi, no cloud dependencies.
 
 ```mermaid
 flowchart TD
@@ -13,7 +13,7 @@ flowchart TD
     subgraph host["Finished host"]
         herdr["Herdr workspace"]
         fm["Firstmate orchestrator"]
-        agents["omp and Pi agents"]
+        agents["omp agents"]
         guards["Fleet guards"]
         docker["Docker engine"]
     end
