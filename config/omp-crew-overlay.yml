@@ -1,0 +1,6 @@
+# Captain-local omp overlay for crewmate and scout launches (bin/fm-spawn.sh).
+# Captain order 2026-09-24: every crewmate runs with a sonnet-5 advisor, thinking off.
+modelRoles:
+  advisor: anthropic/claude-sonnet-5:off
+advisor:
+  enabled: true

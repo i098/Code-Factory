@@ -1,54 +1,9 @@
 {
-  "rules": [
-    {
-      "when": "Routine documentation, config changes, simple fixes, README updates, or straightforward boilerplate work",
-      "use": [
-        {
-          "harness": "omp",
-          "model": "anthropic/claude-fable-5-1",
-          "effort": "high"
-        }
-      ],
-      "why": "Fable handles routine work well at lower cost; saves opus headroom for complex tasks"
-    },
-    {
-      "when": "Bug investigation, reproduction, diagnostic reasoning, or codebase exploration that needs careful analysis",
-      "use": [
-        {
-          "harness": "omp",
-          "model": "anthropic/claude-fable-5-1",
-          "effort": "xhigh"
-        }
-      ],
-      "why": "Fable at xhigh for investigation; strong reasoning without burning opus quota"
-    },
-    {
-      "when": "Complex implementation, architecture decisions, security-sensitive work, multi-file refactors, or anything requiring deep reasoning",
-      "use": [
-        {
-          "harness": "omp",
-          "model": "anthropic/claude-opus-5",
-          "effort": "xhigh"
-        }
-      ],
-      "why": "Opus for work that demands the strongest reasoning"
-    },
-    {
-      "when": "Scout investigation, codebase audit, security scan, or research task that produces a report without changing code",
-      "use": [
-        {
-          "harness": "omp",
-          "model": "anthropic/claude-fable-5-1",
-          "effort": "xhigh"
-        }
-      ],
-      "why": "Scouts are read-only; fable handles research well"
-    }
-  ],
+  "_comment": "Captain order 2026-09-24: every crewmate spawn (ship and scout) defaults to opus 5.5 at high effort; its omp advisor (sonnet-5, thinking off) comes from config/omp-crew-overlay.yml. Supersedes the 2026-09-23 planner-on-fable split. NO ROUTERS: omp talks to Anthropic directly; account rotation is native to omp.",
   "default": {
     "harness": "omp",
-    "model": "anthropic/claude-opus-5",
-    "effort": "xhigh"
-  },
-  "_comment": "NO ROUTERS. Every spawn is omp talking straight to Anthropic through omp's own anthropic provider (model ids anthropic/claude-*), authenticated interactively on the account that runs the fleet. Account rotation is native to omp: it pools several accounts of the same provider itself, so needing more than one account is never a reason to reintroduce a gateway. A router, gateway, or gateway-prefixed model id comes back only by explicit operator decision. Harness is omp, not the claude CLI."
+    "model": "anthropic/claude-opus-5-5",
+    "effort": "high",
+    "provider": "anthropic"
+  }
 }

@@ -217,6 +217,9 @@ factory_firstmate_config_names:
   # (bin/fm-spawn-memory-floor-lib.sh). Ten live lanes at 5-8 GB each filled
   # 24 GB RAM + 52 GB swap on the source host on 2026-09-17.
   - spawn-memory-floor-mb
+  # omp overlay Firstmate layers onto crewmate and scout launches (never
+  # secondmates): the sonnet-5 advisor, thinking off, on every omp crew.
+  - omp-crew-overlay.yml
 factory_firstmate_config_first_write: false
 
 # --- Docker -----------------------------------------------------------------
