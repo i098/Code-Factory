@@ -1,0 +1,29 @@
+{{ ansible_managed | comment }}
+# Triggered by flotilla-storage-guard.timer; not enabled on its own.
+# Measures the filesystems holding /, /var/log, the home and Docker's data root:
+# alerts at WARN once per episode and early when the fill rate projects full,
+# prunes only regenerable Docker data (build cache, dangling images, unused
+# images created more than STORAGE_IMAGE_AGE_HOURS ago by creation time, not
+# last use) at CRIT.
+
+[Unit]
+Description=Fleet storage guard - alert on disk use, prune regenerable Docker data at CRIT (Code Factory managed)
+ConditionPathExists={{ factory_fleet_doctor_dir }}/storage-guard.sh
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=STORAGE_WARN_PCT={{ factory_storage_guard_warn_pct }}
+Environment=STORAGE_CRIT_PCT={{ factory_storage_guard_crit_pct }}
+Environment=STORAGE_HYSTERESIS_PCT={{ factory_storage_guard_hysteresis_pct }}
+Environment=STORAGE_IMAGE_AGE_HOURS={{ factory_storage_guard_image_age_hours }}
+Environment=STORAGE_FILL_HORIZON_HOURS={{ factory_storage_guard_fill_horizon_hours }}
+Environment=STORAGE_REPEAT_MIN={{ factory_storage_guard_repeat_min }}
+ExecStart={{ factory_fleet_doctor_dir }}/storage-guard.sh
+# One du walk per measured filesystem (up to four: /, /var/log, the home and
+# Docker's data root; <= 300 s each), three bounded prune steps (<= 300 s each)
+# and the docker info / system df queries (<= 80 s): 2180 s at most.
+TimeoutStartSec=2400
+Nice=5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

@@ -223,6 +223,7 @@
         - flotilla-worktree-env-seed.timer
         - flotilla-worktree-env-seed.path
         - flotilla-dev-server-reaper.timer
+        - flotilla-storage-guard.timer
       when: factory_manage_services | bool
       listen: restart fleet timers
 
