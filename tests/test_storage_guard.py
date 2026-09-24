@@ -233,6 +233,19 @@ def test_fill_rate_alarm_fires_below_warn_and_names_the_fastest_grower(guard):
     assert guard.prunes() == []
 
 
+def test_fill_eta_uses_the_free_space_left_after_a_crit_reclaim(guard):
+    state = guard.doctor / ".storage-guard"
+    state.mkdir()
+    (state / "_").write_text(f"{int(time.time()) - 600} {90 * G} 0 0 0\n")
+    guard.fs({"/": 95})
+    guard.free(builder=1, dangling=2, old=8)
+    guard.run()
+    (alert,) = guard.alerts()
+    assert alert.startswith("CRIT / 84% used, 16.0G free: filling: +5.0G in 10m")
+    assert "full in ~0h32m" in alert  # 16G free at 5G per 10m
+    assert "back to 84% after reclaiming 11.0G" in alert
+
+
 def test_dry_run_estimates_each_step_and_writes_nothing(guard):
     old = "2020-01-01 00:00:00 +0000 UTC"
     images = [
@@ -259,7 +272,7 @@ def test_dry_run_estimates_each_step_and_writes_nothing(guard):
     assert "CRIT step 1 (would run now, stopping once under 92%): docker builder prune -f" in out
     assert "build cache, frees ~476.8M" in out
     assert "dangling images, frees ~953.7M" in out
-    assert "unused images older than 168h, frees ~2.3G" in out
+    assert "unused images created over 168h ago, frees ~2.3G" in out
     assert "a real run would alert: CRIT / 95% used" in out
     assert guard.prunes() == [] and guard.alerts() == [] and guard.pct() == 95
     assert sorted(p.name for p in guard.doctor.iterdir()) == before

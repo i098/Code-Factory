@@ -256,9 +256,9 @@ factory_browser_obscura_checksum: "sha256:{{ factory_cfg.browsers.obscura_sha256
 # Storage guard (fleet/doctor/storage-guard.sh, every 5 min). Use% of the
 # filesystems holding /, /var/log, the home and Docker's data root: WARN alerts
 # once per episode, re-armed below WARN - hysteresis; CRIT prunes build cache,
-# dangling images and unused images older than image_age_hours, then alerts at
-# most once per repeat_min. A fill rate projecting full within
-# fill_horizon_hours alerts even below WARN.
+# dangling images and unused images created more than image_age_hours ago
+# (creation time, not last use), then alerts at most once per repeat_min. A
+# fill rate projecting full within fill_horizon_hours alerts even below WARN.
 factory_storage_guard_warn_pct: 85
 factory_storage_guard_crit_pct: 92
 factory_storage_guard_hysteresis_pct: 3

@@ -16,7 +16,8 @@
 #     idle >= 30 min. Dev servers are throwaway; idle ones filled swap.
 #   * ~/oss-fleet/doctor/storage-guard.sh - every 5 min, alerts on disk use
 #     (WARN, fill rate) and at CRIT prunes only regenerable Docker data: build
-#     cache, dangling images, unused images older than a week.
+#     cache, dangling images, unused images created more than a week ago
+#     (image creation time, not last use).
 #   * ~/.local/bin/supabase - shim refusing lifecycle subcommands.
 #
 # The database is a read-only test fixture. Its data cannot be provisioned from

@@ -10,9 +10,10 @@
 #
 # Measures use% of the filesystems holding /, /var/log, $HOME and Docker's
 # data root (`docker info`), once per filesystem. For each one:
-#   FILL  growth since the previous run projects the filesystem full within
-#         STORAGE_FILL_HORIZON_HOURS (6): alert at once, even below WARN,
-#         naming the entry that grew most since the previous consumer scan.
+#   FILL  growth since the previous run projects the free space left after
+#         any CRIT reclaim full within STORAGE_FILL_HORIZON_HOURS (6): alert
+#         at once, even below WARN, naming the entry that grew most since the
+#         previous consumer scan.
 #   WARN  STORAGE_WARN_PCT (85): log, one COMMS.md line and one
 #         notify-master.sh alert per episode, re-armed only once usage falls
 #         below WARN - STORAGE_HYSTERESIS_PCT (3).
@@ -20,10 +21,10 @@
 #         regenerable data cheapest first, re-measuring after each step and
 #         stopping once under CRIT: build cache, dangling images, then images
 #         no container (running or stopped) uses, created more than
-#         STORAGE_IMAGE_AGE_HOURS (168) ago. On every filesystem a CRIT alert
-#         reports what the reclaim freed, or that a human is needed while
-#         still at CRIT, at most once per STORAGE_REPEAT_MIN (30); FILL
-#         repeats likewise.
+#         STORAGE_IMAGE_AGE_HOURS (168) ago (image creation time, not last
+#         use). On every filesystem a CRIT alert reports what the reclaim
+#         freed, or that a human is needed while still at CRIT, at most once
+#         per STORAGE_REPEAT_MIN (30); FILL repeats likewise.
 # Alerts name the top consumers: `docker system df` and the largest entries
 # one level under the filesystem root, the home and /var/log, from one du walk
 # bounded by STORAGE_SCAN_TIMEOUT seconds (300).
@@ -121,8 +122,9 @@ fastest() {  # <old-scan-file>
 
 docker_df() { timeout 60 docker system df --format '{{.Type}} {{.Size}}, reclaimable {{.Reclaimable}}' 2>/dev/null | paste -sd';' | sed 's/;/; /g'; }
 # What each CRIT step would free: Docker's reclaimable build cache, then the
-# unique size of dangling images and of unused images older than AGE_H. Layers
-# shared only among pruned images are in no unique size, so those are floors.
+# unique size of dangling images and of unused images created more than AGE_H
+# ago (creation time, not last use). Layers shared only among pruned images
+# are in no unique size, so those are floors.
 estimates() {  # -> "build dangling old" in bytes
   local build
   build=$(timeout 60 docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null | awk -F'|' '$1 == "Build Cache" { print $2 }')
@@ -142,7 +144,7 @@ estimates() {  # -> "build dangling old" in bytes
 # CRIT steps, cheapest first: "label|docker arguments".
 STEPS=("build cache|builder prune -f"
        "dangling images|image prune -f"
-       "unused images older than ${AGE_H}h|image prune -af --filter until=${AGE_H}h")
+       "unused images created over ${AGE_H}h ago|image prune -af --filter until=${AGE_H}h")
 
 # --- which filesystems ----------------------------------------------------------
 DOCKER_ROOT=$(timeout 20 docker info -f '{{.DockerRootDir}}' 2>/dev/null) || DOCKER_ROOT=
@@ -174,28 +176,7 @@ for m in "${mounts[@]}"; do
   now=$(date +%s) notes=() filling=0 keep_sample=0 reclaimed=
   show "" && show "$m (holds ${holds[$m]}): ${pct}% used, $(human "$used") of $(human $((used + avail))), $(human "$avail") free"
 
-  # FILL: project the growth since the previous run onto the free space. A
-  # rerun within a minute keeps the older sample; its rate would be noise.
   dt=$((now - p_t)) grow=$((used - p_used))
-  if [ "$p_t" -gt 0 ] && [ "$dt" -lt 60 ]; then
-    keep_sample=1
-    show "  previous sample ${dt}s old; no rate from so short a gap"
-  elif [ "$p_t" -gt 0 ] && [ "$grow" -gt 0 ]; then
-    eta=$((avail * dt / grow))
-    fill="+$(human "$grow") in $((dt / 60))m ($(human $((grow * 60 / dt)))/min), full in ~$(dur "$eta")"
-    if [ "$eta" -lt $((HORIZON_H * 3600)) ]; then
-      say "  FILL $m $fill - inside the ${HORIZON_H}h horizon"
-      if [ $((now - fill_at)) -ge $((REPEAT_MIN * 60)) ]; then
-        notes+=("filling: $fill"); fill_at=$now; filling=1
-      fi
-    else
-      show "  growing $fill - outside the ${HORIZON_H}h horizon"
-    fi
-  elif [ "$p_t" -gt 0 ]; then
-    show "  not growing: $(human "$grow") in $((dt / 60))m"
-  else
-    show "  no previous sample; the fill projection starts next run"
-  fi
 
   # CRIT: reclaim regenerable Docker data, cheapest first.
   if [ "$m" = "$DOCKER_MOUNT" ]; then
@@ -220,6 +201,29 @@ for m in "${mounts[@]}"; do
       done
       reclaimed="reclaiming $(human $((start_used - used))) of regenerable Docker data ($(join ', ' "${freed[@]}"))"
     fi
+  fi
+
+  # FILL: project the growth since the previous run onto the free space left
+  # after any reclaim. A rerun within a minute keeps the older sample; its rate
+  # would be noise.
+  if [ "$p_t" -gt 0 ] && [ "$dt" -lt 60 ]; then
+    keep_sample=1
+    show "  previous sample ${dt}s old; no rate from so short a gap"
+  elif [ "$p_t" -gt 0 ] && [ "$grow" -gt 0 ]; then
+    eta=$((avail * dt / grow))
+    fill="+$(human "$grow") in $((dt / 60))m ($(human $((grow * 60 / dt)))/min), full in ~$(dur "$eta")"
+    if [ "$eta" -lt $((HORIZON_H * 3600)) ]; then
+      say "  FILL $m $fill - inside the ${HORIZON_H}h horizon"
+      if [ $((now - fill_at)) -ge $((REPEAT_MIN * 60)) ]; then
+        notes+=("filling: $fill"); fill_at=$now; filling=1
+      fi
+    else
+      show "  growing $fill - outside the ${HORIZON_H}h horizon"
+    fi
+  elif [ "$p_t" -gt 0 ]; then
+    show "  not growing: $(human "$grow") in $((dt / 60))m"
+  else
+    show "  no previous sample; the fill projection starts next run"
   fi
 
   if [ "$pct" -ge "$CRIT" ] || [ -n "$reclaimed" ]; then
