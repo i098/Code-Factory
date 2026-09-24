@@ -122,19 +122,14 @@ session_mtime() {
   echo "$m"
 }
 
-stop_bridge() { # <pid> <start> <session> <port> -> 0 when the whole tree is gone
-  local pid=$1 start=$2 session=$3 port=$4 file recorded tree p
+stop_bridge() { # <pid> <session> -> 0 when the whole tree is gone
+  local pid=$1 session=$2 file recorded tree p
   tree=$(tree_of "$pid")
   file="$(session_dir "$session")/bridge.pid"
   recorded=$(sed -n 's/.*"pid":[[:space:]]*\([0-9]*\).*/\1/p' "$file" 2>/dev/null)
   if [ "$recorded" = "$pid" ] && command -v chrome-devtools-axi >/dev/null 2>&1; then
-    if [ "$session" = default ]; then
-      env -u CHROME_DEVTOOLS_AXI_SESSION -u CHROME_DEVTOOLS_AXI_PORT \
-        timeout 45 chrome-devtools-axi stop >/dev/null 2>&1
-    else
-      env -u CHROME_DEVTOOLS_AXI_PORT CHROME_DEVTOOLS_AXI_SESSION="$session" \
-        ${port:+CHROME_DEVTOOLS_AXI_PORT="$port"} timeout 45 chrome-devtools-axi stop >/dev/null 2>&1
-    fi
+    env -u CHROME_DEVTOOLS_AXI_PORT CHROME_DEVTOOLS_AXI_SESSION="$session" \
+      timeout 45 chrome-devtools-axi stop >/dev/null 2>&1
     sleep 2
   fi
   for sig in TERM KILL; do
@@ -174,7 +169,6 @@ for pid in $(bridge_pids); do
   key="$pid:$start"
   session=$(env_of "$pid" CHROME_DEVTOOLS_AXI_SESSION)
   session=${session:-default}
-  port=$(env_of "$pid" CHROME_DEVTOOLS_AXI_PORT)
   ticks=$(tree_ticks "$pid")
   smtime=$(session_mtime "$session")
   if [ -z "${PREV_TICKS[$key]:-}" ]; then
@@ -198,7 +192,7 @@ for pid in $(bridge_pids); do
       new_state+="$key $ticks $busy"$'\n'
       continue
     fi
-    if stop_bridge "$pid" "$start" "$session" "$port"; then
+    if stop_bridge "$pid" "$session"; then
       log "REAPED bridge $pid session=$session idle=${idle_min}min freed~${mem}MB"
       reaped=$((reaped + 1))
       freed=$((freed + mem))
