@@ -50,6 +50,8 @@ The `firstmate` profile copies each name in `factory_firstmate_config_names` (`a
 
 `config/omp.yml` seeds `~/.omp/agent/config.yml` on first write only. It holds the host's `modelRoles` (`default` is `anthropic/claude-opus-5-5:xhigh`, `task` and `subagent` are `anthropic/claude-opus-5-5:auto`, `memory` is `anthropic/claude-opus-5-5:off`, and `smol`, `commit` and `tiny` are `anthropic/claude-sonnet-5:off`) and `retry.fallbackChains` with no `default` chain. Its `advisor` block keeps the global advisor off (`enabled: false`); only crews turn it on, through the overlay above. No router or gateway sits between omp and the provider.
 
+Host sizing, the agent plugins and skills, and every auto pruner are listed in [Capacity, plugins and pruners](capacity.md).
+
 ## Reproducibility policy
 
 1. Update native versions and both architecture hashes together in `toolchain.lock.json`; never resolve a mutable `latest` installer during deployment.

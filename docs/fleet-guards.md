@@ -10,6 +10,9 @@ live lanes at 5-8 GB each had been spawned with nothing bounding concurrency.
 
 Every control below removes a cause, not a symptom.
 
+Sizing per lane count and the full list of pruners, including the source host's
+unexported ones, are in [Capacity, plugins and pruners](capacity.md).
+
 ## The chain the controls break
 
 1. Briefs require before/after screenshots of the live app.
