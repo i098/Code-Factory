@@ -25,6 +25,24 @@ An ordinary container has a different process and filesystem lifecycle. Docker's
 
 Use a Linux host for the native recipe. macOS and other client devices can reach that host over SSH; this repository does not claim to reproduce Linux systemd services as native macOS services. Headless Mac setup must not depend on a GUI/TCC dialog being dismissed remotely.
 
+### Docker worker
+
+The Dockerfile's `worker` target is an isolated, non-root, devcontainer-style image built by the same recipe. It runs `./factory apply --config containers/factory.container.yml`, which sets `start_services: false` and `enable_linger: false` and turns off the `docker`, `tailscale`, `desktop`, and `firstmate` profiles and the browser pruner. The image carries the pinned agent and development toolchain and the rendered agent configs, with no systemd services, linger, or Docker-in-Docker. The devcontainer, Compose, and CI use the same image.
+
+```bash
+docker build --target worker --tag code-factory/worker .
+docker compose --profile worker up -d                    # worker only
+docker compose --profile worker --profile data up -d     # + example Postgres and Redis
+```
+
+## Model access
+
+omp talks straight to the provider APIs. `config/omp.yml` maps every model role to a provider-prefixed id (such as `anthropic/claude-sonnet-5`), and `retry.fallbackChains` names the same ids. A fresh host needs no router, gateway, or proxy, and binds no extra port. Account rotation is native to omp: it pools several accounts of the same provider itself, so more than one account is not a reason to add a gateway.
+
+The global omp advisor is off. The `firstmate` profile seeds `config/omp-crew-overlay.yml`, which Firstmate layers onto omp crewmate and scout launches (never secondmates), so every omp crew runs a sonnet-5 advisor with thinking off.
+
+Credentials are authenticated interactively on the account that runs the harness; none live in this repository.
+
 ## Findings from the source VPS
 
 - Ubuntu 26.04 LTS, x86_64. The recipe also targets Ubuntu 24.04 for the container/rebuild baseline.
@@ -44,6 +62,17 @@ Use a Linux host for the native recipe. macOS and other client devices can reach
 4. Keep machine differences in ignored `.local/host.yml`; schema validation precedes provisioning.
 5. Do not force, stash, reset, or overwrite a modified Firstmate checkout or an unmanaged command. Resolve that conflict explicitly.
 6. Keep authentication and mutable application state outside the recipe. Provider model access must be checked on the destination account.
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on pushes to `main`, on every pull request, and on manual dispatch:
+
+- `uv sync --locked --group dev`, then `ruff check` and `pytest`.
+- `./factory validate` for `config/default.yml` and `containers/factory.container.yml`.
+- Audits of the Dockerfile, devcontainer, and Compose definitions (digest-pinned images, no host namespaces or socket, resource caps).
+- A full worker image build and the behavior smoke in `tests/container-smoke.sh`.
+
+Every action is pinned to an immutable commit SHA, and the token is read-only. The uv version comes from `toolchain.lock.json`, the same pin `./bootstrap.sh` installs.
 
 ## Primary sources
 

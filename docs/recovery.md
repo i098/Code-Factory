@@ -3,7 +3,7 @@
 ## New-device sequence
 
 1. Start with a supported Ubuntu installation and working SSH/sudo access. `cloud-init/user-data.yaml` installs initial OS prerequisites; it does not create credentials, log in to services, or clone this private repository.
-2. Authenticate GitHub on the new device and clone Code Factory. Run the README bootstrap, init, validate, plan, apply, and doctor sequence.
+2. Authenticate GitHub on the new device and clone Code Factory. Run the [Quick start](../README.md#quick-start): bootstrap, init, validate, plan, apply, and doctor.
 3. Confirm Herdr's user service and executable agree. Both resolve to the versioned artifact recorded in `toolchain.lock.json`.
 4. Authenticate agent/provider CLIs under the configured operator account. Confirm the configured models exist for that account. Recreate per-project approval/trust choices instead of copying a global auto-approval list.
 5. If selected, authenticate Tailscale as a new device and review its ACL/SSH policy. Installation alone does not authorize incoming connections.
@@ -11,6 +11,17 @@
 7. Restore project source and data through their own workflows. Only then register projects/work with Firstmate or re-enable autonomous fleet tasks.
 
 Do not point two machines at the same live session, task registry, browser profile, or database directory. A Herdr layout is not a process checkpoint. Shells, agents, and servers restart from their own durable inputs.
+
+## Troubleshooting
+
+```bash
+./factory doctor    # actionable diagnostics
+./factory plan      # preview what apply would change
+```
+
+- **`fleet guards require the docker and firstmate profiles`**: enable both profiles in `.local/host.yml`.
+- **Empty fixture archive**: the shared database is a read-only fixture that cannot be rebuilt from migrations. Copy the volume snapshot from the source host; see [The fixture](fleet-guards.md#the-fixture).
+- **Spawn refused by the memory floor**: wait for a lane to finish, or lower the floor in this repository's `config/spawn-memory-floor-mb` and rerun `./factory apply`. Every apply rewrites the Firstmate checkout's copy, so an edit made only there is reverted.
 
 ## Desktop access
 
