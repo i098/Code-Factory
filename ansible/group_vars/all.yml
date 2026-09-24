@@ -199,11 +199,6 @@ factory_agent_config_files:
     dir_mode: "0700"
     mode: "0600"
     first_write: true
-  - src: config/pi.json
-    dest: "{{ factory_cfg.home }}/.pi/agent/settings.json"
-    dir_mode: "0700"
-    mode: "0600"
-    first_write: true
 
 # Firstmate reads these from its own checkout and already gitignores them, so
 # the clone stays clean and no .gitignore is edited.

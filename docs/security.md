@@ -5,7 +5,7 @@ This repository is an allowlisted reconstruction recipe, not a copy of a home di
 ## Never export
 
 - SSH private keys, GitHub tokens, Tailscale node identity or auth keys.
-- OMP, Pi, Claude, Codex, or other provider authentication stores.
+- OMP, Claude, Codex, or other provider authentication stores.
 - Browser profiles, cookies, password stores, desktop login sessions, or VNC passwords.
 - Agent transcripts, fleet task history, private project working trees, database files, or Docker volumes.
 - `.env` files, Terraform state, runtime sockets, PID files, and caches.
