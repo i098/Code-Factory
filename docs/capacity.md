@@ -86,7 +86,10 @@ listed so a rebuilt host can match it. Reinstall plugins with
 | `flotilla-storage-guard.timer` → `storage-guard.sh` | `fleet_guards` | every 5 min | At CRIT (92%): build cache, dangling images, unused images older than `factory_storage_guard_image_age_hours`. Never volumes, containers, repositories, logs or home content. |
 | `flotilla-docker-guard.service` → `docker-guard.sh` | `fleet_guards` | on every container create | Supabase CLI project containers other than the shared stack. Bare Postgres containers are only logged. |
 | Docker `init: true` (`/etc/docker/daemon.json`) | `docker` | continuously | Zombie processes inside every container (docker-init as PID 1). |
-| Firstmate `bin/fm-orphan-sweep.sh` | `firstmate` (ships with the checkout) | on Firstmate's wake drain | Dead per-task desktops, leaked treehouse worktrees, disowned browsers, and `/tmp` scratch older than two days. It refuses anything a live mate owns. |
+| Firstmate `bin/fm-orphan-sweep.sh` | `firstmate` (ships with the checkout) | on Firstmate's wake drain, at most hourly | Dead per-task desktops, leaked treehouse worktrees, disowned browser, ssh-agent, caddy and websockify processes, and `/tmp` scratch older than two days. It refuses anything a live mate owns. |
+| Firstmate `bin/fm-herdr-session-cleanup.sh` | `firstmate` | on every locked session start | Idle restored-shell Herdr presentation panes and their journals. Never a workspace or a pane with an agent. |
+| Firstmate `bin/fm-fleet-sync.sh` (`prune_gone_branches`) | `firstmate` | on session start, in bootstrap's network stage | Local project branches whose upstream is gone; never the checked-out branch or one with a worktree. `FM_FLEET_PRUNE=0` disables it. |
+| Firstmate `bin/fm-remote-job-reap-orphans.sh` | `firstmate` | on every `fm-teardown.sh` | Remote-job worker processes whose Firstmate code root was deleted. |
 
 ### Running on the source host, not reproduced
 
