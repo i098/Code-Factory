@@ -35,14 +35,6 @@ docker compose --profile worker up -d                    # worker only
 docker compose --profile worker --profile data up -d     # + example Postgres and Redis
 ```
 
-## Model access
-
-omp talks straight to the provider APIs. `config/omp.yml` maps every model role to a provider-prefixed id (such as `anthropic/claude-sonnet-5`), and `retry.fallbackChains` names the same ids. A fresh host needs no router, gateway, or proxy, and binds no extra port. Account rotation is native to omp: it pools several accounts of the same provider itself, so more than one account is not a reason to add a gateway.
-
-The global omp advisor is off. The `firstmate` profile seeds `config/omp-crew-overlay.yml`, which Firstmate layers onto omp crewmate and scout launches (never secondmates), so every omp crew runs a sonnet-5 advisor with thinking off.
-
-Credentials are authenticated interactively on the account that runs the harness; none live in this repository.
-
 ## Findings from the source VPS
 
 - Ubuntu 26.04 LTS, x86_64. The recipe also targets Ubuntu 24.04 for the container/rebuild baseline.

@@ -82,7 +82,8 @@ Then authenticate the agent CLIs on this account. Credentials are never copied f
 | [Configuration](docs/configuration.md) | `.local/host.yml`, the `./factory` commands, and what each profile installs |
 | [Dependencies](docs/dependencies.md) | Every pinned tool, package, and image, and what the host must already have |
 | [Fleet guards](docs/fleet-guards.md) | Shared Supabase, Docker guard, dev-server reaper, storage guard, spawn memory floor, browser ladder |
-| [Architecture](docs/architecture.md) | Why Ansible, host and container boundary, model access, Docker worker, CI |
+| [omp configuration](docs/omp.md) | Signing in, model roles, fallbacks, the crew advisor, and updating an existing host |
+| [Architecture](docs/architecture.md) | Why Ansible, host and container boundary, Docker worker, CI |
 | [Migration and recovery](docs/recovery.md) | New-device sequence, desktop access, troubleshooting, upgrades |
 | [Security](docs/security.md) | What is never exported and how to handle credentials and remote access |
 
