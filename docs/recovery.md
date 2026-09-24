@@ -60,8 +60,6 @@ Run `./factory plan` before applying changed pins. An unmanaged executable at a 
 
 Existing OMP settings are first-write-only: provisioning will not replace provider configuration or credentials on a reused account. Review and merge the exported safe preferences manually if deliberately updating an established account.
 
-Pi is no longer installed. On a host provisioned before its removal, the next apply drops the package, which leaves `~/.local/bin/pi` as a dangling link: delete it by hand. `~/.pi` and its settings are not touched; delete them when you no longer need them.
-
 A second unchanged provisioning pass should report `changed=0`. Runtime application activity, deliberate self-updates, and changed package indexes can create real drift; investigate it rather than weakening the check or forcing a reset.
 
 ## Resource limits and cleanup
