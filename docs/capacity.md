@@ -17,8 +17,8 @@ source host on 2026-09-17 (the incident in [fleet guards](fleet-guards.md)) and
 | `tsc --noEmit` | about 0.6 GB; pnpm scripts capped at a 2048 MB heap | measured; seeded `.npmrc` |
 | chrome-devtools-axi bridge + `chrome-devtools-mcp` | about 0.3 GB for the MCP child; nine idle bridges held about 18 GB | measured 2026-09-24 |
 | Obscura browser tier | about 25 MB idle | [browser ladder](../README.md#browser-ladder) |
-| **Light lane** (docs, config, backend: agent + pipeline + tests) | **about 1-1.5 GB** | sum of the rows above |
-| **UI lane** (agent + dev server + tsc + browser) | **5-8 GB** | 2026-09-17 incident |
+| **Light lane** (docs, config, backend: agent + pipeline + tests) | **about 1.35-1.8 GB**; plan 2 GB | sum of the agent, pipeline and `tsc` rows |
+| **UI lane** (agent + dev server + tsc + browser) | **5-8 GB**; plan 8 GB | 2026-09-17 incident |
 
 Fixed cost, whatever the lane count: the OS, Herdr, Firstmate and its
 secondmates (each an omp process), Docker, and the shared Supabase stack. Allow
@@ -26,22 +26,27 @@ about 3 GB; this is an estimate, since most of the source host's stack sat in
 swap when measured.
 
 Firstmate refuses a new spawn while `MemAvailable` is under
-`config/spawn-memory-floor-mb` (8000 MB), and free swap does not count. Plan RAM as:
+`config/spawn-memory-floor-mb` (8000 MB), and free swap does not count. Plan RAM
+from the top of each range:
 
 ```
-RAM ≈ 8 GB spawn floor + 3 GB fixed + (light lanes × 1.5 GB) + (UI lanes × 8 GB)
+RAM ≈ 8 GB spawn floor + 3 GB fixed + (light lanes × 2 GB) + (UI lanes × 8 GB)
+vCPU ≈ (light lanes × 1) + (UI lanes × 2)
 ```
+
+Idle chrome-devtools-axi bridges come on top: each holds about 2 GB until
+`chrome-autoprune` stops it after two idle hours.
 
 ### Recommended specs
 
 | Concurrent lanes | vCPU | RAM | Swap | Disk |
 | --- | --- | --- | --- | --- |
-| 4 light, or 1 UI | 4 | 16 GB | 8 GB | 100 GB |
-| 2 UI + 4 light, or 12 light | 8 | 32 GB | 16 GB | 200 GB |
-| 4 UI + 12 light | 16 | 64 GB | 32 GB | 300 GB |
+| 2 light | 4 | 16 GB | 8 GB | 100 GB |
+| 2 UI + 2 light, or 8 light | 8 | 32 GB | 16 GB | 200 GB |
+| 4 UI + 8 light, or 16 light | 16 | 64 GB | 32 GB | 300 GB |
 
-- **CPU:** plan on about 1 vCPU per light lane and 2 per UI lane while it compiles. This is an estimate. The source host (8 vCPU) sat at load average 31-36 on 2026-09-24 with 28 GB of swap in use, so it was over capacity.
-- **RAM:** the source host has 24 GB. That fits about one UI lane plus five light lanes above the floor. Ten lanes filled it on 2026-09-17.
+- **CPU:** the vCPU line above is an estimate for lanes while they compile. The source host (8 vCPU) sat at load average 31-36 on 2026-09-24 with 28 GB of swap in use, so it was over capacity.
+- **RAM:** the source host has 24 GB. That fits one UI lane plus two light lanes, or six light lanes. Ten lanes filled it on 2026-09-17.
 - **Swap:** keeps the host reachable during a spike. It is not capacity, because the spawn floor ignores it and a swapping host thrashes.
 - **Disk:** the source host has 193 GB, 85% used. Docker holds 45 GB of images (18 GB reclaimable) and 9 GB of volumes. The storage guard warns at 85% and prunes at 92%.
 
