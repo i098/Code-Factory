@@ -25,9 +25,10 @@
 #         use). On every filesystem a CRIT alert reports what the reclaim
 #         freed, or that a human is needed while still at CRIT, at most once
 #         per STORAGE_REPEAT_MIN (30); FILL repeats likewise.
-# Alerts name the top consumers: `docker system df` and the largest entries
-# one level under the filesystem root, the home and /var/log, from one du walk
-# bounded by STORAGE_SCAN_TIMEOUT seconds (300).
+# Alerts name the top consumers: the largest entries one level under the
+# filesystem root, and under the home and /var/log when they live on it, from
+# one du walk bounded by STORAGE_SCAN_TIMEOUT seconds (300), plus
+# `docker system df` on Docker's filesystem.
 #
 # Never deleted, only reported: volumes, containers, repositories, worktrees,
 # /tmp, logs, anything under the home. Firstmate's orphan sweep owns worktree

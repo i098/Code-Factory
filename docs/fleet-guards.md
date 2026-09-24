@@ -84,10 +84,11 @@ root (`docker info`), each filesystem once. Thresholds are the
 | WARN | 85% used | One log line, one `COMMS.md` line and one `notify-master.sh` alert per episode; re-armed only below 82%. |
 | CRIT | 92% used | On Docker's filesystem only: `docker builder prune -f`, then `docker image prune -f` (dangling), then `docker image prune -af --filter until=168h` (images no container uses, created more than 168 h ago; the filter uses image creation time, not last use), re-measuring after each and stopping once under 92%. Every step is logged with what it freed. On every filesystem a CRIT alert reports what the reclaim freed, or that a human is needed while still at 92%; at most one every 30 min. |
 
-Every alert names the top consumers: `docker system df` and the largest
-entries one level under the filesystem root, the home and `/var/log`, from one
-`du` walk capped at 300 s (it took about 3.5 minutes on the source host). A
-FILL alert also names the entry that grew most since the previous scan.
+Every alert names the top consumers: the largest entries one level under the
+filesystem root, and under the home and `/var/log` when they live on it, from
+one `du` walk capped at 300 s (it took about 3.5 minutes on the source host),
+plus `docker system df` on Docker's filesystem. A FILL alert also names the
+entry that grew most since the previous scan.
 
 The guard never deletes volumes, containers, repositories, worktrees, `/tmp`
 content, logs or anything under the home; it reports them. Firstmate's orphan
