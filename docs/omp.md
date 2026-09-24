@@ -45,11 +45,11 @@ Each key under `modelRoles` picks the model for one kind of work. A role value i
 | --- | --- |
 | `default` | The main session model. |
 | `smol`, `slow` | Fast and deep alternatives. `cycleOrder` sets the order the model switcher cycles through (`smol`, `default`, `slow`, `subagent` here). |
-| `task`, `subagent` | Subagents spawned from a session. |
+| `task` | Subagents spawned from a session. |
 | `plan`, `commit`, `tiny`, `vision`, `memory` | Planning, commit messages, small helper calls, image input, and memory. |
 | `advisor` | The advisor model. See [Advisor](#advisor). |
 
-`config/omp.yml` also defines custom roles (`designer`, `Kimi`). The current model for each role is in [`config/omp.yml`](../config/omp.yml).
+`config/omp.yml` also defines custom roles (`designer`, `subagent`, `Kimi`). The current model for each role is in [`config/omp.yml`](../config/omp.yml).
 
 `retry.fallbackChains` lists, for a model id or role, the models to try when it keeps failing (rate limits, quota, outages). `retry.maxDelayMs` caps the retry backoff; a provider-stated wait longer than that fails fast instead of sleeping.
 
@@ -68,9 +68,7 @@ For one repository only, create `<repo>/.omp/config.yml` with the keys to overri
 
 ## Advisor
 
-The advisor is a second model that reviews each completed turn and can add notes. The global advisor is off.
-
-The `firstmate` profile seeds `config/omp-crew-overlay.yml` into the Firstmate checkout. Firstmate layers it onto omp crewmate and scout launches (never secondmates), so every omp crew runs a sonnet-5 advisor with thinking off. To change the crew advisor, edit that file in this repository and rerun `./factory apply`. Each apply rewrites the Firstmate copy.
+The advisor is a second model that reviews each completed turn and can add notes. `config/omp.yml` picks its model (`modelRoles.advisor`) but does not set `advisor.enabled`, so the advisor is off. Turn it on for one session with `/advisor on`, or for every session with `advisor.enabled: true` in `~/.omp/agent/config.yml`.
 
 ## Other seeded preferences
 
