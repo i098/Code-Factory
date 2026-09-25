@@ -16,7 +16,7 @@ source host on 2026-09-17 (the incident in [fleet guards](fleet-guards.md)) and
 | `next dev` / `next-server` for a UI lane | 3-4 GB | [fleet guards](fleet-guards.md) |
 | `tsc --noEmit` | about 0.6 GB; pnpm scripts capped at a 2048 MB heap | measured; seeded `.npmrc` |
 | chrome-devtools-axi bridge + `chrome-devtools-mcp` | about 0.3 GB for the MCP child; nine idle bridges held about 18 GB | measured 2026-09-24 |
-| Obscura browser tier | about 25 MB idle | [browser ladder](../README.md#browser-ladder) |
+| Obscura browser tier | about 25 MB idle | [browser ladder](fleet-guards.md#browser-ladder) |
 | **Light lane** (docs, config, backend: agent + pipeline + tests) | **about 1.35-1.8 GB**; plan 2 GB | sum of the agent, pipeline and `tsc` rows |
 | **UI lane** (agent + dev server + tsc + browser) | **5-8 GB**; plan 8 GB | 2026-09-17 incident |
 

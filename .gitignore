@@ -24,7 +24,6 @@ artifacts/
 .vnc-chrome-profile/
 .chrome-devtools-axi/
 .omp/
-.pi/
 .claude/
 .codex/
 .ssh/
