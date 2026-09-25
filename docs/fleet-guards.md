@@ -102,24 +102,29 @@ stubbed `df`, `du` and `docker`.
 ## Devtools-bridge reaper
 
 Every chrome-devtools-axi session starts a bridge that detaches to init by
-design, plus a chrome-devtools-mcp child, and nothing ever stops one. On
-2026-09-24 idle bridges, some 98 hours old, held about 18 GB, almost all of it
-swap. With swap full the host sat near load 179 for hours, and mem-guardian
-never saw them: they are neither fleet repo processes nor agent panes.
+design, plus a chrome-devtools-mcp child. On 2026-09-24 idle bridges, some 98
+hours old, held about 18 GB, almost all of it swap. With swap full the host sat
+near load 179 for hours, and mem-guardian never saw them: they are neither
+fleet repo processes nor agent panes.
+
+The split with `chrome-autoprune` (agents profile): it stops idle disposable
+bridges and refuses attached ones, which is every bridge an agent starts on a
+fleet host because the browser ladder exports `CHROME_DEVTOOLS_AXI_BROWSER_URL`;
+this reaper stops only those attached bridges and skips every other one, so a
+headed or persistent-profile Chrome is never killed.
 
 `flotilla-devtools-bridge-reaper.timer` runs `devtools-bridge-reaper.sh` every
-10 minutes. Each run records the CPU ticks of every bridge's whole process
-tree; a tree that moved, or a session whose `bridge.pid` or
+10 minutes. Each run records the CPU ticks of every attached bridge's whole
+process tree; a tree that moved, or a session whose `bridge.pid` or
 `snapshot-generation` changed, counts as busy, and a bridge seen for the first
 time is never reaped on that run. A bridge idle for `REAPER_IDLE_MIN` (60)
-minutes is stopped with `chrome-devtools-axi stop` in its own session when that
-session's `bridge.pid` names it, then TERM/KILL of the exact tree, every pid
-re-checked by start time. The session's next command starts a fresh bridge;
-its open pages are lost. The script reads `/proc` in one pass because a
-per-process version could not finish in five minutes at load 160.
-`--dry-run` prints each bridge's idle time and verdict and changes nothing.
-`tests/test_devtools_bridge_reaper.py` drives it against a fixture process
-tree.
+minutes gets TERM, then after a 5 s grace KILL for whatever is left of its
+exact tree, every pid re-checked by start time. The session's next command
+starts a fresh bridge; its open pages are lost. The script reads `/proc` in one
+pass because a per-process version could not finish in five minutes at load
+160. `--dry-run` prints each attached bridge's idle time and verdict and
+changes nothing. `tests/test_devtools_bridge_reaper.py` drives it against a
+fixture process tree.
 
 ## Operating
 

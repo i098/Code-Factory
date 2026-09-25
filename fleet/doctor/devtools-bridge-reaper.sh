@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
-# devtools-bridge-reaper.sh - stop chrome-devtools-axi bridges nobody is using.
+# devtools-bridge-reaper.sh - stop unused attached chrome-devtools-axi bridges.
 #
 # Why: every chrome-devtools-axi session starts a bridge that detaches to init
-# by design, plus a chrome-devtools-mcp child, and nothing ever stops one: the
-# agent forgets `chrome-devtools-axi stop`, and the session that started it can
-# end without it. On 2026-09-24 nine idle bridges, up to 98 hours old, held
-# about 18 GB, almost all of it swap. With swap full the host sat near load 179
-# for six hours. mem-guardian never saw them: they are neither fleet repo
-# processes nor agent panes.
+# by design, plus a chrome-devtools-mcp child. The agent forgets
+# `chrome-devtools-axi stop`, and the session that started it can end without
+# it. On 2026-09-24 nine idle bridges, up to 98 hours old, held about 18 GB,
+# almost all of it swap. With swap full the host sat near load 179 for six
+# hours. mem-guardian never saw them: they are neither fleet repo processes nor
+# agent panes.
+#
+# Scope: attached bridges only, CHROME_DEVTOOLS_AXI_BROWSER_URL set in the
+# bridge's environment, as the fleet browser ladder sets it for every agent.
+# chrome-autoprune refuses exactly those and stops the other, disposable ones.
+# Every other bridge is skipped: a headed or persistent-profile bridge runs its
+# own Chrome inside the tree.
 #
 # Idle signal: CPU time. A bridge serves every CLI command over its local port
 # and forwards it to its MCP child, so a bridge nobody calls accumulates no
@@ -22,38 +28,34 @@
 # that session starts a fresh one. What is lost is that session's open pages,
 # and in the default isolated mode its cookies.
 #
-# Reaping: `chrome-devtools-axi stop` in the bridge's own session, but only
-# when that session's bridge.pid names this exact pid. Otherwise, or if stop
-# leaves anything alive, TERM then KILL for that exact process tree. Every pid
-# is re-validated by start time before it is signalled, so a recycled pid is
-# never hit.
+# Reaping: TERM to the bridge, whose own handler closes its MCP client and
+# signals its group; after a 5 s grace, KILL for whatever is left of that exact
+# process tree. Every pid is re-validated by start time before it is
+# signalled, so a recycled pid is never hit.
 #
 # Usage: devtools-bridge-reaper.sh [--dry-run]
-#   --dry-run prints every bridge with its idle time and verdict, and changes
-#   nothing (no signal, no state write).
+#   --dry-run prints every attached bridge with its idle time and verdict, and
+#   changes nothing (no signal, no state write).
 # Runs every 10 minutes from flotilla-devtools-bridge-reaper.timer.
 # Every reap: devtools-bridge-reaper.log here, one line in COMMS.md for the
 # orchestrator, notify-master.sh when present.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
-LOG=${BRIDGE_REAPER_LOG:-$HERE/devtools-bridge-reaper.log}
-COMMS=${BRIDGE_REAPER_COMMS:-$HERE/COMMS.md}
-STATE=${BRIDGE_REAPER_STATE:-$HERE/devtools-bridge-reaper.state}
+LOG=$HERE/devtools-bridge-reaper.log
+COMMS=$HERE/COMMS.md
+STATE=$HERE/devtools-bridge-reaper.state
 AXI_STATE_DIR=${BRIDGE_REAPER_AXI_STATE_DIR:-$HOME/.chrome-devtools-axi}
 IDLE_MIN=${REAPER_IDLE_MIN:-60}
 NOISE_TICKS=${REAPER_NOISE_TICKS:-10}
 DRY=${REAPER_DRY_RUN:-0}
 # The test suite overrides the marker so it never matches a real bridge.
 BRIDGE_MARK=${BRIDGE_REAPER_MARK:-chrome-devtools-axi-bridge.js}
-# systemd user units carry a minimal PATH; the CLI and node live in the
-# account's own bin directories.
-PATH="$HOME/.bun/bin:$HOME/.local/bin:$PATH"
 
 case "${1:-}" in
 '') ;;
 --dry-run) DRY=1 ;;
 -h | --help)
-  sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
   ;;
 *)
@@ -82,9 +84,11 @@ live_start_of() { sed -E 's/^.*\) //' "/proc/$1/stat" 2>/dev/null | awk '{print 
 env_of() { tr '\0' '\n' <"/proc/$1/environ" 2>/dev/null | sed -n "s/^$2=//p" | head -1; }
 mem_mb_of() { awk '/^(VmRSS|VmSwap):/ {k += $2} END {print int(k / 1024)}' "/proc/$1/status" 2>/dev/null; }
 
-# This account's bridges: exactly `node <path>/chrome-devtools-axi-bridge.js`,
-# the argv chrome-devtools-axi spawns. grep only narrows the candidates; an
-# editor, pager or shell that merely names the file fails the argv check.
+# This account's attached bridges: exactly
+# `node <path>/chrome-devtools-axi-bridge.js`, the argv chrome-devtools-axi
+# spawns, with CHROME_DEVTOOLS_AXI_BROWSER_URL set. grep only narrows the
+# candidates; an editor, pager or shell that merely names the file fails the
+# argv check.
 bridge_pids() {
   local p args
   grep -l -a -F "$BRIDGE_MARK" /proc/[0-9]*/cmdline 2>/dev/null |
@@ -93,7 +97,8 @@ bridge_pids() {
       [ -O "/proc/$p" ] || continue
       mapfile -d '' -t args 2>/dev/null <"/proc/$p/cmdline" || continue
       [ "${#args[@]}" -eq 2 ] && [ "${args[0]##*/}" = node ] &&
-        [ "${args[1]##*/}" = "$BRIDGE_MARK" ] && echo "$p"
+        [ "${args[1]##*/}" = "$BRIDGE_MARK" ] &&
+        [ -n "$(env_of "$p" CHROME_DEVTOOLS_AXI_BROWSER_URL)" ] && echo "$p"
     done
 }
 
@@ -129,31 +134,26 @@ session_mtime() {
   echo "$m"
 }
 
-stop_bridge() { # <pid> <session> -> 0 when the whole tree is gone
-  local pid=$1 session=$2 file recorded tree p
-  tree=$(tree_of "$pid")
-  file="$(session_dir "$session")/bridge.pid"
-  recorded=$(sed -n 's/.*"pid":[[:space:]]*\([0-9]*\).*/\1/p' "$file" 2>/dev/null)
-  if [ "$recorded" = "$pid" ] && command -v chrome-devtools-axi >/dev/null 2>&1; then
-    env -u CHROME_DEVTOOLS_AXI_PORT CHROME_DEVTOOLS_AXI_SESSION="$session" \
-      timeout 45 chrome-devtools-axi stop >/dev/null 2>&1
-    sleep 2
-  fi
+# TERM goes to the bridge alone; whatever of its tree outlives the grace gets
+# KILL. Every pid, the bridge and each descendant, is re-checked against the
+# start time recorded in this run's snapshot, so a recycled pid is never
+# signalled.
+stop_bridge() { # <pid> -> 0 when the whole tree is gone
+  local targets=$1 tree p
+  tree=$(tree_of "$1")
   for sig in TERM KILL; do
-    for p in $tree; do
-      # Every pid, the bridge and each descendant, is re-checked against the
-      # start time recorded in this run's snapshot, so a recycled pid is
-      # never signalled.
+    for p in $targets; do
       [ -d "/proc/$p" ] || continue
       [ "$(live_start_of "$p")" = "$(start_of "$p")" ] || continue
       kill -s "$sig" "$p" 2>/dev/null
     done
-    for _ in 1 2 3 4 5 6 7 8 9 10; do
+    for _ in 1 2 3 4 5; do
       local alive=0
       for p in $tree; do [ -d "/proc/$p" ] && alive=1; done
       [ "$alive" -eq 0 ] && return 0
       sleep 1
     done
+    targets=$tree
   done
   return 1
 }
@@ -199,7 +199,7 @@ for pid in $(bridge_pids); do
       new_state+="$key $ticks $busy"$'\n'
       continue
     fi
-    if stop_bridge "$pid" "$session"; then
+    if stop_bridge "$pid"; then
       log "REAPED bridge $pid session=$session idle=${idle_min}min freed~${mem}MB"
       reaped=$((reaped + 1))
       freed=$((freed + mem))

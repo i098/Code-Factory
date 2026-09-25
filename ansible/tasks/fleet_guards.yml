@@ -19,8 +19,9 @@
 #     cache, dangling images, unused images created more than a week ago
 #     (image creation time, not last use).
 #   * ~/oss-fleet/doctor/devtools-bridge-reaper.sh - every 10 min, stops
-#     chrome-devtools-axi bridges whose tree used no CPU and whose session
-#     state did not change for 60 min. Nothing else ever stops one.
+#     attached chrome-devtools-axi bridges (CHROME_DEVTOOLS_AXI_BROWSER_URL
+#     set, which chrome-autoprune refuses) whose tree used no CPU and whose
+#     session state did not change for 60 min.
 #   * ~/.local/bin/supabase - shim refusing lifecycle subcommands.
 #
 # The database is a read-only test fixture. Its data cannot be provisioned from
