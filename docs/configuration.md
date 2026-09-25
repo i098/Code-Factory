@@ -61,7 +61,7 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 | `development` | on | Rust toolchain, build essentials, development-mode npm packages. |
 | `firstmate` | on | Firstmate clone tracking the fork's `main`, plus seeded Firstmate config: crew dispatch, crew and secondmate harness, the crew omp overlay (crew advisor, see [omp configuration](omp.md#advisor)), Herdr backend selection, startup memory budget, and the spawn memory floor. |
 | `docker` | on | Docker engine and Compose v2, with daemon defaults `init` (reaps orphaned children) and `live-restore`. Group membership is opt-in through the Ansible variable `factory_docker_group_users`. |
-| `fleet_guards` | off | Shared Supabase stack, Docker event guard, [browser ladder](fleet-guards.md#browser-ladder), dev-server reaper, storage guard, env seeder. See [Fleet guards](fleet-guards.md). |
+| `fleet_guards` | off | Shared Supabase stack, Docker event guard, [browser ladder](fleet-guards.md#browser-ladder), dev-server reaper, devtools-bridge reaper, storage guard, env seeder. See [Fleet guards](fleet-guards.md). |
 | `tailscale` | off | Tailscale daemon only. Authentication is manual; see [Security](security.md#remote-access). |
 | `desktop` | off | Loopback-only XFCE + TigerVNC + noVNC operator desktop on `127.0.0.1:6080`, and the Google Chrome apt package. Needs an operator-created VNC password; see [Desktop access](recovery.md#desktop-access). Also supplies the TigerVNC/noVNC packages the browser ladder's `vnc` tier needs. |
 

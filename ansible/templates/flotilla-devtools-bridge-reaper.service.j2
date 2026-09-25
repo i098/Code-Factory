@@ -1,0 +1,15 @@
+{{ ansible_managed | comment }}
+# Triggered by flotilla-devtools-bridge-reaper.timer; not enabled on its own.
+# Stops attached chrome-devtools-axi bridges whose process tree used no CPU and
+# whose session state did not change for 60 minutes (REAPER_IDLE_MIN).
+
+[Unit]
+Description=Fleet devtools-bridge reaper - stop idle attached chrome-devtools-axi bridges (Code Factory managed)
+ConditionPathExists={{ factory_fleet_doctor_dir }}/devtools-bridge-reaper.sh
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart={{ factory_fleet_doctor_dir }}/devtools-bridge-reaper.sh
+TimeoutStartSec=300
+Nice=5

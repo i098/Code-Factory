@@ -31,6 +31,7 @@ unexported ones, are in [Capacity, plugins and pruners](capacity.md).
 | `oss-fleet/doctor/worktree-env-seed.sh` | Installs the env file as `.env.local` in every `~/.treehouse/swarms-platform-*/*/swarms-platform` worktree and Firstmate's `projects/swarms-platform`. Files without the `# fleet-shared-supabase` marker are replaced with a backup left beside them. |
 | `oss-fleet/doctor/dev-server-reaper.sh` | Every 2 minutes: kills `next dev`/`next-server`/`tsc --noEmit` trees in treehouse worktrees whose lane last reported `done:`/`paused:`/`blocked:`/`failed:`, has no agent process, or whose agent transcript is idle >= 30 min (`REAPER_IDLE_MIN`). A dev server is 3-4 GB and restarts in 10 s; idle ones from finished lanes are what filled swap. One `next dev` per branch is inherent - Next compiles the whole app per process - so the fix is lifetime, not sharing. |
 | `oss-fleet/doctor/storage-guard.sh` | Every 5 minutes: use% of the filesystems holding `/`, `/var/log`, the home and Docker's data root. WARN (85%) alerts once per episode, CRIT (92%) prunes only regenerable Docker data, and a fill rate projecting the disk full within 6 hours alerts even below WARN. See [Storage guard](#storage-guard). |
+| `oss-fleet/doctor/devtools-bridge-reaper.sh` | Every 10 minutes: stops attached chrome-devtools-axi bridges (`CHROME_DEVTOOLS_AXI_BROWSER_URL` set) whose process tree used no CPU and whose session state files did not change for 60 min (`REAPER_IDLE_MIN`). See [Devtools-bridge reaper](#devtools-bridge-reaper). |
 | worktree `.npmrc` (seeded, git-excluded) | `node-options=--max-old-space-size=2048` (`FLEET_NODE_HEAP_MB`): pnpm passes it as `NODE_OPTIONS` to every script, so a runaway `next dev`/`tsc` fails fast with a heap error the agent sees instead of swapping the host. Hidden through the shared `.git/info/exclude`; never written when the repository tracks its own `.npmrc`. |
 | `.local/bin/supabase` | Shim: `status`/`--version` pass through; every lifecycle or schema subcommand is refused with the reason. `npx supabase` bypasses it, which is why the Docker guard exists. |
 | `.config/systemd/user/flotilla-*.{service,timer,path}` | Login start + 5-minute keeper for the stack; the guard as a restart-always service; the seeder on pool changes, every 2 minutes and at login. |
@@ -193,15 +194,45 @@ fleet-browser env chrome     # or: eval "$(fleet-browser env chrome)" to escalat
    then `http://127.0.0.1:6909/vnc.html?autoconnect=1`), and the next sync
    carries the session to `obscura` and `chrome`.
 
+## Devtools-bridge reaper
+
+Every chrome-devtools-axi session starts a bridge that detaches to init by
+design, plus a chrome-devtools-mcp child. On 2026-09-24 idle bridges, some 98
+hours old, held about 18 GB, almost all of it swap. With swap full the host sat
+near load 179 for hours, and mem-guardian never saw them: they are neither
+fleet repo processes nor agent panes.
+
+The split with `chrome-autoprune` (agents profile): it stops idle disposable
+bridges and refuses attached ones, which is every bridge an agent starts on a
+fleet host because the browser ladder exports `CHROME_DEVTOOLS_AXI_BROWSER_URL`;
+this reaper stops only those attached bridges and skips every other one, so a
+headed or persistent-profile Chrome is never killed.
+
+`flotilla-devtools-bridge-reaper.timer` runs `devtools-bridge-reaper.sh` every
+10 minutes. Each run records the CPU ticks of every attached bridge's whole
+process tree; a tree that moved, or a session whose `bridge.pid` or
+`snapshot-generation` changed, counts as busy, and a bridge seen for the first
+time is never reaped on that run. A bridge idle for `REAPER_IDLE_MIN` (60)
+minutes gets TERM, then after a 5 s grace KILL for whatever is left of its
+exact tree, every pid re-checked by start time. The session's next command
+starts a fresh bridge attached to the same ladder browser: only the MCP
+connection and page selection are dropped, and the browser keeps its pages and
+cookies. The script reads `/proc` in one pass because a per-process version
+could not finish in five minutes at load 160. `--dry-run` prints each attached
+bridge's idle time and verdict and changes nothing.
+`tests/test_devtools_bridge_reaper.py` drives it against a fixture process
+tree.
+
 ## Operating
 
 ```
 systemctl --user status flotilla-shared-supabase flotilla-docker-guard flotilla-worktree-env-seed.path
-systemctl --user status flotilla-storage-guard.timer
+systemctl --user status flotilla-storage-guard.timer flotilla-devtools-bridge-reaper.timer
 ~/oss-fleet/doctor/storage-guard.sh --dry-run
+~/oss-fleet/doctor/devtools-bridge-reaper.sh --dry-run
 ~/oss-fleet/shared-supabase/node_modules/.bin/supabase status --workdir ~/oss-fleet/shared-supabase
 tail ~/oss-fleet/doctor/docker-guard.log ~/oss-fleet/shared-supabase/check.log ~/oss-fleet/doctor/worktree-env-seed.log
-tail ~/oss-fleet/doctor/storage-guard.log
+tail ~/oss-fleet/doctor/storage-guard.log ~/oss-fleet/doctor/devtools-bridge-reaper.log
 ```
 
 Tolerating a bare Postgres container someone else owns: add its name (glob)

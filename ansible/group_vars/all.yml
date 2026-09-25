@@ -279,6 +279,8 @@ factory_fleet_units:
   - flotilla-dev-server-reaper.timer
   - flotilla-storage-guard.service
   - flotilla-storage-guard.timer
+  - flotilla-devtools-bridge-reaper.service
+  - flotilla-devtools-bridge-reaper.timer
   - fleet-browser-obscura.service
   - fleet-browser-sync.service
   - fleet-browser-sync.timer
@@ -292,6 +294,7 @@ factory_fleet_enabled_units:
   - { unit: flotilla-worktree-env-seed.timer, wants: timers.target.wants }
   - { unit: flotilla-dev-server-reaper.timer, wants: timers.target.wants }
   - { unit: flotilla-storage-guard.timer, wants: timers.target.wants }
+  - { unit: flotilla-devtools-bridge-reaper.timer, wants: timers.target.wants }
   - { unit: fleet-browser-obscura.service, wants: default.target.wants }
   - { unit: fleet-browser-sync.timer, wants: timers.target.wants }
   - { unit: fleet-browser-gc.timer, wants: timers.target.wants }
