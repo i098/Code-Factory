@@ -10,6 +10,9 @@ live lanes at 5-8 GB each had been spawned with nothing bounding concurrency.
 
 Every control below removes a cause, not a symptom.
 
+Sizing per lane count and the full list of pruners, including the source host's
+unexported ones, are in [Capacity, plugins and pruners](capacity.md).
+
 ## The chain the controls break
 
 1. Briefs require before/after screenshots of the live app.
@@ -32,7 +35,7 @@ Every control below removes a cause, not a symptom.
 | `.local/bin/supabase` | Shim: `status`/`--version` pass through; every lifecycle or schema subcommand is refused with the reason. `npx supabase` bypasses it, which is why the Docker guard exists. |
 | `.config/systemd/user/flotilla-*.{service,timer,path}` | Login start + 5-minute keeper for the stack; the guard as a restart-always service; the seeder on pool changes, every 2 minutes and at login. |
 | `/etc/docker/daemon.json` | `init: true` and `live-restore: true` merged in (tasks/docker.yml, any profile with docker). |
-| Firstmate `config/spawn-memory-floor-mb` | `6000`: `bin/fm-spawn.sh` refuses a fresh spawn while host `MemAvailable` is below it. Free swap is not counted - "there is swap left" is the thrash state. |
+| Firstmate `config/spawn-memory-floor-mb` | `8000`: `bin/fm-spawn.sh` refuses a fresh spawn while host `MemAvailable` is below it. Free swap is not counted - "there is swap left" is the thrash state. |
 
 Inside the database, `guard.sql` installs event triggers that reject every DDL
 command and every DROP from any role other than the Supabase service roles,

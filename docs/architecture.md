@@ -40,11 +40,27 @@ docker compose --profile worker --profile data up -d     # + example Postgres an
 - Ubuntu 26.04 LTS, x86_64. The recipe also targets Ubuntu 24.04 for the container/rebuild baseline.
 - Interactive Herdr was 0.9.0, while the user unit pointed at a separate 0.8.2 binary. Export selects one 0.9.0 executable and path.
 - OMP reported 18.1.13, but the Bun global manifest still declared 17.4.2. Locks use the active CLI versions, not old cache contents.
-- Installed quota-axi was 0.1.28, below the pinned Firstmate checkout's 0.1.29 floor. Export deliberately selects 0.1.29. Other captured agent preferences are preserved.
+- Installed quota-axi was 0.1.28, below the pinned Firstmate checkout's 0.1.29 floor. Export deliberately selects 0.1.29. Other captured agent preferences are preserved; see [Seeded Firstmate and OMP configuration](#seeded-firstmate-and-omp-configuration).
 - Desktop helpers contained profile-copying behavior and two incompatible runtime registries. Neither is reproduced. Optional desktop setup has one persistent `~/.vnc-chrome-profile`, no seed copying, and no migration of login state.
 - Some current services and Compose files bind broadly or contain machine-specific network addresses. New templates use loopback and explicit opt-in roles instead of copying those bindings.
 - Host browser pruning, fleet emergency memory handling, and build-cache cleanup have different owners. The exported browser pruner handles only eligible idle AXI bridge processes. It does not delete Docker volumes, caches, worktrees, or active builds.
 - Project-specific Seer, Dorm, Foodie, and development preview deployments are not baseline services. Rebuild those projects from their own source and migrations after authenticating. Their databases and credentials are not environment configuration.
+
+## Seeded Firstmate and OMP configuration
+
+The `firstmate` profile copies each name in `factory_firstmate_config_names` (`ansible/group_vars/all.yml`) from this repository's `config/` into the Firstmate checkout's `config/`, which Firstmate gitignores. Preflight requires every source and verify requires every destination. The files are byte-for-byte copies of the source host's live files:
+
+| File | Value |
+| --- | --- |
+| `crew-dispatch.json` | Default only, no rules: every crewmate spawn (ship and scout) is omp on `anthropic/claude-opus-5-5`, effort `high`, provider `anthropic`. |
+| `secondmate-harness` | `omp anthropic/claude-opus-5-5 xhigh`. |
+| `omp-crew-overlay.yml` | omp overlay Firstmate applies to crewmate and scout launches, never secondmates, ahead of its tracked worker overlay. It sets `modelRoles.advisor: anthropic/claude-fable-5-1:low`, `advisor.enabled: true`, `advisor.immuneTurns: 10` and `advisor.syncBacklog: "off"`. Every omp crewmate runs a fable-5.1 advisor at low thinking (its lowest level). Crews never wait on it, because `syncBacklog: "off"` overrides the global `"1"`. Turns that land during a review batch into the next call instead of one call per turn, and the advisor interrupts at most once per 10 turns. omp has no every-N-turns setting. |
+| `spawn-memory-floor-mb` | `8000`; see [fleet guards](fleet-guards.md). |
+| `crew-harness`, `backend`, `startup-memory-budget` | Harness, Herdr backend, and startup memory budget. |
+
+`config/omp.yml` seeds `~/.omp/agent/config.yml` on first write only. It holds the host's `modelRoles` (`default` is `anthropic/claude-opus-5-5:xhigh`, `task` and `subagent` are `anthropic/claude-opus-5-5:auto`, `memory` is `anthropic/claude-opus-5-5:off`, and `smol`, `commit` and `tiny` are `anthropic/claude-sonnet-5:off`) and `retry.fallbackChains` with no `default` chain. Its `advisor` block keeps the global advisor off (`enabled: false`) with `syncBacklog: '1'`; only crews turn it on, through the overlay above, which also sets `syncBacklog` to `"off"`. No router or gateway sits between omp and the provider.
+
+Host sizing, the agent plugins and skills, and every auto pruner are listed in [Capacity, plugins and pruners](capacity.md).
 
 ## Reproducibility policy
 

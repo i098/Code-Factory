@@ -59,7 +59,7 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 | --- | --- | --- |
 | `agents` | on | omp, Codex, pnpm, AXI tools, gh, no-mistakes, treehouse; safe omp presentation and model-role settings (see [omp configuration](omp.md)); browser env defaults; Chrome autoprune timer. |
 | `development` | on | Rust toolchain, build essentials, development-mode npm packages. |
-| `firstmate` | on | Firstmate clone tracking the fork's `main`, plus seeded Firstmate config: crew dispatch, crew and secondmate harness, Herdr backend selection, startup memory budget, and the spawn memory floor. |
+| `firstmate` | on | Firstmate clone tracking the fork's `main`, plus seeded Firstmate config: crew dispatch, crew and secondmate harness, the crew omp overlay (crew advisor, see [omp configuration](omp.md#advisor)), Herdr backend selection, startup memory budget, and the spawn memory floor. |
 | `docker` | on | Docker engine and Compose v2, with daemon defaults `init` (reaps orphaned children) and `live-restore`. Group membership is opt-in through the Ansible variable `factory_docker_group_users`. |
 | `fleet_guards` | off | Shared Supabase stack, Docker event guard, [browser ladder](fleet-guards.md#browser-ladder), dev-server reaper, storage guard, env seeder. See [Fleet guards](fleet-guards.md). |
 | `tailscale` | off | Tailscale daemon only. Authentication is manual; see [Security](security.md#remote-access). |

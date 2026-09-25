@@ -35,7 +35,7 @@ Stored credentials live in `~/.omp/agent/agent.db`. An environment variable such
 
 ## Model access
 
-omp talks straight to the provider APIs. `config/omp.yml` maps every model role to a provider-prefixed id (such as `anthropic/claude-sonnet-5`), and `retry.fallbackChains` names the same ids. A fresh host needs no router, gateway, or proxy, and binds no extra port. Account rotation is built into omp, so more than one account is not a reason to add a gateway. Bringing back a router or gateway is an explicit operator decision; the header of `config/omp.yml` records this rule.
+omp talks straight to the provider APIs. `config/omp.yml` maps every model role to a provider-prefixed id (such as `anthropic/claude-sonnet-5`), and `retry.fallbackChains` uses provider-prefixed ids too. A fresh host needs no router, gateway, or proxy, and binds no extra port. Account rotation is built into omp, so more than one account is not a reason to add a gateway. Bringing back a router or gateway is an explicit operator decision; the header of `config/omp.yml` records this rule.
 
 ## Model roles
 
@@ -68,7 +68,9 @@ For one repository only, create `<repo>/.omp/config.yml` with the keys to overri
 
 ## Advisor
 
-The advisor is a second model that reviews each completed turn and can add notes. `config/omp.yml` picks its model (`modelRoles.advisor`) but does not set `advisor.enabled`, so the advisor is off. Turn it on for one session with `/advisor on`, or for every session with `advisor.enabled: true` in `~/.omp/agent/config.yml`.
+The advisor is a second model that reviews each completed turn and can add notes. `config/omp.yml` picks its model (`modelRoles.advisor`) and sets `advisor.enabled: false`, so the advisor is off. Turn it on for one session with `/advisor on`, or for every session with `advisor.enabled: true` in `~/.omp/agent/config.yml`.
+
+Firstmate turns it on for omp crewmate and scout launches only, never secondmates, by layering the seeded `config/omp-crew-overlay.yml` over `~/.omp/agent/config.yml` (see [Seeded Firstmate and OMP configuration](architecture.md#seeded-firstmate-and-omp-configuration)). Crews get fable 5.1 at low thinking. They never wait on it, because the overlay's `syncBacklog: "off"` overrides the global `"1"`. Turns that land during a review batch into the next call, and the advisor interrupts at most once per 10 turns. omp has no every-N-turns setting.
 
 ## Other seeded preferences
 
