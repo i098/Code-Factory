@@ -82,12 +82,19 @@ live_start_of() { sed -E 's/^.*\) //' "/proc/$1/stat" 2>/dev/null | awk '{print 
 env_of() { tr '\0' '\n' <"/proc/$1/environ" 2>/dev/null | sed -n "s/^$2=//p" | head -1; }
 mem_mb_of() { awk '/^(VmRSS|VmSwap):/ {k += $2} END {print int(k / 1024)}' "/proc/$1/status" 2>/dev/null; }
 
-# This account's bridges. The grep's own command line carries the marker too;
-# it is not in PROCS, so the caller's start-time lookup drops it.
+# This account's bridges: exactly `node <path>/chrome-devtools-axi-bridge.js`,
+# the argv chrome-devtools-axi spawns. grep only narrows the candidates; an
+# editor, pager or shell that merely names the file fails the argv check.
 bridge_pids() {
+  local p args
   grep -l -a -F "$BRIDGE_MARK" /proc/[0-9]*/cmdline 2>/dev/null |
     sed -n 's#^/proc/\([0-9]*\)/cmdline$#\1#p' |
-    while read -r p; do [ -O "/proc/$p" ] && echo "$p"; done
+    while read -r p; do
+      [ -O "/proc/$p" ] || continue
+      mapfile -d '' -t args 2>/dev/null <"/proc/$p/cmdline" || continue
+      [ "${#args[@]}" -eq 2 ] && [ "${args[0]##*/}" = node ] &&
+        [ "${args[1]##*/}" = "$BRIDGE_MARK" ] && echo "$p"
+    done
 }
 
 # shellcheck disable=SC2016 # an awk program; awk, not the shell, expands it

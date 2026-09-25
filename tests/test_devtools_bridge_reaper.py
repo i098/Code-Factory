@@ -1,8 +1,10 @@
 """fleet/doctor/devtools-bridge-reaper.sh against a fixture bridge process tree.
 
-The fixture is a detached bash (reparented to init, like a real bridge) with
-a `sleep` child, carrying a per-test marker in its command line instead of
-chrome-devtools-axi-bridge.js, so real bridges on the host are never matched.
+The fixture is a detached `bash <marker>` run as argv[0] `node`, so its
+command line has the shape of a real bridge, `node <path>/<marker>`. It is
+reparented to init like a real bridge and has a `sleep` child. The per-test
+marker stands in for chrome-devtools-axi-bridge.js, so real bridges on the
+host are never matched.
 Idle time is simulated by backdating the busy timestamp in the state file.
 """
 
@@ -47,6 +49,9 @@ class Reaper:
         cli.chmod(0o755)
         self.state = self.doctor / "devtools-bridge-reaper.state"
         self.mark = f"fixture-bridge-{uuid.uuid4().hex}.js"
+        self.script = self.stub / self.mark
+        self.script.write_text(BRIDGE)
+        self.spawned: list[int] = []
         self.env = {
             "PATH": f"{self.stub / 'bin'}:/usr/bin:/bin",
             "HOME": str(tmp),
@@ -54,18 +59,19 @@ class Reaper:
             "BRIDGE_REAPER_MARK": self.mark,
             "BRIDGE_REAPER_AXI_STATE_DIR": str(self.axi),
         }
-        self.pid = self.start_bridge()
+        self.pid = self.start("node")
         self.tree = [self.pid, *self.children(self.pid)]
 
-    def start_bridge(self) -> int:
-        # The wrapper backgrounds the bridge and exits, so init adopts it.
+    def start(self, argv0: str) -> int:
+        # The wrapper backgrounds `bash <marker>` under argv[0] and exits, so
+        # init adopts it.
         out = subprocess.run(
             [
                 "bash",
                 "-c",
-                'bash -c "$0" "$1" </dev/null >/dev/null 2>&1 & echo $!',
-                BRIDGE,
-                self.mark,
+                'exec -a "$1" bash "$0" </dev/null >/dev/null 2>&1 & echo $!',
+                str(self.script),
+                argv0,
             ],
             env={**self.env, "CHROME_DEVTOOLS_AXI_SESSION": SESSION},
             capture_output=True,
@@ -76,6 +82,7 @@ class Reaper:
         deadline = time.time() + 5
         while not self.children(pid) and time.time() < deadline:
             time.sleep(0.05)
+        self.spawned += [pid, *self.children(pid)]
         return pid
 
     @staticmethod
@@ -114,7 +121,7 @@ class Reaper:
         return not any(alive(p) for p in self.tree)
 
     def cleanup(self):
-        for p in self.tree:
+        for p in self.spawned:
             if alive(p):
                 os.kill(p, signal.SIGKILL)
 
@@ -189,3 +196,14 @@ def test_bridge_pid_naming_another_pid_skips_stop_but_kills_the_tree(reaper):
     reaper.run()
     assert reaper.stops() == []
     assert reaper.gone()
+
+
+def test_process_that_only_names_the_bridge_file_is_never_touched(reaper):
+    decoy = reaper.start("bash")
+    decoy_tree = [decoy, *reaper.children(decoy)]
+    reaper.run()
+    assert reaper.state.read_text().startswith(f"{reaper.pid}:")
+    reaper.backdate(61)
+    reaper.run()
+    assert reaper.gone()
+    assert all(alive(p) for p in decoy_tree)
