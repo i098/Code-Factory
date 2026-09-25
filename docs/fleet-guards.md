@@ -120,11 +120,13 @@ process tree; a tree that moved, or a session whose `bridge.pid` or
 time is never reaped on that run. A bridge idle for `REAPER_IDLE_MIN` (60)
 minutes gets TERM, then after a 5 s grace KILL for whatever is left of its
 exact tree, every pid re-checked by start time. The session's next command
-starts a fresh bridge; its open pages are lost. The script reads `/proc` in one
-pass because a per-process version could not finish in five minutes at load
-160. `--dry-run` prints each attached bridge's idle time and verdict and
-changes nothing. `tests/test_devtools_bridge_reaper.py` drives it against a
-fixture process tree.
+starts a fresh bridge attached to the same ladder browser: only the MCP
+connection and page selection are dropped, and the browser keeps its pages and
+cookies. The script reads `/proc` in one pass because a per-process version
+could not finish in five minutes at load 160. `--dry-run` prints each attached
+bridge's idle time and verdict and changes nothing.
+`tests/test_devtools_bridge_reaper.py` drives it against a fixture process
+tree.
 
 ## Operating
 

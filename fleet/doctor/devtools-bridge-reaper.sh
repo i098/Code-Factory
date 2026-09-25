@@ -25,8 +25,8 @@
 # time counts as busy at that moment, so nothing is reaped on its first run.
 #
 # A reaped bridge is cheap to get back: the next chrome-devtools-axi command in
-# that session starts a fresh one. What is lost is that session's open pages,
-# and in the default isolated mode its cookies.
+# that session starts a fresh one. Only its MCP connection and page selection
+# are dropped; the shared ladder browser keeps its pages and cookies.
 #
 # Reaping: TERM to the bridge, whose own handler closes its MCP client and
 # signals its group; after a 5 s grace, KILL for whatever is left of that exact
