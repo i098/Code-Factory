@@ -4,7 +4,6 @@
   "version": "1.0.0",
   "description": "Pinned agent and Firstmate CLI tools; no credentials",
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "0.84.2",
     "@oh-my-pi/pi-coding-agent": "18.1.13",
     "@openai/codex": "0.147.0",
     "chrome-devtools-axi": "0.1.29",

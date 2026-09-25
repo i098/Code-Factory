@@ -6,17 +6,27 @@
 # decision. Keep this note in agreement with config/crew-dispatch.json.
 modelRoles:
   designer: anthropic/claude-fable-5-1
-  smol: cerebras/qwen-3.8-27b:high
+  smol: anthropic/claude-sonnet-5:off
   slow: anthropic/claude-fable-5-1:xhigh
-  vision: anthropic/claude-sonnet-5
+  vision: anthropic/claude-opus-5-5:auto
   plan: anthropic/claude-fable-5-1
-  commit: anthropic/claude-sonnet-5
-  tiny: anthropic/claude-sonnet-5
+  commit: anthropic/claude-sonnet-5:off
+  tiny: anthropic/claude-sonnet-5:off
   advisor: anthropic/claude-sonnet-5
   Kimi: kimi-code/k3
-  task: anthropic/claude-opus-5
-  subagent: anthropic/claude-opus-5
-  default: anthropic/claude-opus-5
+  task: anthropic/claude-opus-5-5:auto
+  subagent: anthropic/claude-opus-5-5:auto
+  default: anthropic/claude-opus-5-5:xhigh
+  memory: anthropic/claude-opus-5-5:off
+# Off globally on purpose: Firstmate layers config/omp-crew-overlay.yml onto
+# omp crewmate and scout launches, which turns the advisor on for crews only:
+# fable 5.1 at low thinking, syncBacklog "off" overriding the '1' below so crews
+# never wait on it and turns that land during a review batch into the next
+# call, interrupting at most once per 10 turns.
+advisor:
+  enabled: false
+  immuneTurns: 4
+  syncBacklog: '1'
 theme:
   dark: dark-rose-pine
 symbolPreset: nerd
@@ -68,7 +78,5 @@ retry:
     - anthropic/claude-opus-5
     anthropic/claude-sonnet-5:
     - anthropic/claude-fable-5-1
-    - anthropic/claude-opus-5
-    default:
     - anthropic/claude-opus-5
   maxDelayMs: 60000

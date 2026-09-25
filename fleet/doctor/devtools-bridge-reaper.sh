@@ -11,7 +11,7 @@
 #
 # Scope: attached bridges only, CHROME_DEVTOOLS_AXI_BROWSER_URL set in the
 # bridge's environment, as the fleet browser ladder sets it for every agent.
-# chrome-autoprune refuses exactly those and stops the other, disposable ones.
+# chrome-autoprune refuses those and stops only the disposable ones.
 # Every other bridge is skipped: a headed or persistent-profile bridge runs its
 # own Chrome inside the tree.
 #

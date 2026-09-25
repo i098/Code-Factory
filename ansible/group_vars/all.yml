@@ -199,11 +199,6 @@ factory_agent_config_files:
     dir_mode: "0700"
     mode: "0600"
     first_write: true
-  - src: config/pi.json
-    dest: "{{ factory_cfg.home }}/.pi/agent/settings.json"
-    dir_mode: "0700"
-    mode: "0600"
-    first_write: true
 
 # Firstmate reads these from its own checkout and already gitignores them, so
 # the clone stays clean and no .gitignore is edited.
@@ -217,6 +212,12 @@ factory_firstmate_config_names:
   # (bin/fm-spawn-memory-floor-lib.sh). Ten live lanes at 5-8 GB each filled
   # 24 GB RAM + 52 GB swap on the source host on 2026-09-17.
   - spawn-memory-floor-mb
+  # omp overlay Firstmate layers onto crewmate and scout launches (never
+  # secondmates): the fable-5.1 advisor at low thinking. syncBacklog "off"
+  # overrides the global "1", so crews never wait on it; turns that land during
+  # a review batch into the next call, and it interrupts at most once per 10
+  # turns. omp has no every-N-turns setting.
+  - omp-crew-overlay.yml
 factory_firstmate_config_first_write: false
 
 # --- Docker -----------------------------------------------------------------

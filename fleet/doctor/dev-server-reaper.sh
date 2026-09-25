@@ -14,7 +14,7 @@
 # server (`next dev`, `next-server`) or a type-check (`tsc --noEmit`).
 #
 # A target is reaped when ANY of these hold for its worktree:
-#   * no agent process (omp/pi/claude/codex/grok/kimi/cursor) has that cwd;
+#   * no agent process (omp/claude/codex/grok/kimi/cursor) has that cwd;
 #   * the firstmate lane owning that worktree last reported
 #     done: / paused: / blocked: / failed:;
 #   * the agent's newest transcript has not been written for >= IDLE_MIN
@@ -76,7 +76,7 @@ agent_idle_min() {  # <worktree>
   # Claude Code names its project dir from the full path with every non-alnum
   # character turned into '-': /home/u/.no-mistakes/x -> -home-u--no-mistakes-x
   crel=$(printf '%s' "$1" | sed -E 's/[^A-Za-z0-9]/-/g')
-  for f in "$HOME"/.omp/agent/sessions/*"$rel"/*.jsonl "$HOME"/.pi/agent/sessions/*"$rel"*/*.jsonl "$HOME"/.claude/projects/"$crel"/*.jsonl; do
+  for f in "$HOME"/.omp/agent/sessions/*"$rel"/*.jsonl "$HOME"/.claude/projects/"$crel"/*.jsonl; do
     [ -f "$f" ] || continue
     m=$(stat -c %Y "$f" 2>/dev/null) || continue
     [ "$m" -gt "$newest" ] && newest=$m
@@ -87,7 +87,7 @@ agent_idle_min() {  # <worktree>
 
 agent_alive() {  # <worktree> -> 0 when an agent process has this cwd
   local p
-  for p in $(pgrep -x 'omp|pi|claude|codex|grok|kimi|cursor' 2>/dev/null); do
+  for p in $(pgrep -x 'omp|claude|codex|grok|kimi|cursor' 2>/dev/null); do
     [ "$(cwd_of "$p")" = "$1" ] && return 0
   done
   return 1

@@ -10,6 +10,9 @@ live lanes at 5-8 GB each had been spawned with nothing bounding concurrency.
 
 Every control below removes a cause, not a symptom.
 
+Sizing per lane count and the full list of pruners, including the source host's
+unexported ones, are in [Capacity, plugins and pruners](capacity.md).
+
 ## The chain the controls break
 
 1. Briefs require before/after screenshots of the live app.
@@ -33,7 +36,7 @@ Every control below removes a cause, not a symptom.
 | `.local/bin/supabase` | Shim: `status`/`--version` pass through; every lifecycle or schema subcommand is refused with the reason. `npx supabase` bypasses it, which is why the Docker guard exists. |
 | `.config/systemd/user/flotilla-*.{service,timer,path}` | Login start + 5-minute keeper for the stack; the guard as a restart-always service; the seeder on pool changes, every 2 minutes and at login. |
 | `/etc/docker/daemon.json` | `init: true` and `live-restore: true` merged in (tasks/docker.yml, any profile with docker). |
-| Firstmate `config/spawn-memory-floor-mb` | `6000`: `bin/fm-spawn.sh` refuses a fresh spawn while host `MemAvailable` is below it. Free swap is not counted - "there is swap left" is the thrash state. |
+| Firstmate `config/spawn-memory-floor-mb` | `8000`: `bin/fm-spawn.sh` refuses a fresh spawn while host `MemAvailable` is below it. Free swap is not counted - "there is swap left" is the thrash state. |
 
 Inside the database, `guard.sql` installs event triggers that reject every DDL
 command and every DROP from any role other than the Supabase service roles,
@@ -43,7 +46,7 @@ Storage) is unaffected. There is never a migration on this database.
 
 The Firstmate checkout, tracking `main` of `factory.firstmate.url`, carries the
 last layer: `extensions/fm-swarms-platform-guard.ts`, a tool-call seatbelt
-loaded by every omp and pi crewmate that blocks `supabase start|stop|db reset|migration`,
+loaded by every omp crewmate that blocks `supabase start|stop|db reset|migration`,
 `docker run ... postgres`, `psql` against the stack and edits to the shared
 containers, with the reason attached - so the agent learns why before the
 Docker guard has to act.
@@ -98,6 +101,98 @@ the process writing it. `storage-guard.sh --dry-run` prints the measurement,
 the tier, what each CRIT step would free and the alert a real run would send,
 and changes nothing. `tests/test_storage_guard.py` drives the tiers against
 stubbed `df`, `du` and `docker`.
+
+## Browser ladder
+
+Three browser tiers share one cookie jar. The `fleet_guards` profile installs
+them under `~/oss-fleet/browsers/`. Sources of truth:
+`fleet/browsers/fleet-browser` (runtime, `alive` probe),
+`fleet/browsers/env.sh` (defaults every shell inherits),
+`fleet/browsers/cookie-sync.ts` (jar), `ansible/tasks/fleet-browsers.yml` and
+`ansible/templates/fleet-browser-*.{service,timer}.j2` (units, cadences).
+
+| Tier | CDP port | Always on? | Use it when |
+| --- | --- | --- | --- |
+| 1 `obscura` | `127.0.0.1:9222` | Yes (`fleet-browser-obscura.service`) | Default for everything: clicks, screenshots, screencast. ~25 MB idle; ~5x less RAM per page than Chrome. |
+| 2 `chrome` | `127.0.0.1:9522` | On demand (`fleet-browser up chrome`) | Obscura misrenders the page, a site blocks it, or the maintainer needs pixel-exact before/after evidence. Headless Chromium, persistent profile. |
+| 3 `vnc` | `127.0.0.1:9523`, noVNC `http://127.0.0.1:6909/vnc.html` | On demand (`fleet-browser up vnc`) | A human must see or drive the browser: OAuth consent, second factors, captchas, native dialogs, sites such as Google that refuse any automated browser. TigerVNC display `:9` + headed Chromium. |
+
+Move down one tier only when the tier above cannot do the job; move back to
+`obscura` for the next task. `fleet-browser-gc.timer` (every 5 min) stops tiers
+2 and 3 after 30 idle minutes (`FLEET_BROWSER_IDLE_MIN`, no CDP client
+connected). Tier 3 needs the `desktop` profile's TigerVNC/noVNC packages
+(`ConditionPathExists=/usr/bin/tigervncserver`). Tiers 2 and 3 need a
+Chrome/Chromium binary (`FLEET_CHROME_BIN`, Google Chrome, Chromium, or a
+Playwright Chromium).
+
+Obscura ships for x86_64 only (see [Dependencies](dependencies.md#fleet-browsers-and-supabase)).
+The defaults do not change on aarch64: `fleet/browsers/env.sh` and
+`herdr.service` still point at obscura on `:9222`, so tier 1 never answers
+there. An agent has to escalate by hand with `fleet-browser up chrome` and
+`eval "$(fleet-browser env chrome)"`.
+
+All three tiers share one session. `cookie-sync.ts` keeps a canonical jar at
+`~/.fleet-browser/cookies.json` and converges every live tier to it over CDP.
+`fleet-browser-sync.timer` runs it every 2 minutes, and
+`fleet-browser up chrome|vnc` runs it before returning (`up obscura` returns as
+soon as the tier answers, without a converge). So a login made in any tier is
+present in every tier within one sync. Cookies are synced; localStorage is
+engine-local and is not.
+
+Rule: an agent never launches its own Chrome, headless or not, and never uses a
+private `--user-data-dir`. A private profile has none of the fleet's logins and
+is outside the sync. Use the tier that is already running, or bring one up with
+`fleet-browser up`.
+
+The ladder's `vnc` tier is not the `desktop` profile's operator desktop (XFCE +
+TigerVNC, noVNC on `127.0.0.1:6080`, profile `~/.vnc-chrome-profile`, see
+[Desktop access](recovery.md#desktop-access)). The desktop is a human
+workstation; the `vnc` tier is a fleet browser with a human window into it.
+
+### Testing a tier before using it
+
+Every shell an agent inherits sources `env.sh`, so
+`CHROME_DEVTOOLS_AXI_BROWSER_URL` already points at `obscura`:
+
+```bash
+fleet-browser env            # prints the exports for the default tier
+fleet-browser env chrome     # or: eval "$(fleet-browser env chrome)" to escalate for one task
+```
+
+1. Probe the tier's CDP endpoint. This is the same `alive` check `fleet-browser` uses:
+
+   ```bash
+   curl -s -m 3 http://127.0.0.1:9222/json/version    # obscura
+   curl -s -m 3 http://127.0.0.1:9522/json/version    # chrome
+   curl -s -m 3 http://127.0.0.1:9523/json/version    # vnc
+   ```
+
+   Healthy: exit 0 and a JSON object with `"Browser"`, `"Protocol-Version": "1.3"`
+   and a `"webSocketDebuggerUrl"` on the same port. Anything else (empty output,
+   exit 7 or 28, HTML) means the tier is down. Run `fleet-browser up chrome` or
+   `fleet-browser up vnc` (waits until the probe answers), or for `obscura` run
+   `systemctl --user start fleet-browser-obscura.service`.
+
+2. Check the whole ladder at once. `STATE` is `up`/`down`, `CLIENTS` counts open
+   CDP connections, and the `session:` line shows the jar and the last sync:
+
+   ```bash
+   fleet-browser status
+   ```
+
+3. Confirm the fleet's logins are there. The jar must exist and the sync timer
+   must be active:
+
+   ```bash
+   ls -l ~/.fleet-browser/cookies.json
+   systemctl --user list-timers fleet-browser-sync.timer
+   fleet-browser sync           # force a converge now instead of waiting up to 2 min
+   ```
+
+   A site still asking for a login on every tier means nobody has signed in yet.
+   Bring up `vnc`, sign in through noVNC (`ssh -L 6909:127.0.0.1:6909 <host>`,
+   then `http://127.0.0.1:6909/vnc.html?autoconnect=1`), and the next sync
+   carries the session to `obscura` and `chrome`.
 
 ## Devtools-bridge reaper
 

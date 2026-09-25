@@ -381,7 +381,7 @@
               ~ '.']
              + ['Manual: authenticate every CLI interactively as '
                 ~ factory_cfg.user
-                ~ ' (gh auth login, OMP/Pi/Codex provider sign-in); no credential was copied.']
+                ~ ' (gh auth login, OMP/Codex provider sign-in); no credential was copied.']
              + (['Manual: join the tailnet with `sudo tailscale up`; Tailscale SSH and the tailnet ACL stay separate decisions.']
                 if (factory_cfg.profiles.tailscale | bool) else [])
              + (['Manual: add accounts to the docker group yourself (factory_docker_group_users); it grants host root.']
