@@ -87,5 +87,6 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 | [Architecture](docs/architecture.md) | Why Ansible, host and container boundary, Docker worker, CI |
 | [Migration and recovery](docs/recovery.md) | New-device sequence, desktop access, troubleshooting, upgrades |
 | [Security](docs/security.md) | What is never exported and how to handle credentials and remote access |
+| [Shared credentials](docs/secrets.md) | `super.env` in Cloudflare Secrets Store: push, fetch on a new host, revoke |
 
 Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). License: [MIT](LICENSE).

@@ -16,6 +16,8 @@ The source host contains at least one service unit with an inline API credential
 
 Authenticate each CLI interactively under the account that will run it. Do not copy an old host's credential database to make a tool appear configured. GitHub repository access, model subscriptions, organization permissions, and tailnet membership are separate prerequisites; installing a binary does not grant them.
 
+Shared fleet credentials in `super.env` are the one exception: a new host fetches them from Cloudflare Secrets Store with `scripts/fetch-super-env.sh`. See [Shared credentials](secrets.md).
+
 Keep local credential files outside the checkout, in owner-only directories with mode `0700`; files should have mode `0600`. Services should use `EnvironmentFile=` or Docker secrets. Do not put tokens into shell command arguments or public URLs.
 
 The persistent desktop browser uses exactly one profile, `~/.vnc-chrome-profile`. Never clone, trim, archive into Git, or replace it. Log in on the destination device. The browser pruner excludes persistent profiles, attached browsers, and headed browsers.
