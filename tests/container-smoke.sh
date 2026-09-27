@@ -672,6 +672,34 @@ check_login_shell_environment() {
     printf 'login shell resolves %s and pins the MCP entrypoint at %s\n' "${resolved}" "${mcp}"
 }
 
+# What the no-mistakes gate and the PR review need on a fresh host: acp:omp as
+# the gate agent with acpx mapping omp to `omp acp`, no omp registry override,
+# the omp-based ponytail-review, and the fleet's minimum AXI versions. Versions
+# come from the installed package.json, so no agent CLI is executed.
+check_agent_gate() {
+    local npm_root name floor version
+    npm_root="${HOME}/.local/share/code-factory/npm"
+    cf_python - "${HOME}" <<'PY' || fail "no-mistakes/acpx seed does not make acp:omp the gate agent"
+import json, sys, yaml
+home = sys.argv[1]
+nm = yaml.safe_load(open(f"{home}/.no-mistakes/config.yaml"))
+assert nm["agent"] == ["acp:omp"], nm["agent"]
+assert "acp_registry_overrides" not in nm
+assert json.load(open(f"{home}/.acpx/config.json"))["agents"]["omp"]["command"] == "omp acp"
+PY
+    [ -x "${HOME}/.local/bin/acpx" ] || fail "acpx is not installed in ~/.local/bin"
+    grep -q 'omp -p --model "$model" --no-rules --no-skills --no-extensions' "${HOME}/.local/bin/ponytail-review" \
+        || fail "~/.local/bin/ponytail-review is missing or does not run omp -p"
+    for name in quota-axi:0.1.54 tasks-axi:0.2.6; do
+        floor=${name#*:}; name=${name%%:*}
+        version=$(jq -r .version "${npm_root}/node_modules/${name}/package.json")
+        [ "$(printf '%s\n%s\n' "${floor}" "${version}" | sort -V | head -1)" = "${floor}" ] \
+            || fail "${name} ${version} is below the fleet floor ${floor}"
+        printf '%s %s (floor %s)\n' "${name}" "${version}" "${floor}"
+    done
+    printf 'gate agent acp:omp via acpx, ponytail-review on omp\n'
+}
+
 container_mode() {
     SMOKE_TMP=$(mktemp -d -t code-factory-smoke.XXXXXX)
     trap 'rm -rf "${SMOKE_TMP}"' EXIT
@@ -691,6 +719,7 @@ container_mode() {
     run_check npm-tooling                  check_npm_tooling
     run_check development-toolchain        check_development_toolchain
     run_check login-shell-environment      check_login_shell_environment
+    run_check agent-gate                   check_agent_gate
     run_check no-baked-credentials         check_no_baked_credentials
     run_check herdr-config                 check_herdr_config
     run_check herdr-server-headless        check_herdr_server_headless

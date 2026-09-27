@@ -176,7 +176,10 @@ fleet_chrome_bin() {
   for c in "${FLEET_CHROME_BIN:-}" /usr/bin/google-chrome /usr/bin/google-chrome-stable /usr/bin/chromium /usr/bin/chromium-browser; do
     [ -n "$c" ] && [ -x "$c" ] && { echo "$c"; return 0; }
   done
-  c=$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux64/chrome 2>/dev/null | sort -V | tail -1)
+  # Browser caches: Playwright, the puppeteer cache, and omp's own puppeteer download.
+  c=$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux64/chrome \
+    "$HOME"/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome \
+    "$HOME"/.omp/puppeteer/chrome/linux-*/chrome-linux64/chrome 2>/dev/null | sort -V | tail -1)
   [ -n "$c" ] && [ -x "$c" ] && { echo "$c"; return 0; }
   return 1
 }

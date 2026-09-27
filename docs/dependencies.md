@@ -21,8 +21,8 @@ Everything the recipe installs, grouped by the file that pins it. A version appe
 
 `tools/npm/package.json`, installed with `npm ci` from `tools/npm/package-lock.json` under the `agents` profile.
 
-- omp (`@oh-my-pi/pi-coding-agent`) 18.1.13, codex (`@openai/codex`) 0.147.0, pnpm 10.33.2.
-- chrome-devtools-axi 0.1.29, chrome-devtools-mcp 1.9.0, gh-axi 0.1.30, lavish-axi 0.1.52, quota-axi 0.1.29, tasks-axi 0.2.5.
+- omp (`@oh-my-pi/pi-coding-agent`) 18.1.13, codex (`@openai/codex`) 0.147.0, pnpm 10.33.2, acpx 0.18.0 (runs the no-mistakes gate agent `acp:omp`).
+- chrome-devtools-axi 0.1.29, chrome-devtools-mcp 1.9.0, gh-axi 0.1.30, lavish-axi 0.1.52, quota-axi 0.1.54, tasks-axi 0.2.6. The fleet requires at least quota-axi 0.1.54 and tasks-axi 0.2.6.
 
 ## Ubuntu packages
 

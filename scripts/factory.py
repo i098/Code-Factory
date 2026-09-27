@@ -149,6 +149,7 @@ def doctor(document):
             "tasks-axi",
             "quota-axi",
             "lavish-axi",
+            "acpx",
         ]
     if config["profiles"]["development"]:
         tools += ["rustc", "cargo"]

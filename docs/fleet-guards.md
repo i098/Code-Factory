@@ -123,7 +123,7 @@ Move down one tier only when the tier above cannot do the job; move back to
 connected). Tier 3 needs the `desktop` profile's TigerVNC/noVNC packages
 (`ConditionPathExists=/usr/bin/tigervncserver`). Tiers 2 and 3 need a
 Chrome/Chromium binary (`FLEET_CHROME_BIN`, Google Chrome, Chromium, or a
-Playwright Chromium).
+Playwright or puppeteer Chrome under `~/.cache` or `~/.omp/puppeteer`).
 
 Obscura ships for x86_64 only (see [Dependencies](dependencies.md#fleet-browsers-and-supabase)).
 The defaults do not change on aarch64: `fleet/browsers/env.sh` and

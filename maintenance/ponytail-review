@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Run the ponytail over-engineering review on a diff, from ANY harness.
+#
+# WHY THIS EXISTS
+#   The captain's PR rule (2026-08-25) is: no line cap, instead run
+#   /ponytail-review on the diff, cut everything it names, and ship when it
+#   answers "Lean already. Ship."
+#
+#   But /ponytail-review is a Claude plugin slash command, and crewmates run on
+#   pi, where it is not registered. Abstract's worker hit this: it got a real
+#   verdict only by reading the plugin files off disk and reassembling the
+#   prompt by hand. That works once; as a fleet rule it means every home
+#   improvises a different review, or quietly skips it and says it passed.
+#
+#   This wrapper makes the documented gate actually runnable. It builds the
+#   prompt from the PLUGIN'S OWN files rather than a paraphrase, so the review
+#   stays the real ponytail and follows the plugin when it updates.
+#
+# USAGE
+#   ponytail-review                 review uncommitted work (git diff HEAD)
+#   ponytail-review <base>          review this branch against <base>, e.g. origin/main
+#   ponytail-review --stdin         review a diff piped in
+#   git diff main... | ponytail-review --stdin
+#
+# EXIT CODES
+#   0  "Lean already. Ship." - the gate passes
+#   1  usage, missing plugin, missing agent, or empty diff - NEVER a pass
+#   2  findings remain: cut them and run again
+#
+# FAIL-CLOSED
+#   A missing plugin or agent exits 1 with a named reason. It never prints a
+#   pass it did not get: a gate that silently succeeds is worse than no gate,
+#   because it launders "not run" into "reviewed".
+
+set -uo pipefail
+
+# The copy `omp plugin install ponytail@ponytail` writes; no claude CLI is needed.
+PLUGIN="${PONYTAIL_PLUGIN_DIR:-$HOME/.omp/plugins/cache/marketplaces/ponytail}"
+CMD_TOML="$PLUGIN/commands/ponytail-review.toml"
+SKILL_MD="$PLUGIN/skills/ponytail-review/SKILL.md"
+
+die() { echo "ponytail-review: $*" >&2; exit 1; }
+
+case "${1:-}" in
+  -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
+
+[ -f "$CMD_TOML" ] || die "plugin command not found at $CMD_TOML - the gate cannot run, do not report a pass"
+[ -f "$SKILL_MD" ] || die "plugin skill not found at $SKILL_MD - the gate cannot run, do not report a pass"
+# 2026-09-25: runs on omp, not claude (captain order "USE OMP NOT CLAUDE"; the claude CLI is wedged
+# on this box and the OmniRoute gateway behind cc/* model ids is gone). Rules, skills and extensions
+# are disabled so the reviewer sees only this prompt, not the fleet's instructions.
+command -v omp >/dev/null 2>&1 || die "no 'omp' binary on PATH - the gate cannot run, do not report a pass"
+
+# Collect the diff.
+diff_text=""
+case "${1:-}" in
+  --stdin) diff_text=$(cat) ;;
+  "")      diff_text=$(git diff HEAD 2>/dev/null) ;;
+  *)       diff_text=$(git diff "$1"... 2>/dev/null || git diff "$1" 2>/dev/null) ;;
+esac
+
+[ -n "${diff_text//[[:space:]]/}" ] && : || die "empty diff - nothing to review, and an empty review is not a pass"
+
+# The review instruction comes from the plugin itself, never from a paraphrase
+# maintained here: the whole point is that this is the real ponytail review.
+instruction=$(sed -nE 's/^prompt[[:space:]]*=[[:space:]]*"(.*)"[[:space:]]*$/\1/p' "$CMD_TOML")
+[ -n "$instruction" ] || die "could not read the review prompt from $CMD_TOML"
+
+prompt=$(printf '%s\n\n%s\n\n--- BEGIN DIFF ---\n%s\n--- END DIFF ---\n' \
+  "$instruction" \
+  "Follow these rules exactly:
+$(cat "$SKILL_MD")" \
+  "$diff_text")
+
+# Model-dependent safeguard refusals are real: on 2026-08-27 a worker's review
+# exited 1 on the DEFAULT model with an AUP refusal and passed only under opus.
+# Reviewing a diff is exactly the kind of content a smaller model's safeguard
+# misreads, so pin a model that has been observed to do this work, and let the
+# operator override. An unpinned default turns "this model declined" into what
+# looks like "the gate is broken", and every worker hits it.
+# 2026-09-17: through the OmniRoute gateway the gate competes with every live
+# worker for the same Claude-Code pool, and the pool answers a tool-bearing
+# prompt with "API Error: 400 due to tool use concurrency issues" when it is
+# saturated. Measured that day: opus / cc/claude-opus-5 / claude/claude-opus-5
+# all 400'd on the same diff while nine opus worker sessions were live, and
+# cc/claude-sonnet-5 passed it; one Sonnet run 400'd and passed 20s later. So
+# the default is the pool the workers are NOT on, and a transient provider
+# error is retried with backoff instead of being reported as a failed gate.
+# A refusal is never retried: it is a real verdict about the diff.
+model="${PONYTAIL_REVIEW_MODEL:-anthropic/claude-sonnet-5}"
+tries="${PONYTAIL_REVIEW_RETRIES:-4}"
+attempt=0
+while :; do
+  attempt=$((attempt+1))
+  out=$(cd "${TMPDIR:-/tmp}" && printf '%s' "$prompt" | omp -p --model "$model" --no-rules --no-skills --no-extensions 2>&1) && break
+  if [ "$attempt" -lt "$tries" ] && printf '%s' "$out" | grep -qiE "concurrency|429|rate.?limit|overloaded|5[0-9][0-9] |ECONNRESET|socket hang up|timed? ?out"; then
+    sleep $((attempt * 15))
+    continue
+  fi
+  false
+done || {
+  # Distinguish a refusal from a missing tool. Both are still exit 1 and still
+  # NOT a pass - but a caller who cannot tell them apart will chase the wrong
+  # cause, and a refusal is the one that looks like the gate itself failing.
+  if printf '%s' "$out" | grep -qiE "safeguard|usage polic|acceptable use|refus|declin"; then
+    die "the review model ($model) refused to run this diff, which is NOT a pass. Try another model with PONYTAIL_REVIEW_MODEL=<name>, and report the refusal rather than shipping unreviewed: $(printf '%s' "$out" | head -3)"
+  fi
+  die "omp failed to produce a review (model $model): $(printf '%s' "$out" | head -3)"
+}
+
+printf '%s\n' "$out"
+
+# "Lean already. Ship." is the plugin's own pass phrase.
+if printf '%s' "$out" | grep -qiF "Lean already"; then
+  exit 0
+fi
+echo >&2
+echo "ponytail-review: findings remain - cut them and run again. Not a pass." >&2
+exit 2
