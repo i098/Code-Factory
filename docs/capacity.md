@@ -53,8 +53,9 @@ Idle chrome-devtools-axi bridges come on top: each holds about 2 GB until
 ## Plugins and skills
 
 The recipe does not install these. They are account state on the source host,
-listed so a rebuilt host can match it. Reinstall plugins with
-`omp plugin install`, then confirm with `omp plugin list`.
+listed so a rebuilt host can match it. Add each plugin's marketplace with
+`omp plugin marketplace add`, reinstall plugins with `omp plugin install`,
+then confirm with `omp plugin list`.
 
 ### omp plugins (user scope)
 
