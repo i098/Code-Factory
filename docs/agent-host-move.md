@@ -20,7 +20,7 @@ Other Docker data stays too: the shared Supabase stack, SigNoz (`~/perpetual-sig
 
 ## 1. Provision the new host
 
-1. Follow the [Quick start](../README.md#quick-start): bootstrap, init, validate, plan, apply, doctor. Enable the same profiles as the VPS, plus `desktop` if lanes need the VNC browser tier.
+1. Follow the [Quick start](../README.md#quick-start): bootstrap, init, validate, plan, apply, doctor. Enable the same profiles as the VPS, plus `desktop`: the fleet-browser sign-in in [What git does not carry](#2-what-git-does-not-carry) needs its TigerVNC and noVNC packages.
 2. Fetch `~/super.env` as described in [Fetch on a new host](secrets.md#fetch-on-a-new-host). Compare its `sha256sum` with the VPS copy.
 3. Join the tailnet as a new device ([Remote access](security.md#remote-access)).
 
@@ -29,7 +29,7 @@ Other Docker data stays too: the shared Supabase stack, SigNoz (`~/perpetual-sig
 | Item | How it moves |
 | --- | --- |
 | omp, Anthropic (claude CLI), Codex and gh logins | Sign in again on the new host: [Sign in](omp.md#sign-in), `gh auth login`. Never copy a credential store ([Security](security.md)). |
-| `~/.fleet-browser/cookies.json` | `scp` at mode `600`. It is the session jar every browser tier shares, and a deliberate exception to [Never export](security.md#never-export): it is not a Chrome profile directory. Never through a repository or chat. |
+| Fleet-browser web sessions | Sign in again on the new host through the fleet-browser VNC tier: run `~/oss-fleet/browsers/fleet-browser up vnc`, then open noVNC at `http://127.0.0.1:6909/vnc.html?autoconnect=1` over an SSH tunnel (`ssh -L 6909:127.0.0.1:6909 <host>`). `cookie-sync` then shares that session with every tier ([Browser ladder](fleet-guards.md#browser-ladder)). Sign in to Amazon, Apple, Claude, Cloudflare, GitHub, Granola, LinkedIn, Microsoft, OpenAI, Phantom, Railway, Stripe, Subliminal (subliminal.inc), Swarms (swarms.world), X, and iterative.sh. Google, including YouTube, refuses sign-in inside the fleet-browser: sign in to Google by hand in an ordinary browser, not in the fleet-browser. Never read, print, or copy any cookie value ([Never export](security.md#never-export)). |
 | `data/` and `config/` of the main home (`~/Dev/firstmate`) | `rsync -a` over SSH, after `./factory apply`. The next apply rewrites the seeded names in `config/` from this repository ([Seeded Firstmate and OMP configuration](architecture.md#seeded-firstmate-and-omp-configuration)). |
 | `data/` and `config/` of every secondmate home | Each home path is in the main home's `data/secondmates.md` (`home:`). Provision each home on the new host first, then `rsync -a` both directories. |
 | no-mistakes | Apply seeds `~/.no-mistakes/config.yaml` with the gate agent. Merge any other settings from the VPS file by hand, without `acpx_path`, which names a VPS-only path. Then run `no-mistakes init` in every gated clone; list them on the VPS with `python3 -c "import sqlite3; [print(r[0]) for r in sqlite3.connect('file:$HOME/.no-mistakes/state.sqlite?mode=ro', uri=True).execute('select working_path from repos')]"`. Do not copy `state.sqlite` or `repos/`. |
@@ -73,7 +73,7 @@ Rollback: until step 6, stop the new host's agents and unpause the VPS homes; no
 | Phase | Estimate | Basis |
 | --- | --- | --- |
 | Provision | 15 to 30 minutes | CI applies the `agents` and `development` profiles in about 3 minutes per run. Docker, desktop and the Supabase fixture restore are not measured. |
-| Logins and `super.env` | About 15 minutes | Four interactive sign-ins; the fetch takes seconds. |
+| Logins and `super.env` | About 45 minutes | Four CLI sign-ins, 16 fleet-browser sign-ins and Google by hand, about 2 minutes each (not measured); the fetch takes seconds. |
 | Hand copy | About 30 minutes | Measured 2026-09-27: main home `data/` and `config/` 12 MB, all secondmate homes about 175 MB, 11 clones with unpushed commits. The transfer takes under a minute; the time is in reviewing units and pushing branches. |
 | Wait for in-flight runs | 20 to 90 minutes | no-mistakes runs from start to green CI, last 10 days: median 20 minutes, 90th percentile 90 minutes (47 runs). Live scans run on their own schedule. |
 | Final sync, start, confirm | About 15 minutes | One rsync per home, then one watcher check and one steer per home. |
