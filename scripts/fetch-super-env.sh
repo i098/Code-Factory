@@ -15,7 +15,7 @@ if [[ -z ${FLEET_SECRETS_ACCESS_CLIENT_ID:-} || -z ${FLEET_SECRETS_ACCESS_CLIENT
     echo "Set FLEET_SECRETS_ACCESS_CLIENT_ID and _SECRET, or write them to $creds (mode 600)." >&2
     exit 1
   fi
-  while IFS='=' read -r key value; do
+  while IFS='=' read -r key value || [[ -n $key ]]; do
     case $key in
     FLEET_SECRETS_ACCESS_CLIENT_ID | FLEET_SECRETS_ACCESS_CLIENT_SECRET) printf -v "$key" %s "$value" ;;
     esac

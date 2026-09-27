@@ -163,7 +163,7 @@ def test_fetch_writes_mode_600_from_credentials_file(tmp_path, server):
     creds = tmp_path / ".config/fleet-secrets.env"
     creds.parent.mkdir()
     creds.write_text(
-        "FLEET_SECRETS_ACCESS_CLIENT_ID=fake-id\nFLEET_SECRETS_ACCESS_CLIENT_SECRET=fake-secret\n"
+        "FLEET_SECRETS_ACCESS_CLIENT_ID=fake-id\nFLEET_SECRETS_ACCESS_CLIENT_SECRET=fake-secret"
     )
     creds.chmod(0o644)
     assert fetch(tmp_path, server).returncode != 0
