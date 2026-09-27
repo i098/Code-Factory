@@ -47,7 +47,7 @@ done
 
 ## 3. Check the new host matches
 
-Each check covers a gap measured on the VPS on 2026-09-26. CI runs the automated half: `tests/test_fleet_browser.py` for the Chrome lookup, and the `agent-gate` check in `tests/container-smoke.sh` for the gate agent, ponytail-review, and tool floors.
+Each check covers a gap measured on the VPS on 2026-09-26. CI runs the `agent-gate` check in `tests/container-smoke.sh` for the gate agent, ponytail-review, and tool floors. `tests/test_fleet_browser.py` covers the Chrome lookup only on a host without a system Chrome, so CI runners, which ship one, skip it; run it on the VPS with `uv run pytest tests/test_fleet_browser.py`.
 
 | Gap | Check on the new host | Pass |
 | --- | --- | --- |

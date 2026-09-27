@@ -98,8 +98,6 @@ while :; do
     sleep $((attempt * 15))
     continue
   fi
-  false
-done || {
   # Distinguish a refusal from a missing tool. Both are still exit 1 and still
   # NOT a pass - but a caller who cannot tell them apart will chase the wrong
   # cause, and a refusal is the one that looks like the gate itself failing.
@@ -107,7 +105,7 @@ done || {
     die "the review model ($model) refused to run this diff, which is NOT a pass. Try another model with PONYTAIL_REVIEW_MODEL=<name>, and report the refusal rather than shipping unreviewed: $(printf '%s' "$out" | head -3)"
   fi
   die "omp failed to produce a review (model $model): $(printf '%s' "$out" | head -3)"
-}
+done
 
 printf '%s\n' "$out"
 

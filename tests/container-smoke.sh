@@ -674,17 +674,28 @@ check_login_shell_environment() {
 
 # What the no-mistakes gate and the PR review need on a fresh host: acp:omp as
 # the gate agent with acpx mapping omp to `omp acp`, no omp registry override,
-# the omp-based ponytail-review, and the fleet's minimum AXI versions. Versions
-# come from the installed package.json, so no agent CLI is executed.
+# ponytail-review's exit codes against a stub omp, and the fleet's minimum AXI
+# versions. Versions come from the installed package.json, so no agent CLI is executed.
 check_agent_gate() {
-    local npm_root name floor version
+    local npm_root name floor version stub row want omp_rc omp_out rc
     npm_root="${HOME}/.local/share/code-factory/npm"
     cf_python -c 'import sys, yaml; c = yaml.safe_load(open(sys.argv[1])); assert c["agent"] == ["acp:omp"] and "acp_registry_overrides" not in c' \
         "${HOME}/.no-mistakes/config.yaml" || fail "~/.no-mistakes/config.yaml does not make acp:omp the gate agent"
     jq -e '.agents.omp.command == "omp acp"' "${HOME}/.acpx/config.json" >/dev/null || fail "~/.acpx/config.json does not map omp to omp acp"
     [ -x "${HOME}/.local/bin/acpx" ] || fail "acpx is not installed in ~/.local/bin"
-    grep -q 'omp -p --model "$model" --no-rules --no-skills --no-extensions' "${HOME}/.local/bin/ponytail-review" \
-        || fail "~/.local/bin/ponytail-review is missing or does not run omp -p"
+    stub="${SMOKE_TMP}/ponytail"
+    mkdir -p "${stub}/bin" "${stub}/plugin/commands" "${stub}/plugin/skills/ponytail-review"
+    printf 'prompt = "Review this diff."\n' >"${stub}/plugin/commands/ponytail-review.toml"
+    printf 'Name what to cut.\n' >"${stub}/plugin/skills/ponytail-review/SKILL.md"
+    printf '#!/bin/sh\ncat >/dev/null\nprintf "%%s\\n" "$STUB_OUT"\nexit "$STUB_RC"\n' >"${stub}/bin/omp"
+    chmod +x "${stub}/bin/omp"
+    for row in '0|0|Lean already. Ship.' '2|0|Cut the wrapper.' '1|1|Declined under the usage policy.'; do
+        want=${row%%|*}; row=${row#*|}; omp_rc=${row%%|*}; omp_out=${row#*|}
+        rc=0
+        printf '+x\n' | STUB_OUT=${omp_out} STUB_RC=${omp_rc} PATH="${stub}/bin:${PATH}" PONYTAIL_PLUGIN_DIR="${stub}/plugin" \
+            timeout 20 "${HOME}/.local/bin/ponytail-review" --stdin >/dev/null 2>&1 || rc=$?
+        [ "${rc}" = "${want}" ] || fail "ponytail-review exited ${rc}, expected ${want}, when omp printed '${omp_out}' and exited ${omp_rc}"
+    done
     for name in quota-axi:0.1.54 tasks-axi:0.2.6; do
         floor=${name#*:}; name=${name%%:*}
         version=$(jq -r .version "${npm_root}/node_modules/${name}/package.json")
