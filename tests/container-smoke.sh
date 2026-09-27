@@ -693,8 +693,7 @@ PY
     for name in quota-axi:0.1.54 tasks-axi:0.2.6; do
         floor=${name#*:}; name=${name%%:*}
         version=$(jq -r .version "${npm_root}/node_modules/${name}/package.json")
-        [ "$(printf '%s\n%s\n' "${floor}" "${version}" | sort -V | head -1)" = "${floor}" ] \
-            || fail "${name} ${version} is below the fleet floor ${floor}"
+        printf '%s\n%s\n' "${floor}" "${version}" | sort -C -V || fail "${name} ${version} is below the fleet floor ${floor}"
         printf '%s %s (floor %s)\n' "${name}" "${version}" "${floor}"
     done
     printf 'gate agent acp:omp via acpx, ponytail-review on omp\n'
