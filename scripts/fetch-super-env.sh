@@ -1,26 +1,25 @@
 #!/usr/bin/env bash
 # Fetch super.env from the fleet-secrets Worker into ~/super.env (mode 600, atomic replace).
-# Credentials: FLEET_SECRETS_ACCESS_CLIENT_ID and FLEET_SECRETS_ACCESS_CLIENT_SECRET from the
-# environment, else NAME=value lines in a mode-600 file (FLEET_SECRETS_CREDENTIALS, default
-# ~/.config/fleet-secrets.env). Never pass them as arguments. See docs/secrets.md.
+# Credentials: FLEET_SECRETS_ACCESS_CLIENT_ID and FLEET_SECRETS_ACCESS_CLIENT_SECRET as NAME=value
+# lines in ~/.config/fleet-secrets.env (mode 600); never arguments or the environment.
+# See docs/secrets.md.
 set -euo pipefail
 umask 077
 
 url=${FLEET_SECRETS_URL:-https://fleet-secrets.iterative.sh/}
-dest=${SUPER_ENV:-$HOME/super.env}
-creds=${FLEET_SECRETS_CREDENTIALS:-$HOME/.config/fleet-secrets.env}
+dest=$HOME/super.env
+creds=$HOME/.config/fleet-secrets.env
 
-if [[ -z ${FLEET_SECRETS_ACCESS_CLIENT_ID:-} || -z ${FLEET_SECRETS_ACCESS_CLIENT_SECRET:-} ]]; then
-  if [[ $(stat -c %a "$creds" 2>/dev/null) != 600 ]]; then
-    echo "Set FLEET_SECRETS_ACCESS_CLIENT_ID and _SECRET, or write them to $creds (mode 600)." >&2
-    exit 1
-  fi
-  while IFS='=' read -r key value || [[ -n $key ]]; do
-    case $key in
-    FLEET_SECRETS_ACCESS_CLIENT_ID | FLEET_SECRETS_ACCESS_CLIENT_SECRET) printf -v "$key" %s "$value" ;;
-    esac
-  done <"$creds"
+if [[ $(stat -c %a "$creds" 2>/dev/null) != 600 ]]; then
+  echo "Write FLEET_SECRETS_ACCESS_CLIENT_ID and _SECRET to $creds (mode 600)." >&2
+  exit 1
 fi
+unset FLEET_SECRETS_ACCESS_CLIENT_ID FLEET_SECRETS_ACCESS_CLIENT_SECRET
+while IFS='=' read -r key value || [[ -n $key ]]; do
+  case $key in
+  FLEET_SECRETS_ACCESS_CLIENT_ID | FLEET_SECRETS_ACCESS_CLIENT_SECRET) printf -v "$key" %s "$value" ;;
+  esac
+done <"$creds"
 
 tmp=$(mktemp "$dest.XXXXXX")
 headers=$(mktemp)

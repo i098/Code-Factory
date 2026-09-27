@@ -1,23 +1,14 @@
 #!/usr/bin/env bash
 # Sync ~/super.env into Cloudflare Secrets Store and redeploy the fleet-secrets Worker.
-# Usage: scripts/push-super-env.sh [--prune]      See docs/secrets.md.
+# Usage: scripts/push-super-env.sh      See docs/secrets.md.
 # Uses CLOUDFLARE_ACCOUNT_ID and CF_API_TOKEN_GLOBAL from the file itself. Secret values only
 # travel through mode-600 temp files, never argv, and nothing prints them.
 set -euo pipefail
 umask 077
 
-src=${SUPER_ENV:-$HOME/super.env}
+src=$HOME/super.env
 worker=fleet-secrets
 host=fleet-secrets.iterative.sh
-prune=false
-case ${1:-} in
---prune) prune=true ;;
-"") ;;
-*)
- echo "usage: $0 [--prune]" >&2
- exit 2
- ;;
-esac
 dir=$(cd "$(dirname "$0")/../workers/$worker" && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -84,16 +75,8 @@ echo "Pushed $(jq length "$tmp/entries.json") secrets from $src; Worker $worker 
 
 jq -r --slurpfile want "$tmp/entries.json" \
  '($want[0] | map({(.name): true}) | add) as $w
-   | to_entries[] | select(.value.comment == "super.env" and ($w[.key] | not))
-   | "\(.value.id) \(.key)"' "$tmp/existing.json" >"$tmp/stale"
+   | to_entries[] | select(.value.comment == "super.env" and ($w[.key] | not)) | .key' \
+ "$tmp/existing.json" >"$tmp/stale"
 [[ -s $tmp/stale ]] || exit 0
-echo "Secrets whose variable is no longer in $src:"
-cut -d' ' -f2 "$tmp/stale"
-if ! $prune; then
- echo "Re-run with --prune to delete them."
- exit 0
-fi
-while read -r id name; do
- api DELETE "$secrets/$id" >/dev/null
- echo "deleted $name"
-done <"$tmp/stale"
+echo "Secrets whose variable is no longer in $src; delete them by hand in the dashboard:"
+cat "$tmp/stale"

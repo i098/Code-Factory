@@ -150,10 +150,10 @@ def server():
     httpd.shutdown()
 
 
-def fetch(tmp_path: Path, url: str, **env: str) -> subprocess.CompletedProcess:
+def fetch(tmp_path: Path, url: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         [ROOT / "scripts/fetch-super-env.sh"],
-        env={"PATH": os.environ["PATH"], "HOME": str(tmp_path), "FLEET_SECRETS_URL": url, **env},
+        env={"PATH": os.environ["PATH"], "HOME": str(tmp_path), "FLEET_SECRETS_URL": url},
         capture_output=True,
         text=True,
     )
@@ -180,11 +180,16 @@ def test_fetch_writes_mode_600_from_credentials_file(tmp_path, server):
 
 
 def test_fetch_failure_leaves_existing_file(tmp_path, server):
+    creds = tmp_path / ".config/fleet-secrets.env"
+    creds.parent.mkdir()
+    creds.write_text(
+        "FLEET_SECRETS_ACCESS_CLIENT_ID=fake-id\nFLEET_SECRETS_ACCESS_CLIENT_SECRET=wrong\n"
+    )
+    creds.chmod(0o600)
     dest = tmp_path / "super.env"
     dest.write_text("OLD=1\n")
-    ids = {"FLEET_SECRETS_ACCESS_CLIENT_ID": "fake-id"}
-    result = fetch(tmp_path, server, **ids, FLEET_SECRETS_ACCESS_CLIENT_SECRET="wrong")
+    result = fetch(tmp_path, server)
     assert result.returncode != 0
     assert "403" in result.stderr
     assert dest.read_text() == "OLD=1\n"
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["super.env"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == [".config", "super.env"]
