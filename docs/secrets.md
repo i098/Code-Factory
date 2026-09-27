@@ -18,7 +18,7 @@ Never paste a value from this file into a repository, issue, PR, log, or chat. C
 
 `workers/fleet-secrets/split.jq` defines the split. The Worker rebuilds the file byte for byte from `super_env_layout` plus the per-variable secrets.
 
-Limits: a secret holds at most 65,536 bytes, and an account holds at most 100 secrets during the Secrets Store beta. Every current value and the layout fit in one secret, so nothing is chunked. The push script refuses an empty value, a value or layout above the limit, and a variable named `super_env_layout`.
+Limits: a secret holds at most 65,536 bytes, and an account holds at most 100 secrets during the Secrets Store beta. Every current value and the layout fit in one secret, so nothing is chunked. The push script refuses an empty value, a value or layout above the limit, and a variable whose secret name would collide with another binding: `super_env_layout`, `team_domain`, `aud`, or a generated `NAME__n`.
 
 ## Push after editing super.env
 
@@ -28,7 +28,7 @@ On the VPS, from this repository:
 scripts/push-super-env.sh
 ```
 
-It reads `CLOUDFLARE_ACCOUNT_ID` and the account token `CF_API_TOKEN_GLOBAL` from the file itself. It creates or overwrites every secret, then redeploys the Worker with one binding per variable, then turns `workers.dev` and preview URLs off. Running it twice leaves the same state.
+It reads `CLOUDFLARE_ACCOUNT_ID` and the account token `CF_API_TOKEN_GLOBAL` from the file itself. It creates or overwrites every secret, then redeploys the Worker with one binding per variable, then turns `workers.dev` and preview URLs off. It refuses to overwrite a same-named secret whose comment is not `super.env`. Running it twice leaves the same state.
 
 If a variable was deleted from the file, the script lists the orphaned secret names and deletes nothing. Delete them by hand in the Cloudflare dashboard's Secrets Store.
 
