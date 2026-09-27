@@ -14,7 +14,7 @@ Everything the recipe installs, grouped by the file that pins it. A version appe
 `toolchain.lock.json`, installed by `scripts/install_tools.py`. Every archive is sha256-locked and linked into `~/.local/bin`.
 
 - Always: herdr 0.9.0, node 24.19.0, bun 1.4.0, uv 0.12.5.
-- `agents` profile: gh 2.97.0, no-mistakes 1.48.0, treehouse 2.1.1.
+- `agents` profile: gh 2.97.0, no-mistakes 1.79.0, treehouse 2.1.1.
 - `development` profile: rustup-init 1.29.0, installing Rust 1.97.1 (minimal profile + rustfmt + clippy).
 
 ## Agent CLIs

@@ -54,7 +54,7 @@ Each check covers a gap measured on the VPS on 2026-09-26. CI runs the `agent-ga
 | VNC browser tier restart-looped with "no chrome binary" (this VPS has only a puppeteer Chrome; a `desktop` host gets `/usr/bin/google-chrome` from the recipe) | `fb=~/oss-fleet/browsers/fleet-browser; $fb up vnc && systemctl --user show -p NRestarts fleet-browser-vnc.service; $fb down vnc` | Tier comes up, `NRestarts=0`. |
 | Crew advisor calls got a 400 from the server-side fallback | `grep -A2 '^providers:' ~/Dev/firstmate/config/omp-crew-overlay.yml` | `serverSideFallback: false` under `anthropic:`. |
 | ponytail-review called the hanging claude CLI | `git -C ~/Dev/Code-Factory diff HEAD~1 \| ponytail-review --stdin; echo $?` | Exit `0` or `2`, never `1`. Needs `omp plugin install ponytail@ponytail`. |
-| no-mistakes gate agent | `no-mistakes doctor`, `jq -r .agents.omp.command ~/.acpx/config.json`, `grep -c '^acp_registry_overrides' ~/.no-mistakes/config.yaml` | Doctor reports `acp:omp` runnable, `omp acp`, `0`. |
+| no-mistakes gate agent (the recipe pinned no-mistakes 1.48.0, which launches `omp acp` with the target repo's AGENTS.md and CLAUDE.md loaded) | `no-mistakes --version`, `no-mistakes doctor`, `jq -r .agents.omp.command ~/.acpx/config.json`, `grep -c '^acp_registry_overrides' ~/.no-mistakes/config.yaml` | `v1.79.0`, doctor reports `acp:omp` runnable, `omp acp`, `0`. |
 | AXI tool floors | `quota-axi --version; tasks-axi --version` | At least `0.1.54` and `0.2.6`. |
 
 ## Cutover

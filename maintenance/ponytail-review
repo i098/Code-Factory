@@ -110,7 +110,8 @@ done
 printf '%s\n' "$out"
 
 # "Lean already. Ship." is the plugin's own pass phrase.
-if printf '%s' "$out" | grep -qiF "Lean already"; then
+if grep -qxE '[[:space:]]*Lean already\. Ship\.[[:space:]]*' <<<"$out" \
+  && ! grep -qE '(^|[^[:alnum:]])L[0-9]+(-L?[0-9]+)?:' <<<"$out"; then
   exit 0
 fi
 echo >&2

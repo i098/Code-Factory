@@ -689,7 +689,8 @@ check_agent_gate() {
     printf 'Name what to cut.\n' >"${stub}/plugin/skills/ponytail-review/SKILL.md"
     printf '#!/bin/sh\ncat >/dev/null\nprintf "%%s\\n" "$STUB_OUT"\nexit "$STUB_RC"\n' >"${stub}/bin/omp"
     chmod +x "${stub}/bin/omp"
-    for row in '0|0|Lean already. Ship.' '2|0|Cut the wrapper.' '1|1|Declined under the usage policy.'; do
+    for row in '0|0|Lean already. Ship.' '2|0|Cut the wrapper.' '1|1|Declined under the usage policy.' \
+        $'2|0|L12: delete: dead flag. Nothing replaces it.\nLean already. Ship.' '2|0|net: -4 lines possible. The rest is lean already.'; do
         want=${row%%|*}; row=${row#*|}; omp_rc=${row%%|*}; omp_out=${row#*|}
         rc=0
         printf '+x\n' | STUB_OUT=${omp_out} STUB_RC=${omp_rc} PATH="${stub}/bin:${PATH}" PONYTAIL_PLUGIN_DIR="${stub}/plugin" \

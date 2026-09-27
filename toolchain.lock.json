@@ -113,19 +113,19 @@
       }
     },
     "no-mistakes": {
-      "version": "1.48.0",
+      "version": "1.79.0",
       "assets": {
         "linux-x86_64": {
-          "url": "https://github.com/kunchenguid/no-mistakes/releases/download/v1.48.0/no-mistakes-v1.48.0-linux-amd64.tar.gz",
-          "sha256": "c67c65d626f4c6e6b44c2c079232ec8104f565d124cbe5a300766c85c2ba5bc0",
+          "url": "https://github.com/kunchenguid/no-mistakes/releases/download/v1.79.0/no-mistakes-v1.79.0-linux-amd64.tar.gz",
+          "sha256": "d178c8a5134763b8e5f6d82545a3a76285fbbcdc13d09020d1091ec80a3f8da6",
           "format": "tar",
           "binaries": {
             "no-mistakes": "no-mistakes"
           }
         },
         "linux-aarch64": {
-          "url": "https://github.com/kunchenguid/no-mistakes/releases/download/v1.48.0/no-mistakes-v1.48.0-linux-arm64.tar.gz",
-          "sha256": "7ce8b7f712acc889f48788418435cdd28375222c9450e43a024d043824edb2b2",
+          "url": "https://github.com/kunchenguid/no-mistakes/releases/download/v1.79.0/no-mistakes-v1.79.0-linux-arm64.tar.gz",
+          "sha256": "eac3f8e494c7d2487594b7eb513e605e59588be4ce147390b8fd184a7e6a8b05",
           "format": "tar",
           "binaries": {
             "no-mistakes": "no-mistakes"
