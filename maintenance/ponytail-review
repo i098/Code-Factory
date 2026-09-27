@@ -24,7 +24,7 @@
 #
 # EXIT CODES
 #   0  "Lean already. Ship." - the gate passes
-#   1  usage, missing plugin, missing agent, or empty diff - NEVER a pass
+#   1  usage, missing plugin or omp, empty diff, model refusal, or omp failure - NEVER a pass
 #   2  findings remain: cut them and run again
 #
 # FAIL-CLOSED
