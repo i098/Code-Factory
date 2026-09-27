@@ -9,3 +9,8 @@ advisor:
   enabled: true
   immuneTurns: 10
   syncBacklog: "off"
+# The global providers.anthropic.serverSideFallback sends claude-opus-5-5 as the Fable fallback
+# target, which Anthropic rejects with a 400 on every advisor call (2026-09-26); crews turn it off.
+providers:
+  anthropic:
+    serverSideFallback: false

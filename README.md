@@ -88,5 +88,6 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 | [Migration and recovery](docs/recovery.md) | New-device sequence, desktop access, troubleshooting, upgrades |
 | [Security](docs/security.md) | What is never exported and how to handle credentials and remote access |
 | [Shared credentials](docs/secrets.md) | `super.env` in Cloudflare Secrets Store: push, fetch on a new host, revoke |
+| [Agent host move](docs/agent-host-move.md) | Moving the agents to a bigger host while the VPS keeps sub2api: hand-copy list, parity checks, cutover |
 
 Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). License: [MIT](LICENSE).

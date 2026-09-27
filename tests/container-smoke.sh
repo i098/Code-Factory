@@ -672,6 +672,45 @@ check_login_shell_environment() {
     printf 'login shell resolves %s and pins the MCP entrypoint at %s\n' "${resolved}" "${mcp}"
 }
 
+# What the no-mistakes gate and the PR review need on a fresh host: acp:omp as
+# the gate agent with acpx mapping omp to `omp acp`, no omp registry override,
+# ponytail-review's exit codes against a stub omp, and the fleet's minimum AXI
+# versions. Versions come from the installed package.json, so no agent CLI is executed.
+check_agent_gate() {
+    local npm_root name floor version stub row want omp_rc omp_out rc
+    npm_root="${HOME}/.local/share/code-factory/npm"
+    cf_python -c 'import sys, yaml; c = yaml.safe_load(open(sys.argv[1])); assert c["agent"] == ["acp:omp"] and "acp_registry_overrides" not in c' \
+        "${HOME}/.no-mistakes/config.yaml" || fail "~/.no-mistakes/config.yaml does not make acp:omp the gate agent"
+    jq -e '.agents.omp.command == "omp acp"' "${HOME}/.acpx/config.json" >/dev/null || fail "~/.acpx/config.json does not map omp to omp acp"
+    [ -x "${HOME}/.local/bin/acpx" ] || fail "acpx is not installed in ~/.local/bin"
+    # /tmp is a noexec tmpfs in host mode, so the stub omp must live under the home.
+    mkdir -p "${HOME}/.cache"
+    stub=$(mktemp -d "${HOME}/.cache/ponytail-stub.XXXXXX")
+    trap 'rm -rf "${stub}"' EXIT
+    mkdir -p "${stub}/bin" "${stub}/plugin/commands" "${stub}/plugin/skills/ponytail-review"
+    printf 'prompt = "Review this diff."\n' >"${stub}/plugin/commands/ponytail-review.toml"
+    printf 'Name what to cut.\n' >"${stub}/plugin/skills/ponytail-review/SKILL.md"
+    printf '#!/bin/sh\ncat >/dev/null\nprintf "%%s\\n" "$STUB_OUT"\nexit "$STUB_RC"\n' >"${stub}/bin/omp"
+    chmod +x "${stub}/bin/omp"
+    for row in '0|0|Lean already. Ship.' '0|0|**Lean already. Ship.**' '0|0|`Lean already. Ship.`' '2|0|Cut the wrapper.' '1|1|Declined under the usage policy.' \
+        $'2|0|L12: delete: dead flag. Nothing replaces it.\nLean already. Ship.' '2|0|net: -4 lines possible. The rest is lean already.'; do
+        want=${row%%|*}; row=${row#*|}; omp_rc=${row%%|*}; omp_out=${row#*|}
+        rc=0
+        printf '+x\n' | STUB_OUT=${omp_out} STUB_RC=${omp_rc} PATH="${stub}/bin:${PATH}" PONYTAIL_PLUGIN_DIR="${stub}/plugin" \
+            timeout 20 "${HOME}/.local/bin/ponytail-review" --stdin >/dev/null 2>&1 || rc=$?
+        [ "${rc}" = "${want}" ] || fail "ponytail-review exited ${rc}, expected ${want}, when omp printed '${omp_out}' and exited ${omp_rc}"
+    done
+    rm -rf "${stub}"
+    trap - EXIT
+    for name in quota-axi:0.1.54 tasks-axi:0.2.6; do
+        floor=${name#*:}; name=${name%%:*}
+        version=$(jq -r .version "${npm_root}/node_modules/${name}/package.json")
+        printf '%s\n%s\n' "${floor}" "${version}" | sort -C -V || fail "${name} ${version} is below the fleet floor ${floor}"
+        printf '%s %s (floor %s)\n' "${name}" "${version}" "${floor}"
+    done
+    printf 'gate agent acp:omp via acpx, ponytail-review on omp\n'
+}
+
 container_mode() {
     SMOKE_TMP=$(mktemp -d -t code-factory-smoke.XXXXXX)
     trap 'rm -rf "${SMOKE_TMP}"' EXIT
@@ -691,6 +730,7 @@ container_mode() {
     run_check npm-tooling                  check_npm_tooling
     run_check development-toolchain        check_development_toolchain
     run_check login-shell-environment      check_login_shell_environment
+    run_check agent-gate                   check_agent_gate
     run_check no-baked-credentials         check_no_baked_credentials
     run_check herdr-config                 check_herdr_config
     run_check herdr-server-headless        check_herdr_server_headless

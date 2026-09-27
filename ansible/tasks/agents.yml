@@ -55,3 +55,14 @@
          | selectattr('stat.exists')
          | map(attribute='item.dest') | list | join(', ') | default('none', true) }}
       already exist and were not rewritten (first-write-only inputs).
+
+# The PR-review gate wrapper; it runs the ponytail plugin's own prompt on omp.
+- name: Install ponytail-review
+  ansible.builtin.copy:
+    src: "{{ code_factory_repo }}/maintenance/ponytail-review"
+    dest: "{{ factory_local_bin }}/ponytail-review"
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0755"
+    remote_src: true
+  become: true

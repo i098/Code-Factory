@@ -1,0 +1,16 @@
+{
+  "defaultAgent": "codex",
+  "defaultPermissions": "approve-all",
+  "nonInteractivePermissions": "deny",
+  "authPolicy": "skip",
+  "ttl": 300,
+  "timeout": null,
+  "queueMaxDepth": 16,
+  "format": "text",
+  "agents": {
+    "omp": {
+      "command": "omp acp"
+    }
+  },
+  "auth": {}
+}

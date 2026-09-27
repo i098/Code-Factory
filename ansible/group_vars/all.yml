@@ -199,6 +199,17 @@ factory_agent_config_files:
     dir_mode: "0700"
     mode: "0600"
     first_write: true
+  # The no-mistakes gate agent is acp:omp; acpx maps omp to `omp acp`.
+  - src: config/no-mistakes.yaml
+    dest: "{{ factory_cfg.home }}/.no-mistakes/config.yaml"
+    dir_mode: "0700"
+    mode: "0600"
+    first_write: true
+  - src: config/acpx.json
+    dest: "{{ factory_cfg.home }}/.acpx/config.json"
+    dir_mode: "0700"
+    mode: "0600"
+    first_write: true
 
 # Firstmate reads these from its own checkout and already gitignores them, so
 # the clone stays clean and no .gitignore is edited.
