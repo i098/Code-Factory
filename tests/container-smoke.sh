@@ -679,14 +679,9 @@ check_login_shell_environment() {
 check_agent_gate() {
     local npm_root name floor version
     npm_root="${HOME}/.local/share/code-factory/npm"
-    cf_python - "${HOME}" <<'PY' || fail "no-mistakes/acpx seed does not make acp:omp the gate agent"
-import json, sys, yaml
-home = sys.argv[1]
-nm = yaml.safe_load(open(f"{home}/.no-mistakes/config.yaml"))
-assert nm["agent"] == ["acp:omp"], nm["agent"]
-assert "acp_registry_overrides" not in nm
-assert json.load(open(f"{home}/.acpx/config.json"))["agents"]["omp"]["command"] == "omp acp"
-PY
+    cf_python -c 'import sys, yaml; c = yaml.safe_load(open(sys.argv[1])); assert c["agent"] == ["acp:omp"] and "acp_registry_overrides" not in c' \
+        "${HOME}/.no-mistakes/config.yaml" || fail "~/.no-mistakes/config.yaml does not make acp:omp the gate agent"
+    jq -e '.agents.omp.command == "omp acp"' "${HOME}/.acpx/config.json" >/dev/null || fail "~/.acpx/config.json does not map omp to omp acp"
     [ -x "${HOME}/.local/bin/acpx" ] || fail "acpx is not installed in ~/.local/bin"
     grep -q 'omp -p --model "$model" --no-rules --no-skills --no-extensions' "${HOME}/.local/bin/ponytail-review" \
         || fail "~/.local/bin/ponytail-review is missing or does not run omp -p"
