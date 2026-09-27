@@ -683,7 +683,10 @@ check_agent_gate() {
         "${HOME}/.no-mistakes/config.yaml" || fail "~/.no-mistakes/config.yaml does not make acp:omp the gate agent"
     jq -e '.agents.omp.command == "omp acp"' "${HOME}/.acpx/config.json" >/dev/null || fail "~/.acpx/config.json does not map omp to omp acp"
     [ -x "${HOME}/.local/bin/acpx" ] || fail "acpx is not installed in ~/.local/bin"
-    stub="${SMOKE_TMP}/ponytail"
+    # /tmp is a noexec tmpfs in host mode, so the stub omp must live under the home.
+    mkdir -p "${HOME}/.cache"
+    stub=$(mktemp -d "${HOME}/.cache/ponytail-stub.XXXXXX")
+    trap 'rm -rf "${stub}"' EXIT
     mkdir -p "${stub}/bin" "${stub}/plugin/commands" "${stub}/plugin/skills/ponytail-review"
     printf 'prompt = "Review this diff."\n' >"${stub}/plugin/commands/ponytail-review.toml"
     printf 'Name what to cut.\n' >"${stub}/plugin/skills/ponytail-review/SKILL.md"
@@ -697,6 +700,8 @@ check_agent_gate() {
             timeout 20 "${HOME}/.local/bin/ponytail-review" --stdin >/dev/null 2>&1 || rc=$?
         [ "${rc}" = "${want}" ] || fail "ponytail-review exited ${rc}, expected ${want}, when omp printed '${omp_out}' and exited ${omp_rc}"
     done
+    rm -rf "${stub}"
+    trap - EXIT
     for name in quota-axi:0.1.54 tasks-axi:0.2.6; do
         floor=${name#*:}; name=${name%%:*}
         version=$(jq -r .version "${npm_root}/node_modules/${name}/package.json")
