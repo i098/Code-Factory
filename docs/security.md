@@ -16,7 +16,9 @@ The source host contains at least one service unit with an inline API credential
 
 Authenticate each CLI interactively under the account that will run it. Do not copy an old host's credential database to make a tool appear configured. GitHub repository access, model subscriptions, organization permissions, and tailnet membership are separate prerequisites; installing a binary does not grant them.
 
-Shared fleet credentials in `super.env` are the one exception: a new host fetches them from Cloudflare Secrets Store with `scripts/fetch-super-env.sh`. See [Shared credentials](secrets.md).
+The fleet-browser session jar `~/.fleet-browser/cookies.json` is copied by hand when the agents move hosts ([Agent host move](agent-host-move.md)); it is not a browser profile.
+
+Shared fleet credentials in `super.env` are the other exception: a new host fetches them from Cloudflare Secrets Store with `scripts/fetch-super-env.sh`. See [Shared credentials](secrets.md).
 
 Keep local credential files outside the checkout, in owner-only directories with mode `0700`; files should have mode `0600`. Services should use `EnvironmentFile=` or Docker secrets. Do not put tokens into shell command arguments or public URLs.
 

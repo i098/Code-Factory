@@ -3,6 +3,7 @@
 Without it, fleet-browser-vnc.service and fleet-browser-chrome.service exit
 "no chrome binary" and restart forever on a host that has only the puppeteer
 download.
+CI runners ship /usr/bin/google-chrome, so this test runs only on hosts without one.
 """
 
 import os

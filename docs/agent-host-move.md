@@ -12,7 +12,9 @@ Other Docker data stays too: the shared Supabase stack, SigNoz (`~/perpetual-sig
 
 ## Warnings
 
-- **Never push the main home's local `main`.** Commit `4d87c3bd` put live credentials into that home's history. Before you push any branch from the main home, run `git merge-base --is-ancestor 4d87c3bd <branch>`. It must exit non-zero. Exit 0 means the branch carries that commit: do not push it. To carry local-only commits to the new host, copy them host to host (`git bundle create` and `scp`), never through a forge.
+- **Never push the main home's local `main`.** It carries local-only commits (185 ahead of upstream on 2026-09-27) that belong to this operator's home.
+- **Never push a branch that carries commit `4d87c3bd`.** That commit put live credentials into the main home's history; on 2026-09-27 the branches `feat/omp-crew-overlay`, `fm/layer-personal` and `home-main-pre-u3-2026-09-25` carry it. Before you push any branch from the main home, run `git merge-base --is-ancestor 4d87c3bd <branch>`. It must exit non-zero. Exit 0 means the branch carries that commit: do not push it.
+- To carry local-only commits to the new host, copy them host to host (`git bundle create` and `scp`), never through a forge.
 - **`firstmate-vps.tailc4c9b.ts.net` stays with the VPS.** The VPS keeps its tailnet name and its `tailscale serve` and Funnel ports, because the machine and its services stay. The new host joins as a new device under its own name. After cutover, links to agent-side pages (the desktop wall on `:6090`, noVNC, dev previews) use the new host's name. Never give the new host the old name: Tailscale renames a duplicate, and links would reach the wrong machine.
 - **Never run two copies of one home.** Two watchers on one home's state double-dispatch and fight over its inbox. The old home's agents stop only after the new one is confirmed (see [Cutover](#cutover)).
 
@@ -27,7 +29,7 @@ Other Docker data stays too: the shared Supabase stack, SigNoz (`~/perpetual-sig
 | Item | How it moves |
 | --- | --- |
 | omp, Anthropic (claude CLI), Codex and gh logins | Sign in again on the new host: [Sign in](omp.md#sign-in), `gh auth login`. Never copy a credential store ([Security](security.md)). |
-| `~/.fleet-browser/cookies.json` | `scp` at mode `600`. It is the session jar every browser tier shares. Never through a repository or chat. |
+| `~/.fleet-browser/cookies.json` | `scp` at mode `600`. It is the session jar every browser tier shares, and a deliberate exception to [Never export](security.md#never-export): it is not a Chrome profile directory. Never through a repository or chat. |
 | `data/` and `config/` of the main home (`~/Dev/firstmate`) | `rsync -a` over SSH, after `./factory apply`. The next apply rewrites the seeded names in `config/` from this repository ([Seeded Firstmate and OMP configuration](architecture.md#seeded-firstmate-and-omp-configuration)). |
 | `data/` and `config/` of every secondmate home | Each home path is in the main home's `data/secondmates.md` (`home:`). Provision each home on the new host first, then `rsync -a` both directories. |
 | no-mistakes | Apply seeds `~/.no-mistakes/config.yaml` with the gate agent. Merge any other settings from the VPS file by hand, without `acpx_path`, which names a VPS-only path. Then run `no-mistakes init` in every gated clone; list them on the VPS with `python3 -c "import sqlite3; [print(r[0]) for r in sqlite3.connect('file:$HOME/.no-mistakes/state.sqlite?mode=ro', uri=True).execute('select working_path from repos')]"`. Do not copy `state.sqlite` or `repos/`. |
@@ -49,7 +51,7 @@ Each check covers a gap measured on the VPS on 2026-09-26. CI runs the automated
 
 | Gap | Check on the new host | Pass |
 | --- | --- | --- |
-| VNC browser tier restart-looped with "no chrome binary" | `fb=~/oss-fleet/browsers/fleet-browser; $fb up vnc && systemctl --user show -p NRestarts fleet-browser-vnc.service; $fb down vnc` | Tier comes up, `NRestarts=0`. |
+| VNC browser tier restart-looped with "no chrome binary" (this VPS has only a puppeteer Chrome; a `desktop` host gets `/usr/bin/google-chrome` from the recipe) | `fb=~/oss-fleet/browsers/fleet-browser; $fb up vnc && systemctl --user show -p NRestarts fleet-browser-vnc.service; $fb down vnc` | Tier comes up, `NRestarts=0`. |
 | Crew advisor calls got a 400 from the server-side fallback | `grep -A2 '^providers:' ~/Dev/firstmate/config/omp-crew-overlay.yml` | `serverSideFallback: false` under `anthropic:`. |
 | ponytail-review called the hanging claude CLI | `git -C ~/Dev/Code-Factory diff HEAD~1 \| ponytail-review --stdin; echo $?` | Exit `0` or `2`, never `1`. Needs `omp plugin install ponytail@ponytail`. |
 | no-mistakes gate agent | `no-mistakes doctor`, `jq -r .agents.omp.command ~/.acpx/config.json`, `grep -c '^acp_registry_overrides' ~/.no-mistakes/config.yaml` | Doctor reports `acp:omp` runnable, `omp acp`, `0`. |
