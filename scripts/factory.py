@@ -215,12 +215,6 @@ def questions(document):
     home = Path(config["home"])
     environment = {**os.environ, "PATH": f"{home / '.local/bin'}:{os.environ.get('PATH', '')}"}
     marker = home / ".local/share/code-factory/new-host-questions-done"
-    if marker.exists():
-        print(
-            f"New-host questions already asked ({marker} exists); delete it and rerun "
-            f"./factory apply interactively as {config['user']} to ask them again"
-        )
-        return 0
     if (
         not sys.stdin.isatty()
         or os.environ.get("CI")
@@ -230,6 +224,12 @@ def questions(document):
             "New-host questions skipped (needs an interactive terminal); "
             f"rerun ./factory apply interactively as {config['user']} to start them "
             f"(asked once, then {marker} records it)"
+        )
+        return 0
+    if marker.exists():
+        print(
+            f"New-host questions already asked ({marker} exists); delete it and rerun "
+            f"./factory apply interactively as {config['user']} to ask them again"
         )
         return 0
     source = f"the runbook {ROOT / 'docs/agent-host-move.md'}"
@@ -263,9 +263,15 @@ def questions(document):
         cwd=Path(config["workspace"]) / "firstmate",
         env=environment,
     ).returncode
+    if returncode:
+        print(
+            f"New-host questions did not complete (omp exited {returncode}); rerun "
+            f"./factory apply interactively as {config['user']} to ask them again"
+        )
+        return returncode
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.touch()
-    return returncode
+    return 0
 
 
 def main():

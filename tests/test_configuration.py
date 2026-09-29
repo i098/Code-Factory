@@ -154,19 +154,39 @@ def test_second_apply_does_not_reopen_the_questions(
     monkeypatch.setattr(
         factory.subprocess,
         "run",
-        lambda command, **kwargs: launches.append(command) or subprocess.CompletedProcess(command, 0),
+        lambda command, **kwargs: launches.append(command)
+        or subprocess.CompletedProcess(command, 0 if len(launches) > 1 else 1),
     )
     monkeypatch.setattr(
         factory.sys, "argv", ["factory", "apply", "--config", str(tmp_path / "host.yml")]
     )
-    assert factory.main() == 0
-    assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"]
     marker = tmp_path / ".local/share/code-factory/new-host-questions-done"
+    assert factory.main() == 0
+    assert not marker.exists()
+    assert "New-host questions did not complete (omp exited 1)" in capsys.readouterr().out
+    assert factory.main() == 0
+    assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"] * 2
     assert marker.is_file()
     capsys.readouterr()
     assert factory.main() == 0
-    assert len(launches) == 1
+    assert len(launches) == 2
     assert f"{marker} exists); delete it and rerun" in capsys.readouterr().out
+
+
+def test_another_accounts_apply_skips_questions_without_reading_the_unreadable_home(
+    configuration, tmp_path, monkeypatch, capsys
+):
+    home = tmp_path / "coder"
+    home.mkdir(mode=0o000)
+    configuration["factory"].update(user="another-account", home=str(home))
+    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: True)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(factory.subprocess, "run", lambda *a, **k: pytest.fail("launched"))
+    try:
+        assert factory.questions(configuration) == 0
+    finally:
+        home.chmod(0o700)
+    assert "rerun ./factory apply interactively as another-account" in capsys.readouterr().out
 
 
 def test_apply_warns_when_firstmate_still_tracks_the_stale_fork(
