@@ -156,9 +156,7 @@ def test_questions_launch_only_on_an_interactive_terminal_outside_ci(
     assert skipped == (0 if launched else 1)
 
 
-def test_second_apply_does_not_reopen_the_questions(
-    configuration, tmp_path, monkeypatch, capsys
-):
+def test_second_apply_does_not_reopen_the_questions(configuration, tmp_path, monkeypatch, capsys):
     configuration["factory"].update(
         user=factory.pwd.getpwuid(factory.os.getuid()).pw_name,
         home=str(tmp_path),

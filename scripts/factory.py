@@ -257,9 +257,12 @@ def questions(document):
     if checklist:
         api = f"repos/{checklist['repo']}/contents/{checklist['path']}"
         try:
-            readable = subprocess.run(
-                ["gh", "api", api, "--silent"], env=environment, capture_output=True, timeout=20
-            ).returncode == 0
+            readable = (
+                subprocess.run(
+                    ["gh", "api", api, "--silent"], env=environment, capture_output=True, timeout=20
+                ).returncode
+                == 0
+            )
         except (OSError, subprocess.TimeoutExpired):
             readable = False
         if readable:
