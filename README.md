@@ -61,7 +61,7 @@ You need Ubuntu 24.04 or 26.04 on x86_64 or aarch64 with systemd, a non-root acc
    ./factory plan
    ```
 
-6. Apply. This is the only step that changes the host, and it may ask for your sudo password:
+6. Apply. This is the only step that changes the host, and it may ask for your sudo password. With the `firstmate` profile on, the first successful interactive apply then opens the [new-host questions](docs/configuration.md#new-host-questions):
 
    ```bash
    ./factory apply

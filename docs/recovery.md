@@ -4,7 +4,7 @@
 
 1. Start with a supported Ubuntu installation and working SSH/sudo access. `cloud-init/user-data.yaml` installs initial OS prerequisites; it does not create credentials, log in to services, or clone this private repository.
 2. Authenticate GitHub on the new device and clone Code Factory. Run the [Quick start](../README.md#quick-start): bootstrap, init, validate, plan, apply, and doctor.
-3. Confirm Herdr's user service and executable agree. Both resolve to the versioned artifact recorded in `toolchain.lock.json`.
+3. Confirm Herdr's user service and executable agree. Both resolve to the versioned release that apply resolved and installed (see [Latest releases](dependencies.md#latest-releases)).
 4. Authenticate agent/provider CLIs under the configured operator account (for omp, see [Sign in](omp.md#sign-in)). Confirm the configured models exist for that account. Recreate per-project approval/trust choices instead of copying a global auto-approval list.
 5. If selected, authenticate Tailscale as a new device and review its ACL/SSH policy. Installation alone does not authorize incoming connections.
 6. If selected, open the desktop through an SSH tunnel and sign in using the one persistent browser profile. Never transfer a cookie database or copy the old browser directory.
