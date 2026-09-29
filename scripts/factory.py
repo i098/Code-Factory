@@ -14,6 +14,7 @@ import jsonschema
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+STALE_FIRSTMATE_URL = "https://github.com/undeemed/firstmate.git"
 
 
 def validate_document(document, schema_name):
@@ -220,7 +221,7 @@ def questions(document):
     ):
         print(
             "New-host questions skipped (needs an interactive terminal); "
-            f"start them as {config['user']} with ./factory questions"
+            f"rerun ./factory apply interactively as {config['user']} to start them"
         )
         return 0
     source = f"the runbook {ROOT / 'docs/agent-host-move.md'}"
@@ -265,13 +266,9 @@ def main():
     init.add_argument("--user")
     init.add_argument("--home")
     init.add_argument("--container", action="store_true")
-    for name in ("validate", "plan", "apply", "doctor", "questions"):
+    for name in ("validate", "plan", "apply", "doctor"):
         command = commands.add_parser(name)
         command.add_argument("--config", type=Path, default=None)
-        if name == "apply":
-            command.add_argument(
-                "--no-questions", action="store_true", help="do not open the new-host questions"
-            )
     args = parser.parse_args()
     if args.command == "init":
         initialize(args)
@@ -287,22 +284,22 @@ def main():
         return 0
     if args.command == "doctor":
         return doctor(document)
-    if args.command == "questions":
-        if not document["factory"]["profiles"]["firstmate"]:
-            raise ValueError("the firstmate profile is off; there is no Firstmate to ask")
-        return questions(document)
     if args.command == "apply" and args.config is None and not (ROOT / ".local/host.yml").exists():
         raise ValueError(
             "run ./factory init and review .local/host.yml before applying, or pass an explicit --config"
         )
     result = provision(document, args.command == "plan")
-    if (
-        args.command == "apply"
-        and result == 0
-        and not args.no_questions
-        and document["factory"]["profiles"]["firstmate"]
-    ):
-        questions(document)
+    config = document["factory"]
+    if args.command == "apply" and config["profiles"]["firstmate"]:
+        if config["firstmate"]["url"] == STALE_FIRSTMATE_URL:
+            print(
+                f"WARNING: firstmate.url is the stale fork {STALE_FIRSTMATE_URL}; this host "
+                "is not tracking upstream Firstmate. Move it with the steps in "
+                f"{ROOT / 'docs/configuration.md'} (Moving off the old Firstmate fork).",
+                file=sys.stderr,
+            )
+        if result == 0:
+            questions(document)
     return result
 
 

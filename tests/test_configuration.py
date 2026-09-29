@@ -1,6 +1,9 @@
 import argparse
 import importlib.util
+import json
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -130,4 +133,94 @@ def test_questions_never_launch_without_an_interactive_terminal(
     monkeypatch.setenv("CI", ci)
     monkeypatch.setattr(factory.subprocess, "run", lambda *a, **k: pytest.fail("launched"))
     assert factory.questions(configuration) == 0
-    assert capsys.readouterr().out.count("./factory questions") == 1
+    assert capsys.readouterr().out.count("rerun ./factory apply interactively") == 1
+
+
+def test_apply_warns_when_firstmate_still_tracks_the_stale_fork(
+    configuration, tmp_path, monkeypatch, capsys
+):
+    configuration["factory"]["firstmate"]["url"] = factory.STALE_FIRSTMATE_URL
+    host = tmp_path / "host.yml"
+    host.write_text(yaml.safe_dump(configuration))
+    monkeypatch.setattr(factory, "provision", lambda document, check: 0)
+    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(factory.sys, "argv", ["factory", "apply", "--config", str(host)])
+    assert factory.main() == 0
+    output = capsys.readouterr()
+    assert output.err.startswith("WARNING: firstmate.url is the stale fork")
+    assert "rerun ./factory apply interactively" in output.out
+
+
+def _verify_firstmate(tmp_path, origin, configured):
+    checkout = tmp_path / "firstmate"
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", str(checkout)]
+    subprocess.run(["git", "init", "-q", "-b", "main", str(checkout)], check=True)
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "c"], check=True)
+    subprocess.run([*git, "remote", "add", "origin", origin], check=True)
+    head = subprocess.run(
+        [*git, "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    playbook = tmp_path / "verify.yml"
+    playbook.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "hosts": "localhost",
+                    "connection": "local",
+                    "gather_facts": False,
+                    "tasks": [
+                        {"ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/verify.yml")}
+                    ],
+                }
+            ]
+        )
+    )
+    variables = {
+        "factory_account_ready": True,
+        "factory_become_target": False,
+        "factory_user_env": {},
+        "factory_manage_services": False,
+        "factory_user_units": str(tmp_path),
+        "factory_docker_group_users": [],
+        "factory_firstmate_dir": str(checkout),
+        "factory_firstmate_target": head,
+        "factory_cfg": {
+            "user": "coder",
+            "profiles": {
+                "agents": False,
+                "firstmate": True,
+                "docker": False,
+                "tailscale": False,
+                "desktop": False,
+            },
+            "firstmate": {"url": configured},
+        },
+    }
+    return subprocess.run(
+        [
+            Path(sys.executable).parent / "ansible-playbook",
+            "-i",
+            "localhost,",
+            str(playbook),
+            "--start-at-task",
+            "Read the Firstmate origin URL",
+            "--extra-vars",
+            json.dumps(variables),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_verify_fails_when_firstmate_origin_is_not_the_configured_url(tmp_path):
+    upstream = "https://github.com/kunchenguid/firstmate.git"
+    result = _verify_firstmate(tmp_path, factory.STALE_FIRSTMATE_URL, upstream)
+    assert result.returncode != 0
+    assert "updated the wrong repository" in result.stdout
+
+
+def test_verify_passes_when_firstmate_origin_is_the_configured_url(tmp_path):
+    upstream = "https://github.com/kunchenguid/firstmate.git"
+    result = _verify_firstmate(tmp_path, upstream, upstream)
+    assert result.returncode == 0, result.stdout

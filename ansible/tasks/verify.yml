@@ -272,6 +272,32 @@
         quiet: true
       when: factory_cfg.profiles.firstmate | bool
 
+    - name: Read the Firstmate origin URL
+      ansible.builtin.command:
+        argv: [git, -C, "{{ factory_firstmate_dir }}", config, --get, remote.origin.url]
+      become: "{{ factory_become_target | bool }}"
+      become_user: "{{ factory_cfg.user }}"
+      environment: "{{ factory_user_env }}"
+      register: factory_verify_fm_origin
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: factory_cfg.profiles.firstmate | bool
+
+    - name: Assert Firstmate fetches the configured repository
+      ansible.builtin.assert:
+        that:
+          - (factory_verify_fm_origin.stdout | trim) == factory_cfg.firstmate.url
+        fail_msg: >-
+          {{ factory_firstmate_dir }} fetches origin
+          {{ factory_verify_fm_origin.stdout | default('') | trim | default('(none)', true) }},
+          not factory.firstmate.url {{ factory_cfg.firstmate.url }}, so this
+          run updated the wrong repository. Provisioning never rewrites the
+          remote or discards local commits; follow "Moving off the old
+          Firstmate fork" in docs/configuration.md.
+        quiet: true
+      when: factory_cfg.profiles.firstmate | bool
+
     - name: Read the Firstmate revision
       ansible.builtin.command:
         argv: [git, -C, "{{ factory_firstmate_dir }}", rev-parse, HEAD]
