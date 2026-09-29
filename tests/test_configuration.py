@@ -125,6 +125,7 @@ def test_root_operator_is_rejected_before_config_is_written(tmp_path, monkeypatc
 def test_questions_never_launch_without_an_interactive_terminal(
     configuration, monkeypatch, capsys, tty, ci
 ):
+    configuration["factory"]["user"] = factory.pwd.getpwuid(factory.os.getuid()).pw_name
     monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: tty)
     monkeypatch.setenv("CI", ci)
     monkeypatch.setattr(factory.subprocess, "run", lambda *a, **k: pytest.fail("launched"))

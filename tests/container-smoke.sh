@@ -212,11 +212,30 @@ latest_version() {
     jq -er "$1" <<<"${LATEST_JSON}"
 }
 
-# The contract computes the Herdr service binary from the resolved release,
+# The release the image installed, read from its managed link; an upstream
+# release published after the build must not change what the checks expect.
+installed_version() {
+    local target
+    target=$(readlink -f "${HOME}/.local/bin/$1" || true)
+    target=${target#"$2"/}
+    printf '%s\n' "${target%%/*}"
+}
+
+# The contract computes the Herdr service binary from the installed release,
 # never from PATH.
-herdr_resolved_bin() {
+herdr_installed_bin() {
     printf '%s/.local/share/code-factory/tools/herdr/%s/%s/herdr\n' \
-        "${HOME}" "$(latest_version .herdr.version)" "$(platform_tag)"
+        "${HOME}" "${INSTALLED_HERDR}" "$(platform_tag)"
+}
+
+# A re-run upgrades an image that upstream has since overtaken; that is not a
+# repeat change, and latest-releases already reports it.
+image_is_current() {
+    [ "${INSTALLED_HERDR}" = "$(latest_version .herdr.version)" ] \
+        && [ "${INSTALLED_OMP}" = "$(latest_version .omp)" ] && return 0
+    printf 'image has herdr %s and omp %s but upstream now has %s and %s; idempotence not measured\n' \
+        "${INSTALLED_HERDR}" "${INSTALLED_OMP}" "$(latest_version .herdr.version)" "$(latest_version .omp)"
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -461,17 +480,17 @@ check_herdr_unit() {
 
     exec_start=$(sed -n 's/^ExecStart=//p' "${unit}" | head -n 1)
     [ -n "${exec_start}" ] || fail "${unit} declares no ExecStart"
-    expected="$(herdr_resolved_bin) server"
+    expected="$(herdr_installed_bin) server"
     [ "${exec_start}" = "${expected}" ] || fail "ExecStart is '${exec_start}', expected '${expected}'"
 
     binary=${exec_start%% *}
     [ -x "${binary}" ] || fail "ExecStart binary ${binary} is missing or not executable"
-    locked=$(latest_version .herdr.version)
+    locked=${INSTALLED_HERDR}
     banner=$("${binary}" --version 2>&1) || fail "ExecStart binary ${binary} failed to run"
     banner=${banner%%$'\n'*}
     case "${banner}" in
         *"${locked}"*) ;;
-        *) fail "ExecStart binary reports '${banner}', the latest release is ${locked}" ;;
+        *) fail "ExecStart binary reports '${banner}', the installed release is ${locked}" ;;
     esac
 
     [ -L "${wants}" ] || fail "unit is not statically enabled: ${wants} is missing"
@@ -486,7 +505,7 @@ check_herdr_unit() {
 
 check_herdr_server_headless() {
     local binary log pid socket status waited started_after limit stopped leftover
-    binary=$(herdr_resolved_bin)
+    binary=$(herdr_installed_bin)
     log="${SMOKE_TMP}/herdr-server.log"
     limit=${CF_SMOKE_SERVER_WAIT:-30}
     pid=""
@@ -633,10 +652,12 @@ check_factory_init_refuses_overwrite() {
 
 check_installer_idempotent() {
     local out
+    image_is_current || return 0
     out=$(python3 "${CF_ROOT}/scripts/install_tools.py" \
             --lock "${CF_ROOT}/toolchain.lock.json" \
             --home "${HOME}" \
             --tools herdr,node,bun,uv \
+            --resolved "${LATEST_JSON}" \
             --npm --development 2>&1) || {
         printf '%s\n' "${out}" | tail -n 20
         fail "scripts/install_tools.py re-run failed"
@@ -667,6 +688,7 @@ PY
 check_ansible_second_pass_idempotent() {
     local out rc
     rc=0
+    image_is_current || return 0
     out=$( cd "${CF_ROOT}" && timeout "${CF_SMOKE_APPLY_TIMEOUT:-1800}" ./factory apply --config "${CF_CONFIG}" 2>&1 ) || rc=$?
     if [ "${rc}" -ne 0 ]; then
         printf '%s\n' "${out}" | tail -n 40
@@ -748,6 +770,8 @@ container_mode() {
     printf '== %s %s\n\n' "$(uname -s)" "$(uname -m)"
     LATEST_JSON=$(python3 "${CF_ROOT}/scripts/install_tools.py" --lock "${CF_ROOT}/toolchain.lock.json" \
         --home "${HOME}" --resolve) || fail "could not resolve the latest herdr and omp releases"
+    INSTALLED_HERDR=$(installed_version herdr "${HOME}/.local/share/code-factory/tools/herdr")
+    INSTALLED_OMP=$(installed_version omp "${HOME}/.local/share/code-factory/omp")
 
     run_check identity                     check_identity
     run_check no-systemd                   check_no_systemd
