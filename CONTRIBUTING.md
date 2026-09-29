@@ -21,7 +21,7 @@ Every task is idempotent; a second unchanged `apply` reports `changed=0`.
 
 Every task is check-mode safe: `plan` (Ansible `--check`) previews without mutating.
 
-Every binary is sha256-pinned in `toolchain.lock.json`. No floating `@latest` tags.
+Every binary is sha256-pinned in `toolchain.lock.json`. No floating `@latest` tags. Exceptions by design: herdr and omp track their latest release, resolved once per apply (herdr is verified against the SHA-256 its release publishes), and `verify.yml` asserts the resolved version is the installed one.
 
 No unconditional restarts, daemon-reloads, or bare commands.
 

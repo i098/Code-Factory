@@ -24,9 +24,11 @@ factory_lock_file: "{{ code_factory_repo }}/toolchain.lock.json"
 factory_pruner_source: "{{ code_factory_repo }}/maintenance/chrome-autoprune.py"
 factory_pruner_requirements: "{{ code_factory_repo }}/maintenance/requirements.txt"
 
-# Pinned versions come from the reviewed lock, never from a default here.
-factory_lock: "{{ lookup('ansible.builtin.file', factory_lock_file) | from_json }}"
-factory_herdr_version: "{{ factory_lock.tools.herdr.version }}"
+# herdr and omp track their latest release: tasks/preflight.yml resolves them
+# once per run into factory_latest, and that is what the run installs and
+# tasks/verify.yml asserts. Every other version comes from the reviewed lock.
+factory_herdr_version: "{{ factory_latest.herdr.version }}"
+factory_omp_version: "{{ factory_latest.omp }}"
 
 # --- Platform ---------------------------------------------------------------
 factory_platform_map:
@@ -50,6 +52,7 @@ factory_share_dir: "{{ factory_cfg.home }}/.local/share/code-factory"
 factory_tools_root: "{{ factory_share_dir }}/tools"
 # Locked npm set installed by `install_tools.py --npm` (agents profile).
 factory_npm_root: "{{ factory_share_dir }}/npm"
+factory_omp_root: "{{ factory_share_dir }}/omp/{{ factory_omp_version }}"
 # AXI must launch the pinned chrome-devtools MCP build instead of resolving
 # `npx ...@latest` at runtime. Exported to the managed shell environment and
 # to the Herdr service environment.

@@ -10,7 +10,8 @@
 # Container mode (inside the image; CMD of the `smoke` target):
 #   tests/container-smoke.sh --in-container [--only NAME,NAME]
 #   Exercises what the image actually contains, through the programs a user
-#   would run: managed tool versions compared with toolchain.lock.json, a Herdr
+#   would run: managed tool versions compared with toolchain.lock.json, herdr
+#   and omp compared with their latest release, a Herdr
 #   configuration that Herdr itself accepts and that matches the factory
 #   document, the user unit's ExecStart resolved and executed, a real headless
 #   `herdr server` brought up and shut down over its API socket, the repository
@@ -46,7 +47,7 @@ KEEP=${CF_SMOKE_KEEP:-}
 IMAGE_REF=${CF_SMOKE_IMAGE:-}
 
 usage() {
-    sed -n '2,36p' "${SCRIPT_PATH}" | sed 's/^# \{0,1\}//'
+    sed -n '2,37p' "${SCRIPT_PATH}" | sed 's/^# \{0,1\}//'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -205,10 +206,17 @@ lock_version() {
     jq -er --arg tool "$1" '.tools[$tool].version' "${CF_ROOT}/toolchain.lock.json"
 }
 
-# The contract computes the Herdr service binary from the lock, never from PATH.
-herdr_locked_bin() {
+# herdr and omp track their latest release. container_mode resolves it once
+# into LATEST_JSON through the same installer entry point apply uses.
+latest_version() {
+    jq -er "$1" <<<"${LATEST_JSON}"
+}
+
+# The contract computes the Herdr service binary from the resolved release,
+# never from PATH.
+herdr_resolved_bin() {
     printf '%s/.local/share/code-factory/tools/herdr/%s/%s/herdr\n' \
-        "${HOME}" "$(lock_version herdr)" "$(platform_tag)"
+        "${HOME}" "$(latest_version .herdr.version)" "$(platform_tag)"
 }
 
 # ---------------------------------------------------------------------------
@@ -291,7 +299,7 @@ check_workspace() {
 
 check_core_tools() {
     local tool bin locked version
-    for tool in herdr node bun uv; do
+    for tool in node bun uv; do
         bin="${HOME}/.local/bin/${tool}"
         [ -x "${bin}" ] || fail "missing managed launcher ${bin}"
         [ "$(command -v "${tool}")" = "${bin}" ] || fail "PATH resolves ${tool} to $(command -v "${tool}"), expected ${bin}"
@@ -306,6 +314,27 @@ check_core_tools() {
         esac
         printf '%-6s %-32s (lock %s)\n' "${tool}" "${version}" "${locked}"
     done
+}
+
+# The image was built by an apply that resolved the newest herdr and omp; both
+# must still be the newest release the registries report.
+check_latest_releases() {
+    local herdr omp banner prefix
+    herdr=$(latest_version .herdr.version)
+    omp=$(latest_version .omp)
+    banner=$("${HOME}/.local/bin/herdr" --version 2>&1) || fail "herdr --version exited nonzero: ${banner}"
+    case "${banner%%$'\n'*}" in
+        *"${herdr}"*) ;;
+        *) fail "herdr reports '${banner%%$'\n'*}' but the latest release is ${herdr}" ;;
+    esac
+    prefix="${HOME}/.local/share/code-factory/omp/${omp}"
+    case "$(readlink -f "${HOME}/.local/bin/omp")" in
+        "${prefix}"/*) ;;
+        *) fail "omp resolves to $(readlink -f "${HOME}/.local/bin/omp"), expected the latest release under ${prefix}" ;;
+    esac
+    [ "$(jq -r .version "${prefix}/node_modules/@oh-my-pi/pi-coding-agent/package.json")" = "${omp}" ] \
+        || fail "omp under ${prefix} is not version ${omp}"
+    printf 'herdr %s and omp %s are the latest releases\n' "${herdr}" "${omp}"
 }
 
 check_herdr_install_layout() {
@@ -432,17 +461,17 @@ check_herdr_unit() {
 
     exec_start=$(sed -n 's/^ExecStart=//p' "${unit}" | head -n 1)
     [ -n "${exec_start}" ] || fail "${unit} declares no ExecStart"
-    expected="$(herdr_locked_bin) server"
+    expected="$(herdr_resolved_bin) server"
     [ "${exec_start}" = "${expected}" ] || fail "ExecStart is '${exec_start}', expected '${expected}'"
 
     binary=${exec_start%% *}
     [ -x "${binary}" ] || fail "ExecStart binary ${binary} is missing or not executable"
-    locked=$(lock_version herdr)
+    locked=$(latest_version .herdr.version)
     banner=$("${binary}" --version 2>&1) || fail "ExecStart binary ${binary} failed to run"
     banner=${banner%%$'\n'*}
     case "${banner}" in
         *"${locked}"*) ;;
-        *) fail "ExecStart binary reports '${banner}', lock pins ${locked}" ;;
+        *) fail "ExecStart binary reports '${banner}', the latest release is ${locked}" ;;
     esac
 
     [ -L "${wants}" ] || fail "unit is not statically enabled: ${wants} is missing"
@@ -457,7 +486,7 @@ check_herdr_unit() {
 
 check_herdr_server_headless() {
     local binary log pid socket status waited started_after limit stopped leftover
-    binary=$(herdr_locked_bin)
+    binary=$(herdr_resolved_bin)
     log="${SMOKE_TMP}/herdr-server.log"
     limit=${CF_SMOKE_SERVER_WAIT:-30}
     pid=""
@@ -717,6 +746,8 @@ container_mode() {
 
     printf '== Code Factory container smoke (image role: %s)\n' "${CODE_FACTORY_IMAGE:-unknown}"
     printf '== %s %s\n\n' "$(uname -s)" "$(uname -m)"
+    LATEST_JSON=$(python3 "${CF_ROOT}/scripts/install_tools.py" --lock "${CF_ROOT}/toolchain.lock.json" \
+        --home "${HOME}" --resolve) || fail "could not resolve the latest herdr and omp releases"
 
     run_check identity                     check_identity
     run_check no-systemd                   check_no_systemd
@@ -725,6 +756,7 @@ container_mode() {
     run_check source-checkout              check_source_checkout
     run_check workspace                    check_workspace
     run_check core-tools                   check_core_tools
+    run_check latest-releases              check_latest_releases
     run_check herdr-install-layout         check_herdr_install_layout
     run_check herdr-unit                   check_herdr_unit
     run_check npm-tooling                  check_npm_tooling

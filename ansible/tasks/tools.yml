@@ -1,8 +1,10 @@
 ---
-# Pinned toolchain, installed by the repository installer as the target user.
+# Toolchain, installed by the repository installer as the target user: the
+# lock's pins plus the herdr and omp releases tasks/preflight.yml resolved.
 #
 # Contract: python3 <repo>/scripts/install_tools.py --lock <repo>/toolchain.lock.json
 #           --home <factory.home> --tools herdr,node,bun,uv [--npm] [--development]
+#           --resolved <factory_latest as JSON>
 # The installer is idempotent and prints a final JSON object
 # {"changed": bool, "installed": [...]}, which is the only changed signal this
 # task trusts - the exit status alone would report a change on every apply.
@@ -13,7 +15,8 @@
       {{ ['python3', factory_installer,
           '--lock', factory_lock_file,
           '--home', factory_cfg.home,
-          '--tools', factory_core_tools | join(',')]
+          '--tools', factory_core_tools | join(','),
+          '--resolved', factory_latest | to_json]
          + (['--npm'] if (factory_cfg.profiles.agents | bool) else [])
          + (['--development'] if (factory_cfg.profiles.development | bool) else []) }}
 
@@ -27,7 +30,9 @@
   ansible.builtin.debug:
     msg: >-
       check mode: would run the toolchain installer as {{ factory_cfg.user }};
-      Herdr {{ factory_herdr_version }} would land at {{ factory_herdr_bin }}.
+      Herdr {{ factory_herdr_version }} would land at {{ factory_herdr_bin }}{{
+      (' and omp ' ~ factory_omp_version ~ ' at ' ~ factory_omp_root)
+      if (factory_cfg.profiles.agents | bool) else '' }}.
   when: ansible_check_mode
 
 - name: Install the pinned toolchain as the target user
@@ -61,7 +66,7 @@
     verbosity: 1
   when: not ansible_check_mode
 
-- name: Stat the pinned Herdr executable
+- name: Stat the resolved Herdr executable
   ansible.builtin.stat:
     path: "{{ factory_herdr_bin }}"
     get_checksum: false
@@ -71,16 +76,16 @@
   changed_when: false
   when: not ansible_check_mode
 
-- name: Assert the installer produced the locked Herdr executable
+- name: Assert the installer produced the resolved Herdr executable
   ansible.builtin.assert:
     that:
       - factory_herdr_stat.stat.exists | default(false)
       - factory_herdr_stat.stat.executable | default(false)
     fail_msg: >-
       {{ factory_herdr_bin }} is missing or not executable after the installer
-      ran. The user unit ExecStart is computed from the lock
-      (tools.herdr.version = {{ factory_herdr_version }}) and the platform
-      directory {{ factory_platform }}; installer and lock disagree.
+      ran. The user unit ExecStart is computed from the resolved release
+      (herdr {{ factory_herdr_version }}) and the platform directory
+      {{ factory_platform }}; installer and resolution disagree.
     quiet: true
   when: not ansible_check_mode
 

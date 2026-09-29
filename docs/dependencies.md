@@ -1,6 +1,6 @@
 # Dependencies
 
-Everything the recipe installs, grouped by the file that pins it. A version appears only where a file pins one; everything else tracks its upstream repository. `./factory plan` installs none of this.
+Everything the recipe installs, grouped by the file that pins it. A version appears only where a file pins one; everything else tracks its upstream repository or latest release. `./factory plan` installs none of this.
 
 ## Repository tooling
 
@@ -13,15 +13,22 @@ Everything the recipe installs, grouped by the file that pins it. A version appe
 
 `toolchain.lock.json`, installed by `scripts/install_tools.py`. Every archive is sha256-locked and linked into `~/.local/bin`.
 
-- Always: herdr 0.9.0, node 24.19.0, bun 1.4.0, uv 0.12.5.
+- Always: node 24.19.0, bun 1.4.0, uv 0.12.5.
 - `agents` profile: gh 2.97.0, no-mistakes 1.79.0, treehouse 2.1.1.
 - `development` profile: rustup-init 1.29.0, installing Rust 1.97.1 (minimal profile + rustfmt + clippy).
+
+## Latest releases
+
+Not pinned: every `./factory apply` resolves the newest release, installs exactly that, and `ansible/tasks/verify.yml` asserts the installed version equals the one the run resolved, so re-running apply upgrades an existing host.
+
+- Always: herdr, the latest [herdrdev/herdr release](https://github.com/herdrdev/herdr/releases/latest), verified against the SHA-256 the release publishes for the platform asset. A release that publishes no checksum fails the apply instead of installing an unverified binary. An upgrade rewrites and restarts `herdr.service`.
+- `agents` profile: omp (`@oh-my-pi/pi-coding-agent`), the npm registry's `latest` version, installed with `npm install` into `~/.local/share/code-factory/omp/<version>` (npm checks the registry integrity). Superseded versions stay on disk.
 
 ## Agent CLIs
 
 `tools/npm/package.json`, installed with `npm ci` from `tools/npm/package-lock.json` under the `agents` profile.
 
-- omp (`@oh-my-pi/pi-coding-agent`) 18.1.13, codex (`@openai/codex`) 0.147.0, pnpm 10.33.2, acpx 0.18.0 (runs the no-mistakes gate agent `acp:omp`).
+- codex (`@openai/codex`) 0.147.0, pnpm 10.33.2, acpx 0.18.0 (runs the no-mistakes gate agent `acp:omp`).
 - chrome-devtools-axi 0.1.29, chrome-devtools-mcp 1.9.0, gh-axi 0.1.30, lavish-axi 0.1.52, quota-axi 0.1.54, tasks-axi 0.2.6. The fleet requires at least quota-axi 0.1.54 and tasks-axi 0.2.6.
 
 ## Ubuntu packages
@@ -52,7 +59,7 @@ Everything the recipe installs, grouped by the file that pins it. A version appe
 
 `firstmate` profile.
 
-- `git clone` of `factory.firstmate.url`, tracking `origin/main`, never pinned (`ansible/tasks/firstmate.yml`).
+- `git clone` of `factory.firstmate.url` (upstream `https://github.com/kunchenguid/firstmate.git` by default), tracking `origin/main`, never pinned. Every apply fetches and fast-forwards `main` (`ansible/tasks/firstmate.yml`).
 
 ## Container images
 

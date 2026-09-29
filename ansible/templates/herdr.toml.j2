@@ -20,8 +20,8 @@ agent_panel_sort = "{{ factory_cfg.herdr.agent_panel_sort }}"
 delivery = "{{ factory_cfg.herdr.toast_delivery }}"
 
 [update]
-# Controls the updater's own check behaviour only. The installed build is
-# pinned by toolchain.lock.json; never run `herdr update` from provisioning.
+# Controls the updater's own check behaviour only. `./factory apply` installs
+# the latest release itself; never run `herdr update` from provisioning.
 channel = "{{ factory_herdr_update_channel }}"
 
 [server]

@@ -208,6 +208,51 @@ def doctor(document):
     return 1 if failed else 0
 
 
+def questions(document):
+    """Open Firstmate on omp to ask the operator the new-host move questions."""
+    config = document["factory"]
+    home = Path(config["home"])
+    environment = {**os.environ, "PATH": f"{home / '.local/bin'}:{os.environ.get('PATH', '')}"}
+    if (
+        not sys.stdin.isatty()
+        or os.environ.get("CI")
+        or pwd.getpwuid(os.getuid()).pw_name != config["user"]
+    ):
+        print(
+            "New-host questions skipped (needs an interactive terminal); "
+            f"start them as {config['user']} with ./factory questions"
+        )
+        return 0
+    source = f"the runbook {ROOT / 'docs/agent-host-move.md'}"
+    checklist = config["firstmate"].get("checklist")
+    if checklist:
+        api = f"repos/{checklist['repo']}/contents/{checklist['path']}"
+        readable = subprocess.run(
+            ["gh", "api", api, "--silent"], env=environment, capture_output=True, timeout=20
+        )
+        if readable.returncode == 0:
+            source = (
+                f"the operator's private checklist (read it with `gh api {api} "
+                "-H 'Accept: application/vnd.github.raw'`; never copy its contents "
+                "into a public repository)"
+            )
+        else:
+            print(
+                f"Checklist {checklist['repo']}:{checklist['path']} is not readable; using {source}"
+            )
+    prompt = (
+        "Code Factory setup on this host is complete. Walk me through the new-host move "
+        "decisions one question at a time, waiting for my answer before the next: which "
+        "secondmate homes, services, tools and unpushed work to bring over from the old "
+        f"host. Use {source} as the checklist."
+    )
+    return subprocess.run(
+        [home / ".local/bin/omp", prompt],
+        cwd=Path(config["workspace"]) / "firstmate",
+        env=environment,
+    ).returncode
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -217,9 +262,13 @@ def main():
     init.add_argument("--user")
     init.add_argument("--home")
     init.add_argument("--container", action="store_true")
-    for name in ("validate", "plan", "apply", "doctor"):
+    for name in ("validate", "plan", "apply", "doctor", "questions"):
         command = commands.add_parser(name)
         command.add_argument("--config", type=Path, default=None)
+        if name == "apply":
+            command.add_argument(
+                "--no-questions", action="store_true", help="do not open the new-host questions"
+            )
     args = parser.parse_args()
     if args.command == "init":
         initialize(args)
@@ -235,11 +284,23 @@ def main():
         return 0
     if args.command == "doctor":
         return doctor(document)
+    if args.command == "questions":
+        if not document["factory"]["profiles"]["firstmate"]:
+            raise ValueError("the firstmate profile is off; there is no Firstmate to ask")
+        return questions(document)
     if args.command == "apply" and args.config is None and not (ROOT / ".local/host.yml").exists():
         raise ValueError(
             "run ./factory init and review .local/host.yml before applying, or pass an explicit --config"
         )
-    return provision(document, args.command == "plan")
+    result = provision(document, args.command == "plan")
+    if (
+        args.command == "apply"
+        and result == 0
+        and not args.no_questions
+        and document["factory"]["profiles"]["firstmate"]
+    ):
+        questions(document)
+    return result
 
 
 if __name__ == "__main__":

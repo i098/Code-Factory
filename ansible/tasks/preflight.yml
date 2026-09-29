@@ -83,15 +83,19 @@
       stops rather than degrading silently.
     quiet: true
 
-- name: Assert the lock pins a Herdr version
-  ansible.builtin.assert:
-    that:
-      - factory_herdr_version is string
-      - factory_herdr_version | length > 0
-    fail_msg: >-
-      {{ factory_lock_file }} has no tools.herdr.version. The unit ExecStart is
-      computed from the lock; there is no fallback version.
-    quiet: true
+# Resolved once per run, in plan too, so a release landing mid-run cannot
+# split what is installed from what the unit runs and verify asserts. The
+# installer refuses a herdr release that publishes no SHA-256 for the asset.
+- name: Resolve the latest herdr release and omp version
+  ansible.builtin.command:
+    argv: [python3, "{{ factory_installer }}", --lock, "{{ factory_lock_file }}", --home, "{{ factory_cfg.home }}", --resolve]
+  register: factory_latest_run
+  changed_when: false
+  check_mode: false
+
+- name: Record the resolved herdr and omp releases
+  ansible.builtin.set_fact:
+    factory_latest: "{{ factory_latest_run.stdout | from_json }}"
 
 - name: Assert the pruner requirements pin an exact psutil release
   ansible.builtin.assert:
@@ -113,7 +117,8 @@
     msg:
       - "account            : {{ factory_cfg.user }} (home {{ factory_cfg.home }}, workspace {{ factory_cfg.workspace }})"
       - "platform           : {{ ansible_distribution }} {{ ansible_distribution_version }} {{ ansible_architecture }} -> {{ factory_platform }} / {{ factory_deb_arch }}"
-      - "herdr              : {{ factory_herdr_version }} at {{ factory_herdr_bin }}"
+      - "herdr              : {{ factory_herdr_version }} (latest release) at {{ factory_herdr_bin }}"
+      - "omp                : {{ factory_omp_version if (factory_cfg.profiles.agents | bool) else 'not installed' }} (latest release)"
       - "profiles           : {{ factory_cfg.profiles | dict2items | selectattr('value') | map(attribute='key') | list | join(', ') | default('none', true) }}"
       - "services           : start_services={{ factory_cfg.start_services }} linger={{ factory_manage_linger }}"
       - "pruner runtime     : {{ ('psutil ' ~ factory_pruner_psutil_version ~ ' in ' ~ factory_pruner_venv) if ((factory_cfg.profiles.agents | bool) and (factory_cfg.browser_prune.enabled | bool)) else 'disabled' }}"

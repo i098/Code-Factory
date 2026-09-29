@@ -1,7 +1,7 @@
 ---
 # Herdr static configuration and the per-user service.
 #
-# The unit runs the exact locked build by absolute versioned path, so neither
+# The unit runs the resolved release by absolute versioned path, so neither
 # $PATH nor a stale /usr/local/bin copy can shadow it (the source host ran a
 # 0.8.2 service against a 0.9.0 CLI; that drift is designed out here).
 

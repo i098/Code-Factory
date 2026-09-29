@@ -64,8 +64,8 @@ Host sizing, the agent plugins and skills, and every auto pruner are listed in [
 
 ## Reproducibility policy
 
-1. Update native versions and both architecture hashes together in `toolchain.lock.json`; never resolve a mutable `latest` installer during deployment.
-2. Update exact npm dependencies and regenerate `tools/npm/package-lock.json` together. Do not copy a live global package directory.
+1. Update native versions and both architecture hashes together in `toolchain.lock.json`; never resolve a mutable `latest` installer during deployment. The one exception is herdr: each apply resolves its latest release once and verifies the asset against the SHA-256 that release publishes, refusing a release without one.
+2. Update exact npm dependencies and regenerate `tools/npm/package-lock.json` together. Do not copy a live global package directory. The one exception is omp, which each apply resolves to the registry's latest version and installs exactly.
 3. Change Python dependencies with `uv lock` and commit the lock.
 4. Keep machine differences in ignored `.local/host.yml`; schema validation precedes provisioning.
 5. Do not force, stash, reset, or overwrite a modified Firstmate checkout or an unmanaged command. Resolve that conflict explicitly.
@@ -85,7 +85,7 @@ Every action is pinned to an immutable commit SHA, and the token is read-only. T
 ## Primary sources
 
 - [Herdr installation](https://herdr.dev/docs/install/), [headless/SSH persistence](https://herdr.dev/docs/persistence-remote/), [session-state limits](https://herdr.dev/docs/session-state/), [config reference](https://herdr.dev/docs/config-reference/).
-- [Herdr v0.9.0 release](https://github.com/herdrdev/herdr/releases/tag/v0.9.0). Asset digests are recorded in the lock; no claim is made that the release supplies an independent SBOM or signature bundle.
+- [Herdr latest release](https://github.com/herdrdev/herdr/releases/latest). Assets are verified against the SHA-256 digest GitHub publishes for each release asset; no claim is made that the release supplies an independent SBOM or signature bundle.
 - [Ansible introduction](https://docs.ansible.com/projects/ansible/latest/getting_started/index.html), [checksummed downloads](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/get_url_module.html), [user systemd/D-Bus requirements](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/systemd_service_module.html).
 - [systemd lingering](https://www.freedesktop.org/software/systemd/man/latest/loginctl.html).
 - [Docker process boundaries](https://docs.docker.com/engine/containers/multi-service_container/), [Docker and host firewall behavior](https://docs.docker.com/engine/network/firewall-iptables/).

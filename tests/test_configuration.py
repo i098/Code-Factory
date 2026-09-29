@@ -45,7 +45,7 @@ def test_firstmate_cannot_silently_omit_its_agent_dependencies(configuration):
 
 
 def test_firstmate_revision_pin_is_rejected(configuration):
-    # The checkout tracks the fork's main; a sha pin would silently freeze a
+    # The checkout tracks upstream main; a sha pin would silently freeze a
     # host on an old Firstmate, so the schema refuses the key outright.
     configuration["factory"]["firstmate"]["revision"] = "0" * 40
     with pytest.raises(ValueError):
@@ -119,3 +119,14 @@ def test_root_operator_is_rejected_before_config_is_written(tmp_path, monkeypatc
     with pytest.raises(ValueError, match="non-root"):
         factory.initialize(argparse.Namespace(user="root", home="/home/root", container=False))
     assert not (tmp_path / ".local/host.yml").exists()
+
+
+@pytest.mark.parametrize("tty,ci", [(False, ""), (True, "true")])
+def test_questions_never_launch_without_an_interactive_terminal(
+    configuration, monkeypatch, capsys, tty, ci
+):
+    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: tty)
+    monkeypatch.setenv("CI", ci)
+    monkeypatch.setattr(factory.subprocess, "run", lambda *a, **k: pytest.fail("launched"))
+    assert factory.questions(configuration) == 0
+    assert capsys.readouterr().out.count("./factory questions") == 1

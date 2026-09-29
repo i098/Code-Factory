@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import io
+import json
 import subprocess
 import tarfile
 import zipfile
@@ -93,3 +94,35 @@ def test_archive_traversal_cannot_escape_staging(tmp_path, kind):
 def test_download_rejects_plain_http(tmp_path):
     with pytest.raises(ValueError, match="HTTPS"):
         installer.download("http://example.test/tool", "0" * 64, tmp_path / "download")
+
+
+def release(digest):
+    asset = {
+        "name": "herdr-linux-x86_64",
+        "browser_download_url": "https://github.com/herdrdev/herdr/releases/download/v9.9.9/herdr-linux-x86_64",
+        "digest": digest,
+    }
+    return {"tag_name": "v9.9.9", "assets": [asset]}
+
+
+def registries(monkeypatch, herdr_release):
+    def urlopen(url, **kwargs):
+        body = herdr_release if url == installer.HERDR_LATEST else {"version": "18.9.9"}
+        return io.BytesIO(json.dumps(body).encode())
+
+    monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
+
+
+def test_latest_herdr_is_pinned_to_the_digest_its_release_publishes(monkeypatch):
+    registries(monkeypatch, release("sha256:" + "a" * 64))
+    latest = installer.resolve_latest("linux-x86_64")
+    assert latest["omp"] == "18.9.9"
+    assert latest["herdr"]["version"] == "9.9.9"
+    assert latest["herdr"]["assets"]["linux-x86_64"]["sha256"] == "a" * 64
+
+
+@pytest.mark.parametrize("digest", [None, "", "md5:abc"])
+def test_herdr_release_without_a_checksum_is_refused(monkeypatch, digest):
+    registries(monkeypatch, release(digest))
+    with pytest.raises(ValueError, match="refusing an unverified binary"):
+        installer.resolve_latest("linux-x86_64")
