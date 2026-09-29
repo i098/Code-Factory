@@ -9,7 +9,7 @@
 | `./factory init` | Copies `config/default.yml` to `.local/host.yml` with your user, home, and `~/Dev` workspace filled in. Never overwrites an existing file. Options: `--user`, `--home`, `--container`. |
 | `./factory validate` | Checks the config against `schemas/factory.schema.json` and the cross-field rules below, plus `toolchain.lock.json` against its schema. |
 | `./factory plan` | Runs the Ansible playbook in check mode. Reports what would change; mutates nothing. |
-| `./factory apply` | Runs the playbook for real. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, a successful apply then opens the new-host questions (below). |
+| `./factory apply` | Runs the playbook for real. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, the first successful apply then opens the new-host questions (below). |
 | `./factory doctor` | Checks that each expected tool runs and reports `gh` authentication. Changes nothing. |
 
 `validate`, `plan`, `apply`, and `doctor` read `--config <path>` if you pass one, otherwise `.local/host.yml`. If `.local/host.yml` does not exist, `validate`, `plan`, and `doctor` fall back to `config/default.yml` (user `coder`); `apply` refuses to run.
@@ -65,10 +65,11 @@ Hosts set up before the move have `url: https://github.com/undeemed/firstmate.gi
 
 ## New-host questions
 
-After a successful `./factory apply` with the `firstmate` profile on, Code Factory starts omp in the Firstmate checkout with an opening prompt. Firstmate then asks the move decisions for this host one question at a time: which secondmate homes, services, tools, and unpushed work to bring over.
+After the first successful `./factory apply` with the `firstmate` profile on, Code Factory starts omp in the Firstmate checkout with an opening prompt. Firstmate then asks the move decisions for this host one question at a time: which secondmate homes, services, tools, and unpushed work to bring over.
 
 - The questions follow `firstmate.checklist` when it is set and `gh` can read it: `repo` is a GitHub repository (it can be private) and `path` is the checklist file in it. Set it only in `.local/host.yml`, never in `config/default.yml`. Otherwise they follow [Agent host move](agent-host-move.md).
-- The launch needs an interactive terminal, run as `factory.user`. When stdin is not a TTY, when `CI` is set, or when another account runs apply, apply skips them and prints one line saying to rerun `./factory apply` interactively.
+- They are asked once per host. When the omp session exits, apply writes the marker `~/.local/share/code-factory/new-host-questions-done`; while it exists, later applies skip the questions and print one line naming it. To ask again, delete the marker and rerun `./factory apply` interactively.
+- The launch needs an interactive terminal, run as `factory.user`. When stdin is not a TTY, when `CI` is set, or when another account runs apply, apply skips them without writing the marker and prints one line saying to rerun `./factory apply` interactively.
 
 The recipe refuses to overwrite a conflicting unmanaged command or an independently advanced Firstmate checkout. See [Drift and upgrades](recovery.md#drift-and-upgrades).
 

@@ -214,6 +214,13 @@ def questions(document):
     config = document["factory"]
     home = Path(config["home"])
     environment = {**os.environ, "PATH": f"{home / '.local/bin'}:{os.environ.get('PATH', '')}"}
+    marker = home / ".local/share/code-factory/new-host-questions-done"
+    if marker.exists():
+        print(
+            f"New-host questions already asked ({marker} exists); delete it and rerun "
+            f"./factory apply interactively as {config['user']} to ask them again"
+        )
+        return 0
     if (
         not sys.stdin.isatty()
         or os.environ.get("CI")
@@ -221,7 +228,8 @@ def questions(document):
     ):
         print(
             "New-host questions skipped (needs an interactive terminal); "
-            f"rerun ./factory apply interactively as {config['user']} to start them"
+            f"rerun ./factory apply interactively as {config['user']} to start them "
+            f"(asked once, then {marker} records it)"
         )
         return 0
     source = f"the runbook {ROOT / 'docs/agent-host-move.md'}"
@@ -250,11 +258,14 @@ def questions(document):
         "secondmate homes, services, tools and unpushed work to bring over from the old "
         f"host. Use {source} as the checklist."
     )
-    return subprocess.run(
+    returncode = subprocess.run(
         [home / ".local/bin/omp", prompt],
         cwd=Path(config["workspace"]) / "firstmate",
         env=environment,
     ).returncode
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.touch()
+    return returncode
 
 
 def main():

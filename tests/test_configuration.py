@@ -126,14 +126,47 @@ def test_root_operator_is_rejected_before_config_is_written(tmp_path, monkeypatc
 
 @pytest.mark.parametrize("tty,ci", [(False, ""), (True, "true")])
 def test_questions_never_launch_without_an_interactive_terminal(
-    configuration, monkeypatch, capsys, tty, ci
+    configuration, tmp_path, monkeypatch, capsys, tty, ci
 ):
     configuration["factory"]["user"] = factory.pwd.getpwuid(factory.os.getuid()).pw_name
+    configuration["factory"]["home"] = str(tmp_path)
     monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: tty)
     monkeypatch.setenv("CI", ci)
     monkeypatch.setattr(factory.subprocess, "run", lambda *a, **k: pytest.fail("launched"))
     assert factory.questions(configuration) == 0
     assert capsys.readouterr().out.count("rerun ./factory apply interactively") == 1
+
+
+def test_second_apply_does_not_reopen_the_questions(
+    configuration, tmp_path, monkeypatch, capsys
+):
+    configuration["factory"].update(
+        user=factory.pwd.getpwuid(factory.os.getuid()).pw_name,
+        home=str(tmp_path),
+        workspace=str(tmp_path / "Dev"),
+    )
+    configuration["factory"]["firstmate"].pop("checklist", None)
+    launches = []
+    monkeypatch.setattr(factory, "load_config", lambda path: configuration)
+    monkeypatch.setattr(factory, "provision", lambda document, check: 0)
+    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: True)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(
+        factory.subprocess,
+        "run",
+        lambda command, **kwargs: launches.append(command) or subprocess.CompletedProcess(command, 0),
+    )
+    monkeypatch.setattr(
+        factory.sys, "argv", ["factory", "apply", "--config", str(tmp_path / "host.yml")]
+    )
+    assert factory.main() == 0
+    assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"]
+    marker = tmp_path / ".local/share/code-factory/new-host-questions-done"
+    assert marker.is_file()
+    capsys.readouterr()
+    assert factory.main() == 0
+    assert len(launches) == 1
+    assert f"{marker} exists); delete it and rerun" in capsys.readouterr().out
 
 
 def test_apply_warns_when_firstmate_still_tracks_the_stale_fork(
