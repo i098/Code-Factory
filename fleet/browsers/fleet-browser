@@ -15,7 +15,8 @@
 #
 # One session across all three: cookie-sync.ts keeps a canonical jar in
 # ~/.fleet-browser/cookies.json and converges every live tier to it (timer every
-# 2 min, plus on every `up`). Log in once anywhere, be logged in everywhere.
+# 2 min, plus on every `up`). Log in once anywhere, be logged in everywhere,
+# except Google: its cookies stay in the tier that set them (see cookie-sync.ts).
 #
 #   fleet-browser status            tiers, ports, clients, cookie counts
 #   fleet-browser env [tier]        export lines for chrome-devtools-axi / omp (default: obscura)

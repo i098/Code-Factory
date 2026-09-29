@@ -137,7 +137,10 @@ All three tiers share one session. `cookie-sync.ts` keeps a canonical jar at
 `fleet-browser up chrome|vnc` runs it before returning (`up obscura` returns as
 soon as the tier answers, without a converge). So a login made in any tier is
 present in every tier within one sync. Cookies are synced; localStorage is
-engine-local and is not.
+engine-local and is not. Google cookies (google.com, Google's country domains,
+youtube.com) are the exception: each stays in the tier that set it. Google
+treats one session replayed from several browsers as theft and revokes it, so
+a Google sign-in made by hand in the `vnc` tier stays in `vnc`.
 
 Rule: an agent never launches its own Chrome, headless or not, and never uses a
 private `--user-data-dir`. A private profile has none of the fleet's logins and
