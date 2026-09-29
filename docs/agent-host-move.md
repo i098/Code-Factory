@@ -20,9 +20,10 @@ Other Docker data stays too: the shared Supabase stack, SigNoz (`~/perpetual-sig
 
 ## 1. Provision the new host
 
-1. Follow the [Quick start](../README.md#quick-start): bootstrap, init, validate, plan, apply, doctor. In `.local/host.yml`, enable the same profiles as the VPS, plus `desktop`: the fleet-browser sign-in in [What git does not carry](#2-what-git-does-not-carry) needs its TigerVNC and noVNC packages, and with `desktop` on the default installs `/usr/bin/google-chrome`, which the fleet-browser finds first. When the first apply succeeds in an interactive terminal, it opens Firstmate on omp, which asks the move decisions in this runbook one question at a time: which secondmate homes, services, tools and unpushed work to bring over. Set `firstmate.checklist` in `.local/host.yml` to have it follow your own checklist instead. Later applies skip the questions; to open them again, delete `~/.local/share/code-factory/new-host-questions-done` and rerun `./factory apply` interactively ([New-host questions](configuration.md#new-host-questions)). Sign in to omp first ([Sign in](omp.md#sign-in)) so it can answer.
-2. Fetch `~/super.env` as described in [Fetch on a new host](secrets.md#fetch-on-a-new-host). Compare its `sha256sum` with the VPS copy.
-3. Join the tailnet as a new device ([Remote access](security.md#remote-access)).
+1. Follow the [Quick start](../README.md#quick-start): bootstrap, init, validate, plan, apply, doctor. In `.local/host.yml`, enable the same profiles as the VPS, plus `desktop`: the fleet-browser sign-in in [What git does not carry](#2-what-git-does-not-carry) needs its TigerVNC and noVNC packages, and with `desktop` on the default installs `/usr/bin/google-chrome`, which the fleet-browser finds first. The first apply installs omp; until omp has a provider login it skips the questions and prints a line saying to sign in.
+2. Sign in to omp ([Sign in](omp.md#sign-in)), then rerun `./factory apply` in an interactive terminal. It opens Firstmate on omp, which asks the move decisions in this runbook one question at a time: which secondmate homes, services, tools and unpushed work to bring over. Set `firstmate.checklist` in `.local/host.yml` to have it follow your own checklist instead. Later applies skip the questions; to open them again, delete `~/.local/share/code-factory/new-host-questions-done` and rerun `./factory apply` interactively ([New-host questions](configuration.md#new-host-questions)).
+3. Fetch `~/super.env` as described in [Fetch on a new host](secrets.md#fetch-on-a-new-host). Compare its `sha256sum` with the VPS copy.
+4. Join the tailnet as a new device ([Remote access](security.md#remote-access)).
 
 ## 2. What git does not carry
 

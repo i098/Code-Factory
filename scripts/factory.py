@@ -232,6 +232,26 @@ def questions(document):
             f"./factory apply interactively as {config['user']} to ask them again"
         )
         return 0
+    omp = home / ".local/bin/omp"
+    firstmate = Path(config["workspace"]) / "firstmate"
+    try:
+        probe = subprocess.run(
+            [omp, "models", "--json"],
+            cwd=firstmate,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        signed_in = probe.returncode == 0 and bool(json.loads(probe.stdout)["models"])
+    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError):
+        signed_in = False
+    if not signed_in:
+        print(
+            f"New-host questions not started: sign in to omp with /login (run omp as "
+            f"{config['user']}), then rerun ./factory apply interactively"
+        )
+        return 0
     source = f"the runbook {ROOT / 'docs/agent-host-move.md'}"
     checklist = config["firstmate"].get("checklist")
     if checklist:
@@ -258,11 +278,7 @@ def questions(document):
         "secondmate homes, services, tools and unpushed work to bring over from the old "
         f"host. Use {source} as the checklist."
     )
-    returncode = subprocess.run(
-        [home / ".local/bin/omp", prompt],
-        cwd=Path(config["workspace"]) / "firstmate",
-        env=environment,
-    ).returncode
+    returncode = subprocess.run([omp, prompt], cwd=firstmate, env=environment).returncode
     if returncode:
         print(
             f"New-host questions did not complete (omp exited {returncode}); rerun "

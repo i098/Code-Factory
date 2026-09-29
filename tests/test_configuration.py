@@ -124,6 +124,16 @@ def test_root_operator_is_rejected_before_config_is_written(tmp_path, monkeypatc
     assert not (tmp_path / ".local/host.yml").exists()
 
 
+def fake_omp(launches, models=json.dumps({"models": [{"id": "model"}]}), exits=lambda n: 0):
+    def run(command, **kwargs):
+        if command[1:] == ["models", "--json"]:
+            return subprocess.CompletedProcess(command, 0, models)
+        launches.append(command)
+        return subprocess.CompletedProcess(command, exits(len(launches)))
+
+    return run
+
+
 @pytest.mark.parametrize(
     "tty,ci,launched", [(False, "", False), (True, "true", False), (True, "", True)]
 )
@@ -139,12 +149,7 @@ def test_questions_launch_only_on_an_interactive_terminal_outside_ci(
     launches = []
     monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: tty)
     monkeypatch.setenv("CI", ci)
-    monkeypatch.setattr(
-        factory.subprocess,
-        "run",
-        lambda command, **kwargs: launches.append(command)
-        or subprocess.CompletedProcess(command, 0),
-    )
+    monkeypatch.setattr(factory.subprocess, "run", fake_omp(launches))
     assert factory.questions(configuration) == 0
     assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"] * launched
     skipped = capsys.readouterr().out.count("rerun ./factory apply interactively")
@@ -166,10 +171,7 @@ def test_second_apply_does_not_reopen_the_questions(
     monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: True)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(
-        factory.subprocess,
-        "run",
-        lambda command, **kwargs: launches.append(command)
-        or subprocess.CompletedProcess(command, 0 if len(launches) > 1 else 1),
+        factory.subprocess, "run", fake_omp(launches, exits=lambda n: 0 if n > 1 else 1)
     )
     monkeypatch.setattr(
         factory.sys, "argv", ["factory", "apply", "--config", str(tmp_path / "host.yml")]
@@ -185,6 +187,24 @@ def test_second_apply_does_not_reopen_the_questions(
     assert factory.main() == 0
     assert len(launches) == 2
     assert f"{marker} exists); delete it and rerun" in capsys.readouterr().out
+
+
+def test_questions_wait_for_an_omp_sign_in(configuration, tmp_path, monkeypatch, capsys):
+    configuration["factory"].update(
+        user=factory.pwd.getpwuid(factory.os.getuid()).pw_name,
+        home=str(tmp_path),
+        workspace=str(tmp_path / "Dev"),
+    )
+    launches = []
+    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: True)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(
+        factory.subprocess, "run", fake_omp(launches, models=json.dumps({"models": []}))
+    )
+    assert factory.questions(configuration) == 0
+    assert launches == []
+    assert not (tmp_path / ".local/share/code-factory/new-host-questions-done").exists()
+    assert "sign in to omp with /login" in capsys.readouterr().out
 
 
 def test_another_accounts_apply_skips_questions_without_reading_the_unreadable_home(

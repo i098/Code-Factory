@@ -61,7 +61,7 @@ You need Ubuntu 24.04 or 26.04 on x86_64 or aarch64 with systemd, a non-root acc
    ./factory plan
    ```
 
-6. Apply. This is the only step that changes the host, and it may ask for your sudo password. With the `firstmate` profile on, the first successful interactive apply then opens the [new-host questions](docs/configuration.md#new-host-questions):
+6. Apply. This is the only step that changes the host, and it may ask for your sudo password. With the `firstmate` profile on, the first successful interactive apply after you sign in to omp opens the [new-host questions](docs/configuration.md#new-host-questions); a fresh host's first apply installs omp, so sign in to omp after it and rerun apply:
 
    ```bash
    ./factory apply

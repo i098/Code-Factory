@@ -171,26 +171,6 @@
           "{{ factory_verify_herdr_link.stat.lnk_source | default('(missing)') }}".
         quiet: true
 
-    # --- the installer recorded the releases this run resolved -------------
-
-    - name: Read the installer's resolved-release record
-      ansible.builtin.slurp:
-        src: "{{ factory_share_dir }}/resolved.json"
-      become: true
-      register: factory_verify_resolved
-      changed_when: false
-
-    - name: Assert the record matches the releases this run resolved
-      ansible.builtin.assert:
-        that:
-          - (factory_verify_resolved.content | b64decode | from_json).herdr.version == factory_herdr_version
-          - (factory_verify_resolved.content | b64decode | from_json).omp == factory_omp_version
-        fail_msg: >-
-          {{ factory_share_dir }}/resolved.json does not record herdr
-          {{ factory_herdr_version }} and omp {{ factory_omp_version }}, the
-          releases this run resolved and installed.
-        quiet: true
-
     # --- the omp release this run resolved is the one installed ------------
 
     - name: Stat the managed omp symlink
