@@ -1,6 +1,9 @@
 import argparse
 import importlib.util
+import json
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -45,7 +48,7 @@ def test_firstmate_cannot_silently_omit_its_agent_dependencies(configuration):
 
 
 def test_firstmate_revision_pin_is_rejected(configuration):
-    # The checkout tracks the fork's main; a sha pin would silently freeze a
+    # The checkout tracks upstream main; a sha pin would silently freeze a
     # host on an old Firstmate, so the schema refuses the key outright.
     configuration["factory"]["firstmate"]["revision"] = "0" * 40
     with pytest.raises(ValueError):
@@ -119,3 +122,190 @@ def test_root_operator_is_rejected_before_config_is_written(tmp_path, monkeypatc
     with pytest.raises(ValueError, match="non-root"):
         factory.initialize(argparse.Namespace(user="root", home="/home/root", container=False))
     assert not (tmp_path / ".local/host.yml").exists()
+
+
+def fake_omp(launches, models=json.dumps({"models": [{"id": "model"}]}), exits=lambda n: 0):
+    def run(command, **kwargs):
+        if command[1:] == ["models", "--json"]:
+            return subprocess.CompletedProcess(command, 0, models)
+        launches.append(command)
+        return subprocess.CompletedProcess(command, exits(len(launches)))
+
+    return run
+
+
+@pytest.mark.parametrize(
+    "tty,ci,launched", [(False, "", False), (True, "true", False), (True, "", True)]
+)
+def test_questions_launch_only_on_an_interactive_terminal_outside_ci(
+    configuration, tmp_path, monkeypatch, capsys, tty, ci, launched
+):
+    configuration["factory"].update(
+        user=factory.pwd.getpwuid(factory.os.getuid()).pw_name,
+        home=str(tmp_path),
+        workspace=str(tmp_path / "Dev"),
+    )
+    configuration["factory"]["firstmate"].pop("checklist", None)
+    launches = []
+    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: tty)
+    monkeypatch.setenv("CI", ci)
+    monkeypatch.setattr(factory.subprocess, "run", fake_omp(launches))
+    assert factory.questions(configuration) == 0
+    assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"] * launched
+    skipped = capsys.readouterr().out.count("rerun ./factory apply interactively")
+    assert skipped == (0 if launched else 1)
+
+
+def test_second_apply_does_not_reopen_the_questions(configuration, tmp_path, monkeypatch, capsys):
+    configuration["factory"].update(
+        user=factory.pwd.getpwuid(factory.os.getuid()).pw_name,
+        home=str(tmp_path),
+        workspace=str(tmp_path / "Dev"),
+    )
+    configuration["factory"]["firstmate"].pop("checklist", None)
+    launches = []
+    monkeypatch.setattr(factory, "load_config", lambda path: configuration)
+    monkeypatch.setattr(factory, "provision", lambda document, check: 0)
+    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: True)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(
+        factory.subprocess, "run", fake_omp(launches, exits=lambda n: 0 if n > 1 else 1)
+    )
+    monkeypatch.setattr(
+        factory.sys, "argv", ["factory", "apply", "--config", str(tmp_path / "host.yml")]
+    )
+    marker = tmp_path / ".local/share/code-factory/new-host-questions-done"
+    assert factory.main() == 0
+    assert not marker.exists()
+    assert "New-host questions did not complete (omp exited 1)" in capsys.readouterr().out
+    assert factory.main() == 0
+    assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"] * 2
+    assert marker.is_file()
+    capsys.readouterr()
+    assert factory.main() == 0
+    assert len(launches) == 2
+    assert f"{marker} exists); delete it and rerun" in capsys.readouterr().out
+
+
+def test_questions_wait_for_an_omp_sign_in(configuration, tmp_path, monkeypatch, capsys):
+    configuration["factory"].update(
+        user=factory.pwd.getpwuid(factory.os.getuid()).pw_name,
+        home=str(tmp_path),
+        workspace=str(tmp_path / "Dev"),
+    )
+    launches = []
+    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: True)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(
+        factory.subprocess, "run", fake_omp(launches, models=json.dumps({"models": []}))
+    )
+    assert factory.questions(configuration) == 0
+    assert launches == []
+    assert not (tmp_path / ".local/share/code-factory/new-host-questions-done").exists()
+    assert "sign in to omp with /login" in capsys.readouterr().out
+
+
+def test_another_accounts_apply_skips_questions_without_reading_the_unreadable_home(
+    configuration, tmp_path, monkeypatch, capsys
+):
+    home = tmp_path / "coder"
+    home.mkdir(mode=0o000)
+    configuration["factory"].update(user="another-account", home=str(home))
+    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: True)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(factory.subprocess, "run", lambda *a, **k: pytest.fail("launched"))
+    try:
+        assert factory.questions(configuration) == 0
+    finally:
+        home.chmod(0o700)
+    assert "rerun ./factory apply interactively as another-account" in capsys.readouterr().out
+
+
+def test_apply_warns_when_firstmate_still_tracks_the_stale_fork(
+    configuration, tmp_path, monkeypatch, capsys
+):
+    configuration["factory"]["firstmate"]["url"] = factory.STALE_FIRSTMATE_URL
+    host = tmp_path / "host.yml"
+    host.write_text(yaml.safe_dump(configuration))
+    monkeypatch.setattr(factory, "provision", lambda document, check: 0)
+    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(factory.sys, "argv", ["factory", "apply", "--config", str(host)])
+    assert factory.main() == 0
+    output = capsys.readouterr()
+    assert output.err.startswith("WARNING: firstmate.url is the stale fork")
+    assert "rerun ./factory apply interactively" in output.out
+
+
+def _verify_firstmate(tmp_path, origin, configured):
+    checkout = tmp_path / "firstmate"
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", str(checkout)]
+    subprocess.run(["git", "init", "-q", "-b", "main", str(checkout)], check=True)
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "c"], check=True)
+    subprocess.run([*git, "remote", "add", "origin", origin], check=True)
+    head = subprocess.run(
+        [*git, "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    playbook = tmp_path / "verify.yml"
+    playbook.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "hosts": "localhost",
+                    "connection": "local",
+                    "gather_facts": False,
+                    "tasks": [
+                        {"ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/verify.yml")}
+                    ],
+                }
+            ]
+        )
+    )
+    variables = {
+        "factory_account_ready": True,
+        "factory_become_target": False,
+        "factory_user_env": {},
+        "factory_manage_services": False,
+        "factory_user_units": str(tmp_path),
+        "factory_docker_group_users": [],
+        "factory_firstmate_dir": str(checkout),
+        "factory_firstmate_target": head,
+        "factory_cfg": {
+            "user": "coder",
+            "profiles": {
+                "agents": False,
+                "firstmate": True,
+                "docker": False,
+                "tailscale": False,
+                "desktop": False,
+            },
+            "firstmate": {"url": configured},
+        },
+    }
+    return subprocess.run(
+        [
+            Path(sys.executable).parent / "ansible-playbook",
+            "-i",
+            "localhost,",
+            str(playbook),
+            "--start-at-task",
+            "Read the Firstmate origin URL",
+            "--extra-vars",
+            json.dumps(variables),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_verify_fails_when_firstmate_origin_is_not_the_configured_url(tmp_path):
+    upstream = "https://github.com/kunchenguid/firstmate.git"
+    result = _verify_firstmate(tmp_path, factory.STALE_FIRSTMATE_URL, upstream)
+    assert result.returncode != 0
+    assert "updated the wrong repository" in result.stdout
+
+
+def test_verify_passes_when_firstmate_origin_is_the_configured_url(tmp_path):
+    upstream = "https://github.com/kunchenguid/firstmate.git"
+    result = _verify_firstmate(tmp_path, upstream, upstream)
+    assert result.returncode == 0, result.stdout

@@ -4,8 +4,8 @@
 # Nothing here mutates the host: every command is read-only and marked
 # changed_when: false, so verification can never make a second apply report a
 # change. Individual task files already assert their own outputs; this file
-# checks the wiring that crosses them - the pinned Herdr path, the static
-# enablement symlinks, the managed shell environment, the pruner runtime, the
+# checks the wiring that crosses them - the Herdr and omp releases this run
+# resolved, the static enablement symlinks, the managed shell environment, the pruner runtime, the
 # Firstmate revision this run resolved and the loopback-only desktop listeners.
 #
 # A check-mode run cannot observe files it did not create, so verification
@@ -15,7 +15,7 @@
   ansible.builtin.debug:
     msg: >-
       check mode: skipping output verification. `./factory apply` verifies the
-      pinned Herdr path, unit wiring, pruner runtime, the Firstmate revision it
+      resolved Herdr and omp releases, unit wiring, pruner runtime, the Firstmate revision it
       resolved and the loopback-only desktop listeners.
   when: ansible_check_mode or not (factory_account_ready | bool)
 
@@ -140,7 +140,7 @@
         - factory_cfg.profiles.desktop | bool
         - factory_desktop_strict_symlink_check | bool
 
-    # --- the pinned Herdr build is the one that runs ------------------------
+    # --- the Herdr release this run resolved is the one that runs ----------
 
     - name: Stat the managed Herdr symlink
       ansible.builtin.stat:
@@ -159,17 +159,50 @@
       register: factory_verify_herdr_unit
       changed_when: false
 
-    - name: Assert CLI and service run the same locked build
+    - name: Assert CLI and service run the resolved Herdr release
       ansible.builtin.assert:
         that:
           - (factory_verify_herdr_link.stat.lnk_source | default('')) == factory_herdr_bin
           - (factory_verify_herdr_unit.content | b64decode) is search('ExecStart=' ~ (factory_herdr_bin | regex_escape))
         fail_msg: >-
           The interactive `herdr` command and herdr.service must both resolve to
-          {{ factory_herdr_bin }} (Herdr {{ factory_herdr_version }} from the
-          lock). The symlink points at
+          {{ factory_herdr_bin }} (Herdr {{ factory_herdr_version }}, the latest
+          release this run resolved). The symlink points at
           "{{ factory_verify_herdr_link.stat.lnk_source | default('(missing)') }}".
         quiet: true
+
+    # --- the omp release this run resolved is the one installed ------------
+
+    - name: Stat the managed omp symlink
+      ansible.builtin.stat:
+        path: "{{ factory_local_bin }}/omp"
+        follow: false
+        get_checksum: false
+      become: true
+      register: factory_verify_omp_link
+      changed_when: false
+      check_mode: false
+      when: factory_cfg.profiles.agents | bool
+
+    - name: Read the installed omp package manifest
+      ansible.builtin.slurp:
+        src: "{{ factory_omp_root }}/node_modules/@oh-my-pi/pi-coding-agent/package.json"
+      become: true
+      register: factory_verify_omp_package
+      changed_when: false
+      when: factory_cfg.profiles.agents | bool
+
+    - name: Assert omp is the release this run resolved
+      ansible.builtin.assert:
+        that:
+          - (factory_verify_omp_link.stat.lnk_source | default('')).startswith(factory_omp_root ~ '/')
+          - (factory_verify_omp_package.content | b64decode | from_json).version == factory_omp_version
+        fail_msg: >-
+          `omp` must be omp {{ factory_omp_version }}, the latest release this run
+          resolved, installed under {{ factory_omp_root }}. The symlink points at
+          "{{ factory_verify_omp_link.stat.lnk_source | default('(missing)') }}".
+        quiet: true
+      when: factory_cfg.profiles.agents | bool
 
     # --- managed shell environment -----------------------------------------
 
@@ -236,6 +269,32 @@
           nothing to verify against. tasks/firstmate.yml resolves it from
           origin/main; verify as part of a full apply, or with
           `--tags firstmate,verify`.
+        quiet: true
+      when: factory_cfg.profiles.firstmate | bool
+
+    - name: Read the Firstmate origin URL
+      ansible.builtin.command:
+        argv: [git, -C, "{{ factory_firstmate_dir }}", config, --get, remote.origin.url]
+      become: "{{ factory_become_target | bool }}"
+      become_user: "{{ factory_cfg.user }}"
+      environment: "{{ factory_user_env }}"
+      register: factory_verify_fm_origin
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: factory_cfg.profiles.firstmate | bool
+
+    - name: Assert Firstmate fetches the configured repository
+      ansible.builtin.assert:
+        that:
+          - (factory_verify_fm_origin.stdout | trim) == factory_cfg.firstmate.url
+        fail_msg: >-
+          {{ factory_firstmate_dir }} fetches origin
+          {{ factory_verify_fm_origin.stdout | default('') | trim | default('(none)', true) }},
+          not factory.firstmate.url {{ factory_cfg.firstmate.url }}, so this
+          run updated the wrong repository. Provisioning never rewrites the
+          remote or discards local commits; follow "Moving off the old
+          Firstmate fork" in docs/configuration.md.
         quiet: true
       when: factory_cfg.profiles.firstmate | bool
 

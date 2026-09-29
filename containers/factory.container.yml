@@ -48,7 +48,7 @@ factory:
     poll_seconds: 300
     max_gap_seconds: 900
   firstmate:
-    url: https://github.com/undeemed/firstmate.git
+    url: https://github.com/kunchenguid/firstmate.git
   desktop:
     display: 1
     novnc_port: 6080

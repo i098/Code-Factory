@@ -14,6 +14,7 @@ import jsonschema
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+STALE_FIRSTMATE_URL = "https://github.com/undeemed/firstmate.git"
 
 
 def validate_document(document, schema_name):
@@ -208,6 +209,90 @@ def doctor(document):
     return 1 if failed else 0
 
 
+def questions(document):
+    """Open Firstmate on omp to ask the operator the new-host move questions."""
+    config = document["factory"]
+    home = Path(config["home"])
+    environment = {**os.environ, "PATH": f"{home / '.local/bin'}:{os.environ.get('PATH', '')}"}
+    marker = home / ".local/share/code-factory/new-host-questions-done"
+    if (
+        not sys.stdin.isatty()
+        or os.environ.get("CI")
+        or pwd.getpwuid(os.getuid()).pw_name != config["user"]
+    ):
+        print(
+            "New-host questions skipped (needs an interactive terminal); "
+            f"rerun ./factory apply interactively as {config['user']} to start them "
+            f"(asked once, then {marker} records it)"
+        )
+        return 0
+    if marker.exists():
+        print(
+            f"New-host questions already asked ({marker} exists); delete it and rerun "
+            f"./factory apply interactively as {config['user']} to ask them again"
+        )
+        return 0
+    omp = home / ".local/bin/omp"
+    firstmate = Path(config["workspace"]) / "firstmate"
+    try:
+        probe = subprocess.run(
+            [omp, "models", "--json"],
+            cwd=firstmate,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        signed_in = probe.returncode == 0 and bool(json.loads(probe.stdout)["models"])
+    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError):
+        signed_in = False
+    if not signed_in:
+        print(
+            f"New-host questions not started: sign in to omp with /login (run omp as "
+            f"{config['user']}), then rerun ./factory apply interactively"
+        )
+        return 0
+    source = f"the runbook {ROOT / 'docs/agent-host-move.md'}"
+    checklist = config["firstmate"].get("checklist")
+    if checklist:
+        api = f"repos/{checklist['repo']}/contents/{checklist['path']}"
+        try:
+            readable = (
+                subprocess.run(
+                    ["gh", "api", api, "--silent"], env=environment, capture_output=True, timeout=20
+                ).returncode
+                == 0
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            readable = False
+        if readable:
+            source = (
+                f"the operator's private checklist (read it with `gh api {api} "
+                "-H 'Accept: application/vnd.github.raw'`; never copy its contents "
+                "into a public repository)"
+            )
+        else:
+            print(
+                f"Checklist {checklist['repo']}:{checklist['path']} is not readable; using {source}"
+            )
+    prompt = (
+        "Code Factory setup on this host is complete. Walk me through the new-host move "
+        "decisions one question at a time, waiting for my answer before the next: which "
+        "secondmate homes, services, tools and unpushed work to bring over from the old "
+        f"host. Use {source} as the checklist."
+    )
+    returncode = subprocess.run([omp, prompt], cwd=firstmate, env=environment).returncode
+    if returncode:
+        print(
+            f"New-host questions did not complete (omp exited {returncode}); rerun "
+            f"./factory apply interactively as {config['user']} to ask them again"
+        )
+        return returncode
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.touch()
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -239,7 +324,19 @@ def main():
         raise ValueError(
             "run ./factory init and review .local/host.yml before applying, or pass an explicit --config"
         )
-    return provision(document, args.command == "plan")
+    result = provision(document, args.command == "plan")
+    config = document["factory"]
+    if args.command == "apply" and config["profiles"]["firstmate"]:
+        if config["firstmate"]["url"] == STALE_FIRSTMATE_URL:
+            print(
+                f"WARNING: firstmate.url is the stale fork {STALE_FIRSTMATE_URL}; this host "
+                "is not tracking upstream Firstmate. Move it with the steps in "
+                f"{ROOT / 'docs/configuration.md'} (Moving off the old Firstmate fork).",
+                file=sys.stderr,
+            )
+        if result == 0:
+            questions(document)
+    return result
 
 
 if __name__ == "__main__":

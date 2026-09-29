@@ -4,7 +4,7 @@
 
 1. Start with a supported Ubuntu installation and working SSH/sudo access. `cloud-init/user-data.yaml` installs initial OS prerequisites; it does not create credentials, log in to services, or clone this private repository.
 2. Authenticate GitHub on the new device and clone Code Factory. Run the [Quick start](../README.md#quick-start): bootstrap, init, validate, plan, apply, and doctor.
-3. Confirm Herdr's user service and executable agree. Both resolve to the versioned artifact recorded in `toolchain.lock.json`.
+3. Confirm Herdr's user service and executable agree. Both resolve to the versioned release that apply resolved and installed (see [Latest releases](dependencies.md#latest-releases)).
 4. Authenticate agent/provider CLIs under the configured operator account (for omp, see [Sign in](omp.md#sign-in)). Confirm the configured models exist for that account. Recreate per-project approval/trust choices instead of copying a global auto-approval list.
 5. If selected, authenticate Tailscale as a new device and review its ACL/SSH policy. Installation alone does not authorize incoming connections.
 6. If selected, open the desktop through an SSH tunnel and sign in using the one persistent browser profile. Never transfer a cookie database or copy the old browser directory.
@@ -56,7 +56,7 @@ Never upload a raw failed HTTP request to a public issue or this repository. Suc
 
 ## Drift and upgrades
 
-Run `./factory plan` before applying changed pins. An unmanaged executable at a managed command path is a refusal, not permission to overwrite it. Firstmate refuses dirty or independently advanced checkouts. Preserve that work and decide whether to update the configuration's pin or move to a separate clean checkout.
+Run `./factory plan` before applying changed pins. herdr and omp are not pinned: every apply upgrades them to their latest release, and a herdr upgrade restarts `herdr.service`. An unmanaged executable at a managed command path is a refusal, not permission to overwrite it. Firstmate refuses dirty or independently advanced checkouts. Preserve that work and decide whether to update the configuration's pin or move to a separate clean checkout.
 
 Existing OMP settings are first-write-only: provisioning will not replace provider configuration or credentials on a reused account. Review and merge the exported safe preferences manually if deliberately updating an established account.
 

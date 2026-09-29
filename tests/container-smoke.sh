@@ -10,7 +10,8 @@
 # Container mode (inside the image; CMD of the `smoke` target):
 #   tests/container-smoke.sh --in-container [--only NAME,NAME]
 #   Exercises what the image actually contains, through the programs a user
-#   would run: managed tool versions compared with toolchain.lock.json, a Herdr
+#   would run: managed tool versions compared with toolchain.lock.json, herdr
+#   and omp compared with the release the build resolved, a Herdr
 #   configuration that Herdr itself accepts and that matches the factory
 #   document, the user unit's ExecStart resolved and executed, a real headless
 #   `herdr server` brought up and shut down over its API socket, the repository
@@ -46,7 +47,7 @@ KEEP=${CF_SMOKE_KEEP:-}
 IMAGE_REF=${CF_SMOKE_IMAGE:-}
 
 usage() {
-    sed -n '2,36p' "${SCRIPT_PATH}" | sed 's/^# \{0,1\}//'
+    sed -n '2,37p' "${SCRIPT_PATH}" | sed 's/^# \{0,1\}//'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -205,10 +206,32 @@ lock_version() {
     jq -er --arg tool "$1" '.tools[$tool].version' "${CF_ROOT}/toolchain.lock.json"
 }
 
-# The contract computes the Herdr service binary from the lock, never from PATH.
-herdr_locked_bin() {
+# herdr and omp track their latest release. The installer records the release
+# it installed in RESOLVED_STAMP; checks compare against that record, so an
+# upstream release published after the build cannot turn them red.
+RESOLVED_STAMP="${HOME}/.local/share/code-factory/resolved.json"
+resolved_version() {
+    jq -er "$1" "${RESOLVED_STAMP}"
+}
+
+# The contract computes the Herdr service binary from the installed release,
+# never from PATH.
+herdr_installed_bin() {
     printf '%s/.local/share/code-factory/tools/herdr/%s/%s/herdr\n' \
-        "${HOME}" "$(lock_version herdr)" "$(platform_tag)"
+        "${HOME}" "$(resolved_version .herdr.version)" "$(platform_tag)"
+}
+
+# A second apply resolves upstream again and upgrades an image that upstream
+# has since overtaken; that is an upgrade, not a repeat change.
+image_is_current() {
+    local latest
+    latest=$(python3 "${CF_ROOT}/scripts/install_tools.py" --lock "${CF_ROOT}/toolchain.lock.json" \
+        --home "${HOME}" --resolve) || fail "could not resolve the latest herdr and omp releases"
+    [ "$(jq -c '[.herdr.version, .omp]' <<<"${latest}")" = "$(jq -c '[.herdr.version, .omp]' "${RESOLVED_STAMP}")" ] \
+        && return 0
+    printf 'image has %s but upstream now has %s; idempotence not measured\n' \
+        "$(jq -c '[.herdr.version, .omp]' "${RESOLVED_STAMP}")" "$(jq -c '[.herdr.version, .omp]' <<<"${latest}")"
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -291,7 +314,7 @@ check_workspace() {
 
 check_core_tools() {
     local tool bin locked version
-    for tool in herdr node bun uv; do
+    for tool in node bun uv; do
         bin="${HOME}/.local/bin/${tool}"
         [ -x "${bin}" ] || fail "missing managed launcher ${bin}"
         [ "$(command -v "${tool}")" = "${bin}" ] || fail "PATH resolves ${tool} to $(command -v "${tool}"), expected ${bin}"
@@ -306,6 +329,28 @@ check_core_tools() {
         esac
         printf '%-6s %-32s (lock %s)\n' "${tool}" "${version}" "${locked}"
     done
+}
+
+# The installed herdr and omp are exactly the releases the build resolved and
+# recorded in RESOLVED_STAMP.
+check_resolved_releases() {
+    local herdr omp banner prefix
+    [ -f "${RESOLVED_STAMP}" ] || fail "installer wrote no ${RESOLVED_STAMP}"
+    herdr=$(resolved_version .herdr.version)
+    omp=$(resolved_version .omp)
+    banner=$("${HOME}/.local/bin/herdr" --version 2>&1) || fail "herdr --version exited nonzero: ${banner}"
+    case "${banner%%$'\n'*}" in
+        *"${herdr}"*) ;;
+        *) fail "herdr reports '${banner%%$'\n'*}' but the build resolved ${herdr}" ;;
+    esac
+    prefix="${HOME}/.local/share/code-factory/omp/${omp}"
+    case "$(readlink -f "${HOME}/.local/bin/omp")" in
+        "${prefix}"/*) ;;
+        *) fail "omp resolves to $(readlink -f "${HOME}/.local/bin/omp"), expected the resolved release under ${prefix}" ;;
+    esac
+    [ "$(jq -r .version "${prefix}/node_modules/@oh-my-pi/pi-coding-agent/package.json")" = "${omp}" ] \
+        || fail "omp under ${prefix} is not version ${omp}"
+    printf 'herdr %s and omp %s match %s\n' "${herdr}" "${omp}" "${RESOLVED_STAMP}"
 }
 
 check_herdr_install_layout() {
@@ -432,17 +477,17 @@ check_herdr_unit() {
 
     exec_start=$(sed -n 's/^ExecStart=//p' "${unit}" | head -n 1)
     [ -n "${exec_start}" ] || fail "${unit} declares no ExecStart"
-    expected="$(herdr_locked_bin) server"
+    expected="$(herdr_installed_bin) server"
     [ "${exec_start}" = "${expected}" ] || fail "ExecStart is '${exec_start}', expected '${expected}'"
 
     binary=${exec_start%% *}
     [ -x "${binary}" ] || fail "ExecStart binary ${binary} is missing or not executable"
-    locked=$(lock_version herdr)
+    locked=$(resolved_version .herdr.version)
     banner=$("${binary}" --version 2>&1) || fail "ExecStart binary ${binary} failed to run"
     banner=${banner%%$'\n'*}
     case "${banner}" in
         *"${locked}"*) ;;
-        *) fail "ExecStart binary reports '${banner}', lock pins ${locked}" ;;
+        *) fail "ExecStart binary reports '${banner}', the installed release is ${locked}" ;;
     esac
 
     [ -L "${wants}" ] || fail "unit is not statically enabled: ${wants} is missing"
@@ -457,7 +502,7 @@ check_herdr_unit() {
 
 check_herdr_server_headless() {
     local binary log pid socket status waited started_after limit stopped leftover
-    binary=$(herdr_locked_bin)
+    binary=$(herdr_installed_bin)
     log="${SMOKE_TMP}/herdr-server.log"
     limit=${CF_SMOKE_SERVER_WAIT:-30}
     pid=""
@@ -608,6 +653,7 @@ check_installer_idempotent() {
             --lock "${CF_ROOT}/toolchain.lock.json" \
             --home "${HOME}" \
             --tools herdr,node,bun,uv \
+            --resolved "$(cat "${RESOLVED_STAMP}")" \
             --npm --development 2>&1) || {
         printf '%s\n' "${out}" | tail -n 20
         fail "scripts/install_tools.py re-run failed"
@@ -638,6 +684,7 @@ PY
 check_ansible_second_pass_idempotent() {
     local out rc
     rc=0
+    image_is_current || return 0
     out=$( cd "${CF_ROOT}" && timeout "${CF_SMOKE_APPLY_TIMEOUT:-1800}" ./factory apply --config "${CF_CONFIG}" 2>&1 ) || rc=$?
     if [ "${rc}" -ne 0 ]; then
         printf '%s\n' "${out}" | tail -n 40
@@ -725,6 +772,7 @@ container_mode() {
     run_check source-checkout              check_source_checkout
     run_check workspace                    check_workspace
     run_check core-tools                   check_core_tools
+    run_check resolved-releases            check_resolved_releases
     run_check herdr-install-layout         check_herdr_install_layout
     run_check herdr-unit                   check_herdr_unit
     run_check npm-tooling                  check_npm_tooling

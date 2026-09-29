@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Install only pinned public tools into a user-owned Code Factory prefix.
+"""Install public tools into a user-owned Code Factory prefix.
 
 Stdlib-only: also bootstraps uv before repository dependencies exist. stdout is
 one JSON result; installer progress goes to stderr. Existing unmanaged commands
 are never replaced. Archives cannot write outside their staging directory.
+Every tool is pinned in the lock except herdr and omp, which track their latest
+release: herdr is verified against the SHA-256 its GitHub release publishes,
+omp against the integrity npm records for the resolved version.
 """
 
 import argparse
@@ -19,10 +22,14 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
+
+HERDR_LATEST = "https://api.github.com/repos/herdrdev/herdr/releases/latest"
+OMP_PACKAGE = "@oh-my-pi/pi-coding-agent"
 
 
 def digest(path):
@@ -39,6 +46,47 @@ def platform_key():
             "native provisioning supports Linux x86_64/aarch64; other devices can use SSH Herdr clients"
         )
     return "linux-" + machine
+
+
+def resolve_latest(key):
+    """The newest herdr release as a lock-shaped spec, and the newest omp version."""
+    # Unauthenticated GitHub API calls share a 60/hour budget per IP.
+    token = os.environ.get("GITHUB_TOKEN")
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(HERDR_LATEST, headers=headers), timeout=60
+        ) as response:
+            release = json.load(response)
+    except urllib.error.HTTPError as error:
+        raise ValueError(
+            f"cannot resolve the latest herdr release (HTTP {error.code}); "
+            "if rate limited, set GITHUB_TOKEN and re-run"
+        ) from None
+    version = release["tag_name"].removeprefix("v")
+    name = f"herdr-{key}"
+    asset = next((a for a in release["assets"] if a["name"] == name), {})
+    checksum = (asset.get("digest") or "").removeprefix("sha256:")
+    if not re.fullmatch(r"[0-9a-f]{64}", checksum):
+        raise ValueError(
+            f"herdr {version} publishes no SHA-256 for {name}; refusing an unverified binary"
+        )
+    herdr = {
+        "version": version,
+        "assets": {
+            key: {
+                "url": asset["browser_download_url"],
+                "sha256": checksum,
+                "format": "file",
+                "binaries": {"herdr": "herdr"},
+            }
+        },
+    }
+    with urllib.request.urlopen(
+        f"https://registry.npmjs.org/{OMP_PACKAGE}/latest", timeout=60
+    ) as response:
+        omp = json.load(response)["version"]
+    return {"herdr": herdr, "omp": omp}
 
 
 def download(url, checksum, destination):
@@ -192,8 +240,13 @@ def npm_install(repo, home, environment):
         )
         stamp.write_text(expected + "\n")
         changed = True
+    return link_package_bins(home, destination, manifest["dependencies"]) or changed
+
+
+def link_package_bins(home, destination, package_names):
     # Only expose explicitly requested packages, not incidental dependency bins.
-    for package_name in manifest["dependencies"]:
+    changed = False
+    for package_name in package_names:
         root = destination / "node_modules" / package_name
         package = json.loads((root / "package.json").read_text())
         bins = package.get("bin", {})
@@ -205,6 +258,39 @@ def npm_install(repo, home, environment):
                 raise ValueError(f"invalid installed package command: {name}")
             changed = link_binary(home, name, target) or changed
     return changed
+
+
+def omp_install(home, version, environment):
+    """Install exactly this omp version into its own prefix; a new version relinks omp."""
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+-]*", version):
+        raise ValueError("unsafe omp version")
+    # ponytail: superseded versions stay on disk so running agents keep their files;
+    # prune them by hand or add a sweep if disk use matters.
+    final = home / ".local/share/code-factory/omp" / version
+    package = final / "node_modules" / OMP_PACKAGE / "package.json"
+    changed = False
+    if not package.is_file() or json.loads(package.read_text()).get("version") != version:
+        if final.exists():
+            raise ValueError(f"incomplete omp install: {final}; inspect it before replacing")
+        final.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".install-", dir=final.parent) as temporary:
+            staging = Path(temporary) / "prefix"
+            staging.mkdir()
+            command(
+                [
+                    home / ".local/bin/npm",
+                    "install",
+                    "--prefix",
+                    staging,
+                    "--no-audit",
+                    "--no-fund",
+                    f"{OMP_PACKAGE}@{version}",
+                ],
+                environment,
+            )
+            staging.rename(final)
+        changed = True
+    return link_package_bins(home, final, [OMP_PACKAGE]) or changed
 
 
 def rust_install(home, version, environment):
@@ -298,7 +384,17 @@ def main():
     parser.add_argument("--tools", default="herdr,node,bun,uv")
     parser.add_argument("--npm", action="store_true")
     parser.add_argument("--development", action="store_true")
+    parser.add_argument(
+        "--resolve", action="store_true", help="print the latest herdr and omp as JSON and exit"
+    )
+    parser.add_argument(
+        "--resolved", type=json.loads, help="--resolve output to install instead of resolving"
+    )
     args = parser.parse_args()
+    key = platform_key()
+    if args.resolve:
+        print(json.dumps(resolve_latest(key)))
+        return
     home = args.home.resolve(strict=True)
     if home.stat().st_uid != os.geteuid():
         parser.error("run as the user who owns --home")
@@ -310,7 +406,7 @@ def main():
         names = list(dict.fromkeys([*names, *lock["npm_required_tools"]]))
     if args.development:
         names.append("rustup-init")
-    key = platform_key()
+    latest = args.resolved or (resolve_latest(key) if "herdr" in names or args.npm else {})
     environment = {
         **os.environ,
         "HOME": str(home),
@@ -322,11 +418,17 @@ def main():
         fcntl.flock(guard, fcntl.LOCK_EX)
         changed = False
         for name in names:
-            changed = install_asset(home, name, lock["tools"][name], key) or changed
+            spec = latest["herdr"] if name == "herdr" else lock["tools"][name]
+            changed = install_asset(home, name, spec, key) or changed
         if args.npm:
             changed = npm_install(args.lock.resolve().parent, home, environment) or changed
+            changed = omp_install(home, latest["omp"], environment) or changed
         if args.development:
             changed = rust_install(home, lock["rust_toolchain"], environment) or changed
+        # The record checks compare against, so a later upstream release cannot
+        # make an unchanged install look wrong.
+        if latest:
+            (prefix / "resolved.json").write_text(json.dumps(latest, sort_keys=True) + "\n")
     print(
         json.dumps(
             {

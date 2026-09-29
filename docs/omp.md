@@ -6,7 +6,7 @@ omp (`@oh-my-pi/pi-coding-agent`) is the agent harness Code Factory installs. Th
 
 With the `agents` profile on, `./factory apply`:
 
-1. Installs omp from `tools/npm/package-lock.json` (version in [Dependencies](dependencies.md#agent-clis)).
+1. Installs the latest published omp, resolved from the npm registry on every apply (see [Dependencies](dependencies.md#latest-releases)).
 2. Copies [`config/omp.yml`](../config/omp.yml) to `~/.omp/agent/config.yml` (directory `0700`, file `0600`).
 
 The copy is first-write-only. If `~/.omp/agent/config.yml` already exists, the recipe leaves it alone, so an account's own settings and provider configuration are never overwritten. See [Updating an existing host](#updating-an-existing-host).
@@ -88,4 +88,4 @@ Because the seed is first-write-only, an edit to `config/omp.yml` never reaches 
 
 2. Merge the changes you want into `~/.omp/agent/config.yml` by hand, or use `/settings` and `/model` in a session.
 
-To upgrade omp itself, bump its version in `tools/npm/package.json`, regenerate `tools/npm/package-lock.json`, and apply. See [Reproducibility policy](architecture.md#reproducibility-policy).
+To upgrade omp itself, run `./factory apply`: it installs the newest published omp and relinks `~/.local/bin/omp`.

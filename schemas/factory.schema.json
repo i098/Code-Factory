@@ -142,6 +142,24 @@
             "url": {
               "type": "string",
               "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+            },
+            "checklist": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repo": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+                },
+                "path": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$"
+                }
+              },
+              "required": [
+                "repo",
+                "path"
+              ]
             }
           },
           "required": [

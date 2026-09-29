@@ -1,10 +1,10 @@
 ---
-# Firstmate: a public clone that tracks the fork's default branch `main`, plus
-# its gitignored dispatch settings.
+# Firstmate: a public clone that tracks the default branch `main` of
+# factory.firstmate.url (upstream Firstmate unless .local/host.yml overrides
+# it), plus its gitignored dispatch settings.
 #
-# The fork's `main` is maintained as latest upstream Firstmate plus the fork's
-# own layer, so tracking it is how a host stays current - which is also why it
-# must not be re-pinned to a sha.
+# Every apply fetches and fast-forwards `main`, so tracking it is how a host
+# stays current - which is also why it must not be re-pinned to a sha.
 #
 # Safety rules (contract + docs/security.md):
 #   * `origin/main` is resolved once per run; that captured sha is what this
