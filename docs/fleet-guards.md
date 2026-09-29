@@ -137,7 +137,14 @@ All three tiers share one session. `cookie-sync.ts` keeps a canonical jar at
 `fleet-browser up chrome|vnc` runs it before returning (`up obscura` returns as
 soon as the tier answers, without a converge). So a login made in any tier is
 present in every tier within one sync. Cookies are synced; localStorage is
-engine-local and is not.
+engine-local and is not. Google cookies (google.com, Google's country domains,
+youtube.com) are the exception: each stays in the tier that set it. Google
+treats one session replayed from several browsers as theft and revokes it, so
+a Google sign-in made by hand in the `vnc` tier stays in `vnc`. A Google cookie
+that another tier holds with the same value as `vnc` is deleted from that tier.
+Obscura ignores cookie deletes over CDP, so `fleet-browser sync` stops
+`obscura`, rewrites its session file, and starts it again, only when no lane is
+connected to it.
 
 Rule: an agent never launches its own Chrome, headless or not, and never uses a
 private `--user-data-dir`. A private profile has none of the fleet's logins and
@@ -192,7 +199,7 @@ fleet-browser env chrome     # or: eval "$(fleet-browser env chrome)" to escalat
    A site still asking for a login on every tier means nobody has signed in yet.
    Bring up `vnc`, sign in through noVNC (`ssh -L 6909:127.0.0.1:6909 <host>`,
    then `http://127.0.0.1:6909/vnc.html?autoconnect=1`), and the next sync
-   carries the session to `obscura` and `chrome`.
+   carries the session to `obscura` and `chrome`. A Google sign-in stays in `vnc`.
 
 ## Devtools-bridge reaper
 

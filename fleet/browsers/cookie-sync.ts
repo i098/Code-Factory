@@ -1,9 +1,9 @@
 // cookie-sync.ts - one session, three browsers.
 //
 // The fleet's browser ladder is obscura -> chrome -> vnc (see fleet-browser).
-// A login made in any tier must be usable in the other two, so this keeps ONE
-// canonical cookie jar (~/.fleet-browser/cookies.json) and converges every
-// live tier to it over CDP:
+// A login made in any tier must be usable in the other two (Google excepted,
+// see below), so this keeps ONE canonical cookie jar
+// (~/.fleet-browser/cookies.json) and converges every live tier to it over CDP:
 //
 //   1. read each live tier's jar;
 //   2. compare with what that tier held after the previous sync
@@ -15,8 +15,9 @@
 //   4. push the canonical jar back into every live tier, then record what each
 //      tier now holds as its seen-state.
 //
-// Cookies are the portable part of a session: the app's Supabase SSR auth,
-// GitHub, Google all live there. localStorage is engine-local and NOT synced
+// Cookies are the portable part of a session: the app's Supabase SSR auth and
+// GitHub live there. Google cookies are the exception and stay in the tier that
+// set them (see googleOwned). localStorage is engine-local and NOT synced
 // (Obscura exposes no DOMStorage domain); it holds UI preferences only.
 //
 // Obscura is special (measured 2026-09-17). Its session file is the live truth
@@ -95,6 +96,17 @@ const normalize = (raw: Record<string, unknown>): Cookie => ({
 	sameSite: raw.sameSite === "Strict" || raw.sameSite === "Lax" || raw.sameSite === "None" ? raw.sameSite : undefined,
 });
 const sameCookie = (a: Cookie, b: Cookie) => a.value === b.value && a.expires === b.expires && a.httpOnly === b.httpOnly && a.secure === b.secure;
+
+// Google cookies never fan out. Replaying one Google session from three
+// browsers with three fingerprints reads to Google as session theft, and it
+// revokes the sign-in server-side within one sync. So each tier keeps its own
+// Google cookies: they never enter the canonical jar and are never pushed into
+// another tier. When several tiers hold the same Google cookie with the same
+// value (copies an earlier fan-out left behind), only the last tier on the
+// command line keeps it - vnc, where the human signs in - and the others drop it.
+// Domains: google.com and Google's country domains (google.de, google.co.uk,
+// google.com.au), plus youtube.com, which Google sign-in also sets.
+const googleOwned = (c: Cookie) => /(^|\.)(google\.[a-z]{2,3}(\.[a-z]{2})?|youtube\.com)$/.test(c.domain.toLowerCase());
 
 class Cdp {
 	#ws: WebSocket;
@@ -233,7 +245,7 @@ async function pushJar(cdp: Cdp, want: Jar, have: Jar): Promise<{ set: number; d
 const canonicalFile = `${stateDir}/cookies.json`;
 const canonical = loadJar(canonicalFile);
 const now = Math.floor(Date.now() / 1000);
-for (const k of Object.keys(canonical)) if (canonical[k].expires > 0 && canonical[k].expires < now) delete canonical[k];
+for (const k of Object.keys(canonical)) if (googleOwned(canonical[k]) || (canonical[k].expires > 0 && canonical[k].expires < now)) delete canonical[k];
 
 // A live tier holds the connection we write through (cdp), the file we read
 // truth from (file, optional), and the jar we actually read this pass.
@@ -275,7 +287,7 @@ const edits = new Map<string, { c: Cookie; rank: number }>();
 const deletions = new Set<string>();
 for (const t of live) {
 	for (const [k, c] of Object.entries(t.jar)) {
-		if (c.expires > 0 && c.expires < now) continue;
+		if (googleOwned(c) || (c.expires > 0 && c.expires < now)) continue;
 		const inCanon = canonical[k];
 		const inSeen = t.seen[k];
 		const changedHere = !inSeen || !sameCookie(inSeen, c);
@@ -292,25 +304,36 @@ for (const [k, e] of edits) { canonical[k] = e.c; deletions.delete(k); }
 for (const k of deletions) delete canonical[k];
 saveJar(canonicalFile, canonical);
 
+const googleCopy = (k: string, c: Cookie) => `${k}\n${c.value}`;
+const googleKeeper = new Map<string, Live>();
+for (const t of live) if (t.name !== "seed") for (const [k, c] of Object.entries(t.jar)) if (googleOwned(c)) googleKeeper.set(googleCopy(k, c), t);
+
 const report: string[] = [];
+let needsStop = false;
 for (const t of live) {
 	if (t.name === "seed") { t.cdp?.close(); continue; }
+	const want = { ...canonical, ...Object.fromEntries(Object.entries(t.jar).filter(([k, c]) => googleOwned(c) && googleKeeper.get(googleCopy(k, c)) === t)) };
 	if (t.cdp) {
 		// CDP is the only durable write path for a running server (Obscura
 		// clobbers external file writes; Chromium has no such file at all).
-		const r = await pushJar(t.cdp, canonical, t.jar);
+		const r = await pushJar(t.cdp, want, t.jar);
 		saveJar(`${stateDir}/seen-${t.name}.json`, canonical);
-		report.push(`${t.name}: set ${r.set} del ${r.deleted}${r.failed ? ` FAILED ${r.failed}` : ""}`);
+		// A file-backed tier is Obscura: it acks CDP deletes but keeps the cookie
+		// and writes it back to its file on exit. Only a file rewrite while it is
+		// stopped removes it, so ask the caller for one (exit 3, see fleet-browser).
+		const stuck = t.file ? Object.keys(t.jar).filter((k) => !want[k]).length : 0;
+		if (stuck) needsStop = true;
+		report.push(`${t.name}: set ${r.set} ${stuck ? `del ${stuck} needs a stop` : `del ${r.deleted}`}${r.failed ? ` FAILED ${r.failed}` : ""}`);
 		t.cdp.close();
 		continue;
 	}
 	if (t.file) {
 		// File-only tier (server down): reconcile the file so the next start is correct.
-		const differs = Object.keys(canonical).length !== Object.keys(t.jar).length || Object.values(canonical).some((c) => !t.jar[keyOf(c)] || !sameCookie(t.jar[keyOf(c)], c));
-		if (differs) { writeFileJar(t.file, canonical); report.push(`${t.name}: file rewritten (${Object.keys(canonical).length})`); }
+		const differs = Object.keys(want).length !== Object.keys(t.jar).length || Object.values(want).some((c) => !t.jar[keyOf(c)] || !sameCookie(t.jar[keyOf(c)], c));
+		if (differs) { writeFileJar(t.file, want); report.push(`${t.name}: file rewritten (${Object.keys(want).length})`); }
 		else report.push(`${t.name}: file unchanged`);
 		saveJar(`${stateDir}/seen-${t.name}.json`, canonical);
 	}
 }
 console.log(`cookie-sync: canonical ${Object.keys(canonical).length} cookies; edits ${edits.size} deletions ${deletions.size}; ${report.join("; ")}${seedUrl ? "; seeded" : ""}`);
-process.exit(0);
+process.exit(needsStop ? 3 : 0);

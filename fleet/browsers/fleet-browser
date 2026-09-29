@@ -15,7 +15,8 @@
 #
 # One session across all three: cookie-sync.ts keeps a canonical jar in
 # ~/.fleet-browser/cookies.json and converges every live tier to it (timer every
-# 2 min, plus on every `up`). Log in once anywhere, be logged in everywhere.
+# 2 min, plus on every `up`). Log in once anywhere, be logged in everywhere,
+# except Google: its cookies stay in the tier that set them (see cookie-sync.ts).
 #
 #   fleet-browser status            tiers, ports, clients, cookie counts
 #   fleet-browser env [tier]        export lines for chrome-devtools-axi / omp (default: obscura)
@@ -109,8 +110,16 @@ cmd_down() {
 }
 
 cmd_sync() {
-  local out
-  out=$("$BUN" "$HERE/cookie-sync.ts" --state "$STATE" $(tiers_arg) 2>&1) || true
+  local out rc
+  out=$("$BUN" "$HERE/cookie-sync.ts" --state "$STATE" $(tiers_arg) 2>&1); rc=$?
+  # Exit 3: obscura holds cookies to delete (a replayed Google copy), which it
+  # ignores over CDP. Sync again with it stopped so its file is rewritten, then
+  # start it on that file. Only when no lane is connected; else next tick.
+  if [ "$rc" -eq 3 ] && [ "$(clients obscura)" -eq 0 ]; then
+    systemctl --user stop "$(unit_of obscura)"
+    out="$out; $("$BUN" "$HERE/cookie-sync.ts" --state "$STATE" $(tiers_arg) 2>&1)"
+    systemctl --user start "$(unit_of obscura)" && wait_alive obscura 20 && log "obscura restarted to drop cookies it ignores over CDP"
+  fi
   printf '[%s] %s\n' "$(date -u +%FT%TZ)" "$out" >> "$STATE/sync.log"
   echo "$out"
   refresh_obscura_if_idle
