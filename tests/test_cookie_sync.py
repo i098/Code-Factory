@@ -95,3 +95,52 @@ def test_google_cookies_stay_in_their_tier(tmp_path: Path) -> None:
     assert got_vnc[(".youtube.com", "SID")] == "vnc-yt", "Google cookie deleted from its tier"
     assert ("google.com", "SID") not in got_vnc and (".google.com", "SID") not in got_vnc
     assert "google" not in (state / "cookies.json").read_text()
+
+
+# Like Obscura: answers every CDP call with an empty result and deletes nothing.
+FAKE_OBSCURA = """
+const s = Bun.serve({
+  port: 0,
+  fetch: (req, srv) => new URL(req.url).pathname === "/json/version"
+    ? Response.json({ webSocketDebuggerUrl: `ws://127.0.0.1:${srv.port}/` })
+    : srv.upgrade(req) ? undefined : new Response("", { status: 400 }),
+  websocket: { message: (ws, m) => ws.send(JSON.stringify({ id: JSON.parse(String(m)).id, result: {} })) },
+});
+console.log(s.port);
+"""
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_replayed_google_copy_in_running_obscura_asks_for_a_stop(tmp_path: Path) -> None:
+    obscura, vnc, state, fake = (
+        tmp_path / "obscura.json",
+        tmp_path / "vnc.json",
+        tmp_path / "state",
+        tmp_path / "fake.ts",
+    )
+    copy = cookie("__Secure-1PSID", ".google.com", "vnc-sid")
+    vnc.write_text(json.dumps([copy]))
+    obscura.write_text(json.dumps([copy, cookie("sb-auth-token", "localhost")]))
+    fake.write_text(FAKE_OBSCURA)
+    server = subprocess.Popen(["bun", str(fake)], stdout=subprocess.PIPE, text=True)
+    try:
+        port = server.stdout.readline().strip()
+        sync = ["bun", str(ROOT / "fleet/browsers/cookie-sync.ts"), "--state", str(state)]
+        running = subprocess.run(
+            [*sync, f"obscura=http://127.0.0.1:{port}|file://{obscura}", f"vnc=file://{vnc}"],
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        server.kill()
+    assert running.returncode == 3, running.stdout + running.stderr
+    assert "obscura: set 0 del 1 needs a stop" in running.stdout
+
+    # fleet-browser then stops obscura and syncs again: the file-only pass drops the copy.
+    stopped = subprocess.run(
+        [*sync, f"obscura=file://{obscura}", f"vnc=file://{vnc}"], capture_output=True, text=True
+    )
+    assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+    assert {c["name"] for c in json.loads(obscura.read_text())} == {"sb-auth-token"}
+    got_vnc = {c["name"]: c["value"] for c in json.loads(vnc.read_text())}
+    assert got_vnc["__Secure-1PSID"] == "vnc-sid", "vnc lost its Google sign-in"

@@ -142,6 +142,9 @@ youtube.com) are the exception: each stays in the tier that set it. Google
 treats one session replayed from several browsers as theft and revokes it, so
 a Google sign-in made by hand in the `vnc` tier stays in `vnc`. A Google cookie
 that another tier holds with the same value as `vnc` is deleted from that tier.
+Obscura ignores cookie deletes over CDP, so `fleet-browser sync` stops
+`obscura`, rewrites its session file, and starts it again, only when no lane is
+connected to it.
 
 Rule: an agent never launches its own Chrome, headless or not, and never uses a
 private `--user-data-dir`. A private profile has none of the fleet's logins and

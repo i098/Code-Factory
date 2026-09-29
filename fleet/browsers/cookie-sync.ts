@@ -309,6 +309,7 @@ const googleKeeper = new Map<string, Live>();
 for (const t of live) if (t.name !== "seed") for (const [k, c] of Object.entries(t.jar)) if (googleOwned(c)) googleKeeper.set(googleCopy(k, c), t);
 
 const report: string[] = [];
+let needsStop = false;
 for (const t of live) {
 	if (t.name === "seed") { t.cdp?.close(); continue; }
 	const want = { ...canonical, ...Object.fromEntries(Object.entries(t.jar).filter(([k, c]) => googleOwned(c) && googleKeeper.get(googleCopy(k, c)) === t)) };
@@ -317,7 +318,12 @@ for (const t of live) {
 		// clobbers external file writes; Chromium has no such file at all).
 		const r = await pushJar(t.cdp, want, t.jar);
 		saveJar(`${stateDir}/seen-${t.name}.json`, canonical);
-		report.push(`${t.name}: set ${r.set} del ${r.deleted}${r.failed ? ` FAILED ${r.failed}` : ""}`);
+		// A file-backed tier is Obscura: it acks CDP deletes but keeps the cookie
+		// and writes it back to its file on exit. Only a file rewrite while it is
+		// stopped removes it, so ask the caller for one (exit 3, see fleet-browser).
+		const stuck = t.file ? Object.keys(t.jar).filter((k) => !want[k]).length : 0;
+		if (stuck) needsStop = true;
+		report.push(`${t.name}: set ${r.set} ${stuck ? `del ${stuck} needs a stop` : `del ${r.deleted}`}${r.failed ? ` FAILED ${r.failed}` : ""}`);
 		t.cdp.close();
 		continue;
 	}
@@ -330,4 +336,4 @@ for (const t of live) {
 	}
 }
 console.log(`cookie-sync: canonical ${Object.keys(canonical).length} cookies; edits ${edits.size} deletions ${deletions.size}; ${report.join("; ")}${seedUrl ? "; seeded" : ""}`);
-process.exit(0);
+process.exit(needsStop ? 3 : 0);
