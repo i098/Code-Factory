@@ -107,6 +107,7 @@ def release(digest):
 
 def registries(monkeypatch, herdr_release):
     def urlopen(url, **kwargs):
+        url = getattr(url, "full_url", url)
         body = herdr_release if url == installer.HERDR_LATEST else {"version": "18.9.9"}
         return io.BytesIO(json.dumps(body).encode())
 

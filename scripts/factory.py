@@ -227,10 +227,13 @@ def questions(document):
     checklist = config["firstmate"].get("checklist")
     if checklist:
         api = f"repos/{checklist['repo']}/contents/{checklist['path']}"
-        readable = subprocess.run(
-            ["gh", "api", api, "--silent"], env=environment, capture_output=True, timeout=20
-        )
-        if readable.returncode == 0:
+        try:
+            readable = subprocess.run(
+                ["gh", "api", api, "--silent"], env=environment, capture_output=True, timeout=20
+            ).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            readable = False
+        if readable:
             source = (
                 f"the operator's private checklist (read it with `gh api {api} "
                 "-H 'Accept: application/vnd.github.raw'`; never copy its contents "

@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -49,8 +50,19 @@ def platform_key():
 
 def resolve_latest(key):
     """The newest herdr release as a lock-shaped spec, and the newest omp version."""
-    with urllib.request.urlopen(HERDR_LATEST, timeout=60) as response:
-        release = json.load(response)
+    # Unauthenticated GitHub API calls share a 60/hour budget per IP.
+    token = os.environ.get("GITHUB_TOKEN")
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(HERDR_LATEST, headers=headers), timeout=60
+        ) as response:
+            release = json.load(response)
+    except urllib.error.HTTPError as error:
+        raise ValueError(
+            f"cannot resolve the latest herdr release (HTTP {error.code}); "
+            "if rate limited, set GITHUB_TOKEN and re-run"
+        ) from None
     version = release["tag_name"].removeprefix("v")
     name = f"herdr-{key}"
     asset = next((a for a in release["assets"] if a["name"] == name), {})
