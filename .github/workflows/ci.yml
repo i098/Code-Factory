@@ -62,6 +62,18 @@ jobs:
       - name: Sync locked dependencies
         run: uv sync --locked --group dev
 
+      - name: Resolve the Bun version pinned by the toolchain lock
+        id: bun
+        run: |
+          set -euo pipefail
+          version=$(jq -er '.tools.bun.version' toolchain.lock.json)
+          printf 'version=%s\n' "${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Install pinned Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
       - name: Lint
         run: uv run ruff check .
 

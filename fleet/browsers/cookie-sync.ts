@@ -100,8 +100,10 @@ const sameCookie = (a: Cookie, b: Cookie) => a.value === b.value && a.expires ==
 // Google cookies never fan out. Replaying one Google session from three
 // browsers with three fingerprints reads to Google as session theft, and it
 // revokes the sign-in server-side within one sync. So each tier keeps its own
-// Google cookies: they never enter the canonical jar, are never pushed into
-// another tier, and are never deleted from the tier that holds them.
+// Google cookies: they never enter the canonical jar and are never pushed into
+// another tier. When several tiers hold the same Google cookie with the same
+// value (copies an earlier fan-out left behind), only the last tier on the
+// command line keeps it - vnc, where the human signs in - and the others drop it.
 // Domains: google.com and Google's country domains (google.de, google.co.uk,
 // google.com.au), plus youtube.com, which Google sign-in also sets.
 const googleOwned = (c: Cookie) => /(^|\.)(google\.[a-z]{2,3}(\.[a-z]{2})?|youtube\.com)$/.test(c.domain.toLowerCase());
@@ -302,10 +304,14 @@ for (const [k, e] of edits) { canonical[k] = e.c; deletions.delete(k); }
 for (const k of deletions) delete canonical[k];
 saveJar(canonicalFile, canonical);
 
+const googleCopy = (k: string, c: Cookie) => `${k}\n${c.value}`;
+const googleKeeper = new Map<string, Live>();
+for (const t of live) if (t.name !== "seed") for (const [k, c] of Object.entries(t.jar)) if (googleOwned(c)) googleKeeper.set(googleCopy(k, c), t);
+
 const report: string[] = [];
 for (const t of live) {
 	if (t.name === "seed") { t.cdp?.close(); continue; }
-	const want = { ...canonical, ...Object.fromEntries(Object.entries(t.jar).filter(([, c]) => googleOwned(c))) };
+	const want = { ...canonical, ...Object.fromEntries(Object.entries(t.jar).filter(([k, c]) => googleOwned(c) && googleKeeper.get(googleCopy(k, c)) === t)) };
 	if (t.cdp) {
 		// CDP is the only durable write path for a running server (Obscura
 		// clobbers external file writes; Chromium has no such file at all).

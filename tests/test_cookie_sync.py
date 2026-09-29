@@ -1,10 +1,12 @@
 """fleet/browsers/cookie-sync.ts never fans Google cookies out between tiers.
 
-Two file-only tiers run the real sync without a browser. The vnc tier holds a
-Google sign-in and a GitHub session; the obscura tier holds nothing, and the
-canonical jar still carries a Google cookie from an earlier sync. After one
-sync the GitHub session reaches obscura, no Google cookie does, and vnc keeps
-its own Google cookie.
+Three file-only tiers run the real sync without a browser. The vnc tier holds a
+Google sign-in and a GitHub session; the canonical jar still carries a Google
+cookie from an earlier sync. obscura holds a copy of vnc's Google session left
+by the old fan-out, and chrome holds its own Google cookie with a different
+value. After one sync the GitHub session reaches every tier, no Google cookie
+is pushed, the replayed copy is gone from obscura, and chrome and vnc keep
+their own Google cookies.
 """
 
 import json
@@ -32,7 +34,12 @@ def cookie(name: str, domain: str, value: str = "v") -> dict:
 
 @pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
 def test_google_cookies_stay_in_their_tier(tmp_path: Path) -> None:
-    vnc, obscura, state = tmp_path / "vnc.json", tmp_path / "obscura.json", tmp_path / "state"
+    vnc, obscura, chrome, state = (
+        tmp_path / "vnc.json",
+        tmp_path / "obscura.json",
+        tmp_path / "chrome.json",
+        tmp_path / "state",
+    )
     vnc.write_text(
         json.dumps(
             [
@@ -42,7 +49,15 @@ def test_google_cookies_stay_in_their_tier(tmp_path: Path) -> None:
             ]
         )
     )
-    obscura.write_text(json.dumps([cookie("sb-auth-token", "localhost")]))
+    obscura.write_text(
+        json.dumps(
+            [
+                cookie("sb-auth-token", "localhost"),
+                cookie("__Secure-1PSID", ".google.com", "vnc-sid"),
+            ]
+        )
+    )
+    chrome.write_text(json.dumps([cookie("__Secure-1PSID", ".google.com", "chrome-sid")]))
     state.mkdir()
     stale = cookie("SID", ".google.com", "stale-from-canonical")
     stale["expires"] = -1
@@ -55,16 +70,23 @@ def test_google_cookies_stay_in_their_tier(tmp_path: Path) -> None:
             "--state",
             str(state),
             f"obscura=file://{obscura}",
+            f"chrome=file://{chrome}",
             f"vnc=file://{vnc}",
         ],
         check=True,
     )
 
     got_obscura = {c["name"]: c for c in json.loads(obscura.read_text())}
+    got_chrome = {(c["domain"], c["name"]): c["value"] for c in json.loads(chrome.read_text())}
     got_vnc = {(c["domain"], c["name"]): c["value"] for c in json.loads(vnc.read_text())}
     assert set(got_obscura) == {"user_session", "sb-auth-token"}, (
-        "Google cookie pushed into another tier"
+        "Google cookie pushed into, or replayed copy kept in, another tier"
     )
+    assert got_chrome == {
+        ("github.com", "user_session"): "v",
+        ("localhost", "sb-auth-token"): "v",
+        (".google.com", "__Secure-1PSID"): "chrome-sid",
+    }, "a tier's own Google cookie was lost or another tier's was pushed in"
     # vnc's file is rewritten to receive sb-auth-token, so its Google cookies must survive the rewrite.
     assert ("localhost", "sb-auth-token") in got_vnc, "normal cookie did not sync"
     assert got_vnc[(".google.com", "__Secure-1PSID")] == "vnc-sid", (
