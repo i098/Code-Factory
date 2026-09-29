@@ -42,7 +42,7 @@ def test_google_cookies_stay_in_their_tier(tmp_path: Path) -> None:
             ]
         )
     )
-    obscura.write_text("[]")
+    obscura.write_text(json.dumps([cookie("sb-auth-token", "localhost")]))
     state.mkdir()
     stale = cookie("SID", ".google.com", "stale-from-canonical")
     stale["expires"] = -1
@@ -62,7 +62,11 @@ def test_google_cookies_stay_in_their_tier(tmp_path: Path) -> None:
 
     got_obscura = {c["name"]: c for c in json.loads(obscura.read_text())}
     got_vnc = {(c["domain"], c["name"]): c["value"] for c in json.loads(vnc.read_text())}
-    assert set(got_obscura) == {"user_session"}, "Google cookie pushed into another tier"
+    assert set(got_obscura) == {"user_session", "sb-auth-token"}, (
+        "Google cookie pushed into another tier"
+    )
+    # vnc's file is rewritten to receive sb-auth-token, so its Google cookies must survive the rewrite.
+    assert ("localhost", "sb-auth-token") in got_vnc, "normal cookie did not sync"
     assert got_vnc[(".google.com", "__Secure-1PSID")] == "vnc-sid", (
         "Google cookie deleted from its tier"
     )
