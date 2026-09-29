@@ -425,6 +425,10 @@ def main():
             changed = omp_install(home, latest["omp"], environment) or changed
         if args.development:
             changed = rust_install(home, lock["rust_toolchain"], environment) or changed
+        # The record checks compare against, so a later upstream release cannot
+        # make an unchanged install look wrong.
+        if latest:
+            (prefix / "resolved.json").write_text(json.dumps(latest, sort_keys=True) + "\n")
     print(
         json.dumps(
             {

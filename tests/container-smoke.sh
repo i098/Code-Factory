@@ -11,7 +11,7 @@
 #   tests/container-smoke.sh --in-container [--only NAME,NAME]
 #   Exercises what the image actually contains, through the programs a user
 #   would run: managed tool versions compared with toolchain.lock.json, herdr
-#   and omp compared with their latest release, a Herdr
+#   and omp compared with the release the build resolved, a Herdr
 #   configuration that Herdr itself accepts and that matches the factory
 #   document, the user unit's ExecStart resolved and executed, a real headless
 #   `herdr server` brought up and shut down over its API socket, the repository
@@ -206,35 +206,31 @@ lock_version() {
     jq -er --arg tool "$1" '.tools[$tool].version' "${CF_ROOT}/toolchain.lock.json"
 }
 
-# herdr and omp track their latest release. container_mode resolves it once
-# into LATEST_JSON through the same installer entry point apply uses.
-latest_version() {
-    jq -er "$1" <<<"${LATEST_JSON}"
-}
-
-# The release the image installed, read from its managed link; an upstream
-# release published after the build must not change what the checks expect.
-installed_version() {
-    local target
-    target=$(readlink -f "${HOME}/.local/bin/$1" || true)
-    target=${target#"$2"/}
-    printf '%s\n' "${target%%/*}"
+# herdr and omp track their latest release. The installer records the release
+# it installed in RESOLVED_STAMP; checks compare against that record, so an
+# upstream release published after the build cannot turn them red.
+RESOLVED_STAMP="${HOME}/.local/share/code-factory/resolved.json"
+resolved_version() {
+    jq -er "$1" "${RESOLVED_STAMP}"
 }
 
 # The contract computes the Herdr service binary from the installed release,
 # never from PATH.
 herdr_installed_bin() {
     printf '%s/.local/share/code-factory/tools/herdr/%s/%s/herdr\n' \
-        "${HOME}" "${INSTALLED_HERDR}" "$(platform_tag)"
+        "${HOME}" "$(resolved_version .herdr.version)" "$(platform_tag)"
 }
 
-# A re-run upgrades an image that upstream has since overtaken; that is not a
-# repeat change, and latest-releases already reports it.
+# A second apply resolves upstream again and upgrades an image that upstream
+# has since overtaken; that is an upgrade, not a repeat change.
 image_is_current() {
-    [ "${INSTALLED_HERDR}" = "$(latest_version .herdr.version)" ] \
-        && [ "${INSTALLED_OMP}" = "$(latest_version .omp)" ] && return 0
-    printf 'image has herdr %s and omp %s but upstream now has %s and %s; idempotence not measured\n' \
-        "${INSTALLED_HERDR}" "${INSTALLED_OMP}" "$(latest_version .herdr.version)" "$(latest_version .omp)"
+    local latest
+    latest=$(python3 "${CF_ROOT}/scripts/install_tools.py" --lock "${CF_ROOT}/toolchain.lock.json" \
+        --home "${HOME}" --resolve) || fail "could not resolve the latest herdr and omp releases"
+    [ "$(jq -c '[.herdr.version, .omp]' <<<"${latest}")" = "$(jq -c '[.herdr.version, .omp]' "${RESOLVED_STAMP}")" ] \
+        && return 0
+    printf 'image has %s but upstream now has %s; idempotence not measured\n' \
+        "$(jq -c '[.herdr.version, .omp]' "${RESOLVED_STAMP}")" "$(jq -c '[.herdr.version, .omp]' <<<"${latest}")"
     return 1
 }
 
@@ -335,25 +331,26 @@ check_core_tools() {
     done
 }
 
-# The image was built by an apply that resolved the newest herdr and omp; both
-# must still be the newest release the registries report.
-check_latest_releases() {
+# The installed herdr and omp are exactly the releases the build resolved and
+# recorded in RESOLVED_STAMP.
+check_resolved_releases() {
     local herdr omp banner prefix
-    herdr=$(latest_version .herdr.version)
-    omp=$(latest_version .omp)
+    [ -f "${RESOLVED_STAMP}" ] || fail "installer wrote no ${RESOLVED_STAMP}"
+    herdr=$(resolved_version .herdr.version)
+    omp=$(resolved_version .omp)
     banner=$("${HOME}/.local/bin/herdr" --version 2>&1) || fail "herdr --version exited nonzero: ${banner}"
     case "${banner%%$'\n'*}" in
         *"${herdr}"*) ;;
-        *) fail "herdr reports '${banner%%$'\n'*}' but the latest release is ${herdr}" ;;
+        *) fail "herdr reports '${banner%%$'\n'*}' but the build resolved ${herdr}" ;;
     esac
     prefix="${HOME}/.local/share/code-factory/omp/${omp}"
     case "$(readlink -f "${HOME}/.local/bin/omp")" in
         "${prefix}"/*) ;;
-        *) fail "omp resolves to $(readlink -f "${HOME}/.local/bin/omp"), expected the latest release under ${prefix}" ;;
+        *) fail "omp resolves to $(readlink -f "${HOME}/.local/bin/omp"), expected the resolved release under ${prefix}" ;;
     esac
     [ "$(jq -r .version "${prefix}/node_modules/@oh-my-pi/pi-coding-agent/package.json")" = "${omp}" ] \
         || fail "omp under ${prefix} is not version ${omp}"
-    printf 'herdr %s and omp %s are the latest releases\n' "${herdr}" "${omp}"
+    printf 'herdr %s and omp %s match %s\n' "${herdr}" "${omp}" "${RESOLVED_STAMP}"
 }
 
 check_herdr_install_layout() {
@@ -485,7 +482,7 @@ check_herdr_unit() {
 
     binary=${exec_start%% *}
     [ -x "${binary}" ] || fail "ExecStart binary ${binary} is missing or not executable"
-    locked=${INSTALLED_HERDR}
+    locked=$(resolved_version .herdr.version)
     banner=$("${binary}" --version 2>&1) || fail "ExecStart binary ${binary} failed to run"
     banner=${banner%%$'\n'*}
     case "${banner}" in
@@ -652,12 +649,11 @@ check_factory_init_refuses_overwrite() {
 
 check_installer_idempotent() {
     local out
-    image_is_current || return 0
     out=$(python3 "${CF_ROOT}/scripts/install_tools.py" \
             --lock "${CF_ROOT}/toolchain.lock.json" \
             --home "${HOME}" \
             --tools herdr,node,bun,uv \
-            --resolved "${LATEST_JSON}" \
+            --resolved "$(cat "${RESOLVED_STAMP}")" \
             --npm --development 2>&1) || {
         printf '%s\n' "${out}" | tail -n 20
         fail "scripts/install_tools.py re-run failed"
@@ -768,10 +764,6 @@ container_mode() {
 
     printf '== Code Factory container smoke (image role: %s)\n' "${CODE_FACTORY_IMAGE:-unknown}"
     printf '== %s %s\n\n' "$(uname -s)" "$(uname -m)"
-    LATEST_JSON=$(python3 "${CF_ROOT}/scripts/install_tools.py" --lock "${CF_ROOT}/toolchain.lock.json" \
-        --home "${HOME}" --resolve) || fail "could not resolve the latest herdr and omp releases"
-    INSTALLED_HERDR=$(installed_version herdr "${HOME}/.local/share/code-factory/tools/herdr")
-    INSTALLED_OMP=$(installed_version omp "${HOME}/.local/share/code-factory/omp")
 
     run_check identity                     check_identity
     run_check no-systemd                   check_no_systemd
@@ -780,7 +772,7 @@ container_mode() {
     run_check source-checkout              check_source_checkout
     run_check workspace                    check_workspace
     run_check core-tools                   check_core_tools
-    run_check latest-releases              check_latest_releases
+    run_check resolved-releases            check_resolved_releases
     run_check herdr-install-layout         check_herdr_install_layout
     run_check herdr-unit                   check_herdr_unit
     run_check npm-tooling                  check_npm_tooling

@@ -19,7 +19,7 @@ Everything the recipe installs, grouped by the file that pins it. A version appe
 
 ## Latest releases
 
-Not pinned: every `./factory apply` resolves the newest release, installs exactly that, and `ansible/tasks/verify.yml` asserts the installed version equals the one the run resolved, so re-running apply upgrades an existing host.
+Not pinned: every `./factory apply` resolves the newest release, installs exactly that, and `ansible/tasks/verify.yml` asserts the installed version equals the one the run resolved, so re-running apply upgrades an existing host. The installer records the releases it installed in `~/.local/share/code-factory/resolved.json`, which verify and the container smoke compare against.
 
 - Always: herdr, the latest [herdrdev/herdr release](https://github.com/herdrdev/herdr/releases/latest), verified against the SHA-256 the release publishes for the platform asset. A release that publishes no checksum fails the apply instead of installing an unverified binary. The lookup uses the GitHub API, which allows 60 unauthenticated requests an hour per IP; set `GITHUB_TOKEN` if apply reports it is rate limited. An upgrade rewrites and restarts `herdr.service`.
 - `agents` profile: omp (`@oh-my-pi/pi-coding-agent`), the npm registry's `latest` version, installed with `npm install` into `~/.local/share/code-factory/omp/<version>` (npm checks the registry integrity). Superseded versions stay on disk.
