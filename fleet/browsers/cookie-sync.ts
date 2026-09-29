@@ -1,9 +1,9 @@
 // cookie-sync.ts - one session, three browsers.
 //
 // The fleet's browser ladder is obscura -> chrome -> vnc (see fleet-browser).
-// A login made in any tier must be usable in the other two, so this keeps ONE
-// canonical cookie jar (~/.fleet-browser/cookies.json) and converges every
-// live tier to it over CDP:
+// A login made in any tier must be usable in the other two (Google excepted,
+// see below), so this keeps ONE canonical cookie jar
+// (~/.fleet-browser/cookies.json) and converges every live tier to it over CDP:
 //
 //   1. read each live tier's jar;
 //   2. compare with what that tier held after the previous sync

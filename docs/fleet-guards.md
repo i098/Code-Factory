@@ -199,7 +199,7 @@ fleet-browser env chrome     # or: eval "$(fleet-browser env chrome)" to escalat
    A site still asking for a login on every tier means nobody has signed in yet.
    Bring up `vnc`, sign in through noVNC (`ssh -L 6909:127.0.0.1:6909 <host>`,
    then `http://127.0.0.1:6909/vnc.html?autoconnect=1`), and the next sync
-   carries the session to `obscura` and `chrome`.
+   carries the session to `obscura` and `chrome`. A Google sign-in stays in `vnc`.
 
 ## Devtools-bridge reaper
 
