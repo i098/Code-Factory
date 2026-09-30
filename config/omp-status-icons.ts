@@ -85,18 +85,20 @@ export default function (pi) {
 
 	function install(ctx) {
 		const ui = ctx?.ui;
-		if (ctx?.hasUI !== true || !ui?.setStatus || ui[WRAPPED]) return;
-		const original = ui.setStatus.bind(ui);
-		ui.setStatus = (key: string, text?: string) => {
-			if (!OWNED.has(key)) return original(key, text);
-			// ponytail shows "○" while its ruleset is not yet in context; count that as off.
-			on[key] = Boolean(text) && !(key === "ponytail" && /○/.test(text));
-			original(key, undefined);
-			render(ui, original);
-		};
-		ui[WRAPPED] = true;
-		for (const k of OWNED) original(k, undefined);
-		render(ui, original);
+		if (ctx?.hasUI !== true || !ui?.setStatus) return;
+		if (!ui[WRAPPED]) {
+			const original = ui.setStatus.bind(ui);
+			ui.setStatus = (key: string, text?: string) => {
+				if (!OWNED.has(key)) return original(key, text);
+				// ponytail shows "○" while its ruleset is not yet in context; count that as off.
+				on[key] = Boolean(text) && !(key === "ponytail" && /○/.test(text));
+				original(key, undefined);
+				render(ui, original);
+			};
+			ui[WRAPPED] = original;
+			for (const k of OWNED) original(k, undefined);
+		}
+		render(ui, ui[WRAPPED]);
 	}
 
 	for (const event of ["session_start", "session_switch"])
