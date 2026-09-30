@@ -7,7 +7,8 @@ workspace tokens under the source `code-factory:spaces`:
 
   short      short name ("swarms" for "2ndmate-swarms-mate-s4")
   decisions  "⚑ N"  fresh open decisions (parked captain-hold-* keys left out):
-                    a second-level home's own, or the primary home's own workers'
+                    a second-level home's own, or the primary home's own workers';
+                    only while a workspace is labelled firstmate
   crew       "▶ N"  live worker task records (state/*.meta, homes excluded)
   queue      "◷ N"  queued tasks ready to start (bin/fm-tasks-axi.sh ready)
   res        "⚙ 29%  ▤ 8%  ⛁ 2%"  CPU, RAM and disk, as shares of the machine
@@ -96,6 +97,10 @@ def decisions(primary: Path, wid: str, is_primary: bool, cached: dict, folds: di
     whose herdr_workspace_id is this Space). The primary Space shows only its own
     workers' logs. Parked holds never count, and a second-level home with no live
     Space (closed or not running) is not shown anywhere.
+
+    The flag means waiting on the operator. A second-level home decides for its
+    own workers, and escalates anything it cannot decide into its log in the
+    primary home, which is exactly what is counted here.
     """
     total = 0
     for meta in (primary / "state").glob("*.meta"):
@@ -279,14 +284,16 @@ def main() -> None:
         return ["⌂ " + "  ".join(parts)]
 
     first = workspaces[0] if workspaces else {}
-    primary = next((ws for ws in workspaces if ws.get("label") == "firstmate"), first)
+    firstmate = next((ws["workspace_id"] for ws in workspaces if ws.get("label") == "firstmate"), None)
+    primary = firstmate or first.get("workspace_id")
+    primary_home = homes.get(firstmate)
 
     for ws in workspaces:
         wid, label = ws["workspace_id"], ws.get("label", "")
         # Helper and per-task spaces get their short name only.
         helper = "-afk-daemon-" in label or label.startswith("└")
         home = None if helper else homes.get(wid)
-        pad = BLANK * 2 if wid == primary.get("workspace_id") else ""
+        pad = BLANK * 2 if wid == primary else ""
         keep = last.get(wid, {})
         values: dict[str, str | None] = dict.fromkeys(TOKENS, "")
         values["short"] = short_name(label)
@@ -300,19 +307,12 @@ def main() -> None:
                 values.update({k: keep.get(k) for k in keys})
 
         if home:
-            primary_home = homes.get(primary.get("workspace_id"))
             if primary_home:
                 fill(
                     ["decisions"],
                     lambda: [
                         count(
-                            decisions(
-                                primary_home,
-                                wid,
-                                wid == primary.get("workspace_id"),
-                                cached_folds,
-                                folds,
-                            ),
+                            decisions(primary_home, wid, wid == firstmate, cached_folds, folds),
                             "⚑ ",
                         )
                     ],
@@ -323,7 +323,7 @@ def main() -> None:
             fill(["alert"], lambda: [pad + silent if watcher_silent(home) else ""])
         if not helper:
             fill(["res"], lambda: [pad + res(wid, home)])
-        if wid == primary.get("workspace_id"):
+        if wid == primary:
             fill(["host"], host)
 
         args = [HERDR, "workspace", "report-metadata", wid, "--source", SOURCE]

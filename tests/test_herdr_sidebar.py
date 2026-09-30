@@ -111,7 +111,7 @@ def fixture(tmp_path):
     write(home / "state/fix-docs.meta", "kind=ship\n")
     write(home / "state/old.meta", "kind=ship\n")
     # The stub fold lists each status log's own lines as its open decisions.
-    # w1, the first listed, is the primary Space: its worker has one fresh
+    # w1, labelled firstmate, is the primary Space: its worker has one fresh
     # decision and one parked hold, which never counts.
     write(
         home / "state/fix-login.status",
@@ -131,12 +131,17 @@ def fixture(tmp_path):
 
     stub = tmp_path / "stub"
     log = tmp_path / "reports.jsonl"
-    workspaces = [
-        {"workspace_id": "w1", "label": "2ndmate-docs-mate-d1"},
-        {"workspace_id": "w2", "label": "firstmate-afk-daemon-1-2-3"},
-        {"workspace_id": "w3", "label": "scratch"},
-        {"workspace_id": "w4", "label": "2ndmate-api-mate-a1"},
-    ]
+    workspaces = tmp_path / "workspaces.json"
+    workspaces.write_text(
+        json.dumps(
+            [
+                {"workspace_id": "w1", "label": "firstmate"},
+                {"workspace_id": "w2", "label": "firstmate-afk-daemon-1-2-3"},
+                {"workspace_id": "w3", "label": "scratch"},
+                {"workspace_id": "w4", "label": "2ndmate-api-mate-a1"},
+            ]
+        )
+    )
     panes = [
         {"workspace_id": "w1", "cwd": str(home / "projects/app")},
         {"workspace_id": "w2", "cwd": str(home)},
@@ -148,7 +153,7 @@ def fixture(tmp_path):
 import json, sys
 a = sys.argv[1:]
 if a[:2] == ["workspace", "list"]:
-    print(json.dumps({{"result": {{"workspaces": {json.dumps(workspaces)}}}}}))
+    print(json.dumps({{"result": {{"workspaces": json.load(open({str(workspaces)!r}))}}}}))
 elif a[:2] == ["pane", "list"]:
     print(json.dumps({{"result": {{"panes": {json.dumps(panes)}}}}}))
 elif a[:2] == ["workspace", "report-metadata"]:
@@ -186,7 +191,7 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     res = docs.pop("res")
     host = docs.pop("host")
     assert docs == {
-        "short": "docs",
+        "short": "firstmate",
         # Its own worker's fresh decision only: not the parked hold, not the
         # second-level homes' decisions.
         "decisions": "⚑ 1",
@@ -197,9 +202,8 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     # Shares of the machine; CPU needs a baseline, so it waits for run two.
     # The primary entry indents it to sit under the name, below the header.
     assert re.fullmatch(BLANK * 2 + r"▤ \d+%  ⛁ \d+%", res)
-    # No workspace is labelled firstmate, so the first listed carries the
-    # whole-machine header, within the 42 columns Herdr shows on the first
-    # row of a Spaces entry at sidebar width 46.
+    # The primary carries the whole-machine header, within the 42 columns Herdr
+    # shows on the first row of a Spaces entry at sidebar width 46.
     size = r"[\d.]+/[\d.]+[GT] \d+%"
     assert re.fullmatch(rf"⌂ ▤ {size}  ⛁ {size}", host) and len(host) <= 42
     # A helper space shows its short name only; everything else is cleared.
@@ -230,6 +234,19 @@ def test_reporter_forgets_status_logs_it_no_longer_reads(fixture):
     (home / "state/fix-login.meta").unlink()
     run()
     assert set(json.loads(cache_file.read_text())["folds"]) == {str(home / "state/api-mate-a1.status")}
+
+
+def test_reporter_counts_no_decisions_without_a_firstmate_space(fixture, tmp_path):
+    _, run = fixture
+    workspaces = tmp_path / "workspaces.json"
+    listed = json.loads(workspaces.read_text())
+    listed[0]["label"] = "2ndmate-docs-mate-d1"
+    workspaces.write_text(json.dumps(listed))
+    reported = run()
+    assert {wid: tokens["decisions"] for wid, tokens in reported.items()} == dict.fromkeys(reported)
+    # The first listed still carries the machine header and the indent.
+    assert reported["w1"]["host"].startswith("⌂ ")
+    assert reported["w1"]["res"].startswith(BLANK * 2)
 
 
 def test_space_cpu_leaves_out_a_reaped_child(fixture):
