@@ -2,7 +2,7 @@
 
 Code Factory renders `~/.config/herdr/config.toml` from [`ansible/templates/herdr.toml.j2`](../ansible/templates/herdr.toml.j2) and the `herdr` block of `.local/host.yml`. This guide covers the two sidebar layouts it ships, Spaces and Agents, and the two feeders that report their `$` tokens: an omp extension for Agents and a reporter timer for Spaces.
 
-The sidebar is 46 columns wide (`sidebar_width`; it may grow to `sidebar_max_width`, 48). That fits the widest pull request line: a 4-digit pull request and issue, 5-digit line counts and a 3-digit file count. There is no status word: the color of the state dot already shows it.
+The sidebar is 46 columns wide (`sidebar_width`; it may grow to `sidebar_max_width`, 56). That fits the widest pull request line: a 4-digit pull request and issue, 5-digit line counts and a 3-digit file count. There is no status word: the color of the state dot already shows it.
 
 ## Spaces: one entry per home
 
@@ -10,11 +10,9 @@ Spaces shows one entry per home workspace. It never repeats per-agent detail, wh
 
 ```text
 ● firstmate · ⚑ 3 · ▶ 1 · ◷ 4
-  ⎇ 1 · ✓1
-  cpu 29%  ram 2.4G  disk 8.5G
+  ⚙ 29% ▤ 2.4G ⛁ 8.5G
 ● swarms · ⚑ 2 · ◷ 3
-  ⎇ 6 · ✓5 · ✗1
-  cpu 1%  ram 0.8G  disk 16.2G
+  ⚙ 1% ▤ 0.8G ⛁ 16.2G
   ⚠ watcher silent
 ○ ☾ afk
 ```
@@ -22,9 +20,8 @@ Spaces shows one entry per home workspace. It never repeats per-agent detail, wh
 | Line | Shows |
 | --- | --- |
 | 1 | The state dot, then the short name (`$short`): the primary home (`firstmate`) in bold blue, other homes in mauve. A dead helper space (label contains `-afk-daemon-`) shows `☾ afk`, dimmed, and nothing else. A space with no short name shows its own label, dimmed. Then the decision, worker and queue counts below, each in its own color. A count of zero is not shown. |
-| 2 | The pull request counts (`$prs`, `$ci_ok`, `$ci_bad`), indented two columns, only when the home has an open pull request. They sit on their own line so that line 1 keeps the full name with 2-digit counts at 46 columns. |
-| 3 | What the space costs the machine, dimmed, indented two columns. |
-| 4 | `⚠ watcher silent` in orange, indented two columns, only when the home's watcher stopped reporting. |
+| 2 | What the space costs the machine, dimmed, indented two columns: `⚙` CPU, `▤` RAM, `⛁` disk. |
+| 3 | `⚠ watcher silent` in orange, indented two columns, only when the home's watcher stopped reporting. |
 
 | Token | Value | Source |
 | --- | --- | --- |
@@ -32,10 +29,7 @@ Spaces shows one entry per home workspace. It never repeats per-agent detail, wh
 | `$decisions` | `⚑ N` (red, bold) | Open decisions waiting on the operator: `decisions_open` in the home's summary ledger, `state/home-summary.json`, which the home publishes from the same fold its wake drain uses. That ledger also folds in the decisions of its second-level homes; those whose home has a live Space of its own count on that home's row instead, so nothing is counted twice. Their share is the read-only `status_open_decisions` fold of the home's `bin/fm-classify-lib.sh` over each one's status log, cached until the log changes. A second-level home without a live Space stays counted on the primary row. |
 | `$crew` | `▶ N` (green) | Workers running: the home's live task records, `state/*.meta`, without second-level home records (`kind=secondmate`). |
 | `$queue` | `◷ N` (yellow) | Tasks queued and ready to start: `count` from the home's `bin/fm-tasks-axi.sh ready`. |
-| `$prs` | `⎇ N` (blue) | Open pull requests among the `pr=` links recorded in the task records. |
-| `$ci_ok` | `✓N` (green) | Of those, pull requests whose check runs all passed. |
-| `$ci_bad` | `✗N` (red, bold) | Of those, pull requests with a failed check run. |
-| `$res` | `cpu 29%  ram 2.4G  disk 8.5G` | CPU (share of the whole machine) and resident memory summed over every process whose environment carries the space's `HERDR_WORKSPACE_ID`, so its workers count. Disk is the home plus the worktree pools of its projects, as `treehouse status --json` lists them; a pool worktree that is itself another home is left out. |
+| `$res` | `⚙ 29% ▤ 2.4G ⛁ 8.5G` | CPU (share of the whole machine) and resident memory summed over every process whose environment carries the space's `HERDR_WORKSPACE_ID`, so its workers count. Disk is the home plus the worktree pools of its projects, as `treehouse status --json` lists them; a pool worktree that is itself another home is left out. |
 | `$alert` | `⚠ watcher silent` (orange) | `fm_supervision_unhealthy` from the home's `bin/fm-supervision-lib.sh`: the home has work that needs a watcher and the watcher's beacon is stale. |
 
 There is no rate-limit warning: a rate limit takes every home down at once, so a per-home flag adds nothing.
@@ -50,7 +44,6 @@ For every Herdr workspace it finds the home from its panes' directories: the nea
 | --- | --- | --- |
 | CPU, RAM, counts, watcher | every run (10 s) | One pass over `/proc`, one `fm-tasks-axi.sh ready` per home, and file reads; about one second in total. CPU needs two runs, so it appears from the second run on. |
 | Disk | every 15 minutes | One `du` over each home and its pools. On a host with large pools this run can take a minute; the other values wait for it. |
-| Pull request and CI state | every 5 minutes per pull request | Two GitHub REST calls through `gh api` (the pull request, then its check runs). No GraphQL. |
 
 The caches live in `~/.cache/code-factory/herdr-spaces.json`. A source that fails keeps its previous value, and a failed run never fails the unit: errors go to the journal (`journalctl --user -u herdr-spaces.service`). Herdr drops workspace tokens when its server restarts; the next run reports them again.
 
@@ -119,7 +112,7 @@ Set these keys under `factory.herdr` in `.local/host.yml`, then run `./factory a
 | Key | Default | Effect |
 | --- | --- | --- |
 | `sidebar_width` | `46` | Expanded sidebar width in columns. |
-| `sidebar_max_width` | `48` | Maximum expanded sidebar width. |
+| `sidebar_max_width` | `56` | Maximum expanded sidebar width. |
 | `sidebar_space_rows` | the Spaces layout above | TOML array written as `[ui.sidebar.spaces] rows`. |
 | `sidebar_agent_rows` | the Agents layout above | TOML array written as `[ui.sidebar.agents] rows`. |
 | `sidebar_bg` | `#1e1e2e` | `[theme.custom] sidebar_bg`. |

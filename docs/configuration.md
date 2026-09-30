@@ -36,6 +36,7 @@ factory:
   herdr:
     theme: catppuccin
     sidebar_width: 46     # Spaces and Agents sidebar layouts: see herdr.md
+    sidebar_max_width: 56
     sidebar_space_rows: |
       [ ... ]
     sidebar_agent_rows: |

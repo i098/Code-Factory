@@ -1,7 +1,7 @@
 """Herdr sidebar feeders: config/herdr-sidebar.ts and maintenance/herdr-spaces.py.
 
-The reporter runs against a fixture home and stub `herdr`/`gh` commands that
-record what would be reported, so the live Herdr session is never touched.
+The reporter runs against a fixture home and a stub `herdr` command that
+records what would be reported, so the live Herdr session is never touched.
 """
 
 import importlib.util
@@ -106,9 +106,9 @@ def fixture(tmp_path):
     (home / ".git").mkdir(parents=True)
     (home / "data").mkdir()
     write(home / "state/home-summary.json", json.dumps({"counts": {"decisions_open": 3}}))
-    write(home / "state/fix-login.meta", "kind=ship\npr=https://github.com/o/app/pull/11\n")
-    write(home / "state/fix-docs.meta", "kind=ship\npr=https://github.com/o/app/pull/12\n")
-    write(home / "state/old.meta", "kind=ship\npr=https://github.com/o/app/pull/13\n")
+    write(home / "state/fix-login.meta", "kind=ship\n")
+    write(home / "state/fix-docs.meta", "kind=ship\n")
+    write(home / "state/old.meta", "kind=ship\n")
     # Second-level homes: one with a live Space (w1) and one without (w9). The
     # stub fold reports two open decisions for each.
     write(home / "state/docs-mate-d1.meta", "kind=secondmate\nherdr_workspace_id=w1\n")
@@ -144,23 +144,6 @@ elif a[:2] == ["workspace", "report-metadata"]:
 """,
         0o755,
     )
-    # PR 11 green, PR 12 red, PR 13 merged.
-    write(
-        stub / "gh",
-        """#!/usr/bin/env python3
-import json, sys
-path = sys.argv[2]
-if "/check-runs" in path:
-    sha = path.split("/commits/")[1].split("/")[0]
-    conclusion = {"s11": "success", "s12": "failure"}[sha]
-    print(json.dumps({"check_runs": [{"conclusion": conclusion}, {"conclusion": "skipped"}]}))
-else:
-    n = path.rsplit("/", 1)[1]
-    print(json.dumps({"state": "closed" if n == "13" else "open", "head": {"sha": "s" + n}}))
-""",
-        0o755,
-    )
-
     env = {
         **os.environ,
         "PATH": f"{stub}:{os.environ['PATH']}",
@@ -195,12 +178,9 @@ def test_reporter_counts_from_a_fixture_home(fixture):
         "decisions": "⚑ 1",
         "crew": "▶ 3",
         "queue": "◷ 4",
-        "prs": "⎇ 2",
-        "ci_ok": "✓1",
-        "ci_bad": "✗1",
         "alert": "⚠ watcher silent",
     }
-    assert res.startswith("ram ") and " disk " in res
+    assert res.startswith("▤ ") and " ⛁ " in res
     # A helper space shows its short name only; everything else is cleared.
     assert reported["w2"] == {"short": "☾ afk"} | dict.fromkeys(spaces.TOKENS[1:])
 
@@ -211,13 +191,13 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     docs = run()["w1"]
     assert docs["decisions"] == "⚑ 1"
     assert docs["alert"] is None
-    assert docs["res"].startswith("cpu ")
+    assert docs["res"].startswith("⚙ ")
 
 
 def test_reporter_waits_out_a_failed_disk_measurement(fixture, tmp_path):
     _, run = fixture
     calls = tmp_path / "du-calls"
     write(tmp_path / "stub/du", f"#!/bin/sh\necho x >> {calls}\nexit 1\n", 0o755)
-    assert " disk " not in run()["w1"]["res"]
-    assert " disk " not in run()["w1"]["res"]
+    assert " ⛁ " not in run()["w1"]["res"]
+    assert " ⛁ " not in run()["w1"]["res"]
     assert len(calls.read_text().splitlines()) == 1

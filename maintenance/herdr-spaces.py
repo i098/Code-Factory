@@ -10,14 +10,11 @@ workspace tokens under the source `code-factory:spaces`:
                     second-level homes that have a live Space of their own
   crew       "▶ N"  live worker task records (state/*.meta, homes excluded)
   queue      "◷ N"  queued tasks ready to start (bin/fm-tasks-axi.sh ready)
-  prs        "⎇ N"  open pull requests recorded as pr= in task records
-  ci_ok      "✓N"   of those, pull requests whose checks all passed
-  ci_bad     "✗N"   of those, pull requests with a failed check
-  res        "cpu 29%  ram 2.4G  disk 8.5G"
+  res        "⚙ 29% ▤ 2.4G ⛁ 8.5G"  CPU, RAM, disk
   alert      "⚠ watcher silent" when the home's supervision is unhealthy
 
-Zero counts are cleared. Disk is cached 15 minutes and pull request state 5
-minutes in ~/.cache/code-factory/herdr-spaces.json. A source that fails keeps
+Zero counts are cleared. Disk is cached 15 minutes in
+~/.cache/code-factory/herdr-spaces.json. A source that fails keeps
 its previous value, and the script always exits 0.
 """
 
@@ -32,8 +29,8 @@ from pathlib import Path
 SOURCE = "code-factory:spaces"
 HERDR = os.environ.get("HERDR_BIN_PATH", "herdr")
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "code-factory"
-TOKENS = ("short", "decisions", "crew", "queue", "prs", "ci_ok", "ci_bad", "res", "alert")
-DISK_TTL, PR_TTL = 15 * 60, 5 * 60
+TOKENS = ("short", "decisions", "crew", "queue", "res", "alert")
+DISK_TTL = 15 * 60
 TICK = os.sysconf("SC_CLK_TCK")
 PAGE = os.sysconf("SC_PAGE_SIZE")
 
@@ -117,36 +114,6 @@ def watcher_silent(home: Path) -> bool:
     return rc == 0
 
 
-def pr_urls(home: Path) -> set[str]:
-    return {
-        line[3:].strip()
-        for meta in (home / "state").glob("*.meta")
-        for line in meta.read_text().splitlines()
-        if line.startswith("pr=")
-    }
-
-
-def ci_state(url: str) -> str:
-    """ "closed", "ok", "bad" or "pending" for one pull request URL, via REST."""
-    owner, repo, _, number = url.rstrip("/").split("/")[-4:]
-    pull = json.loads(run("gh", "api", f"repos/{owner}/{repo}/pulls/{number}"))
-    if pull["state"] != "open":
-        return "closed"
-    runs = json.loads(
-        run(
-            "gh",
-            "api",
-            f"repos/{owner}/{repo}/commits/{pull['head']['sha']}/check-runs?per_page=100",
-        )
-    )["check_runs"]
-    conclusions = {r["conclusion"] for r in runs}
-    if conclusions & {"failure", "timed_out", "cancelled", "action_required", "startup_failure"}:
-        return "bad"
-    if runs and conclusions <= {"success", "skipped", "neutral"}:
-        return "ok"
-    return "pending"
-
-
 def disk_paths(home: Path, other_homes: set[Path]) -> list[Path]:
     """The home plus its projects' worktree pools, as treehouse reports them."""
     paths = [home]
@@ -217,10 +184,9 @@ def main() -> None:
     procs = processes()
     prev_cpu = cache.get("cpu", {})
     dt = now - cache.get("cpu_at", now)
-    pr_cache, disk_cache = cache.get("pr", {}), cache.setdefault("disk", {})
+    disk_cache = cache.setdefault("disk", {})
     folds = cache.get("folds", {})
     live_ids = {ws["workspace_id"] for ws in workspaces}
-    seen_prs: dict[str, dict] = {}
 
     def save() -> None:
         CACHE.mkdir(parents=True, exist_ok=True)
@@ -228,25 +194,14 @@ def main() -> None:
         tmp.write_text(json.dumps(cache))
         tmp.replace(cache_file)
 
-    def pr_counts(home: Path) -> list[str]:
-        states = []
-        for url in sorted(pr_urls(home)):
-            hit = pr_cache.get(url)
-            if not hit or now - hit["at"] >= PR_TTL:
-                hit = {"at": now, "state": ci_state(url)}
-            seen_prs[url] = pr_cache[url] = hit
-            states.append(hit["state"])
-        live = [s for s in states if s != "closed"]
-        return [count(len(live), "⎇ "), count(live.count("ok"), "✓"), count(live.count("bad"), "✗")]
-
     def res(wid: str, home: Path | None) -> list[str]:
         rows = procs.get(wid, [])
         parts = []
         before = prev_cpu.get(wid)
         if before is not None and dt > 0:
             used = sum(t - before[str(p)] for p, t, _ in rows if str(p) in before)
-            parts.append(f"cpu {used / TICK / dt / os.cpu_count() * 100:.0f}%")
-        parts.append(f"ram {gib(sum(r for _, _, r in rows))}")
+            parts.append(f"⚙ {used / TICK / dt / os.cpu_count() * 100:.0f}%")
+        parts.append(f"▤ {gib(sum(r for _, _, r in rows))}")
         if home:
             hit = disk_cache.get(str(home))
             if not hit or now - hit["at"] >= DISK_TTL:
@@ -259,8 +214,8 @@ def main() -> None:
                 hit = disk_cache[str(home)] = {"at": now, "bytes": size}
                 save()
             if hit["bytes"] is not None:
-                parts.append(f"disk {gib(hit['bytes'])}")
-        return ["  ".join(parts)]
+                parts.append(f"⛁ {gib(hit['bytes'])}")
+        return [" ".join(parts)]
 
     for ws in workspaces:
         wid, label = ws["workspace_id"], ws.get("label", "")
@@ -283,7 +238,6 @@ def main() -> None:
             fill(["decisions"], lambda: [count(decisions(home, live_ids, folds), "⚑ ")])
             fill(["crew"], lambda: [count(crew(home), "▶ ")])
             fill(["queue"], lambda: [count(queue(home), "◷ ")])
-            fill(["prs", "ci_ok", "ci_bad"], lambda: pr_counts(home))
             silent = "⚠ watcher silent"
             fill(["alert"], lambda: [silent if watcher_silent(home) else ""])
         if not helper:
@@ -303,7 +257,6 @@ def main() -> None:
         tokens={k: v for k, v in last.items() if k in live_ids},
         cpu={w: {str(pid): t for pid, t, _ in procs.get(w, [])} for w in live_ids},
         cpu_at=now,
-        pr=seen_prs,
         folds=folds,
     )
     save()
