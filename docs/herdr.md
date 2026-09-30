@@ -86,7 +86,7 @@ The result carries `tokens.short`, `tokens.decisions`, and so on.
 | `$del` | `−<deleted>` lines (U+2212) | red |
 | `$files` | `✎ <files>` changed | yellow |
 
-The first part present carries the indent as U+2800 blank characters. The line counts come from `git diff --shortstat origin/<default branch>...HEAD` in the session's checkout, so they cover commits since the merge base with the default branch. The pull request comes from the GitHub REST API through `gh api`.
+Herdr indents every line after the first by two columns. For a worker, the first part present adds two U+2800 blank characters to that. The line counts come from `git diff --shortstat origin/<default branch>...HEAD` in the session's checkout, so they cover commits since the merge base with the default branch. The pull request comes from the GitHub REST API through `gh api`.
 
 The issue comes from the worker's task record in its home first: the first `issues/<n>` link or `issue <n>` / `issue #<n>` in the task's backlog entry (`data/backlog.md`), then in its brief (`data/<task>/brief.md`). The home is the ancestor of the pane's launch directory that holds `state/<task>.meta`. So a worker shows its issue before its pull request opens, after it merges, and when the body has no closing keyword. Without a task record, the issue is the first one the pull request body closes (`Closes #N`, `Fixes #N`, `Resolves #N`).
 
@@ -137,6 +137,7 @@ HERDR_CONFIG_PATH=/path/to/rendered.toml herdr config check
 - Agents line 2 is indented by a second state dot drawn in the sidebar background color. `sidebar_bg` is pinned to the catppuccin base (`#1e1e2e`) so that dot stays invisible. On the highlighted row the dot shows faintly. With another theme, change `sidebar_bg` and the `fg` of that dot in `sidebar_agent_rows` together.
 - Agents without the extension, including non-omp agents, show only their dot on line 1: nothing reports their `who` token.
 - Short names and colors match workspace labels (`firstmate`, `2ndmate-…`, `└ …`, `-afk-daemon-`). A home workspace with another name has no short name and shows its label.
+- Herdr keeps the last two columns of a Space row empty. At 46 columns, a Spaces line 1 with all six counts leaves no room for the full name, so Herdr cuts it (`first…`).
 - Only closing keywords in the pull request body count as issues there. Issues linked only in the GitHub UI are not shown, because the REST API does not list them.
 - The pull request lookup filters by head branch in the checkout's own repository, so a pull request opened from a fork does not show.
 - Spaces counts are only as fresh as the home's own records: `$decisions` follows the summary ledger, which the home republishes on its own events.

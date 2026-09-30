@@ -198,9 +198,9 @@ def test_reporter_counts_from_a_fixture_home(fixture):
         "prs": "⎇ 2",
         "ci_ok": "✓1",
         "ci_bad": "✗1",
-        "alert": BLANK * 2 + "⚠ watcher silent",
+        "alert": "⚠ watcher silent",
     }
-    assert res.startswith(BLANK * 2 + "ram ") and " disk " in res
+    assert res.startswith("ram ") and " disk " in res
     # A helper space shows its short name only; everything else is cleared.
     assert reported["w2"] == {"short": "☾ afk"} | dict.fromkeys(spaces.TOKENS[1:])
 
@@ -211,7 +211,7 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     docs = run()["w1"]
     assert docs["decisions"] == "⚑ 1"
     assert docs["alert"] is None
-    assert docs["res"].startswith(BLANK * 2 + "cpu ")
+    assert docs["res"].startswith("cpu ")
 
 
 def test_reporter_waits_out_a_failed_disk_measurement(fixture, tmp_path):

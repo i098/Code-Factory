@@ -30,7 +30,6 @@ import time
 from pathlib import Path
 
 SOURCE = "code-factory:spaces"
-BLANK = "\u2800"
 HERDR = os.environ.get("HERDR_BIN_PATH", "herdr")
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "code-factory"
 TOKENS = ("short", "decisions", "crew", "queue", "prs", "ci_ok", "ci_bad", "res", "alert")
@@ -261,7 +260,7 @@ def main() -> None:
                 save()
             if hit["bytes"] is not None:
                 parts.append(f"disk {gib(hit['bytes'])}")
-        return [BLANK * 2 + "  ".join(parts)]
+        return ["  ".join(parts)]
 
     for ws in workspaces:
         wid, label = ws["workspace_id"], ws.get("label", "")
@@ -285,7 +284,7 @@ def main() -> None:
             fill(["crew"], lambda: [count(crew(home), "▶ ")])
             fill(["queue"], lambda: [count(queue(home), "◷ ")])
             fill(["prs", "ci_ok", "ci_bad"], lambda: pr_counts(home))
-            silent = BLANK * 2 + "⚠ watcher silent"
+            silent = "⚠ watcher silent"
             fill(["alert"], lambda: [silent if watcher_silent(home) else ""])
         if not helper:
             fill(["res"], lambda: res(wid, home))

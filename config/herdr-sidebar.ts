@@ -149,9 +149,11 @@ export default function (pi) {
       const label = JSON.parse(await run(herdr, ["workspace", "get", workspaceId])).result?.workspace?.label;
       who = shortName(label) || label;
     }
+    // Herdr already indents continuation rows two columns, so this lines the
+    // PR line up under the name: after the "└ " for a worker.
     const parts = prParts(
       { pr: pr?.number, issue: taskIssue || closingIssue(pr?.body), ...(pr ? stat : {}) },
-      taskId ? 4 : 2,
+      taskId ? 2 : 0,
     );
     const args = ["pane", "report-metadata", paneId, "--source", SOURCE];
     for (const [k, v] of Object.entries({ who, ...parts })) args.push(...(v ? ["--token", `${k}=${v}`] : ["--clear-token", k]));
