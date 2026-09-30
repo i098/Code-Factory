@@ -284,7 +284,9 @@ def main() -> None:
         return ["⌂ " + "  ".join(parts)]
 
     first = workspaces[0] if workspaces else {}
-    firstmate = next((ws["workspace_id"] for ws in workspaces if ws.get("label") == "firstmate"), None)
+    firstmate = next(
+        (ws["workspace_id"] for ws in workspaces if ws.get("label") == "firstmate"), None
+    )
     primary = firstmate or first.get("workspace_id")
     primary_home = homes.get(firstmate)
 

@@ -233,7 +233,9 @@ def test_reporter_forgets_status_logs_it_no_longer_reads(fixture):
     assert str(home / "state/fix-login.status") in json.loads(cache_file.read_text())["folds"]
     (home / "state/fix-login.meta").unlink()
     run()
-    assert set(json.loads(cache_file.read_text())["folds"]) == {str(home / "state/api-mate-a1.status")}
+    assert set(json.loads(cache_file.read_text())["folds"]) == {
+        str(home / "state/api-mate-a1.status")
+    }
 
 
 def test_reporter_counts_no_decisions_without_a_firstmate_space(fixture, tmp_path):
