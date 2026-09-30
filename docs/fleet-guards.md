@@ -1,34 +1,31 @@
 # Fleet guards
 
-`factory.profiles.fleet_guards` reproduces the controls added to the source host
-on 2026-09-17 after a swap-exhaustion incident: 24 GB of RAM and 52 GB of swap
-were full, load sat near 300, and ssh took minutes. Two full local Supabase
-stacks (24 containers) and three stray Postgres containers were running, each
-built by a swarms-platform lane that only needed a screenshot; 489 zombie
-processes had accumulated under containers whose PID 1 was a bare `node`; ten
-live lanes at 5-8 GB each had been spawned with nothing bounding concurrency.
+`factory.profiles.fleet_guards` installs controls that keep a fleet host out of
+swap exhaustion. Its causes: duplicate local Supabase stacks and stray Postgres
+containers, one per lane; zombie processes under containers whose PID 1 is a
+bare `node`; and lanes spawned with nothing bounding concurrency.
 
 Every control below removes a cause, not a symptom.
 
-Sizing per lane count and the full list of pruners, including the source host's
-unexported ones, are in [Capacity, plugins and pruners](capacity.md).
+Sizing per lane count and the full list of pruners are in
+[Capacity and pruners](capacity.md).
 
 ## The chain the controls break
 
-1. Briefs require before/after screenshots of the live app.
-2. swarms-platform refuses to boot without a Supabase URL and key
+1. A lane that must show the running app needs its backend.
+2. The app refuses to boot without a Supabase URL and key
    (`Your project's URL and Key are required to create a Supabase client!`).
-3. Worktrees carry only `.env.example`; there was no shared backend.
-4. So each lane ran `npx supabase start` - twelve containers - plus `next dev`,
-   `tsc` and a browser, and nothing tore any of it down.
+3. Worktrees carry only `.env.example`, so with no shared backend each lane
+   runs `npx supabase start` - twelve containers - plus `next dev`, `tsc` and a
+   browser, and nothing tears any of it down.
 
 ## What is provisioned
 
 | Path (under the account home) | Purpose |
 | --- | --- |
-| `oss-fleet/shared-supabase/` | The ONE stack: pinned CLI (`npm ci` from `fleet/shared-supabase/package-lock.json`), `supabase/config.toml` with `factory.fleet.supabase_project_id`, `check.sh` keeper, `guard.sql`, `README.md`. `check.sh` also generates `swarms-platform.env.local` from the running stack. |
+| `oss-fleet/shared-supabase/` | The ONE stack: pinned CLI (`npm ci` from `fleet/shared-supabase/package-lock.json`), `supabase/config.toml` with `factory.fleet.supabase_project_id`, `check.sh` keeper, `guard.sql`, `README.md`. `check.sh` also generates the project's `<project>.env.local` from the running stack. |
 | `oss-fleet/doctor/docker-guard.sh` | `docker events` watcher. A container carrying `com.supabase.cli.project` other than an allowlisted project is removed on creation; bare Postgres-family images are logged and alerted, not killed (other projects may own them). `docker-guard-allow.txt` is written once and then operator-owned. |
-| `oss-fleet/doctor/worktree-env-seed.sh` | Installs the env file as `.env.local` in every `~/.treehouse/swarms-platform-*/*/swarms-platform` worktree and Firstmate's `projects/swarms-platform`. Files without the `# fleet-shared-supabase` marker are replaced with a backup left beside them. |
+| `oss-fleet/doctor/worktree-env-seed.sh` | Installs the env file as `.env.local` in the project worktrees matched by the pool glob and Firstmate checkout path fixed in `fleet/doctor/worktree-env-seed.sh`; `factory.fleet.worktree_pools` only sets which pool directories the systemd path unit watches to trigger it. Files without the `# fleet-shared-supabase` marker are replaced with a backup left beside them. |
 | `oss-fleet/doctor/dev-server-reaper.sh` | Every 2 minutes: kills `next dev`/`next-server`/`tsc --noEmit` trees in treehouse worktrees whose lane last reported `done:`/`paused:`/`blocked:`/`failed:`, has no agent process, or whose agent transcript is idle >= 30 min (`REAPER_IDLE_MIN`). A dev server is 3-4 GB and restarts in 10 s; idle ones from finished lanes are what filled swap. One `next dev` per branch is inherent - Next compiles the whole app per process - so the fix is lifetime, not sharing. |
 | `oss-fleet/doctor/storage-guard.sh` | Every 5 minutes: use% of the filesystems holding `/`, `/var/log`, the home and Docker's data root. WARN (85%) alerts once per episode, CRIT (92%) prunes only regenerable Docker data, and a fill rate projecting the disk full within 6 hours alerts even below WARN. See [Storage guard](#storage-guard). |
 | `oss-fleet/doctor/devtools-bridge-reaper.sh` | Every 10 minutes: stops attached chrome-devtools-axi bridges (`CHROME_DEVTOOLS_AXI_BROWSER_URL` set) whose process tree used no CPU and whose session state files did not change for 60 min (`REAPER_IDLE_MIN`). See [Devtools-bridge reaper](#devtools-bridge-reaper). |
@@ -45,7 +42,7 @@ Application traffic (anon/authenticated/service_role through PostgREST, GoTrue,
 Storage) is unaffected. There is never a migration on this database.
 
 The Firstmate checkout, tracking `main` of `factory.firstmate.url`, carries the
-last layer: `extensions/fm-swarms-platform-guard.ts`, a tool-call seatbelt
+last layer: a per-project guard extension, a tool-call seatbelt
 loaded by every omp crewmate that blocks `supabase start|stop|db reset|migration`,
 `docker run ... postgres`, `psql` against the stack and edits to the shared
 containers, with the reason attached - so the agent learns why before the
@@ -60,7 +57,7 @@ empty database), so provisioning restores the Docker volume
 with:
 
 ```
-docker run --rm -v supabase_db_swarms-shared:/v:ro -v "$PWD":/b alpine \
+docker run --rm -v supabase_db_<project>:/v:ro -v "$PWD":/b alpine \
   tar czf /b/db-$(date +%F).tgz -C /v .
 ```
 
@@ -71,11 +68,9 @@ test users and marketplace content only; keep them out of this repository.
 
 ## Storage guard
 
-On 2026-09-23 the root filesystem reached 95% used (9.8 GB free) and nothing
-alerted: docker-guard acts on container creation, mem-guardian on memory and
-swap, Firstmate's orphan sweep on aged litter. Docker held 45 GB of images, 22 GB
-of them reclaimable. The same day `/var/log/syslog` grew to 39 GB at about
-17 MB/s from one looping process and took `/` to 100%.
+Nothing else alerts on a filling disk: docker-guard acts on container creation,
+Firstmate's orphan sweep on aged litter. Docker images, build cache, or one
+looping process writing to `/var/log` can take `/` to 100%.
 
 `flotilla-storage-guard.timer` runs `storage-guard.sh` every 5 minutes. It
 measures the filesystems holding `/`, `/var/log`, the home and Docker's data
@@ -90,7 +85,7 @@ root (`docker info`), each filesystem once. Thresholds are the
 
 Every alert names the top consumers: the largest entries one level under the
 filesystem root, and under the home and `/var/log` when they live on it, from
-one `du` walk capped at 300 s (it took about 3.5 minutes on the source host),
+one `du` walk capped at 300 s,
 plus `docker system df` on Docker's filesystem. A FILL alert also names the
 entry that grew most since the previous scan.
 
@@ -204,10 +199,9 @@ fleet-browser env chrome     # or: eval "$(fleet-browser env chrome)" to escalat
 ## Devtools-bridge reaper
 
 Every chrome-devtools-axi session starts a bridge that detaches to init by
-design, plus a chrome-devtools-mcp child. On 2026-09-24 idle bridges, some 98
-hours old, held about 18 GB, almost all of it swap. With swap full the host sat
-near load 179 for hours, and mem-guardian never saw them: they are neither
-fleet repo processes nor agent panes.
+design, plus a chrome-devtools-mcp child. Idle bridges pile up and hold
+gigabytes, mostly in swap, and no fleet memory guard sees them: they are
+neither fleet repo processes nor agent panes.
 
 The split with `chrome-autoprune` (agents profile): it stops idle disposable
 bridges and refuses attached ones, which is every bridge an agent starts on a
@@ -224,8 +218,8 @@ minutes gets TERM, then after a 5 s grace KILL for whatever is left of its
 exact tree, every pid re-checked by start time. The session's next command
 starts a fresh bridge attached to the same ladder browser: only the MCP
 connection and page selection are dropped, and the browser keeps its pages and
-cookies. The script reads `/proc` in one pass because a per-process version
-could not finish in five minutes at load 160. `--dry-run` prints each attached
+cookies. The script reads `/proc` in one pass because a per-process version is
+too slow on a heavily loaded host. `--dry-run` prints each attached
 bridge's idle time and verdict and changes nothing.
 `tests/test_devtools_bridge_reaper.py` drives it against a fixture process
 tree.

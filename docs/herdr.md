@@ -12,7 +12,7 @@ Spaces shows one entry per home workspace. It never repeats per-agent detail, wh
 ● ⌂ ⚙ 41% ▤ 18.2/31.0G 59% ⛁ 402/937G 43%
 ● firstmate · ⚑ 3 · ▶ 1 · ◷ 4
   ⚙ 29%  ▤ 8%  ⛁ 2%
-● swarms · ⚑ 2 · ◷ 3
+● webapp · ⚑ 2 · ◷ 3
   ⚙ 1%  ▤ 3%  ⛁ 4%
   ⚠ watcher silent
 ○ ☾ afk
@@ -29,7 +29,7 @@ Herdr indents every line after an entry's first by two columns, so every entry's
 
 | Token | Value | Source |
 | --- | --- | --- |
-| `$short` | `swarms` for `2ndmate-swarms-mate-s4` | The workspace label: `firstmate` stays as is, `2ndmate-<name>-mate-<id>` becomes `<name>`, `└ <task> · p:<token>` becomes `└ <task>`. Other labels have no short name. |
+| `$short` | `webapp` for `2ndmate-webapp-mate-s4` | The workspace label: `firstmate` stays as is, `2ndmate-<name>-mate-<id>` becomes `<name>`, `└ <task> · p:<token>` becomes `└ <task>`. Other labels have no short name. |
 | `$decisions` | `⚑ N` (red, bold) | Fresh decisions waiting on the operator, counted where they can be acted on. Every count comes from the primary home's status logs, through the read-only `status_open_decisions` fold of its `bin/fm-classify-lib.sh`, cached until each log changes. The primary home here is only the workspace labelled `firstmate`: without one, no Space shows `⚑`. A second-level home's Space counts the open decisions in its own status log (`state/<home>.status`, the record whose `herdr_workspace_id` is that Space). The primary Space counts only its own workers' logs. A second-level home's own workers are not counted: it decides for them, and escalates anything it cannot decide into its status log in the primary home, which is what its Space counts. Parked holds (keys starting `captain-hold-`) never count, and a second-level home without a live Space is not counted anywhere. |
 | `$crew` | `▶ N` (green) | Workers running: the home's live task records, `state/*.meta`, without second-level home records (`kind=secondmate`). |
 | `$queue` | `◷ N` (yellow) | Tasks queued and ready to start: `count` from the home's `bin/fm-tasks-axi.sh ready`, recounted when the home's `data/backlog.md` changes and at least once a minute. |
@@ -81,7 +81,7 @@ The result carries `tokens.short`, `tokens.decisions`, and so on.
   Planning the release checklist
 ● └ Fixing the token refresh race
     ⎇ 1537 · ○ 1529 · +12847 · −3902 · ✎ 214
-● swarms
+● webapp
   Fix ratings cache key collision
   ⎇ 1561 · ○ 1558 · +84 · −12 · ✎ 3
 ```

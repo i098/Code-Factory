@@ -12,7 +12,7 @@ Never paste a value from this file into a repository, issue, PR, log, or chat. C
 | One secret per variable | Account Secrets Store (`default_secrets_store`), named after the variable, comment `super.env`, scope `workers` | Holds the value without one surrounding pair of matching quotes. |
 | Repeated variable names | Secrets `NAME`, `NAME__1`, `NAME__2`, … | `NAME` holds the last assignment, the one `source` keeps. Earlier ones are numbered in file order. |
 | Everything else: comments, blank lines, quotes, order | Secret `super_env_layout` | The comments hold retired credentials, so they are a secret too. |
-| Fetch endpoint | Worker `fleet-secrets` on custom domain `fleet-secrets.iterative.sh` | No `workers.dev` or preview URL. Answers with `Cache-Control: no-store`. |
+| Fetch endpoint | Worker `fleet-secrets` on the custom domain `host` names in `scripts/push-super-env.sh` | No `workers.dev` or preview URL. Answers with `Cache-Control: no-store`. |
 | Gate | Cloudflare Access app `fleet-secrets`, one policy: Service Auth for service token `fleet-secrets-fetch` | The Worker also verifies the Access JWT: issuer, audience, expiry, signature, and the token's client id. Anything else gets `403`. |
 | Fetch credential | `FLEET_SECRETS_ACCESS_CLIENT_ID`, `FLEET_SECRETS_ACCESS_CLIENT_SECRET` at the end of `~/super.env` | Expires one year after creation. |
 
@@ -68,8 +68,8 @@ Renew the token the same way before it expires; the Access dashboard shows the e
 
 ## One-time setup, for rebuilding
 
-These already exist. Recreate them only if they are lost:
+Create these once per Cloudflare account, and again only if they are lost:
 
-1. Access app `fleet-secrets`: self-hosted, domain `fleet-secrets.iterative.sh`, session 15 minutes, hidden from the App Launcher, no identity providers. Its only policy: decision Service Auth, include only service token `fleet-secrets-fetch`.
+1. Access app `fleet-secrets`: self-hosted, on the Worker's custom domain, session 15 minutes, hidden from the App Launcher, no identity providers. Its only policy: decision Service Auth, include only service token `fleet-secrets-fetch`.
 2. Run `scripts/push-super-env.sh`. It reads the team domain and the app's Application Audience tag from the Access API on every push and binds them to the Worker.
-3. Add the Worker custom domain `fleet-secrets.iterative.sh` only after the Access app exists.
+3. Add the Worker custom domain only after the Access app exists.

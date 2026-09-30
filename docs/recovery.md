@@ -20,7 +20,7 @@ Do not point two machines at the same live session, task registry, browser profi
 ```
 
 - **`fleet guards require the docker and firstmate profiles`**: enable both profiles in `.local/host.yml`.
-- **Empty fixture archive**: the shared database is a read-only fixture that cannot be rebuilt from migrations. Copy the volume snapshot from the source host; see [The fixture](fleet-guards.md#the-fixture).
+- **Empty fixture archive**: the shared database is a read-only fixture that cannot be rebuilt from migrations. Copy the volume snapshot from a host that has the fixture; see [The fixture](fleet-guards.md#the-fixture).
 - **Spawn refused by the memory floor**: wait for a lane to finish, or lower the floor in this repository's `config/spawn-memory-floor-mb` and rerun `./factory apply`. Every apply rewrites the Firstmate checkout's copy, so an edit made only there is reverted.
 
 ## Desktop access
@@ -37,11 +37,11 @@ For a changed display/session configuration, restart VNC explicitly only when th
 
 ## App and fleet state
 
-This repository reconstructs the environment, not the source VPS's live operations:
+This repository reconstructs the environment, not a host's live operations:
 
 - Firstmate source and dispatch choices are installed; its private backlog, charter briefs, project registry, session lock, and operational history are not.
-- The existing Flotilla/OSS-fleet runtime owns its own queues, schedules, recovery policy, and outbound authority. Restore its reviewed source and fresh configuration separately; do not automatically resume publishing jobs merely because a device was rebuilt.
-- Project-specific Seer/Dorm/Foodie/preview services need their own environment files, source revisions, migrations, and data restores. A cache directory containing a running executable is not an installation artifact.
+- Other agent runtimes on the old host own their own queues, schedules, recovery policy, and outbound authority. Restore their reviewed source and fresh configuration separately; do not automatically resume publishing jobs merely because a device was rebuilt.
+- Project-specific services need their own environment files, source revisions, migrations, and data restores. A cache directory containing a running executable is not an installation artifact.
 - Docker named volumes are durable data. Back them up with database-aware tools and verify a restore independently. Do not copy `/var/lib/docker` between running daemons or assume an unused volume is disposable.
 
 The included PostgreSQL/Redis Compose services are empty development examples. They do not supply an application's schema or import production data.

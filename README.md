@@ -84,11 +84,11 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 | [Fleet guards](docs/fleet-guards.md) | Shared Supabase, Docker guard, dev-server reaper, storage guard, spawn memory floor, browser ladder |
 | [Herdr sidebar](docs/herdr.md) | The Spaces and Agents sidebar layouts, what each line and token shows, the reporter timer and omp extension that feed them, and how to override them or turn parts off |
 | [omp configuration](docs/omp.md) | Signing in, model roles, fallbacks, the advisor, and updating an existing host |
-| [Capacity, plugins and pruners](docs/capacity.md) | Host sizing per lane count, agent plugins and skills, every auto pruner |
+| [Capacity and pruners](docs/capacity.md) | Host sizing per lane count and every auto pruner |
 | [Architecture](docs/architecture.md) | Why Ansible, host and container boundary, Docker worker, CI |
 | [Migration and recovery](docs/recovery.md) | New-device sequence, desktop access, troubleshooting, upgrades |
 | [Security](docs/security.md) | What is never exported and how to handle credentials and remote access |
 | [Shared credentials](docs/secrets.md) | `super.env` in Cloudflare Secrets Store: push, fetch on a new host, revoke |
-| [Agent host move](docs/agent-host-move.md) | Moving the agents to a bigger host while the VPS keeps sub2api: hand-copy list, parity checks, cutover |
+| [Agent host move](docs/agent-host-move.md) | Moving the agents to a new host: what to copy by hand, parity checks, cutover |
 
 Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). License: [MIT](LICENSE).
