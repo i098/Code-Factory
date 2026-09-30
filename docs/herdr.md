@@ -11,7 +11,7 @@ Spaces shows one entry per home workspace. It never repeats per-agent detail, wh
 ```text
 ● firstmate · ⚑ 3 · ▶ 1 · ◷ 4
   ⚙ 29%  ▤ 8%  ⛁ 2%
-  ⌂ ⚙ 41%  ▤ 18.2/31.0G 59%  ⛁ 402/937G 43%
+  ⌂ ⚙ 41% ▤ 18.2/31.0G 59% ⛁ 402/937G 43%
 ● swarms · ⚑ 2 · ◷ 3
   ⚙ 1%  ▤ 3%  ⛁ 4%
   ⚠ watcher silent
@@ -35,7 +35,7 @@ Herdr indents every line after an entry's first by two columns, so every entry's
 | `$queue` | `◷ N` (yellow) | Tasks queued and ready to start: `count` from the home's `bin/fm-tasks-axi.sh ready`, recounted when the home's `data/backlog.md` changes and at least once a minute. |
 | `$res` | `⚙ 29%  ▤ 8%  ⛁ 2%` | CPU (share of all cores) and resident memory (share of `MemTotal`) summed over every process whose environment carries the space's `HERDR_WORKSPACE_ID`, so its workers count. CPU is each process's own CPU time (`utime` + `stime`) gained between two runs, for every process present in both, clamped to 0–100%. Disk is the home plus the worktree pools of its projects, as `treehouse status --json` lists them, as a share of the filesystem holding the home; a pool worktree that is itself another home is left out. |
 | `$alert` | `⚠ watcher silent` (orange) | `fm_supervision_unhealthy` from the home's `bin/fm-supervision-lib.sh`: the home has work that needs a watcher and the watcher's beacon is stale. |
-| `$host` | `⌂ ⚙ 41%  ▤ 18.2/31.0G 59%  ⛁ 402/937G 43%` | The whole machine, on the primary home only: CPU busy share from `/proc/stat`, used memory (`MemTotal` − `MemAvailable`) from `/proc/meminfo`, and the root filesystem from `statvfs`. Memory keeps one decimal while the total is under 100G (`18.2/31.0G`); disk is in whole G (`45/93G`, `402/937G`). Both are whole G from 100G and switch to T from 1000G (`1.4/1.9T`, whole T from 10T). |
+| `$host` | `⌂ ⚙ 41% ▤ 18.2/31.0G 59% ⛁ 402/937G 43%` | The whole machine, on the primary home only: CPU busy share from `/proc/stat`, used memory (`MemTotal` − `MemAvailable`) from `/proc/meminfo`, and the root filesystem from `statvfs`. Memory keeps one decimal while the total is under 100G (`18.2/31.0G`); disk is in whole G (`45/93G`, `402/937G`). Both are whole G from 100G and switch to T from 1000G (`1.4/1.9T`, whole T from 10T). |
 
 There is no rate-limit warning: a rate limit takes every home down at once, so a per-home flag adds nothing.
 
@@ -139,5 +139,5 @@ HERDR_CONFIG_PATH=/path/to/rendered.toml herdr config check
 - Short names and colors match workspace labels (`firstmate`, `2ndmate-…`, `└ …`, `-afk-daemon-`). A home workspace with another name has no short name and shows its label.
 - Only closing keywords in the pull request body count as issues there. Issues linked only in the GitHub UI are not shown, because the REST API does not list them.
 - CPU and RAM count only processes the reporter's account can read, and RAM is resident memory, so shared pages count once per process. CPU counts a process only while two runs a second apart both see it: a process that starts and ends between two runs is not counted, and the time before the first run that sees it or after the last is lost, so a space running many short builds reads low.
-- The machine line sits two columns in, under the name. At width 46 a long value, for example with memory or disk at 100%, can reach the sidebar's edge, and Herdr cuts its end.
+- The machine line sits two columns in, under the name, where Herdr shows 40 columns at width 46. Its parts are single-spaced so it fits even with CPU at 100% and memory and disk at 99%; at 100%, or on a narrower sidebar, Herdr cuts its end.
 - Herdr sidebar styles offer color, bold and dim only: no italic and no thinner weight.

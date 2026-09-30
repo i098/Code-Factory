@@ -220,10 +220,10 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     # Shares of the machine; CPU needs a baseline, so it waits for run two.
     # Herdr's own continuation indent puts it under the name: no padding.
     assert re.fullmatch(r"▤ \d+%  ⛁ \d+%", res)
-    # The primary carries the whole-machine line, short enough for the sidebar
-    # at width 46.
+    # The primary carries the whole-machine line, short enough for the 40
+    # columns Herdr shows on a continuation row at width 46.
     size = r"[\d.]+/[\d.]+[GT] \d+%"
-    assert re.fullmatch(rf"⌂ ▤ {size}  ⛁ {size}", host) and len(host) <= 42
+    assert re.fullmatch(rf"⌂ ▤ {size} ⛁ {size}", host) and len(host) <= 40
     # A helper space shows its short name only; everything else is cleared.
     assert reported["w2"] == {"short": "☾ afk"} | dict.fromkeys(spaces.TOKENS[1:])
     # A space with no home is not the primary: CPU and RAM only.
@@ -241,7 +241,7 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     assert docs["decisions"] == "⚑ 1"
     assert docs["alert"] is None
     assert re.fullmatch(r"⚙ \d+%  ▤ \d+%  ⛁ \d+%", docs["res"])
-    assert re.fullmatch(r"⌂ ⚙ \d+%  ▤ .+", docs["host"])
+    assert re.fullmatch(r"⌂ ⚙ \d+% ▤ .+", docs["host"])
 
 
 def test_reporter_forgets_status_logs_it_no_longer_reads(fixture):
@@ -360,12 +360,12 @@ def test_machine_sizes_stay_short(used, total, fine, text):
 
 @pytest.mark.parametrize("ram", [9.96, 15.6, 31.0, 99.9, 999.6, 9.96 * 1024])
 @pytest.mark.parametrize("disk", [9.96, 93.1, 100.0, 999.0, 9.96 * 1024, 99 * 1024])
-def test_machine_header_fits_the_first_spaces_row(ram, disk):
-    # The 42 columns Herdr shows on the first row of a Spaces entry at sidebar
-    # width 46, with CPU at 100% and memory and disk at 99%.
+def test_machine_line_fits_a_continuation_spaces_row(ram, disk):
+    # The 40 columns Herdr shows on a continuation row of a Spaces entry at
+    # sidebar width 46, with CPU at 100% and memory and disk at 99%.
     mem = spaces.used_of(ram * 2**30, ram * 2**30, fine=True)
     root = spaces.used_of(disk * 2**30, disk * 2**30)
-    assert len(f"⌂ ⚙ 100%  ▤ {mem} 99%  ⛁ {root} 99%") <= 42
+    assert len(f"⌂ ⚙ 100% ▤ {mem} 99% ⛁ {root} 99%") <= 40
 
 
 def test_reporter_waits_out_a_failed_disk_measurement(fixture, tmp_path):
