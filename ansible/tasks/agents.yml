@@ -67,8 +67,9 @@
     remote_src: true
   become: true
 
-# The omp extension that feeds the Herdr agent sidebar layout ($who, $refs and
-# the bare topic title; docs/herdr.md). Managed: every apply rewrites it.
+# The omp extension that feeds the Herdr agent sidebar layout ($who, the pull
+# request parts and the bare topic title; docs/herdr.md). Managed: every apply
+# rewrites it.
 - name: Ensure the omp extensions directory
   ansible.builtin.file:
     path: "{{ factory_omp_sidebar_extension | dirname }}"

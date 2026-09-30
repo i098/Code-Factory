@@ -24,10 +24,15 @@ agent_panel_sort = "{{ factory_cfg.herdr.agent_panel_sort }}"
 [ui.toast]
 delivery = "{{ factory_cfg.herdr.toast_delivery }}"
 
-# Agent sidebar layout (docs/herdr.md). $who and $refs come from the omp
-# extension ~/.omp/agent/extensions/code-factory-herdr-sidebar.ts.
+# Agent sidebar layout (docs/herdr.md). $who and the pull request parts come
+# from the omp extension ~/.omp/agent/extensions/code-factory-herdr-sidebar.ts.
 [ui.sidebar.agents]
 rows = {{ factory_cfg.herdr.sidebar_agent_rows | trim }}
+
+# Spaces sidebar layout (docs/herdr.md). Its $ tokens come from the
+# herdr-spaces reporter timer.
+[ui.sidebar.spaces]
+rows = {{ factory_cfg.herdr.sidebar_space_rows | trim }}
 
 [update]
 # Controls the updater's own check behaviour only. `./factory apply` installs

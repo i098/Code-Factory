@@ -1,0 +1,13 @@
+{{ ansible_managed | comment }}
+
+[Unit]
+Description=Herdr Spaces sidebar reporter every 10 s (Code Factory managed)
+
+[Timer]
+Unit=herdr-spaces.service
+OnBootSec=30s
+OnUnitActiveSec=10s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

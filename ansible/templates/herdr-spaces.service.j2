@@ -1,0 +1,19 @@
+{{ ansible_managed | comment }}
+# Triggered by herdr-spaces.timer; not enabled on its own. Reports per-home
+# rollups to the Herdr Spaces sidebar (docs/herdr.md). Display-only: it never
+# changes Herdr state beyond workspace metadata tokens.
+
+[Unit]
+Description=Report per-home rollups to the Herdr Spaces sidebar (Code Factory managed)
+ConditionPathExists={{ factory_herdr_spaces_script }}
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=HERDR_BIN_PATH={{ factory_herdr_bin }}
+ExecStart=/usr/bin/python3 {{ factory_herdr_spaces_script }}
+# A run that refreshes the 15-minute disk cache walks every home and worktree
+# pool with du; the other runs take about a second.
+TimeoutStartSec=600
+Nice=10
+IOSchedulingClass=idle

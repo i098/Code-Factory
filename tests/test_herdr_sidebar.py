@@ -1,0 +1,291 @@
+"""Herdr sidebar feeders: config/herdr-sidebar.ts and maintenance/herdr-spaces.py.
+
+The reporter runs against a fixture home and a stub `herdr` command that
+records what would be reported, so the live Herdr session is never touched.
+"""
+
+import importlib.util
+import json
+import os
+import re
+import shutil
+import subprocess
+import time
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).parents[1]
+REPORTER = ROOT / "maintenance/herdr-spaces.py"
+BLANK = "\u2800"
+
+spec = importlib.util.spec_from_file_location("herdr_spaces", REPORTER)
+spaces = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(spaces)
+
+LABELS = {
+    "firstmate": "firstmate",
+    "2ndmate-swarms-mate-s4": "swarms",
+    "2ndmate-subliminal-mate-b8": "subliminal",
+    "firstmate-afk-daemon-1587287-6940-1790642036": "☾ afk",
+    "└ fix-login · p:Qm3vX8kT2aLp9RwZcN4yHd": "└ fix-login",
+    "scratch": "",
+}
+
+
+def ts(expr: str):
+    """Evaluate an expression against the extension's exports with bun."""
+    code = f"import * as m from {json.dumps(str(ROOT / 'config/herdr-sidebar.ts'))};"
+    code += f"console.log(JSON.stringify({expr}));"
+    env = {k: v for k, v in os.environ.items() if k != "FM_TASK_ID"}
+    out = subprocess.run(["bun", "-e", code], capture_output=True, text=True, check=True, env=env)
+    return json.loads(out.stdout)
+
+
+needs_bun = pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+
+
+def test_short_names():
+    assert {label: spaces.short_name(label) for label in LABELS} == LABELS
+
+
+@needs_bun
+def test_extension_short_names_match_the_reporter():
+    assert (
+        ts(f"Object.fromEntries({json.dumps(list(LABELS))}.map(l => [l, m.shortName(l)]))")
+        == LABELS
+    )
+
+
+@needs_bun
+def test_pr_parts():
+    full = {"pr": 1537, "issue": "1529", "add": 12847, "del": 3902, "files": 214}
+    assert ts(f"m.prParts({json.dumps(full)}, 4)") == {
+        "pr": BLANK * 4 + "⎇ 1537",
+        "issue": "○ 1529",
+        "add": "+12847",
+        "del": "−3902",
+        "files": "✎ 214",
+    }
+    # A worker with an issue but no pull request: the issue carries the indent.
+    assert ts('m.prParts({issue: "88"}, 2)') == {
+        "pr": "",
+        "issue": BLANK * 2 + "○ 88",
+        "add": "",
+        "del": "",
+        "files": "",
+    }
+    assert ts("m.shortstat(' 3 files changed, 84 insertions(+), 12 deletions(-)')") == {
+        "files": 3,
+        "add": 84,
+        "del": 12,
+    }
+    assert ts("m.shortstat(' 1 file changed, 2 deletions(-)')") == {"files": 1, "add": 0, "del": 2}
+
+
+@needs_bun
+def test_issue_sources():
+    assert ts('m.closingIssue("Adds X.\\n\\nFixes #1529 and closes #7")') == "1529"
+    assert ts('m.closingIssue("See #12")') == ""
+    record = [
+        "- [ ] fix-login - app: fix login (repo: app) (kind: ship)",
+        "Implement https://github.com/o/app/issues/1383 in full. Split #1229 first.",
+    ]
+    assert ts(f"m.recordIssue({json.dumps(record)})") == "1383"
+    assert ts('m.recordIssue(["- [ ] x - y (issue 1523) (repo: r)"])') == "1523"
+    assert ts('m.recordIssue(["no issue here", ""])') == ""
+
+
+def write(path: Path, text: str, mode: int = 0o644) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    path.chmod(mode)
+
+
+@pytest.fixture
+def fixture(tmp_path):
+    home = tmp_path / "home"
+    (home / ".git").mkdir(parents=True)
+    (home / "data").mkdir()
+    write(home / "state/home-summary.json", json.dumps({"counts": {"decisions_open": 3}}))
+    write(home / "state/fix-login.meta", "kind=ship\n")
+    write(home / "state/fix-docs.meta", "kind=ship\n")
+    write(home / "state/old.meta", "kind=ship\n")
+    # Second-level homes: one with a live Space (w1) and one without (w9). The
+    # stub fold reports two open decisions for each.
+    write(home / "state/docs-mate-d1.meta", "kind=secondmate\nherdr_workspace_id=w1\n")
+    write(home / "state/gone-mate-g1.meta", "kind=secondmate\nherdr_workspace_id=w9\n")
+    write(home / "state/docs-mate-d1.status", "")
+    write(home / "state/gone-mate-g1.status", "")
+    write(
+        home / "bin/fm-classify-lib.sh",
+        "status_open_decisions() { printf 'a\\tneeds-decision\\tx\\nb\\tblocked\\ty\\n'; }\n",
+    )
+    write(home / "bin/fm-tasks-axi.sh", "#!/bin/sh\n[ \"$1\" = ready ] && echo 'count: 4'\n", 0o755)
+    write(home / "bin/fm-supervision-lib.sh", "fm_supervision_unhealthy() { return 0; }\n")
+
+    stub = tmp_path / "stub"
+    log = tmp_path / "reports.jsonl"
+    workspaces = [
+        {"workspace_id": "w1", "label": "2ndmate-docs-mate-d1"},
+        {"workspace_id": "w2", "label": "firstmate-afk-daemon-1-2-3"},
+        {"workspace_id": "w3", "label": "scratch"},
+    ]
+    panes = [
+        {"workspace_id": "w1", "cwd": str(home / "projects/app")},
+        {"workspace_id": "w2", "cwd": str(home)},
+    ]
+    write(
+        stub / "herdr",
+        f"""#!/usr/bin/env python3
+import json, sys
+a = sys.argv[1:]
+if a[:2] == ["workspace", "list"]:
+    print(json.dumps({{"result": {{"workspaces": {json.dumps(workspaces)}}}}}))
+elif a[:2] == ["pane", "list"]:
+    print(json.dumps({{"result": {{"panes": {json.dumps(panes)}}}}}))
+elif a[:2] == ["workspace", "report-metadata"]:
+    with open({str(log)!r}, "a") as f:
+        f.write(json.dumps(a[2:]) + "\\n")
+""",
+        0o755,
+    )
+    env = {
+        **os.environ,
+        "PATH": f"{stub}:{os.environ['PATH']}",
+        "HERDR_BIN_PATH": str(stub / "herdr"),
+        "XDG_CACHE_HOME": str(tmp_path / "cache"),
+    }
+
+    def run() -> dict[str, dict[str, str | None]]:
+        log.unlink(missing_ok=True)
+        subprocess.run(["python3", str(REPORTER)], env=env, check=True, timeout=120)
+        reported = {}
+        for line in log.read_text().splitlines():
+            args = json.loads(line)
+            tokens = reported.setdefault(args[0], {})
+            for flag, value in zip(args[3::2], args[4::2]):
+                key, _, text = value.partition("=")
+                tokens[key] = text if flag == "--token" else None
+        return reported
+
+    return home, run
+
+
+def test_reporter_counts_from_a_fixture_home(fixture):
+    home, run = fixture
+    reported = run()
+    docs = reported["w1"]
+    res = docs.pop("res")
+    host = docs.pop("host")
+    assert docs == {
+        "short": "docs",
+        # 3 in the ledger, less the 2 of the second-level home with its own
+        # Space; the home without a live Space stays counted here.
+        "decisions": "⚑ 1",
+        "crew": "▶ 3",
+        "queue": "◷ 4",
+        "alert": BLANK * 2 + "⚠ watcher silent",
+    }
+    # Shares of the machine; CPU needs a baseline, so it waits for run two.
+    # The primary entry indents it to sit under the name, below the header.
+    assert re.fullmatch(BLANK * 2 + r"▤ \d+%  ⛁ \d+%", res)
+    # No workspace is labelled firstmate, so the first listed carries the
+    # whole-machine header, within the 42 columns Herdr shows on the first
+    # row of a Spaces entry at sidebar width 46.
+    size = r"[\d.]+/[\d.]+[GT] \d+%"
+    assert re.fullmatch(rf"⌂ ▤ {size}  ⛁ {size}", host) and len(host) <= 42
+    # A helper space shows its short name only; everything else is cleared.
+    assert reported["w2"] == {"short": "☾ afk"} | dict.fromkeys(spaces.TOKENS[1:])
+    # A space with no home is not the primary: CPU and RAM only, not indented.
+    assert reported["w3"]["res"].startswith("▤ ") and reported["w3"]["host"] is None
+
+    # Second run: CPU has a baseline now, a zero count is cleared, and a failed
+    # source keeps its previous value.
+    (home / "state/home-summary.json").unlink()
+    write(home / "bin/fm-supervision-lib.sh", "fm_supervision_unhealthy() { return 1; }\n")
+    docs = run()["w1"]
+    assert docs["decisions"] == "⚑ 1"
+    assert docs["alert"] is None
+    assert re.fullmatch(BLANK * 2 + r"⚙ \d+%  ▤ \d+%  ⛁ \d+%", docs["res"])
+    assert re.fullmatch(r"⌂ ⚙ \d+%  ▤ .+", docs["host"])
+
+
+def test_space_cpu_leaves_out_a_reaped_child(fixture):
+    # A worker in the docs space runs a 6-second build on one core. The reporter
+    # samples the build mid-way, then the worker reaps it: the next run counts
+    # only live processes' own time, never the build's lifetime again through
+    # the worker's child time.
+    _, run = fixture
+    busy = "import time\nt = time.time()\nwhile time.time() - t < 6: pass"
+    worker = subprocess.Popen(
+        [
+            "python3",
+            "-c",
+            f"import subprocess, sys, time; subprocess.run([sys.executable, '-c', {busy!r}]); print(flush=True); time.sleep(30)",
+        ],
+        env={**os.environ, "HERDR_WORKSPACE_ID": "w1"},
+        stdout=subprocess.PIPE,
+    )
+    try:
+        time.sleep(5)
+        run()
+        worker.stdout.readline()
+        res = run()["w1"]["res"]
+    finally:
+        worker.kill()
+        worker.wait()
+    assert int(re.search(r"⚙ (\d+)%", res)[1]) / 100 * os.cpu_count() < 1.5
+
+
+@pytest.mark.parametrize(("before", "share"), [(-(10**12), "100%"), (10**12, "0%")])
+def test_space_cpu_share_stays_within_0_and_100(fixture, tmp_path, before, share):
+    _, run = fixture
+    worker = subprocess.Popen(["sleep", "30"], env={**os.environ, "HERDR_WORKSPACE_ID": "w1"})
+    try:
+        cache = tmp_path / "cache/code-factory/herdr-spaces.json"
+        write(
+            cache,
+            json.dumps({"cpu": {"w1": {str(worker.pid): before}}, "cpu_at": time.time() - 10}),
+        )
+        res = run()["w1"]["res"]
+    finally:
+        worker.kill()
+        worker.wait()
+    assert re.search(r"⚙ (\d+%)", res)[1] == share
+
+
+@pytest.mark.parametrize(
+    ("used", "total", "fine", "text"),
+    [
+        (7.1, 7.8, True, "7.1/7.8G"),
+        (18.2, 31.0, True, "18.2/31.0G"),
+        (99.9, 99.9, True, "99.9/99.9G"),
+        (45.0, 93.1, False, "45/93G"),
+        (402, 937, False, "402/937G"),
+        (402, 937, True, "402/937G"),
+        (1433.6, 1945.6, False, "1.4/1.9T"),
+        (12288, 20480, True, "12/20T"),
+    ],
+)
+def test_machine_sizes_stay_short(used, total, fine, text):
+    assert spaces.used_of(used * 2**30, total * 2**30, fine) == text
+
+
+@pytest.mark.parametrize("ram", [9.96, 15.6, 31.0, 99.9, 999.6, 9.96 * 1024])
+@pytest.mark.parametrize("disk", [9.96, 93.1, 100.0, 999.0, 9.96 * 1024, 99 * 1024])
+def test_machine_header_fits_the_first_spaces_row(ram, disk):
+    # The 42 columns Herdr shows on the first row of a Spaces entry at sidebar
+    # width 46, with CPU at 100% and memory and disk at 99%.
+    mem = spaces.used_of(ram * 2**30, ram * 2**30, fine=True)
+    root = spaces.used_of(disk * 2**30, disk * 2**30)
+    assert len(f"⌂ ⚙ 100%  ▤ {mem} 99%  ⛁ {root} 99%") <= 42
+
+
+def test_reporter_waits_out_a_failed_disk_measurement(fixture, tmp_path):
+    _, run = fixture
+    calls = tmp_path / "du-calls"
+    write(tmp_path / "stub/du", f"#!/bin/sh\necho x >> {calls}\nexit 1\n", 0o755)
+    assert " ⛁ " not in run()["w1"]["res"]
+    assert " ⛁ " not in run()["w1"]["res"]
+    assert len(calls.read_text().splitlines()) == 1

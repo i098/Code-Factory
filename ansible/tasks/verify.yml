@@ -35,6 +35,10 @@
               factory_herdr_config,
               factory_user_units ~ '/herdr.service',
               factory_user_units ~ '/default.target.wants/herdr.service',
+              factory_herdr_spaces_script,
+              factory_user_units ~ '/herdr-spaces.service',
+              factory_user_units ~ '/herdr-spaces.timer',
+              factory_user_units ~ '/timers.target.wants/herdr-spaces.timer',
               factory_cfg.home ~ '/.profile']
              + ([factory_chrome_devtools_mcp_path, factory_omp_sidebar_extension]
                 if (factory_cfg.profiles.agents | bool) else [])
@@ -355,7 +359,7 @@
       become_user: "{{ factory_cfg.user }}"
       environment: "{{ factory_user_systemd_env }}"
       loop: >-
-        {{ ['herdr.service']
+        {{ ['herdr.service', 'herdr-spaces.timer']
            + (['chrome-autoprune.timer']
               if ((factory_cfg.profiles.agents | bool)
                   and (factory_cfg.browser_prune.enabled | bool)) else [])

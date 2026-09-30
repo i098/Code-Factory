@@ -19,21 +19,47 @@ factory:
     agent_panel_sort: spaces
     headless_cols: 120
     headless_rows: 40
-    # Agent sidebar layout; docs/herdr.md explains each line.
-    sidebar_width: 40
-    sidebar_max_width: 48
+    # Sidebar layouts; docs/herdr.md explains each line. The omp extension
+    # feeds the Agents $ tokens and the herdr-spaces reporter timer the Spaces
+    # ones.
+    sidebar_width: 46
+    sidebar_max_width: 56
     sidebar_agent_rows: |
       [
         [
           "state_icon",
-          { token = "$who", rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "2ndmate-", fg = "#cba6f7" }, { starts_with = "└", fg = "#94e2d5" }] },
+          { token = "$who", fg = "#cba6f7", rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "└", fg = "#94e2d5" }] },
         ],
         [
           { token = "state_icon", fg = "#1e1e2e" },
           { token = "terminal_title", dim = true },
         ],
         [
-          { token = "$refs", fg = "#89b4fa" },
+          { token = "$pr", fg = "#89b4fa" },
+          { token = "$issue", fg = "#cba6f7" },
+          { token = "$add", fg = "#a6e3a1" },
+          { token = "$del", fg = "#f38ba8" },
+          { token = "$files", fg = "#f9e2af" },
+        ],
+      ]
+    sidebar_space_rows: |
+      [
+        [
+          { token = "$host", dim = true },
+        ],
+        [
+          "state_icon",
+          { token = "$short", fg = "#cba6f7", rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "└", fg = "#94e2d5" }, { starts_with = "☾", fg = "#6c7086" }] },
+          { token = "workspace", dim = true, rules = [{ equals = "firstmate", hide = true }, { starts_with = "2ndmate-", hide = true }, { starts_with = "└", hide = true }, { contains = "-afk-daemon-", hide = true }] },
+          { token = "$decisions", fg = "#f38ba8", bold = true },
+          { token = "$crew", fg = "#a6e3a1" },
+          { token = "$queue", fg = "#f9e2af" },
+        ],
+        [
+          { token = "$res", dim = true },
+        ],
+        [
+          { token = "$alert", fg = "#fab387" },
         ],
       ]
     # Pinned to the catppuccin base so the hidden indent dot on line 2 blends
@@ -53,7 +79,7 @@ factory:
     worktree_pools:
       - .treehouse/swarms-platform-bcc5ea
   browsers:
-    obscura_version: '0.2.2'
+    obscura_version: "0.2.2"
     obscura_sha256: c1b4548e36549a0228c39c1cc842df425bc7253af2b0a56bd2a538d8ff7e3406
     idle_timeout_min: 30
   firstmate:
