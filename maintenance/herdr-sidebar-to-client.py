@@ -79,14 +79,16 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         sys.exit("usage: herdr-sidebar-to-client.py <host> [config-path]")
     local = os.path.expanduser(sys.argv[2] if len(sys.argv) > 2 else "~/.config/herdr/config.toml")
-    remote = subprocess.run(
+    ssh = subprocess.run(
         ["ssh", sys.argv[1], "cat .config/herdr/config.toml"],
-        check=True,
         capture_output=True,
         text=True,
-    ).stdout
-    merged = merge(open(local).read() if os.path.exists(local) else "", remote)
+    )
+    if ssh.returncode:
+        sys.exit(ssh.stderr.strip() or f"ssh {sys.argv[1]} failed with exit code {ssh.returncode}")
+    merged = merge(open(local).read() if os.path.exists(local) else "", ssh.stdout)
     if os.path.exists(local):
         shutil.copy2(local, f"{local}.bak-sidebar-{time.strftime('%Y%m%dT%H%M%S')}")
+    os.makedirs(os.path.dirname(local) or ".", exist_ok=True)
     open(local, "w").write(merged)
     print(f"sidebar layout written to {local}")

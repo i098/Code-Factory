@@ -504,3 +504,23 @@ def test_client_gets_the_host_sidebar_layout_and_keeps_its_own_settings(local):
         assert got["ui"]["agent_panel_sort"] == "spaces"
         assert got["theme"]["custom"]["accent"] == "#ffffff"
         assert got["keys"] == {"prefix": "ctrl+b"}
+
+
+def test_client_script_creates_the_config_dir_and_surfaces_ssh_errors(tmp_path):
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    (tmp_path / "host.toml").write_text(HOST_CONFIG)
+    ssh = stub / "ssh"
+    env = {**os.environ, "PATH": f"{stub}:{os.environ['PATH']}"}
+    target = tmp_path / "fresh" / "herdr" / "config.toml"
+    script = ["python3", str(ROOT / "maintenance" / "herdr-sidebar-to-client.py"), "host", str(target)]
+
+    ssh.write_text(f"#!/bin/sh\ncat {tmp_path / 'host.toml'}\n")
+    ssh.chmod(0o755)
+    subprocess.run(script, env=env, check=True, capture_output=True)
+    assert tomllib.loads(target.read_text())["ui"]["sidebar_width"] == 46
+
+    ssh.write_text("#!/bin/sh\necho 'ssh: Could not resolve hostname host' >&2\nexit 255\n")
+    failed = subprocess.run(script, env=env, capture_output=True, text=True)
+    assert failed.returncode == 1
+    assert failed.stderr == "ssh: Could not resolve hostname host\n"
