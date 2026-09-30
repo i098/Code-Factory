@@ -24,9 +24,10 @@ factory_lock_file: "{{ code_factory_repo }}/toolchain.lock.json"
 factory_pruner_source: "{{ code_factory_repo }}/maintenance/chrome-autoprune.py"
 factory_pruner_requirements: "{{ code_factory_repo }}/maintenance/requirements.txt"
 
-# herdr and omp track their latest release: tasks/preflight.yml resolves them
-# once per run into factory_latest, and that is what the run installs and
-# tasks/verify.yml asserts. Every other version comes from the reviewed lock.
+# Every tool except uv and the Rust toolchain tracks its latest release:
+# tasks/preflight.yml resolves them once per run into factory_latest, and that
+# is what the run installs and tasks/verify.yml asserts for herdr and omp.
+# uv and Rust come from the reviewed lock.
 factory_herdr_version: "{{ factory_latest.herdr.version }}"
 factory_omp_version: "{{ factory_latest.omp }}"
 

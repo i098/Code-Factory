@@ -8,9 +8,15 @@
     },
     "tools": {
       "type": "object",
-      "minProperties": 4,
+      "required": [
+        "uv",
+        "rustup-init"
+      ],
       "propertyNames": {
-        "pattern": "^[A-Za-z0-9_.-]+$"
+        "enum": [
+          "uv",
+          "rustup-init"
+        ]
       },
       "additionalProperties": {
         "type": "object",
@@ -113,13 +119,6 @@
         ]
       }
     },
-    "npm_required_tools": {
-      "type": "array",
-      "uniqueItems": true,
-      "items": {
-        "type": "string"
-      }
-    },
     "rust_toolchain": {
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
@@ -128,7 +127,6 @@
   "required": [
     "schema_version",
     "tools",
-    "npm_required_tools",
     "rust_toolchain"
   ]
 }

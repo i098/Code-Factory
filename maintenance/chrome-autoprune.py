@@ -34,16 +34,21 @@ import psutil
 
 HOME = Path.home()
 REGISTRY = HOME / ".chrome-devtools-axi"
-BRIDGE = (
-    HOME
-    / ".local/share/code-factory/npm/node_modules/chrome-devtools-axi/dist/bin/chrome-devtools-axi-bridge.js"
-)
+# chrome-devtools-axi tracks its latest release, one prefix per version:
+# <AXI_ROOT>/<version>/<BRIDGE>. Bridges from a superseded version stay prunable.
+AXI_ROOT = HOME / ".local/share/code-factory/chrome-devtools-axi"
+BRIDGE = Path("node_modules/chrome-devtools-axi/dist/bin/chrome-devtools-axi-bridge.js")
 DEFAULT_STATE = HOME / ".local/state/chrome-autoprune/state.json"
 UID = os.getuid()
 
 
 class Protected(Exception):
     pass
+
+
+def installed_bridge(path):
+    script, root = Path(path).resolve(), AXI_ROOT.resolve()
+    return script.is_relative_to(root) and script.relative_to(root).parts[1:] == BRIDGE.parts
 
 
 def owned_json(path):
@@ -73,11 +78,7 @@ def observe(name, path):
     if proc.uids().real != UID or proc.uids().effective != UID:
         raise Protected("different process owner")
     args = proc.cmdline()
-    if (
-        len(args) != 2
-        or Path(args[1]).resolve() != BRIDGE.resolve()
-        or Path(proc.exe()).name != "node"
-    ):
+    if len(args) != 2 or not installed_bridge(args[1]) or Path(proc.exe()).name != "node":
         raise Protected("not the installed AXI bridge")
     if os.getpgid(pid) != pid:
         raise Protected("bridge does not own its process group")

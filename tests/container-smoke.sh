@@ -212,9 +212,10 @@ lock_version() {
     jq -er --arg tool "$1" '.tools[$tool].version' "${CF_ROOT}/toolchain.lock.json"
 }
 
-# herdr and omp track their latest release. The installer records the release
-# it installed in RESOLVED_STAMP; checks compare against that record, so an
-# upstream release published after the build cannot turn them red.
+# Every tool except uv and the Rust toolchain tracks its latest release. The
+# installer records the releases it installed in RESOLVED_STAMP; checks compare
+# against that record, so an upstream release published after the build cannot
+# turn them red.
 RESOLVED_STAMP="${HOME}/.local/share/code-factory/resolved.json"
 resolved_version() {
     jq -er "$1" "${RESOLVED_STAMP}"
@@ -230,13 +231,13 @@ herdr_installed_bin() {
 # A second apply resolves upstream again and upgrades an image that upstream
 # has since overtaken; that is an upgrade, not a repeat change.
 image_is_current() {
-    local latest
+    local latest versions='map_values(.version? // .)'
     latest=$(python3 "${CF_ROOT}/scripts/install_tools.py" --lock "${CF_ROOT}/toolchain.lock.json" \
-        --home "${HOME}" --resolve) || fail "could not resolve the latest herdr and omp releases"
-    [ "$(jq -c '[.herdr.version, .omp]' <<<"${latest}")" = "$(jq -c '[.herdr.version, .omp]' "${RESOLVED_STAMP}")" ] \
+        --home "${HOME}" --resolve) || fail "could not resolve the latest releases"
+    [ "$(jq -cS "${versions}" <<<"${latest}")" = "$(jq -cS "${versions}" "${RESOLVED_STAMP}")" ] \
         && return 0
     printf 'image has %s but upstream now has %s; idempotence not measured\n' \
-        "$(jq -c '[.herdr.version, .omp]' "${RESOLVED_STAMP}")" "$(jq -c '[.herdr.version, .omp]' <<<"${latest}")"
+        "$(jq -cS "${versions}" "${RESOLVED_STAMP}")" "$(jq -cS "${versions}" <<<"${latest}")"
     return 1
 }
 
@@ -319,7 +320,7 @@ check_workspace() {
 }
 
 check_core_tools() {
-    local tool bin locked version
+    local tool bin expected version
     for tool in node bun uv; do
         bin="${HOME}/.local/bin/${tool}"
         [ -x "${bin}" ] || fail "missing managed launcher ${bin}"
@@ -327,36 +328,48 @@ check_core_tools() {
         version=$("${bin}" --version 2>&1) || fail "${tool} --version exited nonzero: ${version}"
         version=${version%%$'\n'*}
         [ -n "${version}" ] || fail "${tool} --version produced no output"
-        # An existing command is not enough: it must be the build the lock pins.
-        locked=$(lock_version "${tool}") || fail "toolchain.lock.json pins no version for ${tool}"
+        # An existing command is not enough: it must be the build the lock pins
+        # (uv) or the release the build resolved (node, bun).
+        if [ "${tool}" = uv ]; then
+            expected=$(lock_version uv) || fail "toolchain.lock.json pins no version for uv"
+        else
+            expected=$(resolved_version ".${tool}.version") || fail "${RESOLVED_STAMP} records no ${tool}"
+        fi
         case "${version}" in
-            *"${locked}"*) ;;
-            *) fail "${tool} reports '${version}' but the lock pins ${locked}" ;;
+            *"${expected}"*) ;;
+            *) fail "${tool} reports '${version}' but expected ${expected}" ;;
         esac
-        printf '%-6s %-32s (lock %s)\n' "${tool}" "${version}" "${locked}"
+        printf '%-6s %-32s (expected %s)\n' "${tool}" "${version}" "${expected}"
     done
 }
 
-# The installed herdr and omp are exactly the releases the build resolved and
-# recorded in RESOLVED_STAMP.
+# The installed herdr, gh, no-mistakes, treehouse, omp and AXI tools are exactly
+# the releases the build resolved and recorded in RESOLVED_STAMP.
 check_resolved_releases() {
-    local herdr omp banner prefix
+    local tool version banner package prefix
     [ -f "${RESOLVED_STAMP}" ] || fail "installer wrote no ${RESOLVED_STAMP}"
-    herdr=$(resolved_version .herdr.version)
-    omp=$(resolved_version .omp)
-    banner=$("${HOME}/.local/bin/herdr" --version 2>&1) || fail "herdr --version exited nonzero: ${banner}"
-    case "${banner%%$'\n'*}" in
-        *"${herdr}"*) ;;
-        *) fail "herdr reports '${banner%%$'\n'*}' but the build resolved ${herdr}" ;;
-    esac
-    prefix="${HOME}/.local/share/code-factory/omp/${omp}"
-    case "$(readlink -f "${HOME}/.local/bin/omp")" in
-        "${prefix}"/*) ;;
-        *) fail "omp resolves to $(readlink -f "${HOME}/.local/bin/omp"), expected the resolved release under ${prefix}" ;;
-    esac
-    [ "$(jq -r .version "${prefix}/node_modules/@oh-my-pi/pi-coding-agent/package.json")" = "${omp}" ] \
-        || fail "omp under ${prefix} is not version ${omp}"
-    printf 'herdr %s and omp %s match %s\n' "${herdr}" "${omp}" "${RESOLVED_STAMP}"
+    for tool in herdr gh no-mistakes treehouse; do
+        version=$(resolved_version ".\"${tool}\".version")
+        banner=$("${HOME}/.local/bin/${tool}" --version 2>&1) || fail "${tool} --version exited nonzero: ${banner}"
+        case "${banner%%$'\n'*}" in
+            *"${version}"*) ;;
+            *) fail "${tool} reports '${banner%%$'\n'*}' but the build resolved ${version}" ;;
+        esac
+        printf '%s %s\n' "${tool}" "${version}"
+    done
+    for tool in omp:@oh-my-pi/pi-coding-agent chrome-devtools-axi gh-axi lavish-axi quota-axi tasks-axi; do
+        package=${tool#*:}; tool=${tool%%:*}
+        version=$(resolved_version ".\"${tool}\"")
+        prefix="${HOME}/.local/share/code-factory/${tool}/${version}"
+        case "$(readlink -f "${HOME}/.local/bin/${tool}")" in
+            "${prefix}"/*) ;;
+            *) fail "${tool} resolves to $(readlink -f "${HOME}/.local/bin/${tool}"), expected the resolved release under ${prefix}" ;;
+        esac
+        [ "$(jq -r .version "${prefix}/node_modules/${package}/package.json")" = "${version}" ] \
+            || fail "${tool} under ${prefix} is not version ${version}"
+        printf '%s %s\n' "${tool}" "${version}"
+    done
+    printf 'installed releases match %s\n' "${RESOLVED_STAMP}"
 }
 
 check_herdr_install_layout() {
@@ -740,10 +753,10 @@ check_login_shell_environment() {
 # What the no-mistakes gate and the PR review need on a fresh host: acp:omp as
 # the gate agent with acpx mapping omp to `omp acp`, no omp registry override,
 # ponytail-review's exit codes against a stub omp, and the fleet's minimum AXI
-# versions. Versions come from the installed package.json, so no agent CLI is executed.
+# versions. Versions come from RESOLVED_STAMP, which resolved-releases matched against
+# the installed package.json, so no agent CLI is executed.
 check_agent_gate() {
-    local npm_root name floor version stub row want omp_rc omp_out rc
-    npm_root="${HOME}/.local/share/code-factory/npm"
+    local name floor version stub row want omp_rc omp_out rc
     cf_python -c 'import sys, yaml; c = yaml.safe_load(open(sys.argv[1])); assert c["agent"] == ["acp:omp"] and "acp_registry_overrides" not in c' \
         "${HOME}/.no-mistakes/config.yaml" || fail "~/.no-mistakes/config.yaml does not make acp:omp the gate agent"
     jq -e '.agents.omp.command == "omp acp"' "${HOME}/.acpx/config.json" >/dev/null || fail "~/.acpx/config.json does not map omp to omp acp"
@@ -773,7 +786,7 @@ check_agent_gate() {
     trap - EXIT
     for name in quota-axi:0.1.54 tasks-axi:0.2.6; do
         floor=${name#*:}; name=${name%%:*}
-        version=$(jq -r .version "${npm_root}/node_modules/${name}/package.json")
+        version=$(resolved_version ".\"${name}\"")
         printf '%s\n%s\n' "${floor}" "${version}" | sort -C -V || fail "${name} ${version} is below the fleet floor ${floor}"
         printf '%s %s (floor %s)\n' "${name}" "${version}" "${floor}"
     done

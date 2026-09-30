@@ -1,6 +1,6 @@
 ---
 # Toolchain, installed by the repository installer as the target user: the
-# lock's pins plus the herdr and omp releases tasks/preflight.yml resolved.
+# lock's pins plus the latest releases tasks/preflight.yml resolved.
 #
 # Contract: python3 <repo>/scripts/install_tools.py --lock <repo>/toolchain.lock.json
 #           --home <factory.home> --tools herdr,node,bun,uv [--npm] [--development]
@@ -35,7 +35,7 @@
       if (factory_cfg.profiles.agents | bool) else '' }}.
   when: ansible_check_mode
 
-- name: Install the pinned toolchain as the target user
+- name: Install the toolchain as the target user
   ansible.builtin.command:
     argv: "{{ factory_installer_argv }}"
     chdir: "{{ code_factory_repo }}"

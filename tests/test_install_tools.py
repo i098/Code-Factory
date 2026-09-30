@@ -96,50 +96,89 @@ def test_download_rejects_plain_http(tmp_path):
         installer.download("http://example.test/tool", "0" * 64, tmp_path / "download")
 
 
-def release(digest):
-    asset = {
-        "name": "herdr-linux-x86_64",
-        "browser_download_url": "https://github.com/herdrdev/herdr/releases/download/v9.9.9/herdr-linux-x86_64",
-        "digest": digest,
-    }
-    return {"tag_name": "v9.9.9", "assets": [asset]}
+# What each fake GitHub release publishes for linux-x86_64: tag and asset name.
+RELEASES = {
+    "herdrdev/herdr": ("v9.9.9", "herdr-linux-x86_64"),
+    "oven-sh/bun": ("bun-v9.9.9", "bun-linux-x64-baseline.zip"),
+    "cli/cli": ("v9.9.9", "gh_9.9.9_linux_amd64.tar.gz"),
+    "kunchenguid/no-mistakes": ("v9.9.9", "no-mistakes-v9.9.9-linux-amd64.tar.gz"),
+    "kunchenguid/treehouse": ("v9.9.9", "treehouse-v9.9.9-linux-amd64.tar.gz"),
+}
 
 
-def registries(monkeypatch, herdr_release):
-    def urlopen(url, **kwargs):
-        url = getattr(url, "full_url", url)
-        body = herdr_release if url == installer.HERDR_LATEST else {"version": "18.9.9"}
+def upstream(monkeypatch, unverified=None, seen=None):
+    """Fake GitHub, nodejs.org and npm; `unverified` publishes no SHA-256 for that source."""
+
+    def urlopen(request, **kwargs):
+        url = request.full_url
+        if seen is not None:
+            seen.append((url, request.get_header("Authorization")))
+        if url.startswith("https://api.github.com/repos/"):
+            repo = url.removeprefix("https://api.github.com/repos/").removesuffix(
+                "/releases/latest"
+            )
+            tag, name = RELEASES[repo]
+            digest = None if repo == unverified else "sha256:" + "a" * 64
+            asset = {
+                "name": name,
+                "browser_download_url": f"https://github.com/{name}",
+                "digest": digest,
+            }
+            body = {"tag_name": tag, "assets": [asset]}
+        elif url == "https://nodejs.org/dist/index.json":
+            body = [{"version": "v9.99.0"}, {"version": "v30.1.0"}]
+        elif url == "https://nodejs.org/dist/v30.1.0/SHASUMS256.txt":
+            sums = "" if unverified == "node" else "b" * 64 + "  node-v30.1.0-linux-x64.tar.xz\n"
+            return io.BytesIO(("c" * 64 + "  node-v30.1.0-linux-arm64.tar.xz\n" + sums).encode())
+        else:
+            body = {"version": "18.9.9"}
         return io.BytesIO(json.dumps(body).encode())
 
     monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
 
 
-def test_latest_herdr_is_pinned_to_the_digest_its_release_publishes(monkeypatch):
-    registries(monkeypatch, release("sha256:" + "a" * 64))
+def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeypatch):
+    upstream(monkeypatch)
     latest = installer.resolve_latest("linux-x86_64")
-    assert latest["omp"] == "18.9.9"
-    assert latest["herdr"]["version"] == "9.9.9"
-    assert latest["herdr"]["assets"]["linux-x86_64"]["sha256"] == "a" * 64
+    for tool in ("herdr", "bun", "gh", "no-mistakes", "treehouse"):
+        assert latest[tool]["version"] == "9.9.9"
+        assert latest[tool]["assets"]["linux-x86_64"]["sha256"] == "a" * 64
+    assert latest["gh"]["assets"]["linux-x86_64"]["format"] == "tar"
+    assert latest["bun"]["assets"]["linux-x86_64"]["format"] == "zip"
+    # The newest Node release, not the first index entry, verified by SHASUMS256.
+    node = latest["node"]["assets"]["linux-x86_64"]
+    assert latest["node"]["version"] == "30.1.0"
+    assert node["url"] == "https://nodejs.org/dist/v30.1.0/node-v30.1.0-linux-x64.tar.xz"
+    assert node["sha256"] == "b" * 64
+    for tool in ("omp", "chrome-devtools-axi", "gh-axi", "lavish-axi", "quota-axi", "tasks-axi"):
+        assert latest[tool] == "18.9.9"
 
 
-@pytest.mark.parametrize("digest", [None, "", "md5:abc"])
-def test_herdr_release_without_a_checksum_is_refused(monkeypatch, digest):
-    registries(monkeypatch, release(digest))
+@pytest.mark.parametrize("source", [*RELEASES, "node"])
+def test_release_without_a_published_checksum_is_refused(monkeypatch, source):
+    upstream(monkeypatch, unverified=source)
     with pytest.raises(ValueError, match="refusing an unverified binary"):
         installer.resolve_latest("linux-x86_64")
 
 
 @pytest.mark.parametrize(("env", "expected"), [("env-token", "Bearer env-token"), ("", None)])
-def test_herdr_lookup_authenticates_with_github_token_else_anonymous(monkeypatch, env, expected):
+def test_github_token_goes_only_to_the_github_api(monkeypatch, env, expected):
     seen = []
-
-    def urlopen(url, **kwargs):
-        if getattr(url, "full_url", url) == installer.HERDR_LATEST:
-            seen.append(url.get_header("Authorization"))
-            return io.BytesIO(json.dumps(release("sha256:" + "a" * 64)).encode())
-        return io.BytesIO(json.dumps({"version": "18.9.9"}).encode())
-
     monkeypatch.setenv("GITHUB_TOKEN", env)
-    monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
+    upstream(monkeypatch, seen=seen)
     installer.resolve_latest("linux-x86_64")
-    assert seen == [expected]
+    github = {auth for url, auth in seen if url.startswith("https://api.github.com/")}
+    assert github == {expected}
+    assert {auth for url, auth in seen if not url.startswith("https://api.github.com/")} == {None}
+
+
+def test_commands_of_removed_packages_are_unlinked_but_user_links_kept(tmp_path):
+    bin_dir = tmp_path / ".local/bin"
+    bin_dir.mkdir(parents=True)
+    managed = bin_dir / "codex"
+    managed.symlink_to(tmp_path / ".local/share/code-factory/npm/node_modules/gone/bin.js")
+    user = bin_dir / "mine"
+    user.symlink_to(tmp_path / "elsewhere/gone")
+    assert installer.prune_dangling_links(tmp_path)
+    assert not managed.is_symlink()
+    assert user.is_symlink()

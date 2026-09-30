@@ -1,52 +1,6 @@
 {
   "schema_version": 1,
   "tools": {
-    "node": {
-      "version": "24.19.0",
-      "assets": {
-        "linux-x86_64": {
-          "url": "https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-x64.tar.xz",
-          "sha256": "14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647",
-          "format": "tar",
-          "binaries": {
-            "node": "node-v24.19.0-linux-x64/bin/node",
-            "npm": "node-v24.19.0-linux-x64/bin/npm",
-            "npx": "node-v24.19.0-linux-x64/bin/npx"
-          }
-        },
-        "linux-aarch64": {
-          "url": "https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-arm64.tar.xz",
-          "sha256": "01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc",
-          "format": "tar",
-          "binaries": {
-            "node": "node-v24.19.0-linux-arm64/bin/node",
-            "npm": "node-v24.19.0-linux-arm64/bin/npm",
-            "npx": "node-v24.19.0-linux-arm64/bin/npx"
-          }
-        }
-      }
-    },
-    "bun": {
-      "version": "1.4.0",
-      "assets": {
-        "linux-x86_64": {
-          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-x64-baseline.zip",
-          "sha256": "184fb4595f0d401a217cf7c78c1bc430ba83314dab7a8b94805babbf7fa7097f",
-          "format": "zip",
-          "binaries": {
-            "bun": "bun-linux-x64-baseline/bun"
-          }
-        },
-        "linux-aarch64": {
-          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-aarch64.zip",
-          "sha256": "4b1a332ee861983eb93bcfe6f770fff94e3e31b2c388bdaea3c8ed35e58eed0e",
-          "format": "zip",
-          "binaries": {
-            "bun": "bun-linux-aarch64/bun"
-          }
-        }
-      }
-    },
     "uv": {
       "version": "0.12.5",
       "assets": {
@@ -66,69 +20,6 @@
           "binaries": {
             "uv": "uv-aarch64-unknown-linux-gnu/uv",
             "uvx": "uv-aarch64-unknown-linux-gnu/uvx"
-          }
-        }
-      }
-    },
-    "gh": {
-      "version": "2.97.0",
-      "assets": {
-        "linux-x86_64": {
-          "url": "https://github.com/cli/cli/releases/download/v2.97.0/gh_2.97.0_linux_amd64.tar.gz",
-          "sha256": "a2c9b8497e1f85b1ad0dfcb78b5a622e098801b8e461e459e88e1ee12f018112",
-          "format": "tar",
-          "binaries": {
-            "gh": "gh_2.97.0_linux_amd64/bin/gh"
-          }
-        },
-        "linux-aarch64": {
-          "url": "https://github.com/cli/cli/releases/download/v2.97.0/gh_2.97.0_linux_arm64.tar.gz",
-          "sha256": "73ea440ecad9c9e284429997ee6f93577bc6f7bc6fba357ef62c53ad8fb641a5",
-          "format": "tar",
-          "binaries": {
-            "gh": "gh_2.97.0_linux_arm64/bin/gh"
-          }
-        }
-      }
-    },
-    "no-mistakes": {
-      "version": "1.79.0",
-      "assets": {
-        "linux-x86_64": {
-          "url": "https://github.com/kunchenguid/no-mistakes/releases/download/v1.79.0/no-mistakes-v1.79.0-linux-amd64.tar.gz",
-          "sha256": "d178c8a5134763b8e5f6d82545a3a76285fbbcdc13d09020d1091ec80a3f8da6",
-          "format": "tar",
-          "binaries": {
-            "no-mistakes": "no-mistakes"
-          }
-        },
-        "linux-aarch64": {
-          "url": "https://github.com/kunchenguid/no-mistakes/releases/download/v1.79.0/no-mistakes-v1.79.0-linux-arm64.tar.gz",
-          "sha256": "eac3f8e494c7d2487594b7eb513e605e59588be4ce147390b8fd184a7e6a8b05",
-          "format": "tar",
-          "binaries": {
-            "no-mistakes": "no-mistakes"
-          }
-        }
-      }
-    },
-    "treehouse": {
-      "version": "2.1.1",
-      "assets": {
-        "linux-x86_64": {
-          "url": "https://github.com/kunchenguid/treehouse/releases/download/v2.1.1/treehouse-v2.1.1-linux-amd64.tar.gz",
-          "sha256": "2fe3e01220ae51a967c3e5ba6ccf10ec83bdbae8e420368d194285a8d04c9ef8",
-          "format": "tar",
-          "binaries": {
-            "treehouse": "treehouse"
-          }
-        },
-        "linux-aarch64": {
-          "url": "https://github.com/kunchenguid/treehouse/releases/download/v2.1.1/treehouse-v2.1.1-linux-arm64.tar.gz",
-          "sha256": "980367c0233274eb3181a19a2ca8ec69d09b4a588ba27367937d336f9a2c938e",
-          "format": "tar",
-          "binaries": {
-            "treehouse": "treehouse"
           }
         }
       }
@@ -155,10 +46,5 @@
       }
     }
   },
-  "npm_required_tools": [
-    "gh",
-    "no-mistakes",
-    "treehouse"
-  ],
   "rust_toolchain": "1.97.1"
 }

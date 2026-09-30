@@ -1,6 +1,6 @@
 # ⚡ Code Factory
 
-Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, and the omp agent fleet, provisioned by Ansible from a pinned, checksum-locked toolchain. No Nix, no chezmoi, no cloud dependencies.
+Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, and the omp agent fleet, provisioned by Ansible from a checksum-verified toolchain. No Nix, no chezmoi, no cloud dependencies.
 
 ```mermaid
 flowchart TD
@@ -8,7 +8,7 @@ flowchart TD
     boot --> init["./factory init: writes .local/host.yml"]
     init --> check["./factory validate, then plan"]
     check --> apply["./factory apply"]
-    lock["toolchain.lock.json: sha256-pinned tools"] --> apply
+    lock["toolchain: latest releases, checksum-verified"] --> apply
     apply --> profiles["Ansible profiles"]
     subgraph host["Finished host"]
         herdr["Herdr workspace"]
@@ -80,7 +80,7 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 | Doc | What it covers |
 | --- | --- |
 | [Configuration](docs/configuration.md) | `.local/host.yml`, the `./factory` commands, and what each profile installs |
-| [Dependencies](docs/dependencies.md) | Every pinned tool, package, and image, and what the host must already have |
+| [Dependencies](docs/dependencies.md) | Every tool, package, and image, pinned or latest, and what the host must already have |
 | [Fleet guards](docs/fleet-guards.md) | Shared Supabase, Docker guard, dev-server reaper, storage guard, spawn memory floor, browser ladder |
 | [Herdr sidebar](docs/herdr.md) | The Spaces and Agents sidebar layouts, what each line and token shows, the reporter timer and omp extension that feed them, and how to override them or turn parts off |
 | [omp configuration](docs/omp.md) | Signing in, model roles, fallbacks, the advisor, and updating an existing host |

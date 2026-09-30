@@ -10,8 +10,8 @@ Code Factory is an Ansible playbook with a Python CLI wrapper (`scripts/factory.
 - `ansible/tasks/*.yml` — the tasks themselves (one file per concern)
 - `ansible/templates/*.j2` — systemd unit templates
 - `scripts/factory.py` — CLI (`init`, `validate`, `plan`, `apply`, `doctor`)
-- `scripts/install_tools.py` — pinned binary installer (idempotent)
-- `toolchain.lock.json` — every binary, every version, every sha256
+- `scripts/install_tools.py` — checksum-verified tool installer (idempotent)
+- `toolchain.lock.json` — the pinned tools (uv, rustup-init, Rust): version, URL, sha256
 - `fleet/` — runtime scripts deployed to `~/oss-fleet/` on the target host
 - `config/` — per-tool config templates deployed to Firstmate homes
 
@@ -21,7 +21,7 @@ Every task is idempotent; a second unchanged `apply` reports `changed=0`.
 
 Every task is check-mode safe: `plan` (Ansible `--check`) previews without mutating.
 
-Every binary is sha256-pinned in `toolchain.lock.json`. No floating `@latest` tags. Exceptions by design: herdr and omp track their latest release, resolved once per apply (herdr is verified against the SHA-256 its release publishes), and `verify.yml` asserts the resolved version is the installed one.
+Only uv, rustup-init and the Rust toolchain are pinned in `toolchain.lock.json`. Every other tool tracks its latest release, resolved once per apply: native assets are verified against the SHA-256 their publisher lists for that release and refused without one, npm tools install the exact resolved version. The installer records what it resolved in `~/.local/share/code-factory/resolved.json`.
 
 No unconditional restarts, daemon-reloads, or bare commands.
 
@@ -48,7 +48,7 @@ uv run ansible-playbook -i ansible/inventory.yml ansible/site.yml --syntax-check
 
 ## Adding a new tool
 
-1. Add the release asset to `toolchain.lock.json` with the correct `format` (`file` or `tar`), sha256, URL, and `binaries` map.
+1. Pin it in `toolchain.lock.json` with the correct `format` (`file`, `tar` or `zip`), sha256, URL, and `binaries` map, and allow its name in `schemas/toolchain.schema.json`. A tool that tracks its latest release goes in `GITHUB_LATEST` or `NPM_LATEST` in `scripts/install_tools.py` instead.
 2. Add the tool name to `factory_core_tools` in `group_vars/all.yml` (or a profile-gated list).
 3. If it needs a systemd unit, add a `.j2` template in `ansible/templates/` and wire it in the relevant task file.
 4. If it needs environment variables, add them to `group_vars/all.yml` (not to shell rc files).

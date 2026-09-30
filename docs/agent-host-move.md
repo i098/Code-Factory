@@ -27,7 +27,7 @@ Services that hold state other hosts share, such as a model relay, a monitoring 
 
 | Item | How it moves |
 | --- | --- |
-| omp, Codex, gh and other CLI logins | Sign in again on the new host: [Sign in](omp.md#sign-in), `gh auth login`. Never copy a credential store ([Security](security.md)). |
+| omp, gh and other CLI logins | Sign in again on the new host: [Sign in](omp.md#sign-in), `gh auth login`. Never copy a credential store ([Security](security.md)). |
 | Fleet-browser web sessions | Sign in again on the new host through the fleet-browser VNC tier: run `~/oss-fleet/browsers/fleet-browser up vnc`, then open noVNC at `http://127.0.0.1:6909/vnc.html?autoconnect=1` over an SSH tunnel (`ssh -L 6909:127.0.0.1:6909 <host>`). `cookie-sync` then shares that session with every tier ([Browser ladder](fleet-guards.md#browser-ladder)). Sign in to Google by hand in the VNC tier; `cookie-sync` keeps Google cookies in that tier only. |
 | Each home's `.env` | Enter it by hand on the new host, in a file with mode `600`. |
 | Project clones with unpushed commits | List them on the old host with the loop below. Push each branch to its fork, except branches the [Warnings](#warnings) exclude. |

@@ -56,7 +56,7 @@ Never upload a raw failed HTTP request to a public issue or this repository. Suc
 
 ## Drift and upgrades
 
-Run `./factory plan` before applying changed pins. herdr and omp are not pinned: every apply upgrades them to their latest release, and a herdr upgrade restarts `herdr.service`. An unmanaged executable at a managed command path is a refusal, not permission to overwrite it. Firstmate refuses dirty or independently advanced checkouts. Preserve that work and decide whether to update the configuration's pin or move to a separate clean checkout.
+Run `./factory plan` before applying changed pins. Only uv and the Rust toolchain are pinned: every apply upgrades every other tool to its latest release, and a herdr upgrade restarts `herdr.service`. An unmanaged executable at a managed command path is a refusal, not permission to overwrite it. Firstmate refuses dirty or independently advanced checkouts. Preserve that work and decide whether to update the configuration's pin or move to a separate clean checkout.
 
 Existing OMP settings are first-write-only: provisioning will not replace provider configuration or credentials on a reused account. Review and merge the exported safe preferences manually if deliberately updating an established account.
 

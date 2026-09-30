@@ -39,7 +39,7 @@
     # the account work and skips what it cannot preview, instead of failing on
     # an owner that cannot be looked up. On a real apply the account exists by
     # this point and nothing is skipped.
-    - name: Pinned toolchain via the repository installer
+    - name: Toolchain via the repository installer
       ansible.builtin.import_tasks: tasks/tools.yml
       become: "{{ factory_become_target | bool }}"
       become_user: "{{ factory_cfg.user }}"

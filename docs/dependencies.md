@@ -13,23 +13,29 @@ Everything the recipe installs, grouped by the file that pins it. A version appe
 
 `toolchain.lock.json`, installed by `scripts/install_tools.py`. Every archive is sha256-locked and linked into `~/.local/bin`.
 
-- Always: node 24.19.0, bun 1.4.0, uv 0.12.5.
-- `agents` profile: gh 2.97.0, no-mistakes 1.79.0, treehouse 2.1.1.
+- Always: uv 0.12.5.
 - `development` profile: rustup-init 1.29.0, installing Rust 1.97.1 (minimal profile + rustfmt + clippy).
 
 ## Latest releases
 
-Not pinned: every `./factory apply` resolves the newest release, installs exactly that, and `ansible/tasks/verify.yml` asserts the installed version equals the one the run resolved, so re-running apply upgrades an existing host. The installer records the releases it installed in `~/.local/share/code-factory/resolved.json`, which the container smoke compares against.
+Not pinned: every `./factory apply` resolves the newest release once and installs exactly that, so re-running apply upgrades an existing host. The installer records the releases it installed in `~/.local/share/code-factory/resolved.json`, which the container smoke compares against; `ansible/tasks/verify.yml` also asserts that the herdr service and omp run the resolved releases.
 
-- Always: herdr, the latest [herdrdev/herdr release](https://github.com/herdrdev/herdr/releases/latest), verified against the SHA-256 the release publishes for the platform asset. A release that publishes no checksum fails the apply instead of installing an unverified binary. The lookup uses the GitHub API, which allows 60 unauthenticated requests an hour per IP (shared IPs such as CI runners exhaust it). The lookup authenticates with `GITHUB_TOKEN` from the environment that runs `./factory apply`, else runs unauthenticated. Container builds take the token as the optional BuildKit secret `github_token` (`docker build --secret id=github_token,env=GITHUB_TOKEN ...`), so it never lands in the image. An upgrade rewrites and restarts `herdr.service`.
-- `agents` profile: omp (`@oh-my-pi/pi-coding-agent`), the npm registry's `latest` version, installed with `npm install` into `~/.local/share/code-factory/omp/<version>` (npm checks the registry integrity). Superseded versions stay on disk.
+Native tools, linked into `~/.local/bin`. Each asset is verified against the SHA-256 its publisher lists for that exact release; a release that lists none fails the apply instead of installing an unverified binary.
+
+- Always: herdr ([herdrdev/herdr](https://github.com/herdrdev/herdr/releases/latest)), bun ([oven-sh/bun](https://github.com/oven-sh/bun/releases/latest), the x64 `baseline` build), verified against the GitHub release-asset digest. A herdr upgrade rewrites and restarts `herdr.service`.
+- Always: node, the newest release in the [nodejs.org index](https://nodejs.org/dist/index.json) (not the LTS line), verified against that release's `SHASUMS256.txt`.
+- `agents` profile: gh ([cli/cli](https://github.com/cli/cli/releases/latest)), no-mistakes ([kunchenguid/no-mistakes](https://github.com/kunchenguid/no-mistakes/releases/latest)), treehouse ([kunchenguid/treehouse](https://github.com/kunchenguid/treehouse/releases/latest)), verified against the GitHub release-asset digest.
+
+The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests an hour per IP (shared IPs such as CI runners exhaust it); one apply makes five. The lookups authenticate with `GITHUB_TOKEN` from the environment that runs `./factory apply`, else run unauthenticated; the token is sent to the GitHub API only. Container builds take the token as the optional BuildKit secret `github_token` (`docker build --secret id=github_token,env=GITHUB_TOKEN ...`), so it never lands in the image.
+
+npm tools, `agents` profile: the npm registry's `latest` version of omp (`@oh-my-pi/pi-coding-agent`), chrome-devtools-axi, gh-axi, lavish-axi, quota-axi, and tasks-axi, each installed with `npm install` into `~/.local/share/code-factory/<tool>/<version>` (npm checks the registry integrity). Superseded versions stay on disk. The fleet requires at least quota-axi 0.1.54 and tasks-axi 0.2.6.
 
 ## Agent CLIs
 
 `tools/npm/package.json`, installed with `npm ci` from `tools/npm/package-lock.json` under the `agents` profile.
 
-- codex (`@openai/codex`) 0.147.0, pnpm 10.33.2, acpx 0.18.0 (runs the no-mistakes gate agent `acp:omp`).
-- chrome-devtools-axi 0.1.29, chrome-devtools-mcp 1.9.0, gh-axi 0.1.30, lavish-axi 0.1.52, quota-axi 0.1.54, tasks-axi 0.2.6. The fleet requires at least quota-axi 0.1.54 and tasks-axi 0.2.6.
+- acpx 0.18.0 (runs the no-mistakes gate agent `acp:omp`).
+- chrome-devtools-mcp 1.9.0 (the MCP build chrome-devtools-axi launches through `CHROME_DEVTOOLS_AXI_MCP_PATH`).
 
 ## Ubuntu packages
 
@@ -73,7 +79,7 @@ Not pinned: every `./factory apply` resolves the newest release, installs exactl
 The recipe never installs these. The base requirements (Ubuntu, sudo, Python, `git`, `gh`) are in the [Quick start](../README.md#quick-start). Notes on those:
 
 - `bootstrap.sh` refuses to run without Python 3.12+.
-- The recipe installs gh 2.97.0 later, under `agents`; the Quick start needs an authenticated `gh` before that.
+- The recipe installs the latest gh later, under `agents`; the Quick start needs an authenticated `gh` before that.
 
 Also needed, depending on profile:
 
