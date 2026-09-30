@@ -91,8 +91,8 @@ export default function (pi) {
 			const original = ui.setStatus.bind(ui);
 			ui.setStatus = (key: string, text?: string) => {
 				if (!OWNED.has(key)) return original(key, text);
-				// ponytail shows "○" while its ruleset is not yet in context; count that as off.
-				on[key] = Boolean(text) && !(key === "ponytail" && /○/.test(text));
+				// Plugins send "" (or nothing) only when the mode is off; ponytail's "○" just means idle.
+				on[key] = Boolean(text);
 				original(key, undefined);
 				render(original);
 			};

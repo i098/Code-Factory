@@ -47,7 +47,13 @@ def test_off_modes_are_not_shown_and_on_modes_are(tmp_path):
     assert ADHD not in shown
 
     (tmp_path / ".claude/.caveman-active").write_text("on\n")
-    shown = row(tmp_path, {"ponytail": "🐴 ponytail: ○", "i-have-adhd": "● ADHD ON"})
+    shown = row(tmp_path, {"ponytail": "", "i-have-adhd": "● ADHD ON"})
     assert CAVEMAN in shown
     assert ADHD in shown
     assert PONYTAIL not in shown
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_ponytail_stays_shown_while_idle(tmp_path):
+    # ponytail FULL shows "○" between turns; only mode off sends "".
+    assert PONYTAIL in row(tmp_path, {"ponytail": "🐴 ponytail: ○"})
