@@ -116,7 +116,10 @@ def fixture(tmp_path):
     write(home / "state/gone-mate-g1.meta", "kind=secondmate\nherdr_workspace_id=w9\n")
     write(home / "state/docs-mate-d1.status", "")
     write(home / "state/gone-mate-g1.status", "")
-    write(home / "bin/fm-classify-lib.sh", "status_open_decisions() { printf 'a\\tneeds-decision\\tx\\nb\\tblocked\\ty\\n'; }\n")
+    write(
+        home / "bin/fm-classify-lib.sh",
+        "status_open_decisions() { printf 'a\\tneeds-decision\\tx\\nb\\tblocked\\ty\\n'; }\n",
+    )
     write(home / "bin/fm-tasks-axi.sh", "#!/bin/sh\n[ \"$1\" = ready ] && echo 'count: 4'\n", 0o755)
     write(home / "bin/fm-supervision-lib.sh", "fm_supervision_unhealthy() { return 0; }\n")
 

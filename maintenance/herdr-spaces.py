@@ -181,7 +181,7 @@ def pct(part: float, whole: float) -> str:
 
 
 def used_of(used: float, total: float) -> str:
-    """"7.1/7.8G", "18/31G", "1.4/1.9T": one decimal only under 10 of the unit
+    """ "7.1/7.8G", "18/31G", "1.4/1.9T": one decimal only under 10 of the unit
     and T from 1000G, so it never passes 8 columns and the header fits in the
     42 columns Herdr shows on a Spaces row at sidebar width 46."""
     size, unit = (2**30, "G") if total < 999.5 * 2**30 else (2**40, "T")
