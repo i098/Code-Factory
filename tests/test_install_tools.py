@@ -129,11 +129,8 @@ def test_herdr_release_without_a_checksum_is_refused(monkeypatch, digest):
         installer.resolve_latest("linux-x86_64")
 
 
-@pytest.mark.parametrize(
-    ("env", "gh", "expected"),
-    [("env-token", "gh-token", "Bearer env-token"), ("", "gh-token", "Bearer gh-token"), ("", None, None)],
-)
-def test_herdr_lookup_authenticates_with_env_then_gh_then_anonymous(monkeypatch, env, gh, expected):
+@pytest.mark.parametrize(("env", "expected"), [("env-token", "Bearer env-token"), ("", None)])
+def test_herdr_lookup_authenticates_with_github_token_else_anonymous(monkeypatch, env, expected):
     seen = []
 
     def urlopen(url, **kwargs):
@@ -142,14 +139,7 @@ def test_herdr_lookup_authenticates_with_env_then_gh_then_anonymous(monkeypatch,
             return io.BytesIO(json.dumps(release("sha256:" + "a" * 64)).encode())
         return io.BytesIO(json.dumps({"version": "18.9.9"}).encode())
 
-    def run(argv, **kwargs):
-        assert argv == ["gh", "auth", "token"]
-        if gh is None:
-            raise FileNotFoundError("gh")
-        return installer.subprocess.CompletedProcess(argv, 0, stdout=gh + "\n")
-
     monkeypatch.setenv("GITHUB_TOKEN", env)
     monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
-    monkeypatch.setattr(installer.subprocess, "run", run)
     installer.resolve_latest("linux-x86_64")
     assert seen == [expected]
