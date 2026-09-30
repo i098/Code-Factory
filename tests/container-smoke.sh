@@ -466,8 +466,9 @@ actual = {
 }
 # The document carries the layout as TOML text; compare it parsed. An empty
 # layout means Herdr's built-in rows, so the rendered file must not set any.
-rows = wanted.get("sidebar_agent_rows", "").strip()
-wanted["sidebar_agent_rows"] = tomllib.loads("rows = " + rows)["rows"] if rows else None
+if "sidebar_agent_rows" in wanted:
+    rows = wanted["sidebar_agent_rows"].strip()
+    wanted["sidebar_agent_rows"] = tomllib.loads("rows = " + rows)["rows"] if rows else None
 mismatched = {key: (actual[key], value) for key, value in wanted.items() if key in actual and actual[key] != value}
 if mismatched:
     raise SystemExit(f"rendered Herdr config disagrees with the factory document (actual, wanted): {mismatched}")
