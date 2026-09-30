@@ -41,7 +41,7 @@ factory:
       [ ... ]
     sidebar_agent_rows: |
       [ ... ]
-    sidebar_bg: "#1e1e2e"
+    sidebar_bg: "reset"   # the terminal's own background
   browsers:               # Obscura tier of the browser ladder
     obscura_version: '0.2.2'
     obscura_sha256: c1b4548e36549a0228c39c1cc842df425bc7253af2b0a56bd2a538d8ff7e3406

@@ -268,6 +268,20 @@ def test_reporter_counts_no_decisions_without_a_firstmate_space(fixture, tmp_pat
     assert reported["w1"]["host"].startswith("⌂ ")
 
 
+def test_a_machine_workspace_carries_the_machine_line_alone(fixture, tmp_path):
+    _, run = fixture
+    workspaces = tmp_path / "workspaces.json"
+    listed = json.loads(workspaces.read_text())
+    workspaces.write_text(json.dumps([{"workspace_id": "w0", "label": "machine"}, *listed]))
+    reported = run()
+    machine = reported["w0"]
+    assert machine.pop("host").startswith("⌂ ")
+    # Nothing else, not even a short name: the line sits alone at the left edge.
+    assert machine == dict.fromkeys(spaces.TOKENS[:-1])
+    # The primary home no longer carries it.
+    assert reported["w1"]["host"] is None
+
+
 def test_queue_count_is_cached_until_the_backlog_changes_or_a_minute_passes(tmp_path):
     home = tmp_path / "home"
     calls = tmp_path / "calls"

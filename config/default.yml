@@ -47,23 +47,21 @@ factory:
         [
           "state_icon",
           { token = "$short", fg = "#cba6f7", rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "└", fg = "#94e2d5" }, { starts_with = "☾", fg = "#6c7086" }] },
-          { token = "workspace", dim = true, rules = [{ equals = "firstmate", hide = true }, { starts_with = "2ndmate-", hide = true }, { starts_with = "└", hide = true }, { contains = "-afk-daemon-", hide = true }] },
+          { token = "workspace", dim = true, rules = [{ equals = "firstmate", hide = true }, { starts_with = "2ndmate-", hide = true }, { starts_with = "└", hide = true }, { contains = "-afk-daemon-", hide = true }, { equals = "machine", hide = true }] },
           { token = "$decisions", fg = "#f38ba8", bold = true },
           { token = "$crew", fg = "#a6e3a1" },
           { token = "$queue", fg = "#f9e2af" },
+          { token = "$host", fg = "#a6adc8" },
         ],
         [
           { token = "$res", fg = "#a6adc8" },
         ],
         [
-          { token = "$host", fg = "#a6adc8" },
-        ],
-        [
           { token = "$alert", fg = "#fab387" },
         ],
       ]
-    # Pinned to the catppuccin base.
-    sidebar_bg: "#1e1e2e"
+    # "reset" is Herdr's alias for the terminal's own background, so a transparent terminal shows through.
+    sidebar_bg: "reset"
   browser_prune:
     enabled: true
     idle_seconds: 7200
