@@ -8,7 +8,8 @@
 //     the pane's own workspace.
 //   - pane token `refs` (workers only): the open pull request for the current
 //     branch and the issues it closes, as "⎇ <pr>  ◉ <issue>".
-// Lookups run in the background on turn end and never fail or slow a turn.
+// Lookups run in the background on session start and turn end and never fail
+// or slow a turn.
 // @ts-nocheck
 
 import { execFile } from "node:child_process";
@@ -122,7 +123,7 @@ export default function (pi) {
 
   pi.on("session_start", (_event, ctx) => {
     track(ctx);
-    if (current) void refresh();
+    if (current) void refresh(current.cwd);
   });
   pi.on("session_switch", (_event, ctx) => track(ctx));
   pi.on("agent_start", (_event, ctx) => track(ctx));
