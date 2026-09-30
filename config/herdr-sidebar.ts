@@ -59,6 +59,7 @@ export default function (pi) {
   let refsAt = 0;
   let refreshing = false;
   let trailing;
+  let titleTimer;
 
   // Runs from a raw timer too, where a throw would take the session down.
   function applyTitle() {
@@ -71,13 +72,14 @@ export default function (pi) {
   // omp resets the title (and drops an extension override) on rename, /new,
   // /resume and cwd changes, often after its own async work, so keep
   // re-applying; the terminal sink skips unchanged titles.
-  const titleTimer = setInterval(() => current && applyTitle(), 1000);
-  titleTimer.unref?.();
-
   function track(ctx) {
     if (ctx?.hasUI !== true) return;
     current = ctx;
     applyTitle();
+    if (!titleTimer) {
+      titleTimer = setInterval(applyTitle, 1000);
+      titleTimer.unref?.();
+    }
   }
 
   async function report() {
@@ -136,6 +138,7 @@ export default function (pi) {
   // Tokens have no TTL, so a pane reused by another program must not keep them.
   pi.on("session_shutdown", () => {
     clearInterval(titleTimer);
+    titleTimer = undefined;
     clearTimeout(trailing);
     if (current) void run(herdr, ["pane", "report-metadata", paneId, "--source", SOURCE, "--clear-token", "who", "--clear-token", "refs"]).catch(() => {});
   });
