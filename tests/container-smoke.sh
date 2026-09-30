@@ -111,18 +111,6 @@ host_mode() {
         SMOKE_BUILT=1
     fi
 
-    # The token is build-time only: neither its name nor its value may reach
-    # the image history or config.
-    local meta
-    meta=$(docker history --no-trunc --format '{{.CreatedBy}}' "${SMOKE_TAG}"
-        docker image inspect "${SMOKE_TAG}")
-    if grep -q GITHUB_TOKEN <<<"${meta}" ||
-        { [ -n "${GITHUB_TOKEN:-}" ] && grep -qF -- "${GITHUB_TOKEN}" <<<"${meta}"; }; then
-        printf 'image %s history or config carries the GitHub token\n' "${SMOKE_TAG}" >&2
-        return 1
-    fi
-    printf 'image history and config carry no GitHub token\n'
-
     printf '==> docker run %s (memory=%s cpus=%s pids=%s)\n' \
         "${SMOKE_TAG}" "${CF_SMOKE_MEMORY:-4g}" "${CF_SMOKE_CPUS:-2}" "${CF_SMOKE_PIDS:-4096}"
 

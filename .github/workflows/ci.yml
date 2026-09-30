@@ -285,8 +285,7 @@ jobs:
 
       # The job's read-only GITHUB_TOKEN authenticates the latest-herdr lookup:
       # shared runner IPs exhaust the unauthenticated API budget. It enters
-      # builds only as a BuildKit secret; the smoke asserts the image never
-      # carries it.
+      # builds only as a BuildKit secret.
       - name: Build worker image
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
