@@ -35,8 +35,10 @@ close that.
   is removed the instant it is created; bare Postgres containers are alerted.
   Allowlist: `doctor/docker-guard-allow.txt`.
 - `~/oss-fleet/doctor/worktree-env-seed.sh` (`flotilla-worktree-env-seed.*`) -
-  installs `<project>.env.local` as `.env.local` in every project
-  worktree, on pool changes, every 2 min, and at login. Files lacking the
+  installs `<project>.env.local` as `.env.local` in the project worktrees
+  matched by the pool glob and checkout path fixed in that script, on changes
+  to the pools the path unit watches (`factory.fleet.worktree_pools`), every
+  2 min, and at login. Files lacking the
   `# fleet-shared-supabase` marker are replaced (backup kept alongside).
 - `~/.local/bin/supabase` - shim; refuses lifecycle subcommands with a pointer
   here. (`npx supabase` bypasses it; the docker guard does not.)
