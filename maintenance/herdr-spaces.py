@@ -182,11 +182,14 @@ def pct(part: float, whole: float) -> str:
     return f"{part / whole * 100:.0f}%"
 
 
-def used_of(used: float, total: float) -> str:
-    """ "18.2/31.0G", "402/937G", "1.4/1.9T", "12/20T": one decimal while the
-    total is under 100G, whole G from 100G, and T from 1000G."""
+def used_of(used: float, total: float, fine: bool = False) -> str:
+    """ "402/937G", "1.4/1.9T", "12/20T": whole G below 1000G, then T with one
+    decimal below 10T; `fine` keeps one decimal below 100G ("18.2/31.0G")."""
     size, unit = (2**30, "G") if total < 999.5 * 2**30 else (2**40, "T")
-    digits = 1 if total < (99.95 if unit == "G" else 9.95) * size else 0
+    if unit == "G":
+        digits = 1 if fine and total < 99.95 * size else 0
+    else:
+        digits = 1 if total < 9.95 * size else 0
     return f"{used / size:.{digits}f}/{total / size:.{digits}f}{unit}"
 
 
@@ -257,7 +260,7 @@ def main() -> None:
             parts.append(f"⚙ {pct(busy - before[0], total - before[1])}")
         mem_total, mem_free = meminfo()
         mem_used = mem_total - mem_free
-        parts.append(f"▤ {used_of(mem_used, mem_total)} {pct(mem_used, mem_total)}")
+        parts.append(f"▤ {used_of(mem_used, mem_total, fine=True)} {pct(mem_used, mem_total)}")
         st = os.statvfs("/")
         disk_total, disk_used = st.f_blocks * st.f_frsize, (st.f_blocks - st.f_bfree) * st.f_frsize
         parts.append(f"⛁ {used_of(disk_used, disk_total)} {pct(disk_used, disk_total)}")

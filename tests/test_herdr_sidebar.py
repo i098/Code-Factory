@@ -256,26 +256,28 @@ def test_space_cpu_share_stays_within_0_and_100(fixture, tmp_path, before, share
 
 
 @pytest.mark.parametrize(
-    ("used", "total", "text"),
+    ("used", "total", "fine", "text"),
     [
-        (7.1, 7.8, "7.1/7.8G"),
-        (18.2, 31.0, "18.2/31.0G"),
-        (99.9, 99.9, "99.9/99.9G"),
-        (402, 937, "402/937G"),
-        (1433.6, 1945.6, "1.4/1.9T"),
-        (12288, 20480, "12/20T"),
+        (7.1, 7.8, True, "7.1/7.8G"),
+        (18.2, 31.0, True, "18.2/31.0G"),
+        (99.9, 99.9, True, "99.9/99.9G"),
+        (45.0, 93.1, False, "45/93G"),
+        (402, 937, False, "402/937G"),
+        (402, 937, True, "402/937G"),
+        (1433.6, 1945.6, False, "1.4/1.9T"),
+        (12288, 20480, True, "12/20T"),
     ],
 )
-def test_machine_sizes_stay_short(used, total, text):
-    assert spaces.used_of(used * 2**30, total * 2**30) == text
+def test_machine_sizes_stay_short(used, total, fine, text):
+    assert spaces.used_of(used * 2**30, total * 2**30, fine) == text
 
 
-@pytest.mark.parametrize("ram", [9.96, 31.0, 99.9, 999.6, 9.96 * 1024])
-@pytest.mark.parametrize("disk", [100.0, 999.0, 9.96 * 1024, 99 * 1024])
+@pytest.mark.parametrize("ram", [9.96, 15.6, 31.0, 99.9, 999.6, 9.96 * 1024])
+@pytest.mark.parametrize("disk", [9.96, 93.1, 100.0, 999.0, 9.96 * 1024, 99 * 1024])
 def test_machine_header_fits_the_first_spaces_row(ram, disk):
     # The 42 columns Herdr shows on the first row of a Spaces entry at sidebar
     # width 46, with CPU at 100% and memory and disk at 99%.
-    mem = spaces.used_of(ram * 2**30, ram * 2**30)
+    mem = spaces.used_of(ram * 2**30, ram * 2**30, fine=True)
     root = spaces.used_of(disk * 2**30, disk * 2**30)
     assert len(f"⌂ ⚙ 100%  ▤ {mem} 99%  ⛁ {root} 99%") <= 42
 
