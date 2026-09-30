@@ -87,7 +87,7 @@ The status icons extension puts the mode indicators and the configured hooks on 
 
 The file is installed as `aa-mode-icons.ts` on purpose: omp loads extensions in name order, and the extension must wrap the status API before the ponytail and ADHD plugins set their statuses.
 
-The row needs two keys in `statusLine`: `status` in `leftSegments`, which shows extension statuses on the main line, and `showHookStatus: false`, which drops the separate hooks line. `config/omp.yml` seeds both. On a host whose `~/.omp/agent/config.yml` already exists, every apply appends `status` to `leftSegments` when it is missing and sets `showHookStatus` to `false`, and leaves every other key alone. Start a new omp session to see the change. Check the result with:
+The row needs two keys in `statusLine`: `status` in `leftSegments`, which shows extension statuses on the main line, and `showHookStatus: false`, which drops the separate hooks line. omp reads `leftSegments` only when `preset` is `custom`. `config/omp.yml` seeds all three. On a host whose `~/.omp/agent/config.yml` already exists and uses `preset: custom`, every apply appends `status` to `leftSegments` when it is missing and sets `showHookStatus` to `false`, and leaves every other key alone. A config with any other preset, or none, is left untouched: switch it to `preset: custom` by hand to get the row. Start a new omp session to see the change. Check the result with:
 
 ```bash
 omp config get statusLine.leftSegments

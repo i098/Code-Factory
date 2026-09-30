@@ -385,6 +385,21 @@ def test_omp_config_that_has_the_status_row_keys_is_left_alone(tmp_path):
     assert config.read_text() == seed
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "theme: {dark: titanium}\n",
+        "statusLine:\n  preset: default\n  showHookStatus: true\n",
+        "statusLine:\n  leftSegments: [path, git]\n  showHookStatus: true\n",
+    ],
+)
+def test_omp_config_without_the_custom_preset_is_left_alone(tmp_path, text):
+    config = tmp_path / "config.yml"
+    config.write_text(text)
+    assert _ensure_status_row(tmp_path, config) == 0
+    assert config.read_text() == text
+
+
 def test_absent_omp_config_is_not_created_by_the_status_row_step(tmp_path):
     config = tmp_path / "config.yml"
     assert _ensure_status_row(tmp_path, config) == 0
