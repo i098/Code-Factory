@@ -158,7 +158,12 @@ RUN set -eux; uv run --project . --locked python containers/assert-image-config.
 # The real convergence run. `apply` installs the checksum-pinned agent and
 # development toolchain through scripts/install_tools.py and renders the
 # user-scope files; start_services=false keeps it off systemd and linger.
-RUN set -eux; ./factory apply --config "${FACTORY_CONFIG}"
+# The optional `github_token` BuildKit secret authenticates the latest-herdr
+# lookup (shared CI runner IPs exhaust the unauthenticated API budget). It is
+# exposed to this step only, never as an ARG, ENV, layer file or history entry;
+# without it the lookup runs unauthenticated.
+RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
+    set -eux; ./factory apply --config "${FACTORY_CONFIG}"
 
 ENV CODE_FACTORY_IMAGE=worker \
     CODE_FACTORY_CONFIG=/opt/code-factory/${FACTORY_CONFIG}

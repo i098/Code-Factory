@@ -127,3 +127,19 @@ def test_herdr_release_without_a_checksum_is_refused(monkeypatch, digest):
     registries(monkeypatch, release(digest))
     with pytest.raises(ValueError, match="refusing an unverified binary"):
         installer.resolve_latest("linux-x86_64")
+
+
+@pytest.mark.parametrize(("env", "expected"), [("env-token", "Bearer env-token"), ("", None)])
+def test_herdr_lookup_authenticates_with_github_token_else_anonymous(monkeypatch, env, expected):
+    seen = []
+
+    def urlopen(url, **kwargs):
+        if getattr(url, "full_url", url) == installer.HERDR_LATEST:
+            seen.append(url.get_header("Authorization"))
+            return io.BytesIO(json.dumps(release("sha256:" + "a" * 64)).encode())
+        return io.BytesIO(json.dumps({"version": "18.9.9"}).encode())
+
+    monkeypatch.setenv("GITHUB_TOKEN", env)
+    monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
+    installer.resolve_latest("linux-x86_64")
+    assert seen == [expected]
