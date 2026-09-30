@@ -79,13 +79,13 @@ The result carries `tokens.short`, `tokens.decisions`, and so on.
 
 | Token | Value | Color |
 | --- | --- | --- |
-| `$pr` | `⎇ <pr>`: the open pull request whose head is the current branch | blue |
+| `$pr` | `⎇ <pr>`: the open pull request whose head is the current branch, in the checkout's repository or a fork | blue |
 | `$issue` | `○ <issue>`: the issue the work is for | mauve |
 | `$add` | `+<added>` lines | green |
 | `$del` | `−<deleted>` lines (U+2212) | red |
 | `$files` | `✎ <files>` changed | yellow |
 
-Herdr indents every line after the first by two columns. For a worker, the first part present adds two U+2800 blank characters to that. The line counts come from `git diff --shortstat origin/<default branch>...HEAD` in the session's checkout, so they cover commits since the merge base with the default branch. The pull request comes from the GitHub REST API through `gh api`.
+Herdr indents every line after the first by two columns. For a worker, the first part present adds two U+2800 blank characters to that. The line counts come from `git diff --shortstat origin/<default branch>...HEAD` in the session's checkout, so they cover commits since the merge base with the default branch. The pull request comes from the GitHub REST API through `gh api`. It is looked up with the checkout's repository owner as the head owner first, then with the owner of each GitHub remote in `git remote -v`, in order, so a pull request opened from a fork shows as long as the checkout has the fork as a remote.
 
 The issue comes from the worker's task record in its home first: the first `issues/<n>` link or `issue <n>` / `issue #<n>` in the task's backlog entry (`data/backlog.md`), then in its brief (`data/<task>/brief.md`). The home is the ancestor of the pane's launch directory that holds `state/<task>.meta`. So a worker shows its issue before its pull request opens, after it merges, and when the body has no closing keyword. Without a task record, the issue is the first one the pull request body closes (`Closes #N`, `Fixes #N`, `Resolves #N`).
 
@@ -137,7 +137,6 @@ HERDR_CONFIG_PATH=/path/to/rendered.toml herdr config check
 - Agents without the extension, including non-omp agents, show only their dot on line 1: nothing reports their `who` token.
 - Short names and colors match workspace labels (`firstmate`, `2ndmate-…`, `└ …`, `-afk-daemon-`). A home workspace with another name has no short name and shows its label.
 - Only closing keywords in the pull request body count as issues there. Issues linked only in the GitHub UI are not shown, because the REST API does not list them.
-- The pull request lookup filters by head branch in the checkout's own repository, so a pull request opened from a fork does not show.
 - Spaces counts are only as fresh as the home's own records: `$decisions` follows the summary ledger, which the home republishes on its own events.
 - CPU and RAM count only processes the reporter's account can read, and RAM is resident memory, so shared pages count once per process. CPU counts a process only while two runs 10 seconds apart both see it: a process that starts and ends between two runs is not counted, and the time before the first run that sees it or after the last is lost, so a space running many short builds reads low.
 - The machine header fits the 42 columns Herdr shows on the first row of a Spaces entry at width 46 while neither memory nor disk is at 100%. Otherwise it can pass 42 columns, and Herdr cuts its end.
