@@ -6,7 +6,7 @@
 //     topic lines up under its "└ task" name.
 //   - pane token `who`: "└ <FM_TASK_ID>" for a worker, otherwise the label of
 //     the pane's own workspace.
-//   - pane token `refs` (workers only): the pull request for the current
+//   - pane token `refs` (workers only): the open pull request for the current
 //     branch and the issues it closes, as "⎇ <pr>  ◉ <issue>".
 // Lookups run in the background on turn end and never fail or slow a turn.
 // @ts-nocheck
@@ -43,7 +43,7 @@ async function lookupRefs(cwd: string): Promise<string> {
   const branch = (await run("git", ["-C", cwd, "branch", "--show-current"])).trim();
   if (!branch) return "";
   // REST, not GraphQL: gh fills {owner}/{repo} from the checkout's remote.
-  const endpoint = `repos/{owner}/{repo}/pulls?state=all&head={owner}:${encodeURIComponent(branch)}`;
+  const endpoint = `repos/{owner}/{repo}/pulls?state=open&head={owner}:${encodeURIComponent(branch)}`;
   const pulls = JSON.parse(await run("gh", ["api", "-X", "GET", endpoint], cwd));
   return refsValue(pulls[0]);
 }
@@ -114,10 +114,15 @@ export default function (pi) {
   });
   pi.on("session_switch", (_event, ctx) => track(ctx));
   pi.on("agent_start", (_event, ctx) => track(ctx));
-  pi.on("agent_end", (_event, ctx) => {
+  // Subagent turns end here too; only the interactive session's cwd counts.
+  pi.on("agent_end", () => {
     if (!current) return;
     applyTitle();
-    void refresh(ctx?.cwd || current.cwd);
+    void refresh(current.cwd);
   });
-  pi.on("session_shutdown", () => unsubscribe?.());
+  // Tokens have no TTL, so a pane reused by another program must not keep them.
+  pi.on("session_shutdown", () => {
+    unsubscribe?.();
+    if (current) void run(herdr, ["pane", "report-metadata", paneId, "--source", SOURCE, "--clear-token", "who", "--clear-token", "refs"]).catch(() => {});
+  });
 }

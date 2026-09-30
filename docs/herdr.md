@@ -32,7 +32,7 @@ The extension does nothing outside Herdr (`HERDR_ENV` is not `1`) or in an omp s
 
 - Sets the terminal title to the bare session topic, and sets it again whenever omp renames the session. A spawned worker (`FM_TASK_ID` set) gets two U+2800 blank characters in front; Herdr keeps them in `terminal_title`, which makes the extra indent.
 - Reports the pane token `who` under the source `code-factory:sidebar`: `└ <FM_TASK_ID>` for a spawned worker, otherwise the label of the pane's own workspace.
-- For a spawned worker only, reports the pane token `refs`: four U+2800 characters, then `⎇ <pr>` and one `◉ <issue>` per issue the pull request body closes (`Closes #N`, `Fixes #N`, `Resolves #N`), joined by two spaces. The pull request is the one whose head is the checkout's current branch, found with the GitHub REST API through `gh api`. The value is cached and looked up again at most every 5 minutes, only when a turn ends. The token is cleared when the branch has no pull request.
+- For a spawned worker only, reports the pane token `refs`: four U+2800 characters, then `⎇ <pr>` and one `◉ <issue>` per issue the pull request body closes (`Closes #N`, `Fixes #N`, `Resolves #N`), joined by two spaces. The pull request is the open one whose head is the checkout's current branch, found with the GitHub REST API through `gh api`. The value is cached and looked up again at most every 5 minutes, only when a turn ends. The token is cleared when the branch has no open pull request, and both tokens are cleared when omp exits.
 
 Lookups run in the background with a timeout. A failed lookup keeps the previous value and never fails or slows a turn. Herdr drops pane tokens when its server restarts; the extension reports them again at the next turn end.
 
