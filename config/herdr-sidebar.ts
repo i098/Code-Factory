@@ -84,12 +84,22 @@ export function prParts(v: { pr?; issue?; add?; del?; files? }, indent: number):
   );
 }
 
+// "{owner}" (gh fills in the checkout's repository owner), then the owner of
+// every GitHub remote: a fork's pull request has its head under the fork owner.
+export function prOwners(remotes: string): string[] {
+  return [...new Set(["{owner}", ...[...remotes.matchAll(/github\.com[:/]([^/\s]+)\//g)].map((m) => m[1])])];
+}
+
 async function lookupPr(cwd: string) {
   const branch = (await run("git", ["-C", cwd, "branch", "--show-current"])).trim();
   if (!branch) return undefined;
-  // REST, not GraphQL: gh fills {owner}/{repo} from the checkout's remote.
-  const endpoint = `repos/{owner}/{repo}/pulls?state=open&head={owner}:${encodeURIComponent(branch)}`;
-  return JSON.parse(await run("gh", ["api", "-X", "GET", endpoint], cwd))[0];
+  for (const owner of prOwners(await run("git", ["-C", cwd, "remote", "-v"]))) {
+    // REST, not GraphQL: gh fills {owner}/{repo} from the checkout's remote.
+    const endpoint = `repos/{owner}/{repo}/pulls?state=open&head=${owner}:${encodeURIComponent(branch)}`;
+    const pr = JSON.parse(await run("gh", ["api", "-X", "GET", endpoint], cwd))[0];
+    if (pr) return pr;
+  }
+  return undefined;
 }
 
 // A worker's issue from its orchestrator home: the backlog entry, then the

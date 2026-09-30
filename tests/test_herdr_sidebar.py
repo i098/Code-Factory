@@ -96,6 +96,24 @@ def test_issue_sources():
     assert ts('m.recordIssue(["no issue here", ""])') == ""
 
 
+@needs_bun
+def test_pr_owners_from_remotes():
+    remotes = (
+        "fork\tgit@github.com:undeemed/swarms-platform.git (fetch)\n"
+        "fork\tgit@github.com:undeemed/swarms-platform.git (push)\n"
+        "origin\thttps://github.com/The-Swarm-Corporation/swarms-platform.git (fetch)\n"
+        "origin\thttps://github.com/The-Swarm-Corporation/swarms-platform.git (push)\n"
+        "mirror\tssh://git@github.com/undeemed/swarms-platform (fetch)\n"
+        "other\thttps://gitlab.com/someone/swarms-platform.git (fetch)\n"
+    )
+    assert ts(f"m.prOwners({json.dumps(remotes)})") == [
+        "{owner}",
+        "undeemed",
+        "The-Swarm-Corporation",
+    ]
+    assert ts('m.prOwners("")') == ["{owner}"]
+
+
 def write(path: Path, text: str, mode: int = 0o644) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
