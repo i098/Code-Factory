@@ -17,3 +17,7 @@ ExecStart=/usr/bin/python3 {{ factory_herdr_spaces_script }}
 TimeoutStartSec=600
 Nice=10
 IOSchedulingClass=idle
+# A run every second: keep the manager's per-run start and finish lines out of
+# the journal, and log the script's own stderr (its errors) above that cut.
+LogLevelMax=notice
+SyslogLevel=warning
