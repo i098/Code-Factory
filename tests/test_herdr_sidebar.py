@@ -216,6 +216,8 @@ def test_reporter_counts_from_a_fixture_home(fixture):
         "crew": "▶ 3",
         "queue": "◷ 4",
         "alert": "⚠ watcher silent",
+        # No machine workspace: the machine line is its host row instead.
+        "machine": None,
     }
     # Shares of the machine; CPU needs a baseline, so it waits for run two.
     # Herdr's own continuation indent puts it under the name: no padding.
@@ -266,6 +268,21 @@ def test_reporter_counts_no_decisions_without_a_firstmate_space(fixture, tmp_pat
     assert {wid: tokens["decisions"] for wid, tokens in reported.items()} == dict.fromkeys(reported)
     # The first listed still carries the machine line.
     assert reported["w1"]["host"].startswith("⌂ ")
+
+
+def test_a_machine_workspace_carries_the_machine_line_alone(fixture, tmp_path):
+    _, run = fixture
+    workspaces = tmp_path / "workspaces.json"
+    listed = json.loads(workspaces.read_text())
+    workspaces.write_text(json.dumps([{"workspace_id": "w0", "label": "machine"}, *listed]))
+    reported = run()
+    machine = reported["w0"]
+    assert machine.pop("machine").startswith("⌂ ")
+    # Nothing else, not even a short name: the line sits alone at the left edge.
+    assert machine == dict.fromkeys(spaces.TOKENS[:-1])
+    # Never both: no Space carries the host row under its resource line.
+    assert all(tokens["host"] is None for tokens in reported.values())
+    assert all(tokens["machine"] is None for wid, tokens in reported.items() if wid != "w0")
 
 
 def test_queue_count_is_cached_until_the_backlog_changes_or_a_minute_passes(tmp_path):
