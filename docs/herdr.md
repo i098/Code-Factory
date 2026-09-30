@@ -9,9 +9,9 @@ The sidebar is 46 columns wide (`sidebar_width`; it may grow to `sidebar_max_wid
 Spaces shows one entry per home workspace. It never repeats per-agent detail, which lives in Agents.
 
 ```text
-⌂ ⚙ 41%  ▤ 18/31G 59%  ⛁ 402/937G 43%
+⌂ ⚙ 41%  ▤ 18.2/31.0G 59%  ⛁ 402/937G 43%
   ● firstmate · ⚑ 3 · ▶ 1 · ◷ 4
-  ⚙ 29%  ▤ 8%  ⛁ 2%
+    ⚙ 29%  ▤ 8%  ⛁ 2%
 ● swarms · ⚑ 2 · ◷ 3
   ⚙ 1%  ▤ 3%  ⛁ 4%
   ⚠ watcher silent
@@ -20,7 +20,7 @@ Spaces shows one entry per home workspace. It never repeats per-agent detail, wh
 
 | Line | Shows |
 | --- | --- |
-| Header | The whole machine, dimmed, on the primary home's entry only (the workspace labelled `firstmate`; without one, the first workspace listed): `⚙` CPU, `▤` used/total RAM, `⛁` used/total root filesystem, each with its share. Every other entry leaves this row empty, and Herdr hides it. |
+| Header | The whole machine, dimmed, on the primary home's entry only (the workspace labelled `firstmate`; without one, the first workspace listed): `⚙` CPU, `▤` used/total RAM, `⛁` used/total root filesystem, each with its share. Every other entry leaves this row empty, and Herdr hides it. Herdr then indents the primary entry's lines 1 to 3 by two columns, and the reporter indents its lines 2 and 3 by two more, so they still sit under the name. |
 | 1 | The state dot, then the short name (`$short`): the primary home (`firstmate`) in bold blue, other homes in mauve. A dead helper space (label contains `-afk-daemon-`) shows `☾ afk`, dimmed, and nothing else. A space with no short name shows its own label, dimmed. Then the decision, worker and queue counts below, each in its own color. A count of zero is not shown. |
 | 2 | What the space costs the machine, as shares, dimmed, indented two columns: `⚙` CPU, `▤` RAM, `⛁` disk. |
 | 3 | `⚠ watcher silent` in orange, indented two columns, only when the home's watcher stopped reporting. |
@@ -31,9 +31,9 @@ Spaces shows one entry per home workspace. It never repeats per-agent detail, wh
 | `$decisions` | `⚑ N` (red, bold) | Open decisions waiting on the operator: `decisions_open` in the home's summary ledger, `state/home-summary.json`, which the home publishes from the same fold its wake drain uses. That ledger also folds in the decisions of its second-level homes; those whose home has a live Space of its own count on that home's row instead, so nothing is counted twice. Their share is the read-only `status_open_decisions` fold of the home's `bin/fm-classify-lib.sh` over each one's status log, cached until the log changes. A second-level home without a live Space stays counted on the primary row. |
 | `$crew` | `▶ N` (green) | Workers running: the home's live task records, `state/*.meta`, without second-level home records (`kind=secondmate`). |
 | `$queue` | `◷ N` (yellow) | Tasks queued and ready to start: `count` from the home's `bin/fm-tasks-axi.sh ready`. |
-| `$res` | `⚙ 29%  ▤ 8%  ⛁ 2%` | CPU (share of all cores) and resident memory (share of `MemTotal`) summed over every process whose environment carries the space's `HERDR_WORKSPACE_ID`, so its workers count. CPU is the growth of the space's total CPU time between two runs, where a process's time includes that of the children it has waited for; so it also counts processes that started and exited between two runs, and a finished child's time counts once. Disk is the home plus the worktree pools of its projects, as `treehouse status --json` lists them, as a share of the filesystem holding the home; a pool worktree that is itself another home is left out. |
-| `$alert` | `⚠ watcher silent` (orange) | `fm_supervision_unhealthy` from the home's `bin/fm-supervision-lib.sh`: the home has work that needs a watcher and the watcher's beacon is stale. |
-| `$host` | `⌂ ⚙ 41%  ▤ 18/31G 59%  ⛁ 402/937G 43%` | The whole machine, on the primary home only: CPU busy share from `/proc/stat`, used memory (`MemTotal` − `MemAvailable`) from `/proc/meminfo`, and the root filesystem from `statvfs`. Sizes keep one decimal only under 10G (`7.1/7.8G`) and switch to T from 1000G (`1.4/1.9T`, whole T from 10T), so a size never passes 8 columns and the line fits the 42 columns Herdr shows on the first row of a Spaces entry at width 46. |
+| `$res` | `⚙ 29%  ▤ 8%  ⛁ 2%` | CPU (share of all cores) and resident memory (share of `MemTotal`) summed over every process whose environment carries the space's `HERDR_WORKSPACE_ID`, so its workers count. CPU is each process's own CPU time (`utime` + `stime`) gained between two runs, for every process present in both, clamped to 0–100%. Disk is the home plus the worktree pools of its projects, as `treehouse status --json` lists them, as a share of the filesystem holding the home; a pool worktree that is itself another home is left out. On the primary home the value starts with two U+2800 blank characters. |
+| `$alert` | `⚠ watcher silent` (orange) | `fm_supervision_unhealthy` from the home's `bin/fm-supervision-lib.sh`: the home has work that needs a watcher and the watcher's beacon is stale. On the primary home the value starts with two U+2800 blank characters. |
+| `$host` | `⌂ ⚙ 41%  ▤ 18.2/31.0G 59%  ⛁ 402/937G 43%` | The whole machine, on the primary home only: CPU busy share from `/proc/stat`, used memory (`MemTotal` − `MemAvailable`) from `/proc/meminfo`, and the root filesystem from `statvfs`. Sizes keep one decimal while the total is under 100G (`18.2/31.0G`), are whole G from 100G (`402/937G`), and switch to T from 1000G (`1.4/1.9T`, whole T from 10T). |
 
 There is no rate-limit warning: a rate limit takes every home down at once, so a per-home flag adds nothing.
 
@@ -139,5 +139,5 @@ HERDR_CONFIG_PATH=/path/to/rendered.toml herdr config check
 - Only closing keywords in the pull request body count as issues there. Issues linked only in the GitHub UI are not shown, because the REST API does not list them.
 - The pull request lookup filters by head branch in the checkout's own repository, so a pull request opened from a fork does not show.
 - Spaces counts are only as fresh as the home's own records: `$decisions` follows the summary ledger, which the home republishes on its own events.
-- CPU and RAM count only processes the reporter's account can read, and RAM is resident memory, so shared pages count once per process. When a process of the space exits and a process outside it waits for it (a closed pane's shell, reaped by the Herdr server), its time leaves the total, and CPU reads low, down to `0%`, for that one run.
-- Herdr indents every row after a layout's first by two columns. The machine header is the first row, so on the primary home's entry the state dot and name sit two columns in, level with its resources line.
+- CPU and RAM count only processes the reporter's account can read, and RAM is resident memory, so shared pages count once per process. CPU counts a process only while two runs 10 seconds apart both see it: a process that starts and ends between two runs is not counted, and the time before the first run that sees it or after the last is lost, so a space running many short builds reads low.
+- The machine header fits the 42 columns Herdr shows on the first row of a Spaces entry at width 46 while the root filesystem is at least 100G and neither memory nor disk is at 100%. Otherwise it can pass 42 columns, and Herdr cuts its end.

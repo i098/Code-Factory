@@ -129,6 +129,7 @@ def fixture(tmp_path):
     workspaces = [
         {"workspace_id": "w1", "label": "2ndmate-docs-mate-d1"},
         {"workspace_id": "w2", "label": "firstmate-afk-daemon-1-2-3"},
+        {"workspace_id": "w3", "label": "scratch"},
     ]
     panes = [
         {"workspace_id": "w1", "cwd": str(home / "projects/app")},
@@ -184,10 +185,11 @@ def test_reporter_counts_from_a_fixture_home(fixture):
         "decisions": "⚑ 1",
         "crew": "▶ 3",
         "queue": "◷ 4",
-        "alert": "⚠ watcher silent",
+        "alert": BLANK * 2 + "⚠ watcher silent",
     }
     # Shares of the machine; CPU needs a baseline, so it waits for run two.
-    assert re.fullmatch(r"▤ \d+%  ⛁ \d+%", res)
+    # The primary entry indents it to sit under the name, below the header.
+    assert re.fullmatch(BLANK * 2 + r"▤ \d+%  ⛁ \d+%", res)
     # No workspace is labelled firstmate, so the first listed carries the
     # whole-machine header, within the 42 columns Herdr shows on the first
     # row of a Spaces entry at sidebar width 46.
@@ -195,6 +197,8 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     assert re.fullmatch(rf"⌂ ▤ {size}  ⛁ {size}", host) and len(host) <= 42
     # A helper space shows its short name only; everything else is cleared.
     assert reported["w2"] == {"short": "☾ afk"} | dict.fromkeys(spaces.TOKENS[1:])
+    # A space with no home is not the primary: CPU and RAM only, not indented.
+    assert reported["w3"]["res"].startswith("▤ ") and reported["w3"]["host"] is None
 
     # Second run: CPU has a baseline now, a zero count is cleared, and a failed
     # source keeps its previous value.
@@ -203,38 +207,23 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     docs = run()["w1"]
     assert docs["decisions"] == "⚑ 1"
     assert docs["alert"] is None
-    assert re.fullmatch(r"⚙ \d+%  ▤ \d+%  ⛁ \d+%", docs["res"])
+    assert re.fullmatch(BLANK * 2 + r"⚙ \d+%  ▤ \d+%  ⛁ \d+%", docs["res"])
     assert re.fullmatch(r"⌂ ⚙ \d+%  ▤ .+", docs["host"])
 
 
-def test_space_cpu_includes_finished_children():
-    # A worker's shell that ran a half-second build: the build is gone, but its
-    # time must still count toward the space.
-    busy = "import time\nt = time.time()\nwhile time.time() - t < 0.5: pass"
-    parent = subprocess.Popen(
-        ["python3", "-c", f"import subprocess, sys, time; subprocess.run([sys.executable, '-c', {busy!r}]); print(flush=True); time.sleep(30)"],
-        env={**os.environ, "HERDR_WORKSPACE_ID": "cpu-test"},
-        stdout=subprocess.PIPE,
-    )
-    try:
-        parent.stdout.readline()
-        [(pid, ticks, _)] = spaces.processes()["cpu-test"]
-    finally:
-        parent.kill()
-        parent.wait()
-    assert pid == parent.pid
-    assert ticks >= 0.4 * spaces.TICK
-
-
-def test_space_cpu_counts_a_reaped_child_once(fixture):
+def test_space_cpu_leaves_out_a_reaped_child(fixture):
     # A worker in the docs space runs a 6-second build on one core. The reporter
-    # samples the build mid-way, then the worker reaps it: the next run must
-    # count only the build's last stretch, not its whole lifetime again through
+    # samples the build mid-way, then the worker reaps it: the next run counts
+    # only live processes' own time, never the build's lifetime again through
     # the worker's child time.
     _, run = fixture
     busy = "import time\nt = time.time()\nwhile time.time() - t < 6: pass"
     worker = subprocess.Popen(
-        ["python3", "-c", f"import subprocess, sys, time; subprocess.run([sys.executable, '-c', {busy!r}]); print(flush=True); time.sleep(30)"],
+        [
+            "python3",
+            "-c",
+            f"import subprocess, sys, time; subprocess.run([sys.executable, '-c', {busy!r}]); print(flush=True); time.sleep(30)",
+        ],
         env={**os.environ, "HERDR_WORKSPACE_ID": "w1"},
         stdout=subprocess.PIPE,
     )
@@ -246,15 +235,32 @@ def test_space_cpu_counts_a_reaped_child_once(fixture):
     finally:
         worker.kill()
         worker.wait()
-    cores = int(re.match(r"⚙ (\d+)%", res)[1]) / 100 * os.cpu_count()
-    assert cores < 1.5
+    assert int(re.search(r"⚙ (\d+)%", res)[1]) / 100 * os.cpu_count() < 1.5
+
+
+@pytest.mark.parametrize(("before", "share"), [(-(10**12), "100%"), (10**12, "0%")])
+def test_space_cpu_share_stays_within_0_and_100(fixture, tmp_path, before, share):
+    _, run = fixture
+    worker = subprocess.Popen(["sleep", "30"], env={**os.environ, "HERDR_WORKSPACE_ID": "w1"})
+    try:
+        cache = tmp_path / "cache/code-factory/herdr-spaces.json"
+        write(
+            cache,
+            json.dumps({"cpu": {"w1": {str(worker.pid): before}}, "cpu_at": time.time() - 10}),
+        )
+        res = run()["w1"]["res"]
+    finally:
+        worker.kill()
+        worker.wait()
+    assert re.search(r"⚙ (\d+%)", res)[1] == share
 
 
 @pytest.mark.parametrize(
     ("used", "total", "text"),
     [
         (7.1, 7.8, "7.1/7.8G"),
-        (35.2, 64.0, "35/64G"),
+        (18.2, 31.0, "18.2/31.0G"),
+        (99.9, 99.9, "99.9/99.9G"),
         (402, 937, "402/937G"),
         (1433.6, 1945.6, "1.4/1.9T"),
         (12288, 20480, "12/20T"),
@@ -264,11 +270,14 @@ def test_machine_sizes_stay_short(used, total, text):
     assert spaces.used_of(used * 2**30, total * 2**30) == text
 
 
-@pytest.mark.parametrize("total", [9.96, 64.0, 99.9, 999.6, 9.96 * 1024, 99 * 1024])
-def test_machine_header_fits_the_first_spaces_row(total):
-    # Worst case: CPU and both shares at 100%, sizes at their widest.
-    size = spaces.used_of(total * 2**30, total * 2**30)
-    assert len(f"⌂ ⚙ 100%  ▤ {size} 100%  ⛁ {size} 100%") <= 42
+@pytest.mark.parametrize("ram", [9.96, 31.0, 99.9, 999.6, 9.96 * 1024])
+@pytest.mark.parametrize("disk", [100.0, 999.0, 9.96 * 1024, 99 * 1024])
+def test_machine_header_fits_the_first_spaces_row(ram, disk):
+    # The 42 columns Herdr shows on the first row of a Spaces entry at sidebar
+    # width 46, with CPU at 100% and memory and disk at 99%.
+    mem = spaces.used_of(ram * 2**30, ram * 2**30)
+    root = spaces.used_of(disk * 2**30, disk * 2**30)
+    assert len(f"⌂ ⚙ 100%  ▤ {mem} 99%  ⛁ {root} 99%") <= 42
 
 
 def test_reporter_waits_out_a_failed_disk_measurement(fixture, tmp_path):

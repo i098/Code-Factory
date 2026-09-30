@@ -12,8 +12,9 @@ workspace tokens under the source `code-factory:spaces`:
   queue      "◷ N"  queued tasks ready to start (bin/fm-tasks-axi.sh ready)
   res        "⚙ 29%  ▤ 8%  ⛁ 2%"  CPU, RAM and disk, as shares of the machine
   alert      "⚠ watcher silent" when the home's supervision is unhealthy
-  host       "⌂ ⚙ 41%  ▤ 18/31G 59%  ⛁ 402/937G 43%"  the whole machine,
-             on the primary home only (labelled firstmate, else the first listed)
+  host       "⌂ ⚙ 41%  ▤ 18.2/31.0G 59%  ⛁ 402/937G 43%"  the whole machine,
+             on the primary home only (labelled firstmate, else the first listed),
+             whose res and alert are indented two columns to sit under its name
 
 Zero counts are cleared. Disk is cached 15 minutes in
 ~/.cache/code-factory/herdr-spaces.json. A source that fails keeps
@@ -35,6 +36,7 @@ TOKENS = ("short", "decisions", "crew", "queue", "res", "alert", "host")
 DISK_TTL = 15 * 60
 TICK = os.sysconf("SC_CLK_TCK")
 PAGE = os.sysconf("SC_PAGE_SIZE")
+BLANK = "\u2800"
 
 
 def short_name(label: str) -> str:
@@ -139,7 +141,7 @@ def disk_bytes(paths: list[Path]) -> int:
 
 
 def processes() -> dict[str, list[tuple[int, int, int]]]:
-    """(pid, cpu ticks, rss bytes) per HERDR_WORKSPACE_ID, for readable processes."""
+    """(pid, own cpu ticks, rss bytes) per HERDR_WORKSPACE_ID, for readable processes."""
     found: dict[str, list[tuple[int, int, int]]] = {}
     for proc in Path("/proc").iterdir():
         if not proc.name.isdigit():
@@ -153,7 +155,7 @@ def processes() -> dict[str, list[tuple[int, int, int]]]:
             rss = int((proc / "statm").read_text().split()[1]) * PAGE
         except OSError:
             continue
-        ticks = sum(int(f) for f in stat[11:15])
+        ticks = int(stat[11]) + int(stat[12])
         found.setdefault(m[1].decode(), []).append((int(proc.name), ticks, rss))
     return found
 
@@ -181,11 +183,10 @@ def pct(part: float, whole: float) -> str:
 
 
 def used_of(used: float, total: float) -> str:
-    """ "7.1/7.8G", "18/31G", "1.4/1.9T": one decimal only under 10 of the unit
-    and T from 1000G, so it never passes 8 columns and the header fits in the
-    42 columns Herdr shows on a Spaces row at sidebar width 46."""
+    """ "18.2/31.0G", "402/937G", "1.4/1.9T", "12/20T": one decimal while the
+    total is under 100G, whole G from 100G, and T from 1000G."""
     size, unit = (2**30, "G") if total < 999.5 * 2**30 else (2**40, "T")
-    digits = 1 if total < 9.95 * size else 0
+    digits = 1 if total < (99.95 if unit == "G" else 9.95) * size else 0
     return f"{used / size:.{digits}f}/{total / size:.{digits}f}{unit}"
 
 
@@ -223,13 +224,14 @@ def main() -> None:
         tmp.write_text(json.dumps(cache))
         tmp.replace(cache_file)
 
-    def res(wid: str, home: Path | None) -> list[str]:
+    def res(wid: str, home: Path | None) -> str:
         rows = procs.get(wid, [])
         parts = []
         before = prev_cpu.get(wid)
         if before is not None and dt > 0:
-            used = max(0, sum(t for _, t, _ in rows) - sum(before.values()))
-            parts.append(f"⚙ {pct(used / TICK / dt, os.cpu_count())}")
+            used = sum(t - before[str(p)] for p, t, _ in rows if str(p) in before)
+            cores = os.cpu_count()
+            parts.append(f"⚙ {pct(min(max(used / TICK / dt, 0), cores), cores)}")
         parts.append(f"▤ {pct(sum(r for _, _, r in rows), meminfo()[0])}")
         if home:
             hit = disk_cache.get(str(home))
@@ -244,7 +246,7 @@ def main() -> None:
                 save()
             if hit["bytes"] is not None:
                 parts.append(f"⛁ {pct(hit['bytes'], fs_size(home))}")
-        return ["  ".join(parts)]
+        return "  ".join(parts)
 
     def host() -> list[str]:
         busy, total = cpu_times()
@@ -269,6 +271,7 @@ def main() -> None:
         # Helper and per-task spaces get their short name only.
         helper = "-afk-daemon-" in label or label.startswith("└")
         home = None if helper else homes.get(wid)
+        pad = BLANK * 2 if wid == primary.get("workspace_id") else ""
         keep = last.get(wid, {})
         values: dict[str, str | None] = dict.fromkeys(TOKENS, "")
         values["short"] = short_name(label)
@@ -286,9 +289,9 @@ def main() -> None:
             fill(["crew"], lambda: [count(crew(home), "▶ ")])
             fill(["queue"], lambda: [count(queue(home), "◷ ")])
             silent = "⚠ watcher silent"
-            fill(["alert"], lambda: [silent if watcher_silent(home) else ""])
+            fill(["alert"], lambda: [pad + silent if watcher_silent(home) else ""])
         if not helper:
-            fill(["res"], lambda: res(wid, home))
+            fill(["res"], lambda: [pad + res(wid, home)])
         if wid == primary.get("workspace_id"):
             fill(["host"], host)
 
