@@ -1,24 +1,28 @@
 // Installed by Code Factory from config/herdr-sidebar.ts; `./factory apply`
-// overwrites it. Feeds the Herdr agent sidebar layout described in
+// overwrites it. Feeds the Herdr Agents sidebar layout described in
 // docs/herdr.md:
 //   - terminal title: the bare session topic, without omp's "π" and spinner;
 //     a spawned worker (FM_TASK_ID set) gets two U+2800 blanks in front so the
 //     topic lines up under its "└ task" name.
-//   - pane token `who`: "└ <FM_TASK_ID>" for a worker, otherwise the label of
-//     the pane's own workspace.
-//   - pane token `refs` (workers only): the open pull request for the current
-//     branch and the issues it closes, as "⎇ <pr>  ◉ <issue>".
+//   - pane token `who`: "└ <FM_TASK_ID>" for a worker, otherwise the short
+//     name of the pane's own workspace (shortName below).
+//   - pane tokens `pr`, `issue`, `add`, `del`, `files`: the open pull request
+//     for the current branch, the issue it works on, and its size against the
+//     default branch, as "⎇ <pr>", "○ <issue>", "+<added>", "−<deleted>",
+//     "✎ <files>". The first part present carries the indent.
 // Lookups run in the background on session start and turn end and never fail
 // or slow a turn.
 // @ts-nocheck
 
 import { execFile } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 
 const BLANK = "\u2800";
 const SOURCE = "code-factory:sidebar";
-const REFS_REFRESH_MS = 5 * 60 * 1000;
+const PR_REFRESH_MS = 5 * 60 * 1000;
+const PARTS = ["pr", "issue", "add", "del", "files"];
 const taskId = process.env.FM_TASK_ID || "";
 const paneId = process.env.HERDR_PANE_ID;
 const workspaceId = process.env.HERDR_WORKSPACE_ID;
@@ -31,22 +35,77 @@ export function titleFor(topic: string): string {
   return (taskId ? BLANK + BLANK : "") + topic;
 }
 
-// Same-repository closing keywords GitHub recognises in a PR body.
-const CLOSING = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#(\d+)\b/gi;
-
-export function refsValue(pr: { number: number; body?: string | null } | undefined): string {
-  if (!pr) return "";
-  const issues = [...new Set([...(pr.body || "").matchAll(CLOSING)].map((m) => m[1]))];
-  return BLANK.repeat(4) + [`⎇ ${pr.number}`, ...issues.map((n) => `◉ ${n}`)].join("  ");
+// Same mapping as maintenance/herdr-spaces.py short_name; "" means none.
+export function shortName(label = ""): string {
+  if (label.includes("-afk-daemon-")) return "☾ afk";
+  if (label.startsWith("└")) return label.split(" · ")[0];
+  if (label.startsWith("2ndmate-")) return label.slice(8).replace(/-mate-[^-]+$/, "");
+  return label === "firstmate" ? label : "";
 }
 
-async function lookupRefs(cwd: string): Promise<string> {
+// Same-repository closing keywords GitHub recognises in a PR body.
+const CLOSING = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#(\d+)\b/i;
+// How a task record names its issue: an issues/<n> link or "issue #<n>".
+const RECORD_ISSUE = /issues\/(\d+)|\bissue\s+#?(\d+)/i;
+
+export function closingIssue(body?: string | null): string {
+  return (body || "").match(CLOSING)?.[1] || "";
+}
+
+export function recordIssue(texts: string[]): string {
+  for (const text of texts) {
+    const m = text.match(RECORD_ISSUE);
+    if (m) return m[1] || m[2];
+  }
+  return "";
+}
+
+export function shortstat(out: string) {
+  const n = (re: RegExp) => Number(out.match(re)?.[1] || 0);
+  return { files: n(/(\d+) files? changed/), add: n(/(\d+) insertions?/), del: n(/(\d+) deletions?/) };
+}
+
+// Token values for the pull request line; "" clears a part.
+export function prParts(v: { pr?; issue?; add?; del?; files? }, indent: number): Record<string, string> {
+  const text = {
+    pr: v.pr ? `⎇ ${v.pr}` : "",
+    issue: v.issue ? `○ ${v.issue}` : "",
+    add: v.add != null ? `+${v.add}` : "",
+    del: v.del != null ? `−${v.del}` : "",
+    files: v.files != null ? `✎ ${v.files}` : "",
+  };
+  let pad = BLANK.repeat(indent);
+  return Object.fromEntries(
+    PARTS.map((k) => {
+      const value = text[k] ? pad + text[k] : "";
+      if (value) pad = "";
+      return [k, value];
+    }),
+  );
+}
+
+async function lookupPr(cwd: string) {
   const branch = (await run("git", ["-C", cwd, "branch", "--show-current"])).trim();
-  if (!branch) return "";
+  if (!branch) return undefined;
   // REST, not GraphQL: gh fills {owner}/{repo} from the checkout's remote.
   const endpoint = `repos/{owner}/{repo}/pulls?state=open&head={owner}:${encodeURIComponent(branch)}`;
-  const pulls = JSON.parse(await run("gh", ["api", "-X", "GET", endpoint], cwd));
-  return refsValue(pulls[0]);
+  return JSON.parse(await run("gh", ["api", "-X", "GET", endpoint], cwd))[0];
+}
+
+// A worker's issue from its orchestrator home: the backlog entry, then the
+// brief. The home is the ancestor of the pane's launch directory that holds
+// state/<task>.meta.
+async function lookupTaskIssue(): Promise<string> {
+  let dir = JSON.parse(await run(herdr, ["pane", "get", paneId])).result?.pane?.cwd;
+  for (; dir && dir !== path.dirname(dir); dir = path.dirname(dir)) {
+    if (!existsSync(path.join(dir, "state", `${taskId}.meta`))) continue;
+    const read = (f: string) => (existsSync(f) ? readFileSync(f, "utf8") : "");
+    const entry = read(path.join(dir, "data", "backlog.md"))
+      .split("\n")
+      .filter((line) => line.startsWith("- [") && line.includes(` ${taskId} - `));
+    return recordIssue([...entry, read(path.join(dir, "data", taskId, "brief.md"))]);
+  }
+  return "";
 }
 
 export default function (pi) {
@@ -55,11 +114,13 @@ export default function (pi) {
   if (process.env.HERDR_ENV !== "1" || !paneId || process.env.OMPCODE === "1") return;
 
   let current; // latest interactive ctx
-  let refs = "";
-  let refsAt = 0;
-  let refreshing = false;
   let trailing;
   let titleTimer;
+  let pr; // open pull request for the current branch, from the REST API
+  let taskIssue = "";
+  let stat = {};
+  let lookedUpAt = 0;
+  let refreshing = false;
 
   // Runs from a raw timer too, where a throw would take the session down.
   function applyTitle() {
@@ -83,21 +144,27 @@ export default function (pi) {
   }
 
   async function report() {
-    const who = taskId
-      ? `└ ${taskId}`
-      : JSON.parse(await run(herdr, ["workspace", "get", workspaceId])).result?.workspace?.label;
+    let who = `└ ${taskId}`;
+    if (!taskId) {
+      const label = JSON.parse(await run(herdr, ["workspace", "get", workspaceId])).result?.workspace?.label;
+      who = shortName(label) || label;
+    }
+    const parts = prParts(
+      { pr: pr?.number, issue: taskIssue || closingIssue(pr?.body), ...(pr ? stat : {}) },
+      taskId ? 4 : 2,
+    );
     const args = ["pane", "report-metadata", paneId, "--source", SOURCE];
-    args.push(...(who ? ["--token", `who=${who}`] : ["--clear-token", "who"]));
-    if (taskId) args.push(...(refs ? ["--token", `refs=${refs}`] : ["--clear-token", "refs"]));
+    for (const [k, v] of Object.entries({ who, ...parts })) args.push(...(v ? ["--token", `${k}=${v}`] : ["--clear-token", k]));
     await run(herdr, args);
   }
 
-  // Re-reporting on every call also restores tokens a Herdr restart dropped.
-  // A lookup asked for while one runs or inside the throttle window is put
-  // off to the window's end, not dropped.
+  // Display-only: a failed lookup keeps the previous value. Re-reporting on
+  // every call also restores tokens a Herdr restart dropped. A lookup asked
+  // for while one runs or inside the throttle window is put off to the
+  // window's end, not dropped.
   async function refresh(cwd?: string) {
-    const wait = refsAt + REFS_REFRESH_MS - Date.now();
-    if (cwd && taskId && (refreshing || wait > 0) && !trailing) {
+    const wait = lookedUpAt + PR_REFRESH_MS - Date.now();
+    if (cwd && (refreshing || wait > 0) && !trailing) {
       trailing = setTimeout(() => {
         trailing = undefined;
         void refresh(current.cwd);
@@ -107,17 +174,17 @@ export default function (pi) {
     if (refreshing) return;
     refreshing = true;
     try {
-      await report();
-      if (cwd && taskId && wait <= 0) {
-        refsAt = Date.now();
-        const next = await lookupRefs(cwd);
-        if (next !== refs) {
-          refs = next;
-          await report();
-        }
+      if (cwd && wait <= 0) {
+        lookedUpAt = Date.now();
+        pr = await lookupPr(cwd).catch(() => pr);
+        if (taskId) taskIssue = await lookupTaskIssue().catch(() => taskIssue);
       }
+      if (cwd && pr) {
+        const base = `origin/${pr.base?.repo?.default_branch || pr.base?.ref}`;
+        stat = await run("git", ["-C", cwd, "diff", "--shortstat", `${base}...HEAD`]).then(shortstat, () => stat);
+      }
+      await report();
     } catch {
-      // Display-only: a failed lookup or report keeps the previous value.
     } finally {
       refreshing = false;
     }
@@ -140,6 +207,7 @@ export default function (pi) {
     clearInterval(titleTimer);
     titleTimer = undefined;
     clearTimeout(trailing);
-    if (current) void run(herdr, ["pane", "report-metadata", paneId, "--source", SOURCE, "--clear-token", "who", "--clear-token", "refs"]).catch(() => {});
+    const clear = ["who", ...PARTS].flatMap((k) => ["--clear-token", k]);
+    if (current) void run(herdr, ["pane", "report-metadata", paneId, "--source", SOURCE, ...clear]).catch(() => {});
   });
 }

@@ -82,7 +82,7 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 | [Configuration](docs/configuration.md) | `.local/host.yml`, the `./factory` commands, and what each profile installs |
 | [Dependencies](docs/dependencies.md) | Every pinned tool, package, and image, and what the host must already have |
 | [Fleet guards](docs/fleet-guards.md) | Shared Supabase, Docker guard, dev-server reaper, storage guard, spawn memory floor, browser ladder |
-| [Herdr sidebar](docs/herdr.md) | The Agent sidebar layout, what each line shows, the omp extension that feeds it, and how to override it |
+| [Herdr sidebar](docs/herdr.md) | The Spaces and Agents sidebar layouts, what each line and token shows, the reporter timer and omp extension that feed them, and how to override them or turn parts off |
 | [omp configuration](docs/omp.md) | Signing in, model roles, fallbacks, the advisor, and updating an existing host |
 | [Capacity, plugins and pruners](docs/capacity.md) | Host sizing per lane count, agent plugins and skills, every auto pruner |
 | [Architecture](docs/architecture.md) | Why Ansible, host and container boundary, Docker worker, CI |

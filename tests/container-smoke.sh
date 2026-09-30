@@ -465,9 +465,11 @@ actual = {
     "sidebar_max_width": rendered.get("ui", {}).get("sidebar_max_width"),
     "sidebar_bg": rendered.get("theme", {}).get("custom", {}).get("sidebar_bg"),
     "sidebar_agent_rows": rendered.get("ui", {}).get("sidebar", {}).get("agents", {}).get("rows"),
+    "sidebar_space_rows": rendered.get("ui", {}).get("sidebar", {}).get("spaces", {}).get("rows"),
 }
-# The document carries the layout as TOML text; compare it parsed.
-wanted["sidebar_agent_rows"] = tomllib.loads("rows = " + wanted["sidebar_agent_rows"])["rows"]
+# The document carries the layouts as TOML text; compare them parsed.
+for key in ("sidebar_agent_rows", "sidebar_space_rows"):
+    wanted[key] = tomllib.loads("rows = " + wanted[key])["rows"]
 mismatched = {key: (actual[key], value) for key, value in wanted.items() if key in actual and actual[key] != value}
 if mismatched:
     raise SystemExit(f"rendered Herdr config disagrees with the factory document (actual, wanted): {mismatched}")
@@ -476,7 +478,8 @@ if rendered.get("experimental", {}).get("pane_history"):
 if rendered.get("onboarding", False):
     raise SystemExit("onboarding is enabled; a provisioned image must not prompt on first run")
 
-actual["sidebar_agent_rows"] = f"{len(actual['sidebar_agent_rows'] or [])} rows"
+for key in ("sidebar_agent_rows", "sidebar_space_rows"):
+    actual[key] = f"{len(actual[key] or [])} rows"
 print("rendered config matches the document: " + ", ".join(f"{k}={v}" for k, v in sorted(actual.items())))
 PY
     printf 'herdr config check: %s\n' "${report%%$'\n'*}"
