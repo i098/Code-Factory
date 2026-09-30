@@ -9,9 +9,11 @@ The sidebar is 46 columns wide (`sidebar_width`; it may grow to `sidebar_max_wid
 Spaces shows one entry per home workspace. It never repeats per-agent detail, which lives in Agents.
 
 ```text
-● firstmate · ⚑ 3 · ▶ 1 · ◷ 4 · ⎇ 1 · ✓1
+● firstmate · ⚑ 3 · ▶ 1 · ◷ 4
+  ⎇ 1 · ✓1
   cpu 29%  ram 2.4G  disk 8.5G
-● swarms · ⚑ 2 · ◷ 3 · ⎇ 6 · ✓5 · ✗1
+● swarms · ⚑ 2 · ◷ 3
+  ⎇ 6 · ✓5 · ✗1
   cpu 1%  ram 0.8G  disk 16.2G
   ⚠ watcher silent
 ○ ☾ afk
@@ -19,9 +21,10 @@ Spaces shows one entry per home workspace. It never repeats per-agent detail, wh
 
 | Line | Shows |
 | --- | --- |
-| 1 | The state dot, then the short name (`$short`): the primary home (`firstmate`) in bold blue, other homes in mauve. A dead helper space (label contains `-afk-daemon-`) shows `☾ afk`, dimmed, and nothing else. A space with no short name shows its own label, dimmed. Then the counts below, each in its own color. A count of zero is not shown. |
-| 2 | What the space costs the machine, dimmed, indented two columns. |
-| 3 | `⚠ watcher silent` in orange, indented two columns, only when the home's watcher stopped reporting. |
+| 1 | The state dot, then the short name (`$short`): the primary home (`firstmate`) in bold blue, other homes in mauve. A dead helper space (label contains `-afk-daemon-`) shows `☾ afk`, dimmed, and nothing else. A space with no short name shows its own label, dimmed. Then the decision, worker and queue counts below, each in its own color. A count of zero is not shown. |
+| 2 | The pull request counts (`$prs`, `$ci_ok`, `$ci_bad`), indented two columns, only when the home has an open pull request. They sit on their own line so that line 1 keeps the full name with 2-digit counts at 46 columns. |
+| 3 | What the space costs the machine, dimmed, indented two columns. |
+| 4 | `⚠ watcher silent` in orange, indented two columns, only when the home's watcher stopped reporting. |
 
 | Token | Value | Source |
 | --- | --- | --- |
@@ -137,7 +140,6 @@ HERDR_CONFIG_PATH=/path/to/rendered.toml herdr config check
 - Agents line 2 is indented by a second state dot drawn in the sidebar background color. `sidebar_bg` is pinned to the catppuccin base (`#1e1e2e`) so that dot stays invisible. On the highlighted row the dot shows faintly. With another theme, change `sidebar_bg` and the `fg` of that dot in `sidebar_agent_rows` together.
 - Agents without the extension, including non-omp agents, show only their dot on line 1: nothing reports their `who` token.
 - Short names and colors match workspace labels (`firstmate`, `2ndmate-…`, `└ …`, `-afk-daemon-`). A home workspace with another name has no short name and shows its label.
-- Herdr keeps the last two columns of a Space row empty. At 46 columns, a Spaces line 1 with all six counts leaves no room for the full name, so Herdr cuts it (`first…`).
 - Only closing keywords in the pull request body count as issues there. Issues linked only in the GitHub UI are not shown, because the REST API does not list them.
 - The pull request lookup filters by head branch in the checkout's own repository, so a pull request opened from a fork does not show.
 - Spaces counts are only as fresh as the home's own records: `$decisions` follows the summary ledger, which the home republishes on its own events.

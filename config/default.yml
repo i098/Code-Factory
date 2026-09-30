@@ -51,6 +51,8 @@ factory:
           { token = "$decisions", fg = "#f38ba8", bold = true },
           { token = "$crew", fg = "#a6e3a1" },
           { token = "$queue", fg = "#f9e2af" },
+        ],
+        [
           { token = "$prs", fg = "#89b4fa" },
           { token = "$ci_ok", fg = "#a6e3a1" },
           { token = "$ci_bad", fg = "#f38ba8", bold = true },
