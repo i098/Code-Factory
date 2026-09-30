@@ -215,18 +215,18 @@ def test_reporter_counts_from_a_fixture_home(fixture):
         "decisions": "⚑ 1",
         "crew": "▶ 3",
         "queue": "◷ 4",
-        "alert": BLANK * 2 + "⚠ watcher silent",
+        "alert": "⚠ watcher silent",
     }
     # Shares of the machine; CPU needs a baseline, so it waits for run two.
-    # The primary entry indents it to sit under the name, below the header.
-    assert re.fullmatch(BLANK * 2 + r"▤ \d+%  ⛁ \d+%", res)
-    # The primary carries the whole-machine header, within the 42 columns Herdr
-    # shows on the first row of a Spaces entry at sidebar width 46.
+    # Herdr's own continuation indent puts it under the name: no padding.
+    assert re.fullmatch(r"▤ \d+%  ⛁ \d+%", res)
+    # The primary carries the whole-machine line, short enough for the 40
+    # columns Herdr shows on a continuation row at width 46.
     size = r"[\d.]+/[\d.]+[GT] \d+%"
-    assert re.fullmatch(rf"⌂ ▤ {size}  ⛁ {size}", host) and len(host) <= 42
+    assert re.fullmatch(rf"⌂ ▤ {size} ⛁ {size}", host) and len(host) <= 40
     # A helper space shows its short name only; everything else is cleared.
     assert reported["w2"] == {"short": "☾ afk"} | dict.fromkeys(spaces.TOKENS[1:])
-    # A space with no home is not the primary: CPU and RAM only, not indented.
+    # A space with no home is not the primary: CPU and RAM only.
     assert reported["w3"]["res"].startswith("▤ ") and reported["w3"]["host"] is None
     # A second-level home with a live Space counts its own log there; the one
     # without a live Space is counted nowhere.
@@ -240,8 +240,8 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     docs = run()["w1"]
     assert docs["decisions"] == "⚑ 1"
     assert docs["alert"] is None
-    assert re.fullmatch(BLANK * 2 + r"⚙ \d+%  ▤ \d+%  ⛁ \d+%", docs["res"])
-    assert re.fullmatch(r"⌂ ⚙ \d+%  ▤ .+", docs["host"])
+    assert re.fullmatch(r"⚙ \d+%  ▤ \d+%  ⛁ \d+%", docs["res"])
+    assert re.fullmatch(r"⌂ ⚙ \d+% ▤ .+", docs["host"])
 
 
 def test_reporter_forgets_status_logs_it_no_longer_reads(fixture):
@@ -264,9 +264,37 @@ def test_reporter_counts_no_decisions_without_a_firstmate_space(fixture, tmp_pat
     workspaces.write_text(json.dumps(listed))
     reported = run()
     assert {wid: tokens["decisions"] for wid, tokens in reported.items()} == dict.fromkeys(reported)
-    # The first listed still carries the machine header and the indent.
+    # The first listed still carries the machine line.
     assert reported["w1"]["host"].startswith("⌂ ")
-    assert reported["w1"]["res"].startswith(BLANK * 2)
+
+
+def test_queue_count_is_cached_until_the_backlog_changes_or_a_minute_passes(tmp_path):
+    home = tmp_path / "home"
+    calls = tmp_path / "calls"
+    write(
+        home / "bin/fm-tasks-axi.sh",
+        f'#!/bin/sh\necho x >> {calls}\necho "count: $(cat {tmp_path / "ready"})"\n',
+        0o755,
+    )
+    (tmp_path / "ready").write_text("4")
+    backlog = home / "data/backlog.md"
+    write(backlog, "- [ ] a\n")
+    saved = {}
+
+    def calls_made() -> int:
+        return len(calls.read_text().splitlines())
+
+    assert spaces.queue(home, saved) == 4 and calls_made() == 1
+    # Hit: the ready set moved, but the backlog did not and the minute is not up.
+    (tmp_path / "ready").write_text("5")
+    assert spaces.queue(home, saved) == 4 and calls_made() == 1
+    # The backlog changed: recount.
+    os.utime(backlog, ns=(0, backlog.stat().st_mtime_ns + 10**9))
+    assert spaces.queue(home, saved) == 5 and calls_made() == 2
+    # A minute passed with the backlog unchanged: recount.
+    (tmp_path / "ready").write_text("6")
+    saved[str(home)][1] -= spaces.QUEUE_TTL + 1
+    assert spaces.queue(home, saved) == 6 and calls_made() == 3
 
 
 def test_space_cpu_leaves_out_a_reaped_child(fixture):
@@ -332,12 +360,12 @@ def test_machine_sizes_stay_short(used, total, fine, text):
 
 @pytest.mark.parametrize("ram", [9.96, 15.6, 31.0, 99.9, 999.6, 9.96 * 1024])
 @pytest.mark.parametrize("disk", [9.96, 93.1, 100.0, 999.0, 9.96 * 1024, 99 * 1024])
-def test_machine_header_fits_the_first_spaces_row(ram, disk):
-    # The 42 columns Herdr shows on the first row of a Spaces entry at sidebar
-    # width 46, with CPU at 100% and memory and disk at 99%.
+def test_machine_line_fits_a_continuation_spaces_row(ram, disk):
+    # The 40 columns Herdr shows on a continuation row of a Spaces entry at
+    # sidebar width 46, with CPU at 100% and memory and disk at 99%.
     mem = spaces.used_of(ram * 2**30, ram * 2**30, fine=True)
     root = spaces.used_of(disk * 2**30, disk * 2**30)
-    assert len(f"⌂ ⚙ 100%  ▤ {mem} 99%  ⛁ {root} 99%") <= 42
+    assert len(f"⌂ ⚙ 100% ▤ {mem} 99% ⛁ {root} 99%") <= 40
 
 
 def test_reporter_waits_out_a_failed_disk_measurement(fixture, tmp_path):

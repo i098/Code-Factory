@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Report per-home rollups to the Herdr Spaces sidebar (docs/herdr.md).
 
-Run by herdr-spaces.timer every 10 seconds. For every Herdr workspace it finds
+Run by herdr-spaces.timer every second. For every Herdr workspace it finds
 the orchestrator home from its panes' directories and reports display-only
 workspace tokens under the source `code-factory:spaces`:
 
@@ -10,15 +10,15 @@ workspace tokens under the source `code-factory:spaces`:
                     a second-level home's own, or the primary home's own workers';
                     only while a workspace is labelled firstmate
   crew       "▶ N"  live worker task records (state/*.meta, homes excluded)
-  queue      "◷ N"  queued tasks ready to start (bin/fm-tasks-axi.sh ready)
+  queue      "◷ N"  queued tasks ready to start (bin/fm-tasks-axi.sh ready),
+                    recounted when data/backlog.md changes, else once a minute
   res        "⚙ 29%  ▤ 8%  ⛁ 2%"  CPU, RAM and disk, as shares of the machine
   alert      "⚠ watcher silent" when the home's supervision is unhealthy
-  host       "⌂ ⚙ 41%  ▤ 18.2/31.0G 59%  ⛁ 402/937G 43%"  the whole machine,
-             on the primary home only (labelled firstmate, else the first listed),
-             whose res and alert are indented two columns to sit under its name
+  host       "⌂ ⚙ 41% ▤ 18.2/31.0G 59% ⛁ 402/937G 43%"  the whole machine,
+             on the primary home only (labelled firstmate, else the first listed)
 
-Zero counts are cleared. Disk is cached 15 minutes in
-~/.cache/code-factory/herdr-spaces.json. A source that fails keeps
+Zero counts are cleared. Disk is cached 15 minutes, and the queue count as
+above, in ~/.cache/code-factory/herdr-spaces.json. A source that fails keeps
 its previous value, and the script always exits 0.
 """
 
@@ -35,9 +35,9 @@ HERDR = os.environ.get("HERDR_BIN_PATH", "herdr")
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "code-factory"
 TOKENS = ("short", "decisions", "crew", "queue", "res", "alert", "host")
 DISK_TTL = 15 * 60
+QUEUE_TTL = 60  # "ready" also moves with date gates, so recount at least once a minute
 TICK = os.sysconf("SC_CLK_TCK")
 PAGE = os.sysconf("SC_PAGE_SIZE")
-BLANK = "\u2800"
 
 
 def short_name(label: str) -> str:
@@ -119,10 +119,20 @@ def crew(home: Path) -> int:
     return sum("\nkind=secondmate\n" not in f"\n{text}\n" for text in metas)
 
 
-def queue(home: Path) -> int:
+def queue(home: Path, saved: dict) -> int:
+    """fm-tasks-axi's ready count. The call is most of a run's time and the timer
+    fires every second, so the count is reused until the backlog changes or
+    QUEUE_TTL passes."""
+    backlog = home / "data/backlog.md"
+    mtime = backlog.stat().st_mtime_ns if backlog.exists() else 0
+    hit = saved.get(str(home))
+    if hit and hit[0] == mtime and time.time() - hit[1] < QUEUE_TTL:
+        return hit[2]
     env = {**os.environ, "FM_HOME": str(home)}
     out = run(home / "bin/fm-tasks-axi.sh", "ready", cwd=home, env=env)
-    return int(re.search(r"^count: (\d+)", out, re.M)[1])
+    n = int(re.search(r"^count: (\d+)", out, re.M)[1])
+    saved[str(home)] = [mtime, time.time(), n]
+    return n
 
 
 def watcher_silent(home: Path) -> bool:
@@ -281,7 +291,7 @@ def main() -> None:
         st = os.statvfs("/")
         disk_total, disk_used = st.f_blocks * st.f_frsize, (st.f_blocks - st.f_bfree) * st.f_frsize
         parts.append(f"⛁ {used_of(disk_used, disk_total)} {pct(disk_used, disk_total)}")
-        return ["⌂ " + "  ".join(parts)]
+        return ["⌂ " + " ".join(parts)]
 
     first = workspaces[0] if workspaces else {}
     firstmate = next(
@@ -295,7 +305,6 @@ def main() -> None:
         # Helper and per-task spaces get their short name only.
         helper = "-afk-daemon-" in label or label.startswith("└")
         home = None if helper else homes.get(wid)
-        pad = BLANK * 2 if wid == primary else ""
         keep = last.get(wid, {})
         values: dict[str, str | None] = dict.fromkeys(TOKENS, "")
         values["short"] = short_name(label)
@@ -320,11 +329,10 @@ def main() -> None:
                     ],
                 )
             fill(["crew"], lambda: [count(crew(home), "▶ ")])
-            fill(["queue"], lambda: [count(queue(home), "◷ ")])
-            silent = "⚠ watcher silent"
-            fill(["alert"], lambda: [pad + silent if watcher_silent(home) else ""])
+            fill(["queue"], lambda: [count(queue(home, cache.setdefault("queue", {})), "◷ ")])
+            fill(["alert"], lambda: ["⚠ watcher silent" if watcher_silent(home) else ""])
         if not helper:
-            fill(["res"], lambda: [pad + res(wid, home)])
+            fill(["res"], lambda: [res(wid, home)])
         if wid == primary:
             fill(["host"], host)
 

@@ -80,7 +80,7 @@
       {{ factory_cfg.user }}.
   when: not (factory_manage_services | bool)
 
-# Spaces sidebar reporter (docs/herdr.md): a stdlib Python script on a 10 s
+# Spaces sidebar reporter (docs/herdr.md): a stdlib Python script on a 1 s
 # user timer. Each run is a fresh process, so a rewritten script needs no
 # restart.
 - name: Install the Herdr Spaces reporter

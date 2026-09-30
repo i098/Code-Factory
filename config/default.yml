@@ -28,10 +28,11 @@ factory:
       [
         [
           "state_icon",
-          { token = "$who", fg = "#cba6f7", bold = true, rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "└", fg = "#94e2d5", bold = false }, { starts_with = "☾", bold = false }] },
+          { token = "$who", fg = "#cba6f7", bold = true, rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "☾", bold = false }] },
+          { token = "terminal_title", fg = "#94e2d5", rules = [{ starts_with = "└" }, { starts_with = "", hide = true }] },
         ],
         [
-          { token = "terminal_title", fg = "#a6adc8" },
+          { token = "terminal_title", fg = "#cdd6f4", dim = true, rules = [{ starts_with = "└", hide = true }] },
         ],
         [
           { token = "$pr", fg = "#89b4fa" },
@@ -44,9 +45,6 @@ factory:
     sidebar_space_rows: |
       [
         [
-          { token = "$host", fg = "#a6adc8" },
-        ],
-        [
           "state_icon",
           { token = "$short", fg = "#cba6f7", rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "└", fg = "#94e2d5" }, { starts_with = "☾", fg = "#6c7086" }] },
           { token = "workspace", dim = true, rules = [{ equals = "firstmate", hide = true }, { starts_with = "2ndmate-", hide = true }, { starts_with = "└", hide = true }, { contains = "-afk-daemon-", hide = true }] },
@@ -56,6 +54,9 @@ factory:
         ],
         [
           { token = "$res", fg = "#a6adc8" },
+        ],
+        [
+          { token = "$host", fg = "#a6adc8" },
         ],
         [
           { token = "$alert", fg = "#fab387" },

@@ -6,6 +6,7 @@
 [Unit]
 Description=Report per-home rollups to the Herdr Spaces sidebar (Code Factory managed)
 ConditionPathExists={{ factory_herdr_spaces_script }}
+StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
@@ -13,7 +14,11 @@ Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 Environment=HERDR_BIN_PATH={{ factory_herdr_bin }}
 ExecStart=/usr/bin/python3 {{ factory_herdr_spaces_script }}
 # A run that refreshes the 15-minute disk cache walks every home and worktree
-# pool with du; the other runs take about a second.
+# pool with du; the timer waits for it, so runs never overlap.
 TimeoutStartSec=600
 Nice=10
 IOSchedulingClass=idle
+# A run every second: keep the manager's per-run start and finish lines out of
+# the journal, and log the script's own stderr (its errors) above that cut.
+LogLevelMax=notice
+SyslogLevel=warning
