@@ -28,10 +28,11 @@ factory:
       [
         [
           "state_icon",
-          { token = "$who", fg = "#cba6f7", bold = true, rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "└", fg = "#94e2d5", bold = false }, { starts_with = "☾", bold = false }] },
+          { token = "$who", fg = "#cba6f7", bold = true, rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "☾", bold = false }] },
+          { token = "terminal_title", fg = "#94e2d5", rules = [{ starts_with = "└" }, { starts_with = "", hide = true }] },
         ],
         [
-          { token = "terminal_title", fg = "#cdd6f4", dim = true },
+          { token = "terminal_title", fg = "#cdd6f4", dim = true, rules = [{ starts_with = "└", hide = true }] },
         ],
         [
           { token = "$pr", fg = "#89b4fa" },

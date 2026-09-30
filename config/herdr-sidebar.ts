@@ -2,10 +2,10 @@
 // overwrites it. Feeds the Herdr Agents sidebar layout described in
 // docs/herdr.md:
 //   - terminal title: the bare session topic, without omp's "π" and spinner;
-//     a spawned worker (FM_TASK_ID set) gets two U+2800 blanks in front so the
-//     topic lines up under its "└ task" name.
-//   - pane token `who`: "└ <FM_TASK_ID>" for a worker, otherwise the short
-//     name of the pane's own workspace (shortName below).
+//     a spawned worker (FM_TASK_ID set) gets "└ " in front, and the Agents
+//     layout shows that title as the worker's only name line.
+//   - pane token `who`: the short name of the pane's own workspace (shortName
+//     below); none for a worker, whose title names it.
 //   - pane tokens `pr`, `issue`, `add`, `del`, `files`: the open pull request
 //     for the current branch, the issue it works on, and its size against the
 //     default branch, as "⎇ <pr>", "○ <issue>", "+<added>", "−<deleted>",
@@ -32,7 +32,7 @@ const run = async (cmd: string, args: string[], cwd?: string): Promise<string> =
   (await promisify(execFile)(cmd, args, { cwd, timeout: 15_000, encoding: "utf8" })).stdout;
 
 export function titleFor(topic: string): string {
-  return (taskId ? BLANK + BLANK : "") + topic;
+  return (taskId ? "└ " : "") + topic;
 }
 
 // Same mapping as maintenance/herdr-spaces.py short_name; "" means none.
@@ -154,7 +154,7 @@ export default function (pi) {
   }
 
   async function report() {
-    let who = `└ ${taskId}`;
+    let who = "";
     if (!taskId) {
       const label = JSON.parse(await run(herdr, ["workspace", "get", workspaceId])).result?.workspace?.label;
       who = shortName(label) || label;

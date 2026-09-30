@@ -66,8 +66,7 @@ The result carries `tokens.short`, `tokens.decisions`, and so on.
 ```text
 ● firstmate
   Planning the release checklist
-● └ fix-login
-    Fixing the token refresh race
+● └ Fixing the token refresh race
     ⎇ 1537 · ○ 1529 · +12847 · −3902 · ✎ 214
 ● swarms
   Fix ratings cache key collision
@@ -76,8 +75,8 @@ The result carries `tokens.short`, `tokens.decisions`, and so on.
 
 | Line | Shows |
 | --- | --- |
-| 1 | The state dot, then the pane's `who` name: the same short names as Spaces. The primary home is bold blue, other homes bold mauve, a dead helper (`☾ afk`) mauve, not bold, and a spawned worker (`└ <task>`) teal, not bold. |
-| 2 | The agent's current session topic, dimmed on a brighter base (`#cdd6f4`) so it reads lighter than the name, without omp's `π` and spinner. Herdr's two-column indent puts it under the name; a spawned worker's topic is indented two more, so it sits under the task name after the `└ `. |
+| 1 | The state dot, then the pane's `who` name: the same short names as Spaces. The primary home is bold blue, other homes bold mauve, and a dead helper (`☾ afk`) mauve, not bold. A spawned worker has no `who` name: its line is `└ ` and its session topic, in teal, because a worker works on one thing and its topic says what. |
+| 2 | A home's current session topic, dimmed on a brighter base (`#cdd6f4`) so it reads lighter than the name, without omp's `π` and spinner. Herdr's two-column indent puts it under the name. A worker has no line 2: its topic is on line 1. |
 | 3 | The pull request line, for any agent whose current branch has an open pull request, workers and homes alike, and for a worker whose task names an issue. Indented to line up under the name: four columns for a worker, two for a home. |
 
 | Token | Value | Color |
@@ -98,7 +97,7 @@ Herdr configuration alone cannot drop the `π` (omp puts it at the start of ever
 
 The extension does nothing outside Herdr (`HERDR_ENV` is not `1`) or in an omp started from another omp's shell (`OMPCODE=1`). Inside a Herdr pane it:
 
-- Sets the terminal title to the bare session topic, and sets it again within a second whenever omp resets it (rename, `/new`, `/resume`, a cwd change). A spawned worker (`FM_TASK_ID` set) gets two U+2800 blank characters in front; Herdr keeps them in `terminal_title`, which makes the extra indent.
+- Sets the terminal title to the bare session topic, and sets it again within a second whenever omp resets it (rename, `/new`, `/resume`, a cwd change). A spawned worker (`FM_TASK_ID` set) gets `└ ` in front; the Agents layout shows a title that starts with `└` on line 1 and hides it on line 2.
 - Reports the pane tokens `who`, `pr`, `issue`, `add`, `del` and `files` under the source `code-factory:sidebar`, and clears the ones without a value.
 
 It reports when a session starts and when a turn ends. The pull request and the task's issue are looked up then too, at most every 5 minutes; a turn that ends sooner gets its lookup when the 5 minutes are up. The line counts are recomputed on every turn end while a pull request is open. Lookups run in the background with a timeout. A failed lookup keeps the previous value and never fails or slows a turn. Herdr drops pane tokens when its server restarts; the extension reports them again at the next turn end. All tokens are cleared when omp exits.
