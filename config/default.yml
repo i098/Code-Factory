@@ -23,7 +23,7 @@ factory:
     # feeds the Agents $ tokens and the herdr-spaces reporter timer the Spaces
     # ones.
     sidebar_width: 46
-    sidebar_max_width: 54
+    sidebar_max_width: 48
     sidebar_agent_rows: |
       [
         [

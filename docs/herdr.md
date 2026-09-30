@@ -2,7 +2,7 @@
 
 Code Factory renders `~/.config/herdr/config.toml` from [`ansible/templates/herdr.toml.j2`](../ansible/templates/herdr.toml.j2) and the `herdr` block of `.local/host.yml`. This guide covers the two sidebar layouts it ships, Spaces and Agents, and the two feeders that report their `$` tokens: an omp extension for Agents and a reporter timer for Spaces.
 
-The sidebar is 46 columns wide (`sidebar_width`; it may grow to `sidebar_max_width`, 54). That fits the widest pull request line: a 4-digit pull request and issue, 5-digit line counts and a 3-digit file count. There is no status word: the color of the state dot already shows it.
+The sidebar is 46 columns wide (`sidebar_width`; it may grow to `sidebar_max_width`, 48). That fits the widest pull request line: a 4-digit pull request and issue, 5-digit line counts and a 3-digit file count. There is no status word: the color of the state dot already shows it.
 
 ## Spaces: one entry per home
 
@@ -116,7 +116,7 @@ Set these keys under `factory.herdr` in `.local/host.yml`, then run `./factory a
 | Key | Default | Effect |
 | --- | --- | --- |
 | `sidebar_width` | `46` | Expanded sidebar width in columns. |
-| `sidebar_max_width` | `54` | Maximum expanded sidebar width. |
+| `sidebar_max_width` | `48` | Maximum expanded sidebar width. |
 | `sidebar_space_rows` | the Spaces layout above | TOML array written as `[ui.sidebar.spaces] rows`. |
 | `sidebar_agent_rows` | the Agents layout above | TOML array written as `[ui.sidebar.agents] rows`. |
 | `sidebar_bg` | `#1e1e2e` | `[theme.custom] sidebar_bg`. |
