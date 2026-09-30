@@ -395,8 +395,8 @@ def test_reporter_waits_out_a_failed_disk_measurement(fixture, tmp_path):
     assert len(calls.read_text().splitlines()) == 1
 
 
-def worker_report(tmp_path, origin_head=True):
-    """The last report of a worker's pane with a commit and no pull request."""
+def worker_report(tmp_path, origin_head=True, commit=True):
+    """The last report of a worker's pane with no pull request."""
     git_env = {
         **os.environ,
         "GIT_AUTHOR_NAME": "t",
@@ -416,9 +416,10 @@ def worker_report(tmp_path, origin_head=True):
     if not origin_head:
         git("remote", "set-head", "origin", "-d")
     git("checkout", "-q", "-b", "task")
-    (work / "f").write_text("x\n")
-    git("add", "f")
-    git("commit", "-q", "-m", "work")
+    if commit:
+        (work / "f").write_text("x\n")
+        git("add", "f")
+        git("commit", "-q", "-m", "work")
     log = tmp_path / "herdr.log"
     write(tmp_path / "stub/herdr", f'#!/bin/sh\necho "$@" >> {log}\necho "{{}}"\n', 0o755)
     write(tmp_path / "stub/gh", "#!/bin/sh\necho '[]'\n", 0o755)
@@ -450,6 +451,13 @@ def test_worker_shows_its_size_before_a_pull_request(tmp_path):
 @needs_bun
 def test_worker_without_origin_head_shows_no_size(tmp_path):
     report = worker_report(tmp_path, origin_head=False)
+    for part in ("add", "del", "files"):
+        assert f"--clear-token {part}" in report
+
+
+@needs_bun
+def test_worker_without_a_commit_shows_no_size(tmp_path):
+    report = worker_report(tmp_path, commit=False)
     for part in ("add", "del", "files"):
         assert f"--clear-token {part}" in report
 

@@ -7,11 +7,11 @@ omp (`@oh-my-pi/pi-coding-agent`) is the agent harness Code Factory installs. Th
 With the `agents` profile on, `./factory apply`:
 
 1. Installs the latest published omp, resolved from the npm registry on every apply (see [Dependencies](dependencies.md#latest-releases)).
-2. Copies [`config/omp.yml`](../config/omp.yml) to `~/.omp/agent/config.yml` (directory `0700`, file `0600`).
+2. Copies [`config/omp.yml`](../config/omp.yml) to `~/.omp/agent/config.yml` (directory `0700`, file `0600`), and [`config/omp-lsp.json`](../config/omp-lsp.json) to `~/.omp/agent/lsp.json`, which disables the markdown language server (marksman): it costs each session about 90 MB, and markdown diagnostics add nothing to agent work.
 3. Installs the extension `~/.omp/agent/extensions/code-factory-herdr-sidebar.ts`, which feeds the Herdr Agent sidebar the session topic, the pane's short name, and the pull request line (pull request, issue and diff size). Every apply rewrites it. See [Herdr sidebar](herdr.md).
 4. Installs the extension `~/.omp/agent/extensions/aa-mode-icons.ts` from [`config/omp-status-icons.ts`](../config/omp-status-icons.ts). Every apply rewrites it. See [Status line icons](#status-line-icons).
 
-The copy is first-write-only. If `~/.omp/agent/config.yml` already exists, the recipe leaves it alone, so an account's own settings and provider configuration are never overwritten. See [Updating an existing host](#updating-an-existing-host).
+Both copies are first-write-only. If a file already exists, the recipe leaves it alone, so an account's own settings and provider configuration are never overwritten. The one exception is the two status line keys the [status line icons](#status-line-icons) need, which every apply ensures. See [Updating an existing host](#updating-an-existing-host).
 
 No credentials are installed. You sign in on each host.
 
@@ -87,7 +87,7 @@ The status icons extension puts the mode indicators and the configured hooks on 
 
 The file is installed as `aa-mode-icons.ts` on purpose: omp loads extensions in name order, and the extension must wrap the status API before the ponytail and ADHD plugins set their statuses.
 
-The row needs two keys in `statusLine`, both in `config/omp.yml`: `status` at the end of `leftSegments`, which shows extension statuses on the main line, and `showHookStatus: false`, which drops the separate hooks line. A host whose `~/.omp/agent/config.yml` predates them keeps its old status line, because the seed is first-write-only. To adopt it there, edit `~/.omp/agent/config.yml`: add `- status` as the last entry of `statusLine.leftSegments` and set `statusLine.showHookStatus` to `false`. Then start a new omp session. Check the result with:
+The row needs two keys in `statusLine`: `status` in `leftSegments`, which shows extension statuses on the main line, and `showHookStatus: false`, which drops the separate hooks line. `config/omp.yml` seeds both. On a host whose `~/.omp/agent/config.yml` already exists, every apply appends `status` to `leftSegments` when it is missing and sets `showHookStatus` to `false`, and leaves every other key alone. Start a new omp session to see the change. Check the result with:
 
 ```bash
 omp config get statusLine.leftSegments

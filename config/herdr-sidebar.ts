@@ -9,7 +9,8 @@
 //   - pane tokens `pr`, `issue`, `add`, `del`, `files`: the open pull request
 //     for the current branch, the issue it works on, and its size against the
 //     default branch, as "⎇ <pr>", "○ <issue>", "+<added>", "−<deleted>",
-//     "✎ <files>". A worker shows its size before any pull request opens.
+//     "✎ <files>". A worker shows its size from its first commit, before any
+//     pull request opens.
 //     The first part present carries the indent.
 // Lookups run in the background on session start and turn end and never fail
 // or slow a turn.
@@ -198,6 +199,7 @@ export default function (pi) {
       if (cwd && (pr || taskId)) {
         const base = pr ? `origin/${pr.base?.repo?.default_branch || pr.base?.ref}` : "origin/HEAD";
         stat = await run("git", ["-C", cwd, "diff", "--shortstat", `${base}...HEAD`]).then(shortstat, () => stat);
+        if (!pr && !stat.files) stat = {};
       }
       await report();
     } catch {

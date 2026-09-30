@@ -100,3 +100,30 @@
     mode: "0644"
     remote_src: true
   become: true
+
+# The omp config is first-write-only, but the status icons row needs two of its
+# keys on every host: `status` in statusLine.leftSegments and no separate hooks
+# line (docs/omp.md). Only those two keys are ensured; the rest is left as is.
+- name: Read the omp config for the status row keys
+  ansible.builtin.slurp:
+    path: "{{ factory_omp_config }}"
+  become: true
+  register: factory_omp_config_raw
+  failed_when: false
+  check_mode: false
+
+- name: Ensure the status row keys in the omp config
+  vars:
+    current: "{{ factory_omp_config_raw.content | b64decode | from_yaml }}"
+    segments: "{{ current.statusLine.leftSegments | default([]) }}"
+    wanted: >-
+      {{ current | combine({'statusLine': current.statusLine | default({}) | combine({
+           'leftSegments': segments + ([] if 'status' in segments else ['status']),
+           'showHookStatus': false})}) }}
+  ansible.builtin.copy:
+    content: "{{ wanted | to_nice_yaml(indent=2, sort_keys=false) }}"
+    dest: "{{ factory_omp_config }}"
+  become: true
+  when:
+    - factory_omp_config_raw.content is defined
+    - wanted != current

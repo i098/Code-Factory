@@ -751,6 +751,7 @@ check_agent_gate() {
     cf_python -c 'import sys, yaml; s = yaml.safe_load(open(sys.argv[1]))["statusLine"]; assert s["leftSegments"][-1] == "status" and s["showHookStatus"] is False' \
         "${HOME}/.omp/agent/config.yml" || fail "~/.omp/agent/config.yml does not put extension statuses on the status line without a hooks line"
     [ -f "${HOME}/.omp/agent/extensions/aa-mode-icons.ts" ] || fail "the status icons omp extension is not installed"
+    jq -e '.servers.marksman.disabled == true' "${HOME}/.omp/agent/lsp.json" >/dev/null || fail "~/.omp/agent/lsp.json does not disable marksman"
     # /tmp is a noexec tmpfs in host mode, so the stub omp must live under the home.
     mkdir -p "${HOME}/.cache"
     stub=$(mktemp -d "${HOME}/.cache/ponytail-stub.XXXXXX")
