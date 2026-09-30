@@ -13,6 +13,7 @@
 
 import { execFile } from "node:child_process";
 import path from "node:path";
+import { promisify } from "node:util";
 
 const BLANK = "\u2800";
 const SOURCE = "code-factory:sidebar";
@@ -22,13 +23,8 @@ const paneId = process.env.HERDR_PANE_ID;
 const workspaceId = process.env.HERDR_WORKSPACE_ID;
 const herdr = process.env.HERDR_BIN_PATH || "herdr";
 
-function run(cmd: string, args: string[], cwd?: string): Promise<string> {
-  const { promise, resolve, reject } = Promise.withResolvers<string>();
-  execFile(cmd, args, { cwd, timeout: 15_000, encoding: "utf8" }, (error, stdout) =>
-    error ? reject(error) : resolve(stdout),
-  );
-  return promise;
-}
+const run = async (cmd: string, args: string[], cwd?: string): Promise<string> =>
+  (await promisify(execFile)(cmd, args, { cwd, timeout: 15_000, encoding: "utf8" })).stdout;
 
 export function titleFor(topic: string): string {
   return (taskId ? BLANK + BLANK : "") + topic;
