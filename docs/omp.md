@@ -82,7 +82,7 @@ Firstmate turns it on for omp crewmate and scout launches only, never secondmate
 
 The status icons extension puts the mode indicators and the configured hooks on the main status line as one row of evenly spaced Nerd Font icons, instead of one extension status line per plugin and a separate hooks line:
 
-- Modes: caveman, ADHD (`i-have-adhd`) and ponytail. An icon is lit when the mode is active and dimmed when it is off. The extension takes over the `ponytail` and `i-have-adhd` status keys those plugins set, so their own text statuses no longer show. caveman has no omp extension; its icon is lit unless `~/.claude/.caveman-active` holds `off`.
+- Modes: caveman, ADHD (`i-have-adhd`) and ponytail. An icon shows only while its mode is active; an off mode has no icon, because omp strips all styling from extension statuses and a dimmed icon would look the same as a lit one. The extension takes over the `ponytail` and `i-have-adhd` status keys those plugins set, so their own text statuses no longer show. caveman has no omp extension; its icon shows unless `~/.claude/.caveman-active` holds `off`.
 - Hooks: the hooks in `~/.claude/settings.json` and `<cwd>/.claude/settings.json`. Known hooks get their own icon; the rest show as one icon followed by their count.
 
 The file is installed as `aa-mode-icons.ts` on purpose: omp loads extensions in name order, and the extension must wrap the status API before the ponytail and ADHD plugins set their statuses.

@@ -1,7 +1,8 @@
 /**
  * One status-line entry of evenly spaced icons for the always-on modes:
  *   compress = caveman, brain = ADHD, scissors = ponytail (Nerd Font icons)
- * Lit = the mode's own plugin reports it active; dimmed = present but off.
+ * An icon shows only while the mode's own plugin reports it active: omp strips
+ * all styling from extension statuses, so a dimmed icon would look lit.
  *
  * ponytail and i-have-adhd set their own text statuses ("🐴 ponytail: ⚡ FULL",
  * "● ADHD ON"). omp gives every extension the same ui object, so this wraps
@@ -9,7 +10,7 @@
  * icons under one key. Code Factory installs it as
  * ~/.omp/agent/extensions/aa-mode-icons.ts: omp loads extensions in name order,
  * so the "aa-" name sorts first and the wrap is in place before the plugins'
- * own session_start handlers run. caveman ships no omp extension, so it is lit
+ * own session_start handlers run. caveman ships no omp extension, so it shows
  * unless ~/.claude/.caveman-active says off.
  */
 import { existsSync, readFileSync } from "fs";
@@ -68,11 +69,11 @@ export default function (pi) {
 
 	let hooks = "";
 
-	function render(ui, set) {
-		const t = ui.theme;
-		const icon = (glyph: string, lit: boolean) => (lit ? glyph : t.fg("dim", glyph));
+	function render(set) {
 		on.caveman = cavemanOn();
-		const modes = [icon("\uf066", on.caveman), icon("\u{f09d1}", on["i-have-adhd"]), icon("\uf0c4", on.ponytail)];
+		const modes = [["\uf066", on.caveman], ["\u{f09d1}", on["i-have-adhd"]], ["\uf0c4", on.ponytail]]
+			.filter(([, lit]) => lit)
+			.map(([glyph]) => glyph);
 		set(KEY, [...modes, ...(hooks ? [hooks] : [])].join("   "));
 	}
 
@@ -93,12 +94,12 @@ export default function (pi) {
 				// ponytail shows "○" while its ruleset is not yet in context; count that as off.
 				on[key] = Boolean(text) && !(key === "ponytail" && /○/.test(text));
 				original(key, undefined);
-				render(ui, original);
+				render(original);
 			};
 			ui[WRAPPED] = original;
 			for (const k of OWNED) original(k, undefined);
 		}
-		render(ui, ui[WRAPPED]);
+		render(ui[WRAPPED]);
 	}
 
 	for (const event of ["session_start", "session_switch"])
