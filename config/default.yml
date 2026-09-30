@@ -51,10 +51,13 @@ factory:
           { token = "$decisions", fg = "#f38ba8", bold = true },
           { token = "$crew", fg = "#a6e3a1" },
           { token = "$queue", fg = "#f9e2af" },
-          { token = "$host", fg = "#a6adc8" },
+          { token = "$machine", fg = "#a6adc8" },
         ],
         [
           { token = "$res", fg = "#a6adc8" },
+        ],
+        [
+          { token = "$host", fg = "#a6adc8" },
         ],
         [
           { token = "$alert", fg = "#fab387" },

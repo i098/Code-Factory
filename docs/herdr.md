@@ -22,9 +22,10 @@ Herdr indents every line after an entry's first by two columns, so every entry's
 
 | Line | Shows |
 | --- | --- |
-| 1 | The state dot, then the short name (`$short`): the primary home (`firstmate`) in bold blue, other homes in mauve. A dead helper space (label contains `-afk-daemon-`) shows `☾ afk`, dimmed, and nothing else. A space with no short name shows its own label, dimmed. Then the decision, worker and queue counts below, each in its own color. A count of zero is not shown. Last, the whole machine (`$host`), in light grey (`#a6adc8`), on one entry only: `⚙` CPU, `▤` used/total RAM, `⛁` used/total root filesystem, each with its share. |
+| 1 | The state dot, then the short name (`$short`): the primary home (`firstmate`) in bold blue, other homes in mauve. A dead helper space (label contains `-afk-daemon-`) shows `☾ afk`, dimmed, and nothing else. A space with no short name shows its own label, dimmed. Then the decision, worker and queue counts below, each in its own color. A count of zero is not shown. On the `machine` workspace only, the whole machine (`$machine`) instead. |
 | 2 | What the space costs the machine, as shares, in light grey (`#a6adc8`): `⚙` CPU, `▤` RAM, `⛁` disk. |
-| 3 | `⚠ watcher silent` in orange, only when the home's watcher stopped reporting. |
+| 3 | The whole machine (`$host`), on the primary home's entry only (the workspace labelled `firstmate`; without one, the first workspace listed), and only while no `machine` workspace exists. Every other entry leaves this line empty, and Herdr hides it. |
+| 4 | `⚠ watcher silent` in orange, only when the home's watcher stopped reporting. |
 
 | Token | Value | Source |
 | --- | --- | --- |
@@ -34,7 +35,8 @@ Herdr indents every line after an entry's first by two columns, so every entry's
 | `$queue` | `◷ N` (yellow) | Tasks queued and ready to start: `count` from the home's `bin/fm-tasks-axi.sh ready`, recounted when the home's `data/backlog.md` changes and at least once a minute. |
 | `$res` | `⚙ 29%  ▤ 8%  ⛁ 2%` | CPU (share of all cores) and resident memory (share of `MemTotal`) summed over every process whose environment carries the space's `HERDR_WORKSPACE_ID`, so its workers count. CPU is each process's own CPU time (`utime` + `stime`) gained between two runs, for every process present in both, clamped to 0–100%. Disk is the home plus the worktree pools of its projects, as `treehouse status --json` lists them, as a share of the filesystem holding the home; a pool worktree that is itself another home is left out. |
 | `$alert` | `⚠ watcher silent` (orange) | `fm_supervision_unhealthy` from the home's `bin/fm-supervision-lib.sh`: the home has work that needs a watcher and the watcher's beacon is stale. |
-| `$host` | `⌂ ⚙ 41% ▤ 18.2/31.0G 59% ⛁ 402/937G 43%` | The whole machine, on the `machine` workspace, else on the primary home: CPU busy share from `/proc/stat`, used memory (`MemTotal` − `MemAvailable`) from `/proc/meminfo`, and the root filesystem from `statvfs`. Memory keeps one decimal while the total is under 100G (`18.2/31.0G`); disk is in whole G (`45/93G`, `402/937G`). Both are whole G from 100G and switch to T from 1000G (`1.4/1.9T`, whole T from 10T). |
+| `$host` | `⌂ ⚙ 41% ▤ 18.2/31.0G 59% ⛁ 402/937G 43%` (light grey) | The whole machine: CPU busy share from `/proc/stat`, used memory (`MemTotal` − `MemAvailable`) from `/proc/meminfo`, and the root filesystem from `statvfs`, each with its share. Memory keeps one decimal while the total is under 100G (`18.2/31.0G`); disk is in whole G (`45/93G`, `402/937G`). Both are whole G from 100G and switch to T from 1000G (`1.4/1.9T`, whole T from 10T). Reported on the primary home, only while no `machine` workspace exists. |
+| `$machine` | the same as `$host` | The same line, reported on the `machine` workspace instead. The two are never both set. |
 
 There is no rate-limit warning: a rate limit takes every home down at once, so a per-home flag adds nothing.
 
@@ -48,13 +50,13 @@ herdr workspace create --cwd ~ --label machine --no-focus
 
 Its entry shows the state dot and the machine line, nothing else: no name, no label, no counts and no CPU and RAM line.
 
-Without a `machine` workspace, the machine line goes on the primary home's entry (the workspace labelled `firstmate`; without one, the first workspace listed), at the end of its first line after the counts. Herdr cuts that line at the sidebar width, so the end of the machine line can be hidden there.
+Without a `machine` workspace, the machine line is the primary home's `$host` line (the workspace labelled `firstmate`; without one, the first workspace listed), below its CPU and RAM line.
 
 ### The reporter
 
 [`maintenance/herdr-spaces.py`](../maintenance/herdr-spaces.py) is installed as `~/.local/bin/herdr-spaces.py` and run by the user timer `herdr-spaces.timer` every second. It uses only the Python standard library.
 
-For every Herdr workspace it finds the home from its panes' directories: the nearest git top-level that holds both `state/` and `data/`. It then reports the tokens above as workspace metadata under the source `code-factory:spaces`, with `herdr workspace report-metadata`, and clears every token that has no value. Helper spaces and per-task spaces (`└ …`) get `short` only. A space with no home gets `short` and CPU and RAM only. The `machine` workspace gets `host` only; without one, the primary home gets it.
+For every Herdr workspace it finds the home from its panes' directories: the nearest git top-level that holds both `state/` and `data/`. It then reports the tokens above as workspace metadata under the source `code-factory:spaces`, with `herdr workspace report-metadata`, and clears every token that has no value. Helper spaces and per-task spaces (`└ …`) get `short` only. A space with no home gets `short` and CPU and RAM only. The `machine` workspace gets `machine` only; without one, the primary home gets `host`.
 
 | Source | Refresh | Cost |
 | --- | --- | --- |
@@ -150,5 +152,5 @@ HERDR_CONFIG_PATH=/path/to/rendered.toml herdr config check
 - Short names and colors match workspace labels (`firstmate`, `2ndmate-…`, `└ …`, `-afk-daemon-`). A home workspace with another name has no short name and shows its label.
 - Only closing keywords in the pull request body count as issues there. Issues linked only in the GitHub UI are not shown, because the REST API does not list them.
 - CPU and RAM count only processes the reporter's account can read, and RAM is resident memory, so shared pages count once per process. CPU counts a process only while two runs a second apart both see it: a process that starts and ends between two runs is not counted, and the time before the first run that sees it or after the last is lost, so a space running many short builds reads low.
-- The machine line's parts are single-spaced so it fits after the `machine` entry's state dot at width 46 even with CPU at 100% and memory and disk at 99%. At 100%, on a narrower sidebar, or at the end of the primary home's first line, Herdr cuts its end.
+- The machine line's parts are single-spaced so it fits even with CPU at 100% and memory and disk at 99%: after the `machine` entry's state dot, or two columns in under the primary home's name, where Herdr shows 40 columns at width 46. At 100%, or on a narrower sidebar, Herdr cuts its end.
 - Herdr sidebar styles offer color, bold and dim only: no italic and no thinner weight.

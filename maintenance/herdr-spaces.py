@@ -15,8 +15,9 @@ workspace tokens under the source `code-factory:spaces`:
   res        "⚙ 29%  ▤ 8%  ⛁ 2%"  CPU, RAM and disk, as shares of the machine
   alert      "⚠ watcher silent" when the home's supervision is unhealthy
   host       "⌂ ⚙ 41% ▤ 18.2/31.0G 59% ⛁ 402/937G 43%"  the whole machine,
-             on the workspace labelled machine if one exists, else on the
-             primary home (labelled firstmate, else the first listed)
+             on the primary home (labelled firstmate, else the first listed),
+             only while no workspace is labelled machine
+  machine    the same line, on the workspace labelled machine
 
 Zero counts are cleared. Disk is cached 15 minutes, and the queue count as
 above, in ~/.cache/code-factory/herdr-spaces.json. A source that fails keeps
@@ -34,7 +35,7 @@ from pathlib import Path
 SOURCE = "code-factory:spaces"
 HERDR = os.environ.get("HERDR_BIN_PATH", "herdr")
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "code-factory"
-TOKENS = ("short", "decisions", "crew", "queue", "res", "alert", "host")
+TOKENS = ("short", "decisions", "crew", "queue", "res", "alert", "host", "machine")
 DISK_TTL = 15 * 60
 QUEUE_TTL = 60  # "ready" also moves with date gates, so recount at least once a minute
 TICK = os.sysconf("SC_CLK_TCK")
@@ -302,9 +303,7 @@ def main() -> None:
     primary_home = homes.get(firstmate)
     # An operator-made workspace labelled "machine" carries the machine line as its
     # own entry (pin it first); without one the line sits under the primary home.
-    machine = next(
-        (ws["workspace_id"] for ws in workspaces if ws.get("label") == "machine"), primary
-    )
+    machine = next((ws["workspace_id"] for ws in workspaces if ws.get("label") == "machine"), None)
 
     for ws in workspaces:
         wid, label = ws["workspace_id"], ws.get("label", "")
@@ -340,6 +339,8 @@ def main() -> None:
         if not helper:
             fill(["res"], lambda: [res(wid, home)])
         if wid == machine:
+            fill(["machine"], host)
+        elif wid == primary and not machine:
             fill(["host"], host)
 
         args = [HERDR, "workspace", "report-metadata", wid, "--source", SOURCE]
