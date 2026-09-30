@@ -105,10 +105,12 @@
               "minimum": 1
             },
             "sidebar_agent_rows": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "sidebar_bg": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             }
           },
           "required": [

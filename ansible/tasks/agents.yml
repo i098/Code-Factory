@@ -68,8 +68,7 @@
   become: true
 
 # The omp extension that feeds the Herdr agent sidebar layout ($who, $refs and
-# the bare topic title; docs/herdr.md). Managed: every apply rewrites it, and an
-# empty herdr.sidebar_agent_rows removes it with the layout.
+# the bare topic title; docs/herdr.md). Managed: every apply rewrites it.
 - name: Ensure the omp extensions directory
   ansible.builtin.file:
     path: "{{ factory_omp_sidebar_extension | dirname }}"
@@ -78,7 +77,6 @@
     group: "{{ factory_group }}"
     mode: "0755"
   become: true
-  when: factory_herdr_sidebar_layout | bool
 
 - name: Install the Herdr sidebar omp extension
   ansible.builtin.copy:
@@ -89,11 +87,3 @@
     mode: "0644"
     remote_src: true
   become: true
-  when: factory_herdr_sidebar_layout | bool
-
-- name: Remove the Herdr sidebar omp extension when the layout is off
-  ansible.builtin.file:
-    path: "{{ factory_omp_sidebar_extension }}"
-    state: absent
-  become: true
-  when: not (factory_herdr_sidebar_layout | bool)

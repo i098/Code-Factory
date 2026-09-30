@@ -19,9 +19,7 @@ factory:
     agent_panel_sort: spaces
     headless_cols: 120
     headless_rows: 40
-    # Agent sidebar layout; docs/herdr.md explains each line. An empty
-    # sidebar_agent_rows keeps Herdr's built-in layout and removes the omp
-    # extension that feeds $who, $refs and the bare topic title.
+    # Agent sidebar layout; docs/herdr.md explains each line.
     sidebar_width: 40
     sidebar_max_width: 48
     sidebar_agent_rows: |
@@ -39,7 +37,7 @@ factory:
         ],
       ]
     # Pinned to the catppuccin base so the hidden indent dot on line 2 blends
-    # in; "" leaves the host terminal background.
+    # in.
     sidebar_bg: "#1e1e2e"
   browser_prune:
     enabled: true

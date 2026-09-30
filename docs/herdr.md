@@ -44,7 +44,7 @@ herdr agent get <pane_id>
 
 The result carries `terminal_title` and `tokens.who` / `tokens.refs`.
 
-## Override or turn off the layout
+## Override the layout
 
 Set these keys under `factory.herdr` in `.local/host.yml`, then run `./factory apply`:
 
@@ -53,11 +53,9 @@ Set these keys under `factory.herdr` in `.local/host.yml`, then run `./factory a
 | `sidebar_width` | `40` | Expanded sidebar width in columns. |
 | `sidebar_max_width` | `48` | Maximum expanded sidebar width. |
 | `sidebar_agent_rows` | the layout above | TOML array written as `[ui.sidebar.agents] rows`. Token syntax: [Herdr configuration](https://herdr.dev/docs/configuration/). |
-| `sidebar_bg` | `#1e1e2e` | `[theme.custom] sidebar_bg`. `""` leaves the host terminal background. |
+| `sidebar_bg` | `#1e1e2e` | `[theme.custom] sidebar_bg`. |
 
-To turn the layout off, set `sidebar_agent_rows: ""`. Herdr then uses its built-in rows, and apply removes the omp extension. Set `sidebar_bg: ""` too if you do not want the pinned background.
-
-Apply's verification runs `herdr config check` on the rendered file, so an override Herdr rejects fails the run instead of silently falling back to defaults. To check a rendered file by hand without touching the live configuration:
+To check an override before applying, render it to a file and run Herdr's own validator on it without touching the live configuration:
 
 ```bash
 HERDR_CONFIG_PATH=/path/to/rendered.toml herdr config check

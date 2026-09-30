@@ -36,7 +36,7 @@ factory:
   herdr:
     theme: catppuccin
     sidebar_width: 40     # Agent sidebar layout: see herdr.md
-    sidebar_agent_rows: | # "" turns the layout and its omp extension off
+    sidebar_agent_rows: |
       [ ... ]
     sidebar_bg: "#1e1e2e"
   browsers:               # Obscura tier of the browser ladder
