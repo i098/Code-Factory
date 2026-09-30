@@ -49,7 +49,7 @@ KEEP=${CF_SMOKE_KEEP:-}
 IMAGE_REF=${CF_SMOKE_IMAGE:-}
 
 usage() {
-    sed -n '2,37p' "${SCRIPT_PATH}" | sed 's/^# \{0,1\}//'
+    sed -n '2,39p' "${SCRIPT_PATH}" | sed 's/^# \{0,1\}//'
 }
 
 while [ "$#" -gt 0 ]; do
