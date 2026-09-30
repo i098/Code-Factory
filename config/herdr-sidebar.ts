@@ -9,7 +9,8 @@
 //   - pane tokens `pr`, `issue`, `add`, `del`, `files`: the open pull request
 //     for the current branch, the issue it works on, and its size against the
 //     default branch, as "⎇ <pr>", "○ <issue>", "+<added>", "−<deleted>",
-//     "✎ <files>". The first part present carries the indent.
+//     "✎ <files>". A worker shows its size before any pull request opens.
+//     The first part present carries the indent.
 // Lookups run in the background on session start and turn end and never fail
 // or slow a turn.
 // @ts-nocheck
@@ -162,7 +163,7 @@ export default function (pi) {
     // Herdr already indents continuation rows two columns, so this lines the
     // PR line up under the name: after the "└ " for a worker.
     const parts = prParts(
-      { pr: pr?.number, issue: taskIssue || closingIssue(pr?.body), ...(pr ? stat : {}) },
+      { pr: pr?.number, issue: taskIssue || closingIssue(pr?.body), ...(pr || taskId ? stat : {}) },
       taskId ? 2 : 0,
     );
     const args = ["pane", "report-metadata", paneId, "--source", SOURCE];
@@ -192,8 +193,10 @@ export default function (pi) {
         pr = await lookupPr(cwd).catch(() => pr);
         if (taskId) taskIssue = await lookupTaskIssue().catch(() => taskIssue);
       }
-      if (cwd && pr) {
-        const base = `origin/${pr.base?.repo?.default_branch || pr.base?.ref}`;
+      // A worker's size shows from its first commit, before any PR: diff against
+      // the PR base, else the remote's default branch.
+      if (cwd && (pr || taskId)) {
+        const base = pr ? `origin/${pr.base?.repo?.default_branch || pr.base?.ref}` : "origin/HEAD";
         stat = await run("git", ["-C", cwd, "diff", "--shortstat", `${base}...HEAD`]).then(shortstat, () => stat);
       }
       await report();

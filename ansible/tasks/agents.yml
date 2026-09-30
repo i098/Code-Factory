@@ -88,3 +88,15 @@
     mode: "0644"
     remote_src: true
   become: true
+
+# The omp extension that folds the mode and hook indicators into one row of
+# icons on the status line (docs/omp.md). Managed: every apply rewrites it.
+- name: Install the status icons omp extension
+  ansible.builtin.copy:
+    src: "{{ code_factory_repo }}/config/omp-status-icons.ts"
+    dest: "{{ factory_omp_status_icons_extension }}"
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0644"
+    remote_src: true
+  become: true

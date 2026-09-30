@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import time
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -392,3 +393,114 @@ def test_reporter_waits_out_a_failed_disk_measurement(fixture, tmp_path):
     assert " ⛁ " not in run()["w1"]["res"]
     assert " ⛁ " not in run()["w1"]["res"]
     assert len(calls.read_text().splitlines()) == 1
+
+
+def worker_report(tmp_path, origin_head=True):
+    """The last report of a worker's pane with a commit and no pull request."""
+    git_env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    origin, work = tmp_path / "origin", tmp_path / "work"
+
+    def git(*args, cwd=work):
+        subprocess.run(["git", *args], cwd=cwd, env=git_env, check=True, capture_output=True)
+
+    origin.mkdir()
+    git("init", "-q", "-b", "main", cwd=origin)
+    git("commit", "-q", "--allow-empty", "-m", "base", cwd=origin)
+    git("clone", "-q", str(origin), str(work), cwd=tmp_path)
+    if not origin_head:
+        git("remote", "set-head", "origin", "-d")
+    git("checkout", "-q", "-b", "task")
+    (work / "f").write_text("x\n")
+    git("add", "f")
+    git("commit", "-q", "-m", "work")
+    log = tmp_path / "herdr.log"
+    write(tmp_path / "stub/herdr", f'#!/bin/sh\necho "$@" >> {log}\necho "{{}}"\n', 0o755)
+    write(tmp_path / "stub/gh", "#!/bin/sh\necho '[]'\n", 0o755)
+    ext = json.dumps(str(ROOT / "config/herdr-sidebar.ts"))
+    ctx = f"{{hasUI: true, cwd: {json.dumps(str(work))}, ui: {{setTitle() {{}}}}}}"
+    code = f"import ext from {ext}; const on = {{}}; ext({{on: (e, f) => (on[e] = f)}}); on.session_start({{}}, {ctx});"
+    env = {k: v for k, v in os.environ.items() if k != "OMPCODE"}
+    env.update(
+        HERDR_ENV="1",
+        HERDR_PANE_ID="p1",
+        HERDR_WORKSPACE_ID="w1",
+        FM_TASK_ID="t1",
+        HERDR_BIN_PATH=str(tmp_path / "stub/herdr"),
+        PATH=f"{tmp_path / 'stub'}:{os.environ['PATH']}",
+    )
+    subprocess.run(["bun", "-e", code], env=env, check=True, timeout=30)
+    return [line for line in log.read_text().splitlines() if "report-metadata" in line][-1]
+
+
+@needs_bun
+def test_worker_shows_its_size_before_a_pull_request(tmp_path):
+    report = worker_report(tmp_path)
+    assert f"add={BLANK * 2}+1" in report
+    assert "del=−0" in report
+    assert "files=✎ 1" in report
+    assert "--clear-token pr" in report
+
+
+@needs_bun
+def test_worker_without_origin_head_shows_no_size(tmp_path):
+    report = worker_report(tmp_path, origin_head=False)
+    for part in ("add", "del", "files"):
+        assert f"--clear-token {part}" in report
+
+
+client_spec = importlib.util.spec_from_file_location(
+    "sidebar_to_client", ROOT / "maintenance/herdr-sidebar-to-client.py"
+)
+to_client = importlib.util.module_from_spec(client_spec)
+client_spec.loader.exec_module(to_client)
+
+HOST_CONFIG = """[ui]
+sidebar_width = 46
+sidebar_max_width = 56
+
+[ui.sidebar.agents]
+rows = [
+  [
+    { token = "$who", fg = "#cba6f7" },
+  ],
+]
+
+[ui.sidebar.spaces]
+rows = [
+  [
+    { token = "$short", bold = true },
+  ],
+]
+
+[theme.custom]
+sidebar_bg = "reset"
+"""
+
+
+@pytest.mark.parametrize(
+    "local",
+    [
+        "",
+        'onboarding = false\n\n[ui]\nsidebar_width = 30\nagent_panel_sort = "spaces"\n\n'
+        '[ui.sidebar.agents]\nrows = [["state_icon"]]\n\n[theme.custom]\naccent = "#ffffff"\n\n[keys]\nprefix = "ctrl+b"\n',
+    ],
+)
+def test_client_gets_the_host_sidebar_layout_and_keeps_its_own_settings(local):
+    merged = to_client.merge(local, HOST_CONFIG)
+    assert to_client.merge(merged, HOST_CONFIG) == merged
+    got, host = tomllib.loads(merged), tomllib.loads(HOST_CONFIG)
+    assert got["ui"]["sidebar"] == host["ui"]["sidebar"]
+    assert got["ui"]["sidebar_width"] == 46
+    assert got["ui"]["sidebar_max_width"] == 56
+    assert got["theme"]["custom"]["sidebar_bg"] == "reset"
+    if local:
+        assert got["onboarding"] is False
+        assert got["ui"]["agent_panel_sort"] == "spaces"
+        assert got["theme"]["custom"]["accent"] == "#ffffff"
+        assert got["keys"] == {"prefix": "ctrl+b"}

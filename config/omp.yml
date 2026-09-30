@@ -53,6 +53,7 @@ statusLine:
   - git
   - model
   - mode
+  - status
   rightSegments:
   - context_pct
   - token_rate
@@ -64,7 +65,7 @@ statusLine:
       showThinkingLevel: true
     git:
       showBranch: true
-  showHookStatus: true
+  showHookStatus: false
   sessionAccent: false
   separator: powerline
   transparent: true

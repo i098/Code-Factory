@@ -9,6 +9,7 @@ With the `agents` profile on, `./factory apply`:
 1. Installs the latest published omp, resolved from the npm registry on every apply (see [Dependencies](dependencies.md#latest-releases)).
 2. Copies [`config/omp.yml`](../config/omp.yml) to `~/.omp/agent/config.yml` (directory `0700`, file `0600`).
 3. Installs the extension `~/.omp/agent/extensions/code-factory-herdr-sidebar.ts`, which feeds the Herdr Agent sidebar the session topic, the pane's short name, and the pull request line (pull request, issue and diff size). Every apply rewrites it. See [Herdr sidebar](herdr.md).
+4. Installs the extension `~/.omp/agent/extensions/aa-mode-icons.ts` from [`config/omp-status-icons.ts`](../config/omp-status-icons.ts). Every apply rewrites it. See [Status line icons](#status-line-icons).
 
 The copy is first-write-only. If `~/.omp/agent/config.yml` already exists, the recipe leaves it alone, so an account's own settings and provider configuration are never overwritten. See [Updating an existing host](#updating-an-existing-host).
 
@@ -75,7 +76,23 @@ Firstmate turns it on for omp crewmate and scout launches only, never secondmate
 
 ## Other seeded preferences
 
-`config/omp.yml` also sets the theme (`dark-rose-pine`), a custom status line, `textVerbosity: low`, `readLineNumbers: true`, steering and interrupt modes, and `mnemopi.noEmbeddings: true`. Change a single value with `omp config set <key> <value>`, or use `/settings`.
+`config/omp.yml` also sets the theme (`dark-rose-pine`), a custom status line (see [Status line icons](#status-line-icons)), `textVerbosity: low`, `readLineNumbers: true`, steering and interrupt modes, and `mnemopi.noEmbeddings: true`. Change a single value with `omp config set <key> <value>`, or use `/settings`.
+
+## Status line icons
+
+The status icons extension puts the mode indicators and the configured hooks on the main status line as one row of evenly spaced Nerd Font icons, instead of one extension status line per plugin and a separate hooks line:
+
+- Modes: caveman, ADHD (`i-have-adhd`) and ponytail. An icon is lit when the mode is active and dimmed when it is off. The extension takes over the `ponytail` and `i-have-adhd` status keys those plugins set, so their own text statuses no longer show. caveman has no omp extension; its icon is lit unless `~/.claude/.caveman-active` holds `off`.
+- Hooks: the hooks in `~/.claude/settings.json` and `<cwd>/.claude/settings.json`. Known hooks get their own icon; the rest show as one icon followed by their count.
+
+The file is installed as `aa-mode-icons.ts` on purpose: omp loads extensions in name order, and the extension must wrap the status API before the ponytail and ADHD plugins set their statuses.
+
+The row needs two keys in `statusLine`, both in `config/omp.yml`: `status` at the end of `leftSegments`, which shows extension statuses on the main line, and `showHookStatus: false`, which drops the separate hooks line. A host whose `~/.omp/agent/config.yml` predates them keeps its old status line, because the seed is first-write-only. To adopt it there, edit `~/.omp/agent/config.yml`: add `- status` as the last entry of `statusLine.leftSegments` and set `statusLine.showHookStatus` to `false`. Then start a new omp session. Check the result with:
+
+```bash
+omp config get statusLine.leftSegments
+omp config get statusLine.showHookStatus
+```
 
 ## Updating an existing host
 

@@ -748,6 +748,9 @@ check_agent_gate() {
         "${HOME}/.no-mistakes/config.yaml" || fail "~/.no-mistakes/config.yaml does not make acp:omp the gate agent"
     jq -e '.agents.omp.command == "omp acp"' "${HOME}/.acpx/config.json" >/dev/null || fail "~/.acpx/config.json does not map omp to omp acp"
     [ -x "${HOME}/.local/bin/acpx" ] || fail "acpx is not installed in ~/.local/bin"
+    cf_python -c 'import sys, yaml; s = yaml.safe_load(open(sys.argv[1]))["statusLine"]; assert s["leftSegments"][-1] == "status" and s["showHookStatus"] is False' \
+        "${HOME}/.omp/agent/config.yml" || fail "~/.omp/agent/config.yml does not put extension statuses on the status line without a hooks line"
+    [ -f "${HOME}/.omp/agent/extensions/aa-mode-icons.ts" ] || fail "the status icons omp extension is not installed"
     # /tmp is a noexec tmpfs in host mode, so the stub omp must live under the home.
     mkdir -p "${HOME}/.cache"
     stub=$(mktemp -d "${HOME}/.cache/ponytail-stub.XXXXXX")
