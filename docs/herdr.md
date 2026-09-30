@@ -73,7 +73,7 @@ The result carries `tokens.short`, `tokens.decisions`, and so on.
 
 | Line | Shows |
 | --- | --- |
-| 1 | The state dot, then the pane's `who` name: the same short names as Spaces. The primary home is bold blue, other homes mauve, and a spawned worker (`└ <task>`) teal. |
+| 1 | The state dot, then the pane's `who` name: the same short names as Spaces. The primary home is bold blue, other homes bold mauve, and a spawned worker (`└ <task>`) teal, not bold. |
 | 2 | The agent's current session topic, in light grey (`#a6adc8`), without omp's `π` and spinner. Herdr's two-column indent puts it under the name; a spawned worker's topic is indented two more, so it sits under the task name after the `└ `. |
 | 3 | The pull request line, for any agent whose current branch has an open pull request, workers and homes alike, and for a worker whose task names an issue. Indented to line up under the name: four columns for a worker, two for a home. |
 

@@ -28,7 +28,7 @@ factory:
       [
         [
           "state_icon",
-          { token = "$who", fg = "#cba6f7", rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "└", fg = "#94e2d5" }] },
+          { token = "$who", fg = "#cba6f7", bold = true, rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "└", fg = "#94e2d5", bold = false }] },
         ],
         [
           { token = "terminal_title", fg = "#a6adc8" },
