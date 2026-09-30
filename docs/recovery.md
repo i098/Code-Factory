@@ -20,7 +20,7 @@ Do not point two machines at the same live session, task registry, browser profi
 ```
 
 - **`fleet guards require the docker and firstmate profiles`**: enable both profiles in `.local/host.yml`.
-- **Empty fixture archive**: the shared database is a read-only fixture that cannot be rebuilt from migrations. Copy the volume snapshot from the source host; see [The fixture](fleet-guards.md#the-fixture).
+- **Empty fixture archive**: the shared database is a read-only fixture that cannot be rebuilt from migrations. Copy the volume snapshot from a host that has the fixture; see [The fixture](fleet-guards.md#the-fixture).
 - **Spawn refused by the memory floor**: wait for a lane to finish, or lower the floor in this repository's `config/spawn-memory-floor-mb` and rerun `./factory apply`. Every apply rewrites the Firstmate checkout's copy, so an edit made only there is reverted.
 
 ## Desktop access

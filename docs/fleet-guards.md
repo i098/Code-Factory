@@ -23,9 +23,9 @@ Sizing per lane count and the full list of pruners are in
 
 | Path (under the account home) | Purpose |
 | --- | --- |
-| `oss-fleet/shared-supabase/` | The ONE stack: pinned CLI (`npm ci` from `fleet/shared-supabase/package-lock.json`), `supabase/config.toml` with `factory.fleet.supabase_project_id`, `check.sh` keeper, `guard.sql`, `README.md`. `check.sh` also generates `swarms-platform.env.local` from the running stack. |
+| `oss-fleet/shared-supabase/` | The ONE stack: pinned CLI (`npm ci` from `fleet/shared-supabase/package-lock.json`), `supabase/config.toml` with `factory.fleet.supabase_project_id`, `check.sh` keeper, `guard.sql`, `README.md`. `check.sh` also generates the project's `<project>.env.local` from the running stack. |
 | `oss-fleet/doctor/docker-guard.sh` | `docker events` watcher. A container carrying `com.supabase.cli.project` other than an allowlisted project is removed on creation; bare Postgres-family images are logged and alerted, not killed (other projects may own them). `docker-guard-allow.txt` is written once and then operator-owned. |
-| `oss-fleet/doctor/worktree-env-seed.sh` | Installs the env file as `.env.local` in every `~/.treehouse/swarms-platform-*/*/swarms-platform` worktree and Firstmate's `projects/swarms-platform`. Files without the `# fleet-shared-supabase` marker are replaced with a backup left beside them. |
+| `oss-fleet/doctor/worktree-env-seed.sh` | Installs the env file as `.env.local` in every project worktree in the treehouse pools (`factory.fleet.worktree_pools`) and in Firstmate's `projects/<project>` checkout. Files without the `# fleet-shared-supabase` marker are replaced with a backup left beside them. |
 | `oss-fleet/doctor/dev-server-reaper.sh` | Every 2 minutes: kills `next dev`/`next-server`/`tsc --noEmit` trees in treehouse worktrees whose lane last reported `done:`/`paused:`/`blocked:`/`failed:`, has no agent process, or whose agent transcript is idle >= 30 min (`REAPER_IDLE_MIN`). A dev server is 3-4 GB and restarts in 10 s; idle ones from finished lanes are what filled swap. One `next dev` per branch is inherent - Next compiles the whole app per process - so the fix is lifetime, not sharing. |
 | `oss-fleet/doctor/storage-guard.sh` | Every 5 minutes: use% of the filesystems holding `/`, `/var/log`, the home and Docker's data root. WARN (85%) alerts once per episode, CRIT (92%) prunes only regenerable Docker data, and a fill rate projecting the disk full within 6 hours alerts even below WARN. See [Storage guard](#storage-guard). |
 | `oss-fleet/doctor/devtools-bridge-reaper.sh` | Every 10 minutes: stops attached chrome-devtools-axi bridges (`CHROME_DEVTOOLS_AXI_BROWSER_URL` set) whose process tree used no CPU and whose session state files did not change for 60 min (`REAPER_IDLE_MIN`). See [Devtools-bridge reaper](#devtools-bridge-reaper). |
@@ -42,7 +42,7 @@ Application traffic (anon/authenticated/service_role through PostgREST, GoTrue,
 Storage) is unaffected. There is never a migration on this database.
 
 The Firstmate checkout, tracking `main` of `factory.firstmate.url`, carries the
-last layer: `extensions/fm-swarms-platform-guard.ts`, a tool-call seatbelt
+last layer: a per-project guard extension, a tool-call seatbelt
 loaded by every omp crewmate that blocks `supabase start|stop|db reset|migration`,
 `docker run ... postgres`, `psql` against the stack and edits to the shared
 containers, with the reason attached - so the agent learns why before the
@@ -57,7 +57,7 @@ empty database), so provisioning restores the Docker volume
 with:
 
 ```
-docker run --rm -v supabase_db_swarms-shared:/v:ro -v "$PWD":/b alpine \
+docker run --rm -v supabase_db_<project>:/v:ro -v "$PWD":/b alpine \
   tar czf /b/db-$(date +%F).tgz -C /v .
 ```
 
