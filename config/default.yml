@@ -39,7 +39,7 @@ factory:
         ],
       ]
     # Pinned to the catppuccin base so the hidden indent dot on line 2 blends
-    # in; "" leaves the theme's own sidebar background.
+    # in; "" leaves the host terminal background.
     sidebar_bg: "#1e1e2e"
   browser_prune:
     enabled: true

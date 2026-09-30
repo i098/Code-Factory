@@ -54,10 +54,10 @@ export default function (pi) {
   if (process.env.HERDR_ENV !== "1" || !paneId || process.env.OMPCODE === "1") return;
 
   let current; // latest interactive ctx
-  let unsubscribe: (() => void) | undefined;
   let refs = "";
   let refsAt = 0;
   let refreshing = false;
+  let trailing;
 
   // Runs from a raw timer too, where a throw would take the session down.
   function applyTitle() {
@@ -67,13 +67,15 @@ export default function (pi) {
     } catch {}
   }
 
-  // omp resets the title (and drops an extension override) whenever the
-  // session name changes, so re-apply after its own listener has run.
+  // omp resets the title (and drops an extension override) on rename, /new,
+  // /resume and cwd changes, often after its own async work, so keep
+  // re-applying; the terminal sink skips unchanged titles.
+  const titleTimer = setInterval(() => current && applyTitle(), 1000);
+  titleTimer.unref?.();
+
   function track(ctx) {
     if (ctx?.hasUI !== true) return;
     current = ctx;
-    unsubscribe?.();
-    unsubscribe = ctx.sessionManager?.onSessionNameChanged?.(() => setTimeout(applyTitle, 0));
     applyTitle();
   }
 
@@ -88,12 +90,22 @@ export default function (pi) {
   }
 
   // Re-reporting on every call also restores tokens a Herdr restart dropped.
+  // A lookup asked for while one runs or inside the throttle window is put
+  // off to the window's end, not dropped.
   async function refresh(cwd?: string) {
+    const wait = refsAt + REFS_REFRESH_MS - Date.now();
+    if (cwd && taskId && (refreshing || wait > 0) && !trailing) {
+      trailing = setTimeout(() => {
+        trailing = undefined;
+        void refresh(current.cwd);
+      }, Math.max(wait, 1000));
+      trailing.unref?.();
+    }
     if (refreshing) return;
     refreshing = true;
     try {
       await report();
-      if (cwd && taskId && Date.now() - refsAt >= REFS_REFRESH_MS) {
+      if (cwd && taskId && wait <= 0) {
         refsAt = Date.now();
         const next = await lookupRefs(cwd);
         if (next !== refs) {
@@ -122,7 +134,8 @@ export default function (pi) {
   });
   // Tokens have no TTL, so a pane reused by another program must not keep them.
   pi.on("session_shutdown", () => {
-    unsubscribe?.();
+    clearInterval(titleTimer);
+    clearTimeout(trailing);
     if (current) void run(herdr, ["pane", "report-metadata", paneId, "--source", SOURCE, "--clear-token", "who", "--clear-token", "refs"]).catch(() => {});
   });
 }
