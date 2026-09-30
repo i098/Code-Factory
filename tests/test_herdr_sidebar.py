@@ -222,6 +222,16 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     assert re.fullmatch(r"⌂ ⚙ \d+%  ▤ .+", docs["host"])
 
 
+def test_reporter_forgets_status_logs_it_no_longer_reads(fixture):
+    home, run = fixture
+    cache_file = home.parent / "cache/code-factory/herdr-spaces.json"
+    run()
+    assert str(home / "state/fix-login.status") in json.loads(cache_file.read_text())["folds"]
+    (home / "state/fix-login.meta").unlink()
+    run()
+    assert set(json.loads(cache_file.read_text())["folds"]) == {str(home / "state/api-mate-a1.status")}
+
+
 def test_space_cpu_leaves_out_a_reaped_child(fixture):
     # A worker in the docs space runs a 6-second build on one core. The reporter
     # samples the build mid-way, then the worker reaps it: the next run counts

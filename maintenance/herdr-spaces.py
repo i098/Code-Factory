@@ -70,24 +70,25 @@ def find_home(cwd: str) -> Path | None:
     return None
 
 
-def open_keys(home: Path, log: Path, folds: dict) -> int:
+def open_keys(home: Path, log: Path, cached: dict, folds: dict) -> int:
     """Fresh open decisions in one status log: bin/fm-classify-lib.sh's read-only
     status_open_decisions, minus parked captain holds (keys captain-hold-*).
-    Cached until the log changes."""
+    Cached until the log changes; folds keeps only the logs read this run."""
     stamp = [log.stat().st_mtime_ns, log.stat().st_size]
-    hit = folds.get(str(log))
+    hit = cached.get(str(log))
     if not hit or hit["stamp"] != stamp or "fresh" not in hit:
         script = '. "$1" && status_open_decisions "$2"'
         out = run("bash", "-c", script, "_", home / "bin/fm-classify-lib.sh", log, timeout=60)
         keys = [line.split("\t", 1)[0] for line in out.splitlines() if line.strip()]
-        hit = folds[str(log)] = {
+        hit = {
             "stamp": stamp,
             "fresh": sum(not k.startswith("captain-hold-") for k in keys),
         }
+    folds[str(log)] = hit
     return hit["fresh"]
 
 
-def decisions(primary: Path, wid: str, is_primary: bool, folds: dict) -> int:
+def decisions(primary: Path, wid: str, is_primary: bool, cached: dict, folds: dict) -> int:
     """Decisions waiting on the operator, counted where they can be acted on.
 
     Every count comes from the primary home's status logs. A second-level home's
@@ -104,7 +105,7 @@ def decisions(primary: Path, wid: str, is_primary: bool, folds: dict) -> int:
             continue
         log = meta.with_suffix(".status")
         if log.exists():
-            total += open_keys(primary, log, folds)
+            total += open_keys(primary, log, cached, folds)
     return total
 
 
@@ -229,7 +230,7 @@ def main() -> None:
     prev_cpu = cache.get("cpu", {})
     dt = now - cache.get("cpu_at", now)
     disk_cache = cache.setdefault("disk", {})
-    folds = cache.get("folds", {})
+    cached_folds, folds = cache.get("folds", {}), {}
     live_ids = {ws["workspace_id"] for ws in workspaces}
 
     def save() -> None:
@@ -305,7 +306,13 @@ def main() -> None:
                     ["decisions"],
                     lambda: [
                         count(
-                            decisions(primary_home, wid, wid == primary.get("workspace_id"), folds),
+                            decisions(
+                                primary_home,
+                                wid,
+                                wid == primary.get("workspace_id"),
+                                cached_folds,
+                                folds,
+                            ),
                             "⚑ ",
                         )
                     ],
