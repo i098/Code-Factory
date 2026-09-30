@@ -31,6 +31,8 @@
 #   CF_SMOKE_CPUS     container CPU cap           (default 2)
 #   CF_SMOKE_PIDS     container PID cap           (default 4096)
 #   CF_SMOKE_TIMEOUT  whole-container deadline, s (default 2700)
+#   GITHUB_TOKEN      optional; authenticates the latest-herdr lookup (build
+#                     secret and run env, never baked into the image)
 # Environment knobs (container mode):
 #   CF_SMOKE_ONLY           comma-separated check names
 #   CF_SMOKE_APPLY_TIMEOUT  seconds for the second ansible pass (default 1800)
@@ -100,11 +102,26 @@ host_mode() {
     }
     trap cleanup_host EXIT
 
+    # GITHUB_TOKEN, when set, authenticates the latest-herdr lookup as a
+    # BuildKit secret; unset, the secret is empty and the lookup is anonymous.
     if [ -z "${IMAGE_REF}" ]; then
         printf '==> docker build --target smoke --tag %s\n' "${SMOKE_TAG}"
-        docker build --target smoke --tag "${SMOKE_TAG}" "${REPO_ROOT}"
+        docker build --secret id=github_token,env=GITHUB_TOKEN \
+            --target smoke --tag "${SMOKE_TAG}" "${REPO_ROOT}"
         SMOKE_BUILT=1
     fi
+
+    # The token is build-time only: neither its name nor its value may reach
+    # the image history or config.
+    local meta
+    meta=$(docker history --no-trunc --format '{{.CreatedBy}}' "${SMOKE_TAG}"
+        docker image inspect "${SMOKE_TAG}")
+    if grep -q GITHUB_TOKEN <<<"${meta}" ||
+        { [ -n "${GITHUB_TOKEN:-}" ] && grep -qF -- "${GITHUB_TOKEN}" <<<"${meta}"; }; then
+        printf 'image %s history or config carries the GitHub token\n' "${SMOKE_TAG}" >&2
+        return 1
+    fi
+    printf 'image history and config carry no GitHub token\n'
 
     printf '==> docker run %s (memory=%s cpus=%s pids=%s)\n' \
         "${SMOKE_TAG}" "${CF_SMOKE_MEMORY:-4g}" "${CF_SMOKE_CPUS:-2}" "${CF_SMOKE_PIDS:-4096}"
@@ -124,6 +141,7 @@ host_mode() {
             --env CF_SMOKE_ONLY="${ONLY}" \
             --env CF_SMOKE_APPLY_TIMEOUT="${CF_SMOKE_APPLY_TIMEOUT:-1800}" \
             --env CF_SMOKE_SERVER_WAIT="${CF_SMOKE_SERVER_WAIT:-30}" \
+            --env GITHUB_TOKEN \
             "${SMOKE_TAG}" /opt/code-factory/tests/container-smoke.sh --in-container || rc=$?
 
     if [ "${rc}" -eq 124 ]; then

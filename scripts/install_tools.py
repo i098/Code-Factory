@@ -50,8 +50,16 @@ def platform_key():
 
 def resolve_latest(key):
     """The newest herdr release as a lock-shaped spec, and the newest omp version."""
-    # Unauthenticated GitHub API calls share a 60/hour budget per IP.
+    # Unauthenticated GitHub API calls share a 60/hour budget per IP, so use
+    # GITHUB_TOKEN, else the gh CLI's login, else stay anonymous.
     token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        try:
+            token = subprocess.run(
+                ["gh", "auth", "token"], capture_output=True, text=True, timeout=20
+            ).stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            token = ""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
         with urllib.request.urlopen(

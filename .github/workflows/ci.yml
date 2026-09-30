@@ -283,11 +283,18 @@ jobs:
           print(f"compose audit passed for {len(doc.get('services', {}))} service(s)")
           PY
 
+      # The job's read-only GITHUB_TOKEN authenticates the latest-herdr lookup:
+      # shared runner IPs exhaust the unauthenticated API budget. It enters
+      # builds only as a BuildKit secret; the smoke asserts the image never
+      # carries it.
       - name: Build worker image
-        run: docker build --target worker --tag code-factory/worker:ci .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: docker build --secret id=github_token,env=GITHUB_TOKEN --target worker --tag code-factory/worker:ci .
 
       - name: Behavior smoke in the worker image
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CF_SMOKE_MEMORY: 6g
           CF_SMOKE_CPUS: 2
           CF_SMOKE_TIMEOUT: "2700"
