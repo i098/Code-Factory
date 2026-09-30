@@ -20,7 +20,7 @@
  * caveman's own mode parser, so "stop caveman", "normal mode" and
  * "/caveman off" turn it off and "talk like caveman" turns it back on, and
  * invoking the caveman skill ("/caveman", which omp resolves to the skill)
- * turns it on.
+ * turns it on unless its arguments turn it off ("/skill:caveman off").
  */
 import { existsSync, readFileSync } from "fs";
 import { createRequire } from "module";
@@ -47,18 +47,25 @@ function cavemanParser(): ((prompt: string) => ModeChange) | undefined {
 	}
 }
 
+function applyChange(on: boolean, change: ModeChange): boolean {
+	if (change?.action === "clear") return false;
+	if (change?.action === "set") return change.mode !== "off";
+	return on;
+}
+
 // caveman after this branch of the session: `inForce` at its start, then each
 // user prompt read by caveman's parser and each caveman skill invocation.
 export function cavemanFrom(entries, inForce: boolean, parse: (prompt: string) => ModeChange): boolean {
 	let on = inForce;
 	for (const e of entries ?? []) {
-		if (e?.type === "custom_message" && e.customType === "skill-prompt" && e.details?.name === "caveman") on = true;
+		if (e?.type === "custom_message" && e.customType === "skill-prompt" && e.details?.name === "caveman") {
+			on = applyChange(true, parse(`/caveman ${e.details.args ?? ""}`));
+			continue;
+		}
 		if (e?.type !== "message" || e.message?.role !== "user") continue;
 		const { content } = e.message;
 		const text = typeof content === "string" ? content : (content ?? []).map((p) => (p?.type === "text" ? p.text : "")).join("\n");
-		const change = parse(text);
-		if (change?.action === "clear") on = false;
-		else if (change?.action === "set") on = change.mode !== "off";
+		on = applyChange(on, parse(text));
 	}
 	return on;
 }
@@ -167,5 +174,5 @@ export default function (pi) {
 		on.caveman = cavemanFrom([{ type: "message", message: { role: "user", content: String(event?.text ?? "") } }], on.caveman, parse);
 		render();
 	});
-	pi.on("agent_end", (_event, ctx) => syncCaveman(ctx));
+	for (const event of ["agent_end", "session_tree"]) pi.on(event, (_event, ctx) => syncCaveman(ctx));
 }

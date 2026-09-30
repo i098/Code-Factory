@@ -42,7 +42,7 @@ def install_caveman(home: Path) -> None:
     )
 
 
-def row(home: Path, statuses=None, prompt="", branch=(), inputs=(), end_branch=None) -> str:
+def row(home: Path, statuses=None, prompt="", branch=(), inputs=(), end_branch=None, end_event="agent_end") -> str:
     """The icons row as omp's status segment shows it after the given events."""
     ext = json.dumps(str(ROOT / "config/omp-status-icons.ts"))
     ctx = f"{{ hasUI: true, cwd: {json.dumps(str(home))}, ui, getSystemPrompt: async () => {json.dumps(prompt)}, sessionManager: {{ getBranch: () => branch }} }}"
@@ -58,7 +58,7 @@ await on.session_start({{}}, ctx);
 for (const [k, t] of Object.entries({json.dumps(statuses or {})})) ui.setStatus(k, t ?? undefined);
 for (const text of {json.dumps(list(inputs))}) on.input({{ text, source: "interactive" }}, ctx);
 const end = {json.dumps(end_branch)};
-if (end) {{ branch = end; on.agent_end({{}}, ctx); }}
+if (end) {{ branch = end; on[{json.dumps(end_event)}]({{}}, ctx); }}
 console.log(JSON.stringify(shown["aa-modes"] ?? ""));
 """
     out = subprocess.run(
@@ -120,3 +120,18 @@ def test_a_caveman_skill_invocation_turns_it_on_at_turn_end(tmp_path):
     assert CAVEMAN not in row(
         tmp_path, prompt=rule, branch=before, end_branch=[*before, SKILL, user("normal mode")]
     )
+
+
+def test_a_caveman_skill_invocation_with_off_turns_it_off(tmp_path):
+    install_caveman(tmp_path)
+    rule = "keep skill://caveman in force"
+    off = {**SKILL, "details": {"name": "caveman", "args": "off"}}
+    assert CAVEMAN not in row(tmp_path, prompt=rule, end_branch=[off])
+    assert CAVEMAN in row(tmp_path, prompt=rule, end_branch=[off, SKILL])
+
+
+def test_tree_navigation_resyncs_caveman_to_the_new_branch(tmp_path):
+    install_caveman(tmp_path)
+    rule = "keep skill://caveman in force"
+    before = [user("stop caveman")]
+    assert CAVEMAN in row(tmp_path, prompt=rule, branch=before, end_branch=[], end_event="session_tree")
