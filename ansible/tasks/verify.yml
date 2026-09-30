@@ -36,7 +36,7 @@
               factory_user_units ~ '/herdr.service',
               factory_user_units ~ '/default.target.wants/herdr.service',
               factory_cfg.home ~ '/.profile']
-             + ([factory_chrome_devtools_mcp_path]
+             + ([factory_chrome_devtools_mcp_path, factory_omp_sidebar_extension]
                 if (factory_cfg.profiles.agents | bool) else [])
              + ([factory_pruner_script,
                  factory_pruner_python,

@@ -441,17 +441,19 @@ check_herdr_config() {
 
     # ...and the values it accepted must be the ones the factory document asks
     # for, so a silently ignored key cannot pass as "configured".
-    cf_python - "${cfg}" "${CF_CONFIG}" <<'PY'
+    cf_python - "${cfg}" "${CF_ROOT}/config/default.yml" "${CF_CONFIG}" <<'PY'
 import sys
 import tomllib
 
 import yaml
 
-config_path, document_path = sys.argv[1], sys.argv[2]
+config_path, defaults_path, document_path = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(config_path, "rb") as fh:
     rendered = tomllib.load(fh)
-with open(document_path, encoding="utf-8") as fh:
+with open(defaults_path, encoding="utf-8") as fh:
     wanted = yaml.safe_load(fh)["factory"]["herdr"]
+with open(document_path, encoding="utf-8") as fh:
+    wanted.update(yaml.safe_load(fh)["factory"]["herdr"])
 
 actual = {
     "theme": rendered.get("theme", {}).get("name"),
@@ -459,7 +461,13 @@ actual = {
     "agent_panel_sort": rendered.get("ui", {}).get("agent_panel_sort"),
     "headless_cols": rendered.get("server", {}).get("headless_cols"),
     "headless_rows": rendered.get("server", {}).get("headless_rows"),
+    "sidebar_width": rendered.get("ui", {}).get("sidebar_width"),
+    "sidebar_max_width": rendered.get("ui", {}).get("sidebar_max_width"),
+    "sidebar_bg": rendered.get("theme", {}).get("custom", {}).get("sidebar_bg"),
+    "sidebar_agent_rows": rendered.get("ui", {}).get("sidebar", {}).get("agents", {}).get("rows"),
 }
+# The document carries the layout as TOML text; compare it parsed.
+wanted["sidebar_agent_rows"] = tomllib.loads("rows = " + wanted["sidebar_agent_rows"])["rows"]
 mismatched = {key: (actual[key], value) for key, value in wanted.items() if key in actual and actual[key] != value}
 if mismatched:
     raise SystemExit(f"rendered Herdr config disagrees with the factory document (actual, wanted): {mismatched}")
@@ -468,6 +476,7 @@ if rendered.get("experimental", {}).get("pane_history"):
 if rendered.get("onboarding", False):
     raise SystemExit("onboarding is enabled; a provisioned image must not prompt on first run")
 
+actual["sidebar_agent_rows"] = f"{len(actual['sidebar_agent_rows'] or [])} rows"
 print("rendered config matches the document: " + ", ".join(f"{k}={v}" for k, v in sorted(actual.items())))
 PY
     printf 'herdr config check: %s\n' "${report%%$'\n'*}"
