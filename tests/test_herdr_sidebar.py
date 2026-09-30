@@ -25,8 +25,8 @@ spec.loader.exec_module(spaces)
 
 LABELS = {
     "firstmate": "firstmate",
-    "2ndmate-swarms-mate-s4": "swarms",
-    "2ndmate-subliminal-mate-b8": "subliminal",
+    "2ndmate-webapp-mate-s4": "webapp",
+    "2ndmate-api-mate-b8": "api",
     "firstmate-afk-daemon-1587287-6940-1790642036": "☾ afk",
     "└ fix-login · p:Qm3vX8kT2aLp9RwZcN4yHd": "└ fix-login",
     "scratch": "",
@@ -99,17 +99,17 @@ def test_issue_sources():
 @needs_bun
 def test_pr_owners_from_remotes():
     remotes = (
-        "fork\tgit@github.com:undeemed/swarms-platform.git (fetch)\n"
-        "fork\tgit@github.com:undeemed/swarms-platform.git (push)\n"
-        "origin\thttps://github.com/The-Swarm-Corporation/swarms-platform.git (fetch)\n"
-        "origin\thttps://github.com/The-Swarm-Corporation/swarms-platform.git (push)\n"
-        "mirror\tssh://git@github.com/undeemed/swarms-platform (fetch)\n"
-        "other\thttps://gitlab.com/someone/swarms-platform.git (fetch)\n"
+        "fork\tgit@github.com:alice/webapp.git (fetch)\n"
+        "fork\tgit@github.com:alice/webapp.git (push)\n"
+        "origin\thttps://github.com/acme/webapp.git (fetch)\n"
+        "origin\thttps://github.com/acme/webapp.git (push)\n"
+        "mirror\tssh://git@github.com/alice/webapp (fetch)\n"
+        "other\thttps://gitlab.com/someone/webapp.git (fetch)\n"
     )
     assert ts(f"m.prOwners({json.dumps(remotes)})") == [
         "{owner}",
-        "undeemed",
-        "The-Swarm-Corporation",
+        "alice",
+        "acme",
     ]
     assert ts('m.prOwners("")') == ["{owner}"]
 

@@ -5,7 +5,7 @@ Run by herdr-spaces.timer every second. For every Herdr workspace it finds
 the orchestrator home from its panes' directories and reports display-only
 workspace tokens under the source `code-factory:spaces`:
 
-  short      short name ("swarms" for "2ndmate-swarms-mate-s4")
+  short      short name ("webapp" for "2ndmate-webapp-mate-s4")
   decisions  "⚑ N"  fresh open decisions (parked captain-hold-* keys left out):
                     a second-level home's own, or the primary home's own workers';
                     only while a workspace is labelled firstmate

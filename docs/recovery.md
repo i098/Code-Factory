@@ -37,11 +37,11 @@ For a changed display/session configuration, restart VNC explicitly only when th
 
 ## App and fleet state
 
-This repository reconstructs the environment, not the source VPS's live operations:
+This repository reconstructs the environment, not a host's live operations:
 
 - Firstmate source and dispatch choices are installed; its private backlog, charter briefs, project registry, session lock, and operational history are not.
-- The existing Flotilla/OSS-fleet runtime owns its own queues, schedules, recovery policy, and outbound authority. Restore its reviewed source and fresh configuration separately; do not automatically resume publishing jobs merely because a device was rebuilt.
-- Project-specific Seer/Dorm/Foodie/preview services need their own environment files, source revisions, migrations, and data restores. A cache directory containing a running executable is not an installation artifact.
+- Other agent runtimes on the old host own their own queues, schedules, recovery policy, and outbound authority. Restore their reviewed source and fresh configuration separately; do not automatically resume publishing jobs merely because a device was rebuilt.
+- Project-specific services need their own environment files, source revisions, migrations, and data restores. A cache directory containing a running executable is not an installation artifact.
 - Docker named volumes are durable data. Back them up with database-aware tools and verify a restore independently. Do not copy `/var/lib/docker` between running daemons or assume an unused volume is disposable.
 
 The included PostgreSQL/Redis Compose services are empty development examples. They do not supply an application's schema or import production data.

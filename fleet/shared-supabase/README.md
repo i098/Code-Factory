@@ -2,7 +2,7 @@
 
 Every swarms-platform lane boots the app against this stack. Nobody starts
 their own. The database is a **read-only test fixture**: no migrations, no
-`db reset`, no schema edits, no hand-seeding - ever (captain, 2026-09-17).
+`db reset`, no schema edits, no hand-seeding - ever.
 
 | | |
 |---|---|
@@ -16,11 +16,10 @@ their own. The database is a **read-only test fixture**: no migrations, no
 
 ## Why this exists
 
-The swarms briefs require before/after screenshots of the live app. The app
-refuses to boot without a Supabase URL and key, worktrees carry only
-`.env.example`, so every lane built its own 12-container stack (two full
-stacks and three stray Postgres containers were found on 2026-09-17 while the
-box was 52 GB into swap). One stack, pre-wired env, and hard guards close that.
+Lanes need screenshots of the live app. The app refuses to boot without a
+Supabase URL and key, and worktrees carry only `.env.example`, so every lane
+built its own 12-container stack. One stack, pre-wired env, and hard guards
+close that.
 
 ## Moving parts
 
@@ -42,9 +41,8 @@ box was 52 GB into swap). One stack, pre-wired env, and hard guards close that.
 - `~/.local/bin/supabase` - shim; refuses lifecycle subcommands with a pointer
   here. (`npx supabase` bypasses it; the docker guard does not.)
 - `/etc/docker/daemon.json` - `init: true` so containers reap their children
-  (the 489-zombie pile came from Supabase studio/pg_meta without an init) and
+  (Supabase studio/pg_meta pile up zombies without an init) and
   `live-restore: true` so dockerd restarts do not take containers down.
-- Brief rules: `firstmate/data/swarms-brief-rules.md` "Backend" section.
 
 ## Operating
 
@@ -58,7 +56,6 @@ Stopping on purpose: `systemctl --user stop flotilla-shared-supabase-check.timer
 then `./node_modules/.bin/supabase stop` (volumes are kept). Do NOT `--no-backup`
 unless you mean to lose the fixture.
 
-The fixture volume is `supabase_db_swarms-shared` (cloned 2026-09-17 from lane
-14's seeded DB: 5 test users, marketplace content). Snapshot before any
+The fixture volume is `supabase_db_swarms-shared`. Snapshot before any
 deliberate change:
 `docker run --rm -v supabase_db_swarms-shared:/v:ro -v $PWD:/b alpine tar czf /b/db-$(date +%F).tgz -C /v .`
