@@ -107,20 +107,25 @@ def fixture(tmp_path):
     home = tmp_path / "home"
     (home / ".git").mkdir(parents=True)
     (home / "data").mkdir()
-    write(home / "state/home-summary.json", json.dumps({"counts": {"decisions_open": 3}}))
     write(home / "state/fix-login.meta", "kind=ship\n")
     write(home / "state/fix-docs.meta", "kind=ship\n")
     write(home / "state/old.meta", "kind=ship\n")
-    # Second-level homes: one with a live Space (w1) and one without (w9). The
-    # stub fold reports two open decisions for each.
-    write(home / "state/docs-mate-d1.meta", "kind=secondmate\nherdr_workspace_id=w1\n")
-    write(home / "state/gone-mate-g1.meta", "kind=secondmate\nherdr_workspace_id=w9\n")
-    write(home / "state/docs-mate-d1.status", "")
-    write(home / "state/gone-mate-g1.status", "")
+    # The stub fold lists each status log's own lines as its open decisions.
+    # w1, the first listed, is the primary Space: its worker has one fresh
+    # decision and one parked hold, which never counts.
     write(
-        home / "bin/fm-classify-lib.sh",
-        "status_open_decisions() { printf 'a\\tneeds-decision\\tx\\nb\\tblocked\\ty\\n'; }\n",
+        home / "state/fix-login.status",
+        "ask\tneeds-decision\tx\ncaptain-hold-deploy\tneeds-decision\ty\n",
     )
+    # Second-level homes: one with a live Space (w4) and one without (w9).
+    write(home / "state/api-mate-a1.meta", "kind=secondmate\nherdr_workspace_id=w4\n")
+    write(home / "state/gone-mate-g1.meta", "kind=secondmate\nherdr_workspace_id=w9\n")
+    write(home / "state/api-mate-a1.status", "a\tneeds-decision\tx\nb\tblocked\ty\n")
+    write(
+        home / "state/gone-mate-g1.status",
+        "c\tneeds-decision\tx\nd\tneeds-decision\ty\ne\tblocked\tz\n",
+    )
+    write(home / "bin/fm-classify-lib.sh", 'status_open_decisions() { cat "$1"; }\n')
     write(home / "bin/fm-tasks-axi.sh", "#!/bin/sh\n[ \"$1\" = ready ] && echo 'count: 4'\n", 0o755)
     write(home / "bin/fm-supervision-lib.sh", "fm_supervision_unhealthy() { return 0; }\n")
 
@@ -130,10 +135,12 @@ def fixture(tmp_path):
         {"workspace_id": "w1", "label": "2ndmate-docs-mate-d1"},
         {"workspace_id": "w2", "label": "firstmate-afk-daemon-1-2-3"},
         {"workspace_id": "w3", "label": "scratch"},
+        {"workspace_id": "w4", "label": "2ndmate-api-mate-a1"},
     ]
     panes = [
         {"workspace_id": "w1", "cwd": str(home / "projects/app")},
         {"workspace_id": "w2", "cwd": str(home)},
+        {"workspace_id": "w4", "cwd": str(home / "projects/api")},
     ]
     write(
         stub / "herdr",
@@ -180,8 +187,8 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     host = docs.pop("host")
     assert docs == {
         "short": "docs",
-        # 3 in the ledger, less the 2 of the second-level home with its own
-        # Space; the home without a live Space stays counted here.
+        # Its own worker's fresh decision only: not the parked hold, not the
+        # second-level homes' decisions.
         "decisions": "⚑ 1",
         "crew": "▶ 3",
         "queue": "◷ 4",
@@ -199,10 +206,14 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     assert reported["w2"] == {"short": "☾ afk"} | dict.fromkeys(spaces.TOKENS[1:])
     # A space with no home is not the primary: CPU and RAM only, not indented.
     assert reported["w3"]["res"].startswith("▤ ") and reported["w3"]["host"] is None
+    # A second-level home with a live Space counts its own log there; the one
+    # without a live Space is counted nowhere.
+    assert reported["w4"]["decisions"] == "⚑ 2"
 
     # Second run: CPU has a baseline now, a zero count is cleared, and a failed
     # source keeps its previous value.
-    (home / "state/home-summary.json").unlink()
+    write(home / "bin/fm-classify-lib.sh", "status_open_decisions() { return 1; }\n")
+    (home / "state/fix-login.status").write_text("new\tneeds-decision\tz\n")
     write(home / "bin/fm-supervision-lib.sh", "fm_supervision_unhealthy() { return 1; }\n")
     docs = run()["w1"]
     assert docs["decisions"] == "⚑ 1"

@@ -28,7 +28,7 @@ Spaces shows one entry per home workspace. It never repeats per-agent detail, wh
 | Token | Value | Source |
 | --- | --- | --- |
 | `$short` | `swarms` for `2ndmate-swarms-mate-s4` | The workspace label: `firstmate` stays as is, `2ndmate-<name>-mate-<id>` becomes `<name>`, `└ <task> · p:<token>` becomes `└ <task>`. Other labels have no short name. |
-| `$decisions` | `⚑ N` (red, bold) | Open decisions waiting on the operator: `decisions_open` in the home's summary ledger, `state/home-summary.json`, which the home publishes from the same fold its wake drain uses. That ledger also folds in the decisions of its second-level homes; those whose home has a live Space of its own count on that home's row instead, so nothing is counted twice. Their share is the read-only `status_open_decisions` fold of the home's `bin/fm-classify-lib.sh` over each one's status log, cached until the log changes. A second-level home without a live Space stays counted on the primary row. |
+| `$decisions` | `⚑ N` (red, bold) | Fresh decisions waiting on the operator, counted where they can be acted on. Every count comes from the primary home's status logs, through the read-only `status_open_decisions` fold of its `bin/fm-classify-lib.sh`, cached until each log changes. A second-level home's Space counts the open decisions in its own status log (`state/<home>.status`, the record whose `herdr_workspace_id` is that Space). The primary Space counts only its own workers' logs. Parked holds (keys starting `captain-hold-`) never count, and a second-level home without a live Space is not counted anywhere. |
 | `$crew` | `▶ N` (green) | Workers running: the home's live task records, `state/*.meta`, without second-level home records (`kind=secondmate`). |
 | `$queue` | `◷ N` (yellow) | Tasks queued and ready to start: `count` from the home's `bin/fm-tasks-axi.sh ready`. |
 | `$res` | `⚙ 29%  ▤ 8%  ⛁ 2%` | CPU (share of all cores) and resident memory (share of `MemTotal`) summed over every process whose environment carries the space's `HERDR_WORKSPACE_ID`, so its workers count. CPU is each process's own CPU time (`utime` + `stime`) gained between two runs, for every process present in both, clamped to 0–100%. Disk is the home plus the worktree pools of its projects, as `treehouse status --json` lists them, as a share of the filesystem holding the home; a pool worktree that is itself another home is left out. On the primary home the value starts with two U+2800 blank characters. |
@@ -74,7 +74,7 @@ The result carries `tokens.short`, `tokens.decisions`, and so on.
 | Line | Shows |
 | --- | --- |
 | 1 | The state dot, then the pane's `who` name: the same short names as Spaces. The primary home is bold blue, other homes mauve, and a spawned worker (`└ <task>`) teal. |
-| 2 | The agent's current session topic, dimmed, without omp's `π` and spinner. It is indented two columns to sit under the name; a spawned worker's topic is indented two more, so it starts right after the `└`. |
+| 2 | The agent's current session topic, in light grey (`#a6adc8`), without omp's `π` and spinner. Herdr's two-column indent puts it under the name; a spawned worker's topic is indented two more, so it sits under the task name after the `└ `. |
 | 3 | The pull request line, for any agent whose current branch has an open pull request, workers and homes alike, and for a worker whose task names an issue. Indented to line up under the name: four columns for a worker, two for a home. |
 
 | Token | Value | Color |
@@ -133,11 +133,9 @@ HERDR_CONFIG_PATH=/path/to/rendered.toml herdr config check
 
 ## Known limits
 
-- Agents line 2 is indented by a second state dot drawn in the sidebar background color. `sidebar_bg` is pinned to the catppuccin base (`#1e1e2e`) so that dot stays invisible. On the highlighted row the dot shows faintly. With another theme, change `sidebar_bg` and the `fg` of that dot in `sidebar_agent_rows` together.
 - Agents without the extension, including non-omp agents, show only their dot on line 1: nothing reports their `who` token.
 - Short names and colors match workspace labels (`firstmate`, `2ndmate-…`, `└ …`, `-afk-daemon-`). A home workspace with another name has no short name and shows its label.
 - Only closing keywords in the pull request body count as issues there. Issues linked only in the GitHub UI are not shown, because the REST API does not list them.
 - The pull request lookup filters by head branch in the checkout's own repository, so a pull request opened from a fork does not show.
-- Spaces counts are only as fresh as the home's own records: `$decisions` follows the summary ledger, which the home republishes on its own events.
 - CPU and RAM count only processes the reporter's account can read, and RAM is resident memory, so shared pages count once per process. CPU counts a process only while two runs 10 seconds apart both see it: a process that starts and ends between two runs is not counted, and the time before the first run that sees it or after the last is lost, so a space running many short builds reads low.
 - The machine header fits the 42 columns Herdr shows on the first row of a Spaces entry at width 46 while neither memory nor disk is at 100%. Otherwise it can pass 42 columns, and Herdr cuts its end.

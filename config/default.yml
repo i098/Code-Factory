@@ -31,8 +31,7 @@ factory:
           { token = "$who", fg = "#cba6f7", rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "└", fg = "#94e2d5" }] },
         ],
         [
-          { token = "state_icon", fg = "#1e1e2e" },
-          { token = "terminal_title", dim = true },
+          { token = "terminal_title", fg = "#a6adc8" },
         ],
         [
           { token = "$pr", fg = "#89b4fa" },
@@ -62,8 +61,7 @@ factory:
           { token = "$alert", fg = "#fab387" },
         ],
       ]
-    # Pinned to the catppuccin base so the hidden indent dot on line 2 blends
-    # in.
+    # Pinned to the catppuccin base.
     sidebar_bg: "#1e1e2e"
   browser_prune:
     enabled: true
