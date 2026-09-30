@@ -32,7 +32,11 @@ for (const [k, t] of Object.entries({json.dumps(statuses)})) ui.setStatus(k, t ?
 console.log(JSON.stringify(shown["aa-modes"] ?? ""));
 """
     out = subprocess.run(
-        ["bun", "-e", code], capture_output=True, text=True, check=True, env={"HOME": str(home), "PATH": os.environ["PATH"]}
+        ["bun", "-e", code],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={"HOME": str(home), "PATH": os.environ["PATH"]},
     )
     return re.sub(r"\x1b\[[0-9;]*m", "", json.loads(out.stdout))
 

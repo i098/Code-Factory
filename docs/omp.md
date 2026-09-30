@@ -96,7 +96,7 @@ omp config get statusLine.showHookStatus
 
 ## Updating an existing host
 
-Because the seed is first-write-only, an edit to `config/omp.yml` never reaches a host that already has `~/.omp/agent/config.yml`. To update one:
+Because the seed is first-write-only, an edit to `config/omp.yml` never reaches a host that already has `~/.omp/agent/config.yml`, except the two keys [Status line icons](#status-line-icons) needs. To update one:
 
 1. Compare the two files:
 

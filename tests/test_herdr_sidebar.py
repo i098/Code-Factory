@@ -521,7 +521,12 @@ def test_client_script_creates_the_config_dir_and_surfaces_ssh_errors(tmp_path):
     ssh = stub / "ssh"
     env = {**os.environ, "PATH": f"{stub}:{os.environ['PATH']}"}
     target = tmp_path / "fresh" / "herdr" / "config.toml"
-    script = ["python3", str(ROOT / "maintenance" / "herdr-sidebar-to-client.py"), "host", str(target)]
+    script = [
+        "python3",
+        str(ROOT / "maintenance" / "herdr-sidebar-to-client.py"),
+        "host",
+        str(target),
+    ]
 
     ssh.write_text(f"#!/bin/sh\ncat {tmp_path / 'host.toml'}\n")
     ssh.chmod(0o755)

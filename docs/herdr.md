@@ -113,7 +113,7 @@ The extension does nothing outside Herdr (`HERDR_ENV` is not `1`) or in an omp s
 - Sets the terminal title to the bare session topic, and sets it again within a second whenever omp resets it (rename, `/new`, `/resume`, a cwd change). A spawned worker (`FM_TASK_ID` set) gets `└ ` in front; the Agents layout shows a title that starts with `└` on line 1 and hides it on line 2.
 - Reports the pane tokens `who`, `pr`, `issue`, `add`, `del` and `files` under the source `code-factory:sidebar`, and clears the ones without a value.
 
-It reports when a session starts and when a turn ends. The pull request and the task's issue are looked up then too, at most every 5 minutes; a turn that ends sooner gets its lookup when the 5 minutes are up. The line counts are recomputed on every turn end while a pull request is open. Lookups run in the background with a timeout. A failed lookup keeps the previous value and never fails or slows a turn. Herdr drops pane tokens when its server restarts; the extension reports them again at the next turn end. All tokens are cleared when omp exits.
+It reports when a session starts and when a turn ends. The pull request and the task's issue are looked up then too, at most every 5 minutes; a turn that ends sooner gets its lookup when the 5 minutes are up. The line counts are recomputed on every turn end for a worker, and for a home while a pull request is open. Lookups run in the background with a timeout. A failed lookup keeps the previous value and never fails or slows a turn. Herdr drops pane tokens when its server restarts; the extension reports them again at the next turn end. All tokens are cleared when omp exits.
 
 Inspect what a pane reports:
 
