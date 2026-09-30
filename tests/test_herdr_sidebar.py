@@ -185,9 +185,10 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     # Shares of the machine; CPU needs a baseline, so it waits for run two.
     assert re.fullmatch(r"▤ \d+%  ⛁ \d+%", res)
     # No workspace is labelled firstmate, so the first listed carries the
-    # whole-machine header, within the 45 content columns of a 46-wide sidebar.
+    # whole-machine header, within the 42 columns Herdr shows on the first
+    # row of a Spaces entry at sidebar width 46.
     size = r"[\d.]+/[\d.]+[GT] \d+%"
-    assert re.fullmatch(rf"⌂ ▤ {size}  ⛁ {size}", host) and len(host) <= 45
+    assert re.fullmatch(rf"⌂ ▤ {size}  ⛁ {size}", host) and len(host) <= 42
     # A helper space shows its short name only; everything else is cleared.
     assert reported["w2"] == {"short": "☾ afk"} | dict.fromkeys(spaces.TOKENS[1:])
 
@@ -204,10 +205,23 @@ def test_reporter_counts_from_a_fixture_home(fixture):
 
 @pytest.mark.parametrize(
     ("used", "total", "text"),
-    [(18.2, 31.0, "18.2/31.0G"), (402, 937, "402/937G"), (1433.6, 1945.6, "1.4/1.9T")],
+    [
+        (7.1, 7.8, "7.1/7.8G"),
+        (35.2, 64.0, "35/64G"),
+        (402, 937, "402/937G"),
+        (1433.6, 1945.6, "1.4/1.9T"),
+        (12288, 20480, "12/20T"),
+    ],
 )
 def test_machine_sizes_stay_short(used, total, text):
     assert spaces.used_of(used * 2**30, total * 2**30) == text
+
+
+@pytest.mark.parametrize("total", [9.96, 64.0, 99.9, 999.6, 9.96 * 1024, 99 * 1024])
+def test_machine_header_fits_the_first_spaces_row(total):
+    # Worst case: CPU and both shares at 100%, sizes at their widest.
+    size = spaces.used_of(total * 2**30, total * 2**30)
+    assert len(f"⌂ ⚙ 100%  ▤ {size} 100%  ⛁ {size} 100%") <= 42
 
 
 def test_reporter_waits_out_a_failed_disk_measurement(fixture, tmp_path):

@@ -12,7 +12,7 @@ workspace tokens under the source `code-factory:spaces`:
   queue      "◷ N"  queued tasks ready to start (bin/fm-tasks-axi.sh ready)
   res        "⚙ 29%  ▤ 8%  ⛁ 2%"  CPU, RAM and disk, as shares of the machine
   alert      "⚠ watcher silent" when the home's supervision is unhealthy
-  host       "⌂ ⚙ 41%  ▤ 18.2/31.0G 59%  ⛁ 402/937G 43%"  the whole machine,
+  host       "⌂ ⚙ 41%  ▤ 18/31G 59%  ⛁ 402/937G 43%"  the whole machine,
              on the primary home only (labelled firstmate, else the first listed)
 
 Zero counts are cleared. Disk is cached 15 minutes in
@@ -181,13 +181,12 @@ def pct(part: float, whole: float) -> str:
 
 
 def used_of(used: float, total: float) -> str:
-    """"18.2/31.0G"; whole G from 100G and T from 1000G, so it stays short."""
-    g = 2**30
-    if total < 100 * g:
-        return f"{used / g:.1f}/{total / g:.1f}G"
-    if total < 1000 * g:
-        return f"{used / g:.0f}/{total / g:.0f}G"
-    return f"{used / 2**40:.1f}/{total / 2**40:.1f}T"
+    """"7.1/7.8G", "18/31G", "1.4/1.9T": one decimal only under 10 of the unit
+    and T from 1000G, so it never passes 8 columns and the header fits in the
+    42 columns Herdr shows on a Spaces row at sidebar width 46."""
+    size, unit = (2**30, "G") if total < 999.5 * 2**30 else (2**40, "T")
+    digits = 1 if total < 9.95 * size else 0
+    return f"{used / size:.{digits}f}/{total / size:.{digits}f}{unit}"
 
 
 def count(n: int, glyph: str) -> str:

@@ -9,7 +9,7 @@ The sidebar is 46 columns wide (`sidebar_width`; it may grow to `sidebar_max_wid
 Spaces shows one entry per home workspace. It never repeats per-agent detail, which lives in Agents.
 
 ```text
-⌂ ⚙ 41%  ▤ 18.2/31.0G 59%  ⛁ 402/937G 43%
+⌂ ⚙ 41%  ▤ 18/31G 59%  ⛁ 402/937G 43%
   ● firstmate · ⚑ 3 · ▶ 1 · ◷ 4
   ⚙ 29%  ▤ 8%  ⛁ 2%
 ● swarms · ⚑ 2 · ◷ 3
@@ -33,7 +33,7 @@ Spaces shows one entry per home workspace. It never repeats per-agent detail, wh
 | `$queue` | `◷ N` (yellow) | Tasks queued and ready to start: `count` from the home's `bin/fm-tasks-axi.sh ready`. |
 | `$res` | `⚙ 29%  ▤ 8%  ⛁ 2%` | CPU (share of all cores) and resident memory (share of `MemTotal`) summed over every process whose environment carries the space's `HERDR_WORKSPACE_ID`, so its workers count. Disk is the home plus the worktree pools of its projects, as `treehouse status --json` lists them, as a share of the filesystem holding the home; a pool worktree that is itself another home is left out. |
 | `$alert` | `⚠ watcher silent` (orange) | `fm_supervision_unhealthy` from the home's `bin/fm-supervision-lib.sh`: the home has work that needs a watcher and the watcher's beacon is stale. |
-| `$host` | `⌂ ⚙ 41%  ▤ 18.2/31.0G 59%  ⛁ 402/937G 43%` | The whole machine, on the primary home only: CPU busy share from `/proc/stat`, used memory (`MemTotal` − `MemAvailable`) from `/proc/meminfo`, and the root filesystem from `statvfs`. Sizes switch to whole G from 100G and to T from 1000G, so the line stays within 46 columns. |
+| `$host` | `⌂ ⚙ 41%  ▤ 18/31G 59%  ⛁ 402/937G 43%` | The whole machine, on the primary home only: CPU busy share from `/proc/stat`, used memory (`MemTotal` − `MemAvailable`) from `/proc/meminfo`, and the root filesystem from `statvfs`. Sizes keep one decimal only under 10G (`7.1/7.8G`) and switch to T from 1000G (`1.4/1.9T`, whole T from 10T), so a size never passes 8 columns and the line fits the 42 columns Herdr shows on the first row of a Spaces entry at width 46. |
 
 There is no rate-limit warning: a rate limit takes every home down at once, so a per-home flag adds nothing.
 
