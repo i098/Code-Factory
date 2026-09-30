@@ -228,7 +228,7 @@ def main() -> None:
         parts = []
         before = prev_cpu.get(wid)
         if before is not None and dt > 0:
-            used = sum(t - before.get(str(p), 0) for p, t, _ in rows)
+            used = max(0, sum(t for _, t, _ in rows) - sum(before.values()))
             parts.append(f"⚙ {pct(used / TICK / dt, os.cpu_count())}")
         parts.append(f"▤ {pct(sum(r for _, _, r in rows), meminfo()[0])}")
         if home:

@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -223,6 +224,30 @@ def test_space_cpu_includes_finished_children():
         parent.wait()
     assert pid == parent.pid
     assert ticks >= 0.4 * spaces.TICK
+
+
+def test_space_cpu_counts_a_reaped_child_once(fixture):
+    # A worker in the docs space runs a 6-second build on one core. The reporter
+    # samples the build mid-way, then the worker reaps it: the next run must
+    # count only the build's last stretch, not its whole lifetime again through
+    # the worker's child time.
+    _, run = fixture
+    busy = "import time\nt = time.time()\nwhile time.time() - t < 6: pass"
+    worker = subprocess.Popen(
+        ["python3", "-c", f"import subprocess, sys, time; subprocess.run([sys.executable, '-c', {busy!r}]); print(flush=True); time.sleep(30)"],
+        env={**os.environ, "HERDR_WORKSPACE_ID": "w1"},
+        stdout=subprocess.PIPE,
+    )
+    try:
+        time.sleep(5)
+        run()
+        worker.stdout.readline()
+        res = run()["w1"]["res"]
+    finally:
+        worker.kill()
+        worker.wait()
+    cores = int(re.match(r"⚙ (\d+)%", res)[1]) / 100 * os.cpu_count()
+    assert cores < 1.5
 
 
 @pytest.mark.parametrize(
