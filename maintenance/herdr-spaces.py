@@ -312,7 +312,7 @@ def main() -> None:
         home = None if helper else homes.get(wid)
         keep = last.get(wid, {})
         values: dict[str, str | None] = dict.fromkeys(TOKENS, "")
-        values["short"] = "" if label == "machine" else short_name(label)
+        values["short"] = short_name(label)
 
         def fill(keys, compute):
             """A source that fails keeps its previous value; unknown ones stay untouched."""
