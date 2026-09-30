@@ -7,6 +7,7 @@ records what would be reported, so the live Herdr session is never touched.
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -171,6 +172,7 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     reported = run()
     docs = reported["w1"]
     res = docs.pop("res")
+    host = docs.pop("host")
     assert docs == {
         "short": "docs",
         # 3 in the ledger, less the 2 of the second-level home with its own
@@ -180,7 +182,12 @@ def test_reporter_counts_from_a_fixture_home(fixture):
         "queue": "◷ 4",
         "alert": "⚠ watcher silent",
     }
-    assert res.startswith("▤ ") and " ⛁ " in res
+    # Shares of the machine; CPU needs a baseline, so it waits for run two.
+    assert re.fullmatch(r"▤ \d+%  ⛁ \d+%", res)
+    # No workspace is labelled firstmate, so the first listed carries the
+    # whole-machine header, within the 45 content columns of a 46-wide sidebar.
+    size = r"[\d.]+/[\d.]+[GT] \d+%"
+    assert re.fullmatch(rf"⌂ ▤ {size}  ⛁ {size}", host) and len(host) <= 45
     # A helper space shows its short name only; everything else is cleared.
     assert reported["w2"] == {"short": "☾ afk"} | dict.fromkeys(spaces.TOKENS[1:])
 
@@ -191,7 +198,16 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     docs = run()["w1"]
     assert docs["decisions"] == "⚑ 1"
     assert docs["alert"] is None
-    assert docs["res"].startswith("⚙ ")
+    assert re.fullmatch(r"⚙ \d+%  ▤ \d+%  ⛁ \d+%", docs["res"])
+    assert re.fullmatch(r"⌂ ⚙ \d+%  ▤ .+", docs["host"])
+
+
+@pytest.mark.parametrize(
+    ("used", "total", "text"),
+    [(18.2, 31.0, "18.2/31.0G"), (402, 937, "402/937G"), (1433.6, 1945.6, "1.4/1.9T")],
+)
+def test_machine_sizes_stay_short(used, total, text):
+    assert spaces.used_of(used * 2**30, total * 2**30) == text
 
 
 def test_reporter_waits_out_a_failed_disk_measurement(fixture, tmp_path):

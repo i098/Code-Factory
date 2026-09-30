@@ -10,8 +10,10 @@ workspace tokens under the source `code-factory:spaces`:
                     second-level homes that have a live Space of their own
   crew       "▶ N"  live worker task records (state/*.meta, homes excluded)
   queue      "◷ N"  queued tasks ready to start (bin/fm-tasks-axi.sh ready)
-  res        "⚙ 29% ▤ 2.4G ⛁ 8.5G"  CPU, RAM, disk
+  res        "⚙ 29%  ▤ 8%  ⛁ 2%"  CPU, RAM and disk, as shares of the machine
   alert      "⚠ watcher silent" when the home's supervision is unhealthy
+  host       "⌂ ⚙ 41%  ▤ 18.2/31.0G 59%  ⛁ 402/937G 43%"  the whole machine,
+             on the primary home only (labelled firstmate, else the first listed)
 
 Zero counts are cleared. Disk is cached 15 minutes in
 ~/.cache/code-factory/herdr-spaces.json. A source that fails keeps
@@ -29,7 +31,7 @@ from pathlib import Path
 SOURCE = "code-factory:spaces"
 HERDR = os.environ.get("HERDR_BIN_PATH", "herdr")
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "code-factory"
-TOKENS = ("short", "decisions", "crew", "queue", "res", "alert")
+TOKENS = ("short", "decisions", "crew", "queue", "res", "alert", "host")
 DISK_TTL = 15 * 60
 TICK = os.sysconf("SC_CLK_TCK")
 PAGE = os.sysconf("SC_PAGE_SIZE")
@@ -156,8 +158,36 @@ def processes() -> dict[str, list[tuple[int, int, int]]]:
     return found
 
 
-def gib(n: float) -> str:
-    return f"{n / 2**30:.1f}G"
+def meminfo() -> tuple[int, int]:
+    """(MemTotal, MemAvailable) in bytes."""
+    lines = Path("/proc/meminfo").read_text().splitlines()
+    info = dict(line.split(":", 1) for line in lines)
+    return int(info["MemTotal"].split()[0]) * 1024, int(info["MemAvailable"].split()[0]) * 1024
+
+
+def cpu_times() -> list[int]:
+    """[busy, total] jiffies of the whole machine, from /proc/stat."""
+    fields = [int(f) for f in Path("/proc/stat").read_text().split("\n", 1)[0].split()[1:9]]
+    return [sum(fields) - fields[3] - fields[4], sum(fields)]
+
+
+def fs_size(path: Path | str) -> int:
+    st = os.statvfs(path)
+    return st.f_blocks * st.f_frsize
+
+
+def pct(part: float, whole: float) -> str:
+    return f"{part / whole * 100:.0f}%"
+
+
+def used_of(used: float, total: float) -> str:
+    """"18.2/31.0G"; whole G from 100G and T from 1000G, so it stays short."""
+    g = 2**30
+    if total < 100 * g:
+        return f"{used / g:.1f}/{total / g:.1f}G"
+    if total < 1000 * g:
+        return f"{used / g:.0f}/{total / g:.0f}G"
+    return f"{used / 2**40:.1f}/{total / 2**40:.1f}T"
 
 
 def count(n: int, glyph: str) -> str:
@@ -200,8 +230,8 @@ def main() -> None:
         before = prev_cpu.get(wid)
         if before is not None and dt > 0:
             used = sum(t - before[str(p)] for p, t, _ in rows if str(p) in before)
-            parts.append(f"⚙ {used / TICK / dt / os.cpu_count() * 100:.0f}%")
-        parts.append(f"▤ {gib(sum(r for _, _, r in rows))}")
+            parts.append(f"⚙ {pct(used / TICK / dt, os.cpu_count())}")
+        parts.append(f"▤ {pct(sum(r for _, _, r in rows), meminfo()[0])}")
         if home:
             hit = disk_cache.get(str(home))
             if not hit or now - hit["at"] >= DISK_TTL:
@@ -214,8 +244,26 @@ def main() -> None:
                 hit = disk_cache[str(home)] = {"at": now, "bytes": size}
                 save()
             if hit["bytes"] is not None:
-                parts.append(f"⛁ {gib(hit['bytes'])}")
-        return [" ".join(parts)]
+                parts.append(f"⛁ {pct(hit['bytes'], fs_size(home))}")
+        return ["  ".join(parts)]
+
+    def host() -> list[str]:
+        busy, total = cpu_times()
+        before = cache.get("host_cpu")
+        cache["host_cpu"] = [busy, total]
+        parts = []
+        if before and total > before[1]:
+            parts.append(f"⚙ {pct(busy - before[0], total - before[1])}")
+        mem_total, mem_free = meminfo()
+        mem_used = mem_total - mem_free
+        parts.append(f"▤ {used_of(mem_used, mem_total)} {pct(mem_used, mem_total)}")
+        st = os.statvfs("/")
+        disk_total, disk_used = st.f_blocks * st.f_frsize, (st.f_blocks - st.f_bfree) * st.f_frsize
+        parts.append(f"⛁ {used_of(disk_used, disk_total)} {pct(disk_used, disk_total)}")
+        return ["⌂ " + "  ".join(parts)]
+
+    first = workspaces[0] if workspaces else {}
+    primary = next((ws for ws in workspaces if ws.get("label") == "firstmate"), first)
 
     for ws in workspaces:
         wid, label = ws["workspace_id"], ws.get("label", "")
@@ -242,6 +290,8 @@ def main() -> None:
             fill(["alert"], lambda: [silent if watcher_silent(home) else ""])
         if not helper:
             fill(["res"], lambda: res(wid, home))
+        if wid == primary.get("workspace_id"):
+            fill(["host"], host)
 
         args = [HERDR, "workspace", "report-metadata", wid, "--source", SOURCE]
         for key, value in values.items():
