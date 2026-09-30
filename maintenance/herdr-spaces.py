@@ -153,7 +153,7 @@ def processes() -> dict[str, list[tuple[int, int, int]]]:
             rss = int((proc / "statm").read_text().split()[1]) * PAGE
         except OSError:
             continue
-        ticks = int(stat[11]) + int(stat[12])
+        ticks = sum(int(f) for f in stat[11:15])
         found.setdefault(m[1].decode(), []).append((int(proc.name), ticks, rss))
     return found
 
@@ -228,7 +228,7 @@ def main() -> None:
         parts = []
         before = prev_cpu.get(wid)
         if before is not None and dt > 0:
-            used = sum(t - before[str(p)] for p, t, _ in rows if str(p) in before)
+            used = sum(t - before.get(str(p), 0) for p, t, _ in rows)
             parts.append(f"⚙ {pct(used / TICK / dt, os.cpu_count())}")
         parts.append(f"▤ {pct(sum(r for _, _, r in rows), meminfo()[0])}")
         if home:

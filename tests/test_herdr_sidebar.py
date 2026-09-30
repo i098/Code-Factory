@@ -206,6 +206,25 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     assert re.fullmatch(r"⌂ ⚙ \d+%  ▤ .+", docs["host"])
 
 
+def test_space_cpu_includes_finished_children():
+    # A worker's shell that ran a half-second build: the build is gone, but its
+    # time must still count toward the space.
+    busy = "import time\nt = time.time()\nwhile time.time() - t < 0.5: pass"
+    parent = subprocess.Popen(
+        ["python3", "-c", f"import subprocess, sys, time; subprocess.run([sys.executable, '-c', {busy!r}]); print(flush=True); time.sleep(30)"],
+        env={**os.environ, "HERDR_WORKSPACE_ID": "cpu-test"},
+        stdout=subprocess.PIPE,
+    )
+    try:
+        parent.stdout.readline()
+        [(pid, ticks, _)] = spaces.processes()["cpu-test"]
+    finally:
+        parent.kill()
+        parent.wait()
+    assert pid == parent.pid
+    assert ticks >= 0.4 * spaces.TICK
+
+
 @pytest.mark.parametrize(
     ("used", "total", "text"),
     [
