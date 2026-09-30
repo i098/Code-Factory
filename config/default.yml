@@ -44,7 +44,7 @@ factory:
     sidebar_space_rows: |
       [
         [
-          { token = "$host", dim = true },
+          { token = "$host", fg = "#a6adc8" },
         ],
         [
           "state_icon",
@@ -55,7 +55,7 @@ factory:
           { token = "$queue", fg = "#f9e2af" },
         ],
         [
-          { token = "$res", dim = true },
+          { token = "$res", fg = "#a6adc8" },
         ],
         [
           { token = "$alert", fg = "#fab387" },

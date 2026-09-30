@@ -20,9 +20,9 @@ Spaces shows one entry per home workspace. It never repeats per-agent detail, wh
 
 | Line | Shows |
 | --- | --- |
-| Header | The whole machine, dimmed, on the primary home's entry only (the workspace labelled `firstmate`; without one, the first workspace listed): `⚙` CPU, `▤` used/total RAM, `⛁` used/total root filesystem, each with its share. Every other entry leaves this row empty, and Herdr hides it. Herdr then indents the primary entry's lines 1 to 3 by two columns, and the reporter indents its lines 2 and 3 by two more, so they still sit under the name. |
+| Header | The whole machine, in light grey (`#a6adc8`), on the primary home's entry only (the workspace labelled `firstmate`; without one, the first workspace listed): `⚙` CPU, `▤` used/total RAM, `⛁` used/total root filesystem, each with its share. Every other entry leaves this row empty, and Herdr hides it. Herdr then indents the primary entry's lines 1 to 3 by two columns, and the reporter indents its lines 2 and 3 by two more, so they still sit under the name. |
 | 1 | The state dot, then the short name (`$short`): the primary home (`firstmate`) in bold blue, other homes in mauve. A dead helper space (label contains `-afk-daemon-`) shows `☾ afk`, dimmed, and nothing else. A space with no short name shows its own label, dimmed. Then the decision, worker and queue counts below, each in its own color. A count of zero is not shown. |
-| 2 | What the space costs the machine, as shares, dimmed, indented two columns: `⚙` CPU, `▤` RAM, `⛁` disk. |
+| 2 | What the space costs the machine, as shares, in light grey (`#a6adc8`), indented two columns: `⚙` CPU, `▤` RAM, `⛁` disk. |
 | 3 | `⚠ watcher silent` in orange, indented two columns, only when the home's watcher stopped reporting. |
 
 | Token | Value | Source |
