@@ -212,3 +212,12 @@ def test_reporter_counts_from_a_fixture_home(fixture):
     assert docs["decisions"] == "⚑ 1"
     assert docs["alert"] is None
     assert docs["res"].startswith(BLANK * 2 + "cpu ")
+
+
+def test_reporter_waits_out_a_failed_disk_measurement(fixture, tmp_path):
+    _, run = fixture
+    calls = tmp_path / "du-calls"
+    write(tmp_path / "stub/du", f"#!/bin/sh\necho x >> {calls}\nexit 1\n", 0o755)
+    assert " disk " not in run()["w1"]["res"]
+    assert " disk " not in run()["w1"]["res"]
+    assert len(calls.read_text().splitlines()) == 1

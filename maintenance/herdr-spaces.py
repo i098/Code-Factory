@@ -218,10 +218,16 @@ def main() -> None:
     procs = processes()
     prev_cpu = cache.get("cpu", {})
     dt = now - cache.get("cpu_at", now)
-    pr_cache, disk_cache = cache.get("pr", {}), cache.get("disk", {})
+    pr_cache, disk_cache = cache.get("pr", {}), cache.setdefault("disk", {})
     folds = cache.get("folds", {})
     live_ids = {ws["workspace_id"] for ws in workspaces}
     seen_prs: dict[str, dict] = {}
+
+    def save() -> None:
+        CACHE.mkdir(parents=True, exist_ok=True)
+        tmp = cache_file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cache))
+        tmp.replace(cache_file)
 
     def pr_counts(home: Path) -> list[str]:
         states = []
@@ -245,13 +251,15 @@ def main() -> None:
         if home:
             hit = disk_cache.get(str(home))
             if not hit or now - hit["at"] >= DISK_TTL:
+                others = set(homes.values()) - {home}
                 try:
-                    others = set(homes.values()) - {home}
-                    hit = {"at": now, "bytes": disk_bytes(disk_paths(home, others))}
-                    disk_cache[str(home)] = hit
+                    size = disk_bytes(disk_paths(home, others))
                 except (OSError, subprocess.SubprocessError, ValueError, IndexError) as err:
                     print(f"{home}: disk: {err}", file=sys.stderr)
-            if hit:
+                    size = hit and hit["bytes"]
+                hit = disk_cache[str(home)] = {"at": now, "bytes": size}
+                save()
+            if hit["bytes"] is not None:
                 parts.append(f"disk {gib(hit['bytes'])}")
         return [BLANK * 2 + "  ".join(parts)]
 
@@ -297,13 +305,9 @@ def main() -> None:
         cpu={w: {str(pid): t for pid, t, _ in procs.get(w, [])} for w in live_ids},
         cpu_at=now,
         pr=seen_prs,
-        disk=disk_cache,
         folds=folds,
     )
-    CACHE.mkdir(parents=True, exist_ok=True)
-    tmp = cache_file.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cache))
-    tmp.replace(cache_file)
+    save()
 
 
 if __name__ == "__main__":

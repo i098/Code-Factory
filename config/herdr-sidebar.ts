@@ -175,6 +175,7 @@ export default function (pi) {
     refreshing = true;
     try {
       if (cwd && wait <= 0) {
+        if (!lookedUpAt) await report().catch(() => {});
         lookedUpAt = Date.now();
         pr = await lookupPr(cwd).catch(() => pr);
         if (taskId) taskIssue = await lookupTaskIssue().catch(() => taskIssue);
