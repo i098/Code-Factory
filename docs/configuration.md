@@ -46,7 +46,7 @@ factory:
     obscura_version: '0.2.2'
     obscura_sha256: c1b4548e36549a0228c39c1cc842df425bc7253af2b0a56bd2a538d8ff7e3406
   fleet:
-    supabase_project_id: <project-id>   # The shared Supabase project id
+    supabase_project_id: <project-id>   # The shared Supabase project id; the default is set in config/default.yml
     fixture_archive: ""   # Path to DB volume tarball for fresh hosts
   firstmate:
     url: https://github.com/kunchenguid/firstmate.git
