@@ -32,30 +32,32 @@ seed_one() {
   install -m 600 "$SRC" "$f" && log "seeded $f"
 }
 
-# Heap cap for everything pnpm runs in the worktree (next dev, tsc): pnpm reads
-# `node-options` from the project .npmrc into NODE_OPTIONS. A runaway compile
-# then fails fast with a heap error the agent can see, instead of creeping to
-# 4 GB and swapping the host. The file is hidden from git through the shared
-# .git/info/exclude (the repository tracks no .npmrc), so no lane ever sees or
-# commits it.
+# Heap cap for everything bun runs in the worktree (bun run dev, tsc): the
+# managed shell and Herdr environment set BUN_OPTIONS=--env-file=.env.fleet, so
+# every bun started in the worktree root loads this file and hands NODE_OPTIONS
+# to the node processes it spawns. A runaway compile then fails fast with a
+# heap error the agent can see, instead of creeping to 4 GB and swapping the
+# host. The file is hidden from git through the shared .git/info/exclude, so no
+# lane ever sees or commits it.
 HEAP_MB=${FLEET_NODE_HEAP_MB:-2048}
-npmrc_content() {
+HEAP_FILE=.env.fleet
+heap_content() {
   printf '%s\n' \
     "$MARK  (marker; fleet-managed, hidden via .git/info/exclude)" \
-    "# Heap cap for pnpm-run scripts (next dev, tsc): fail fast instead of swapping the host." \
-    "node-options=--max-old-space-size=$HEAP_MB"
+    "# Heap cap for bun-run scripts (next dev, tsc): fail fast instead of swapping the host." \
+    "NODE_OPTIONS=--max-old-space-size=$HEAP_MB"
 }
-seed_npmrc() {
-  local wt=$1 f=$1/.npmrc common tmp
-  if git -C "$wt" ls-files --error-unmatch .npmrc >/dev/null 2>&1; then
-    return 0   # the repository tracks its own .npmrc; never touch a tracked file
+seed_heap_cap() {
+  local wt=$1 f=$1/$HEAP_FILE common tmp
+  if git -C "$wt" ls-files --error-unmatch "$HEAP_FILE" >/dev/null 2>&1; then
+    return 0   # the repository tracks its own file; never touch a tracked file
   fi
   common=$(git -C "$wt" rev-parse --git-common-dir 2>/dev/null) || return 0
   case "$common" in /*) ;; *) common="$wt/$common" ;; esac
-  if [ -d "$common/info" ] && ! grep -qxF '.npmrc' "$common/info/exclude" 2>/dev/null; then
-    printf '%s\n' '.npmrc' >> "$common/info/exclude" && log "excluded .npmrc in $common/info/exclude"
+  if [ -d "$common/info" ] && ! grep -qxF "$HEAP_FILE" "$common/info/exclude" 2>/dev/null; then
+    printf '%s\n' "$HEAP_FILE" >> "$common/info/exclude" && log "excluded $HEAP_FILE in $common/info/exclude"
   fi
-  tmp=$(mktemp) && npmrc_content > "$tmp"
+  tmp=$(mktemp) && heap_content > "$tmp"
   if [ -f "$f" ] && cmp -s "$tmp" "$f"; then rm -f "$tmp"; return 0; fi
   if [ -f "$f" ] && ! grep -qF "$MARK" "$f"; then
     cp -p "$f" "$f.pre-fleet-$(date -u +%Y%m%dT%H%M%SZ)"
@@ -67,7 +69,7 @@ seed_npmrc() {
 # Worktree pools: ~/.treehouse/<repo>-<hash>/<n>/swarms-platform. A pool slot
 # directory can exist for a moment before `git worktree add` fills it; give the
 # checkout up to 2 minutes to appear so a brand-new lane is covered before its
-# first `pnpm dev`, not on the next timer tick.
+# first `bun run dev`, not on the next timer tick.
 shopt -s nullglob
 for slot in "$HOME"/.treehouse/swarms-platform-*/*/; do
   wt="${slot%/}/swarms-platform"
@@ -77,7 +79,7 @@ for slot in "$HOME"/.treehouse/swarms-platform-*/*/; do
   fi
   [ -e "$wt/package.json" ] || continue
   seed_one "$wt"
-  seed_npmrc "$wt"
+  seed_heap_cap "$wt"
 done
 # Firstmate's primary checkout of the project.
 for wt in "$HOME"/.treehouse/firstmate-*/*/firstmate/projects/swarms-platform; do

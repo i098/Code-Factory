@@ -9,8 +9,8 @@
 #     any Supabase CLI project other than the shared one on creation and alerts
 #     on bare Postgres containers. Allowlist is first-write (operator-owned).
 #   * ~/oss-fleet/doctor/worktree-env-seed.sh - installs the stack's env file
-#     as .env.local in every swarms worktree, plus a git-excluded .npmrc heap
-#     cap for pnpm-run scripts; path unit + timer + login.
+#     as .env.local in every swarms worktree, plus a git-excluded .env.fleet
+#     heap cap for bun-run scripts; path unit + timer + login.
 #   * ~/oss-fleet/doctor/dev-server-reaper.sh - every 2 min, kills next dev /
 #     tsc trees in worktrees whose lane is done/paused/blocked, agent-less or
 #     idle >= 30 min. Dev servers are throwaway; idle ones filled swap.

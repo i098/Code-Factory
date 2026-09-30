@@ -60,9 +60,13 @@ factory_omp_root: "{{ factory_share_dir }}/omp/{{ factory_omp_version }}"
 factory_chrome_devtools_mcp_path: "{{ factory_npm_root }}/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
 # Environment shared by the interactive shell profile and the Herdr unit.
 # Consumed only when the agents profile is on, because the npm set that
-# provides the MCP entrypoint is installed by `--npm`.
-factory_managed_shell_env:
-  CHROME_DEVTOOLS_AXI_MCP_PATH: "{{ factory_chrome_devtools_mcp_path }}"
+# provides the MCP entrypoint is installed by `--npm`. With fleet guards, every
+# bun loads the worktree's seeded .env.fleet heap cap (a missing file is a
+# no-op; see fleet/doctor/worktree-env-seed.sh).
+factory_managed_shell_env: >-
+  {{ {'CHROME_DEVTOOLS_AXI_MCP_PATH': factory_chrome_devtools_mcp_path}
+     | combine({'BUN_OPTIONS': '--env-file=.env.fleet'}
+               if (factory_cfg.profiles.fleet_guards | bool) else {}) }}
 # Contract: compute the unit ExecStart directly, never /usr/local/bin or $PATH.
 factory_herdr_bin: "{{ factory_tools_root }}/herdr/{{ factory_herdr_version }}/{{ factory_platform }}/herdr"
 factory_herdr_config_dir: "{{ factory_cfg.home }}/.config/herdr"
