@@ -6,8 +6,9 @@ the orchestrator home from its panes' directories and reports display-only
 workspace tokens under the source `code-factory:spaces`:
 
   short      short name ("swarms" for "2ndmate-swarms-mate-s4")
-  decisions  "⚑ N"  open decisions, from the home's summary ledger, less those of
-                    second-level homes that have a live Space of their own
+  decisions  "⚑ N"  fresh open decisions (parked captain-hold-* keys left out):
+                    a second-level home's own, or the primary home's own workers';
+                    only while a workspace is labelled firstmate
   crew       "▶ N"  live worker task records (state/*.meta, homes excluded)
   queue      "◷ N"  queued tasks ready to start (bin/fm-tasks-axi.sh ready)
   res        "⚙ 29%  ▤ 8%  ⛁ 2%"  CPU, RAM and disk, as shares of the machine
@@ -70,31 +71,47 @@ def find_home(cwd: str) -> Path | None:
     return None
 
 
-def decisions(home: Path, live: set[str], folds: dict) -> int:
-    """The summary ledger's open decisions, minus those it folds in from
-    second-level homes that have a live Space of their own (they count there).
+def open_keys(home: Path, log: Path, cached: dict, folds: dict) -> int:
+    """Fresh open decisions in one status log: bin/fm-classify-lib.sh's read-only
+    status_open_decisions, minus parked captain holds (keys captain-hold-*).
+    Cached until the log changes; folds keeps only the logs read this run."""
+    stamp = [log.stat().st_mtime_ns, log.stat().st_size]
+    hit = cached.get(str(log))
+    if not hit or hit["stamp"] != stamp or "fresh" not in hit:
+        script = '. "$1" && status_open_decisions "$2"'
+        out = run("bash", "-c", script, "_", home / "bin/fm-classify-lib.sh", log, timeout=60)
+        keys = [line.split("\t", 1)[0] for line in out.splitlines() if line.strip()]
+        hit = {
+            "stamp": stamp,
+            "fresh": sum(not k.startswith("captain-hold-") for k in keys),
+        }
+    folds[str(log)] = hit
+    return hit["fresh"]
 
-    Each such home's share is bin/fm-classify-lib.sh's read-only
-    status_open_decisions over its status log, cached until that log changes.
+
+def decisions(primary: Path, wid: str, is_primary: bool, cached: dict, folds: dict) -> int:
+    """Decisions waiting on the operator, counted where they can be acted on.
+
+    Every count comes from the primary home's status logs. A second-level home's
+    Space shows the fresh escalations in its own log (state/<mate>.status, the meta
+    whose herdr_workspace_id is this Space). The primary Space shows only its own
+    workers' logs. Parked holds never count, and a second-level home with no live
+    Space (closed or not running) is not shown anywhere.
+
+    The flag means waiting on the operator. A second-level home decides for its
+    own workers, and escalates anything it cannot decide into its log in the
+    primary home, which is exactly what is counted here.
     """
-    ledger = json.loads((home / "state/home-summary.json").read_text())
-    total = int(ledger["counts"]["decisions_open"])
-    for meta in (home / "state").glob("*.meta"):
+    total = 0
+    for meta in (primary / "state").glob("*.meta"):
         fields = dict(line.split("=", 1) for line in meta.read_text().splitlines() if "=" in line)
-        if fields.get("kind") != "secondmate" or fields.get("herdr_workspace_id") not in live:
+        mate = fields.get("kind") == "secondmate"
+        if (mate and fields.get("herdr_workspace_id") != wid) or (not mate and not is_primary):
             continue
         log = meta.with_suffix(".status")
-        if not log.exists():
-            continue
-        stamp = [log.stat().st_mtime_ns, log.stat().st_size]
-        hit = folds.get(str(log))
-        if not hit or hit["stamp"] != stamp:
-            script = '. "$1" && o=$(status_open_decisions "$2") && printf %s "$o" | awk "NF{n++} END{print n+0}"'
-            lib = home / "bin/fm-classify-lib.sh"
-            out = run("bash", "-c", script, "_", lib, log, timeout=60)
-            hit = folds[str(log)] = {"stamp": stamp, "n": int(out.strip() or 0)}
-        total -= hit["n"]
-    return max(total, 0)
+        if log.exists():
+            total += open_keys(primary, log, cached, folds)
+    return total
 
 
 def crew(home: Path) -> int:
@@ -218,7 +235,7 @@ def main() -> None:
     prev_cpu = cache.get("cpu", {})
     dt = now - cache.get("cpu_at", now)
     disk_cache = cache.setdefault("disk", {})
-    folds = cache.get("folds", {})
+    cached_folds, folds = cache.get("folds", {}), {}
     live_ids = {ws["workspace_id"] for ws in workspaces}
 
     def save() -> None:
@@ -267,14 +284,18 @@ def main() -> None:
         return ["⌂ " + "  ".join(parts)]
 
     first = workspaces[0] if workspaces else {}
-    primary = next((ws for ws in workspaces if ws.get("label") == "firstmate"), first)
+    firstmate = next(
+        (ws["workspace_id"] for ws in workspaces if ws.get("label") == "firstmate"), None
+    )
+    primary = firstmate or first.get("workspace_id")
+    primary_home = homes.get(firstmate)
 
     for ws in workspaces:
         wid, label = ws["workspace_id"], ws.get("label", "")
         # Helper and per-task spaces get their short name only.
         helper = "-afk-daemon-" in label or label.startswith("└")
         home = None if helper else homes.get(wid)
-        pad = BLANK * 2 if wid == primary.get("workspace_id") else ""
+        pad = BLANK * 2 if wid == primary else ""
         keep = last.get(wid, {})
         values: dict[str, str | None] = dict.fromkeys(TOKENS, "")
         values["short"] = short_name(label)
@@ -288,14 +309,23 @@ def main() -> None:
                 values.update({k: keep.get(k) for k in keys})
 
         if home:
-            fill(["decisions"], lambda: [count(decisions(home, live_ids, folds), "⚑ ")])
+            if primary_home:
+                fill(
+                    ["decisions"],
+                    lambda: [
+                        count(
+                            decisions(primary_home, wid, wid == firstmate, cached_folds, folds),
+                            "⚑ ",
+                        )
+                    ],
+                )
             fill(["crew"], lambda: [count(crew(home), "▶ ")])
             fill(["queue"], lambda: [count(queue(home), "◷ ")])
             silent = "⚠ watcher silent"
             fill(["alert"], lambda: [pad + silent if watcher_silent(home) else ""])
         if not helper:
             fill(["res"], lambda: [pad + res(wid, home)])
-        if wid == primary.get("workspace_id"):
+        if wid == primary:
             fill(["host"], host)
 
         args = [HERDR, "workspace", "report-metadata", wid, "--source", SOURCE]
