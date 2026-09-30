@@ -33,6 +33,12 @@ factory:
     tailscale: false      # Daemon only; authenticate separately
     desktop: false        # XFCE + TigerVNC + noVNC
     fleet_guards: false   # Shared Supabase, browser ladder
+  herdr:
+    theme: catppuccin
+    sidebar_width: 40     # Agent sidebar layout: see herdr.md
+    sidebar_agent_rows: | # "" turns the layout and its omp extension off
+      [ ... ]
+    sidebar_bg: "#1e1e2e"
   browsers:               # Obscura tier of the browser ladder
     obscura_version: '0.2.2'
     obscura_sha256: c1b4548e36549a0228c39c1cc842df425bc7253af2b0a56bd2a538d8ff7e3406
@@ -86,4 +92,4 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 | `tailscale` | off | Tailscale daemon only. Authentication is manual; see [Security](security.md#remote-access). |
 | `desktop` | off | Loopback-only XFCE + TigerVNC + noVNC operator desktop on `127.0.0.1:6080`, and the Google Chrome apt package. Needs an operator-created VNC password; see [Desktop access](recovery.md#desktop-access). Also supplies the TigerVNC/noVNC packages the browser ladder's `vnc` tier needs. |
 
-The latest Herdr release is always installed, with the captured UI preferences and one canonical, versioned user-service executable. Exact versions for every profile are in [Dependencies](dependencies.md).
+The latest Herdr release is always installed, with the captured UI preferences, the [Agent sidebar layout](herdr.md), and one canonical, versioned user-service executable. Exact versions for every profile are in [Dependencies](dependencies.md).

@@ -38,6 +38,9 @@
               factory_cfg.home ~ '/.profile']
              + ([factory_chrome_devtools_mcp_path]
                 if (factory_cfg.profiles.agents | bool) else [])
+             + ([factory_omp_sidebar_extension]
+                if ((factory_cfg.profiles.agents | bool)
+                    and (factory_herdr_sidebar_layout | bool)) else [])
              + ([factory_pruner_script,
                  factory_pruner_python,
                  factory_pruner_stamp,
@@ -169,6 +172,27 @@
           {{ factory_herdr_bin }} (Herdr {{ factory_herdr_version }}, the latest
           release this run resolved). The symlink points at
           "{{ factory_verify_herdr_link.stat.lnk_source | default('(missing)') }}".
+        quiet: true
+
+    - name: Check the rendered Herdr configuration with Herdr itself
+      ansible.builtin.command:
+        argv: ["{{ factory_herdr_bin }}", config, check]
+      environment:
+        HERDR_CONFIG_PATH: "{{ factory_herdr_config }}"
+      register: factory_verify_herdr_config
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Assert Herdr accepts the rendered configuration
+      ansible.builtin.assert:
+        that:
+          - factory_verify_herdr_config.rc == 0
+        fail_msg: >-
+          `herdr config check` rejected {{ factory_herdr_config }}; an operator
+          override in factory.herdr (such as sidebar_agent_rows) is the usual
+          cause, see docs/herdr.md.
+          {{ factory_verify_herdr_config.stdout }} {{ factory_verify_herdr_config.stderr }}
         quiet: true
 
     # --- the omp release this run resolved is the one installed ------------

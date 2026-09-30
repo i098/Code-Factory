@@ -19,6 +19,28 @@ factory:
     agent_panel_sort: spaces
     headless_cols: 120
     headless_rows: 40
+    # Agent sidebar layout; docs/herdr.md explains each line. An empty
+    # sidebar_agent_rows keeps Herdr's built-in layout and removes the omp
+    # extension that feeds $who, $refs and the bare topic title.
+    sidebar_width: 40
+    sidebar_max_width: 48
+    sidebar_agent_rows: |
+      [
+        [
+          "state_icon",
+          { token = "$who", rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "2ndmate-", fg = "#cba6f7" }, { starts_with = "└", fg = "#94e2d5" }] },
+        ],
+        [
+          { token = "state_icon", fg = "#1e1e2e" },
+          { token = "terminal_title", dim = true },
+        ],
+        [
+          { token = "$refs", fg = "#89b4fa" },
+        ],
+      ]
+    # Pinned to the catppuccin base so the hidden indent dot on line 2 blends
+    # in; "" leaves the theme's own sidebar background.
+    sidebar_bg: "#1e1e2e"
   browser_prune:
     enabled: true
     idle_seconds: 7200

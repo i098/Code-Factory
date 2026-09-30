@@ -11,13 +11,27 @@ onboarding = false
 [theme]
 name = "{{ factory_cfg.herdr.theme }}"
 auto_switch = {{ factory_herdr_theme_auto_switch | bool | lower }}
+{% if factory_cfg.herdr.sidebar_bg %}
+
+[theme.custom]
+sidebar_bg = "{{ factory_cfg.herdr.sidebar_bg }}"
+{% endif %}
 
 [ui]
+sidebar_width = {{ factory_cfg.herdr.sidebar_width | int }}
+sidebar_max_width = {{ factory_cfg.herdr.sidebar_max_width | int }}
 show_agent_labels_on_pane_borders = {{ factory_herdr_show_agent_labels | bool | lower }}
 agent_panel_sort = "{{ factory_cfg.herdr.agent_panel_sort }}"
 
 [ui.toast]
 delivery = "{{ factory_cfg.herdr.toast_delivery }}"
+{% if factory_herdr_sidebar_layout | bool %}
+
+# Agent sidebar layout (docs/herdr.md). $who and $refs come from the omp
+# extension ~/.omp/agent/extensions/code-factory-herdr-sidebar.ts.
+[ui.sidebar.agents]
+rows = {{ factory_cfg.herdr.sidebar_agent_rows | trim }}
+{% endif %}
 
 [update]
 # Controls the updater's own check behaviour only. `./factory apply` installs

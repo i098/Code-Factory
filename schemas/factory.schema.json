@@ -95,6 +95,20 @@
               "type": "integer",
               "minimum": 10,
               "maximum": 200
+            },
+            "sidebar_width": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sidebar_max_width": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sidebar_agent_rows": {
+              "type": "string"
+            },
+            "sidebar_bg": {
+              "type": "string"
             }
           },
           "required": [

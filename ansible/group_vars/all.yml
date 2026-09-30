@@ -181,6 +181,10 @@ factory_core_tools: [herdr, node, bun, uv]
 factory_herdr_update_channel: stable
 factory_herdr_show_agent_labels: true
 factory_herdr_theme_auto_switch: false
+# The agent sidebar layout is on unless herdr.sidebar_agent_rows is empty; the
+# omp extension that feeds it is installed only while it is on.
+factory_herdr_sidebar_layout: "{{ (factory_cfg.herdr.sidebar_agent_rows | trim | length) > 0 }}"
+factory_omp_sidebar_extension: "{{ factory_cfg.home }}/.omp/agent/extensions/code-factory-herdr-sidebar.ts"
 
 # --- Browser pruning --------------------------------------------------------
 # Flags confirmed by Main (owner of maintenance/chrome-autoprune.py): without
