@@ -88,7 +88,6 @@
     group: "{{ factory_group }}"
   become: true
   loop: [obscura, obscura-worker]
-  notify: restart fleet browser obscura
   when: not ansible_check_mode
 
 - name: Inject the shared-browser env into shell profiles

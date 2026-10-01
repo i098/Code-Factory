@@ -56,15 +56,11 @@ factory_omp_root: "{{ factory_share_dir }}/omp/{{ factory_omp_version }}"
 factory_chrome_devtools_mcp_path: "{{ factory_share_dir }}/chrome-devtools-mcp/{{ factory_latest['chrome-devtools-mcp'] }}/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
 # Environment shared by the interactive shell profile and the Herdr unit.
 # Consumed only when the agents profile is on, because the npm set that
-# provides the MCP entrypoint is installed by `--npm`. With fleet guards,
-# NODE_OPTIONS caps the heap of every node process the shell or Herdr starts
-# (bun run dev, tsc), so a runaway compile fails fast instead of swapping the
-# host. bun keeps its own .env, .env.<mode> and .env.local autoload.
-factory_fleet_node_heap_mb: 2048
-factory_managed_shell_env: >-
-  {{ {'CHROME_DEVTOOLS_AXI_MCP_PATH': factory_chrome_devtools_mcp_path}
-     | combine({'NODE_OPTIONS': '--max-old-space-size=' ~ factory_fleet_node_heap_mb}
-               if (factory_cfg.profiles.fleet_guards | bool) else {}) }}
+# provides the MCP entrypoint is installed by `--npm`. Nothing here may be a
+# process-wide runtime limit (NODE_OPTIONS, BUN_OPTIONS): it would also reach
+# the chrome-devtools-axi bridge, chrome-devtools-mcp and acpx.
+factory_managed_shell_env:
+  CHROME_DEVTOOLS_AXI_MCP_PATH: "{{ factory_chrome_devtools_mcp_path }}"
 # Contract: compute the unit ExecStart directly, never /usr/local/bin or $PATH.
 factory_herdr_bin: "{{ factory_tools_root }}/herdr/{{ factory_herdr_version }}/{{ factory_platform }}/herdr"
 factory_herdr_config_dir: "{{ factory_cfg.home }}/.config/herdr"

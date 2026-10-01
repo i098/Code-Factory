@@ -56,7 +56,7 @@ factory:
 
 - `user` is not `root`, and `workspace` is inside `home`.
 - `firstmate` and `browser_prune.enabled` need `agents`.
-- `fleet_guards` needs `docker` and `firstmate`. Obscura is always its latest release; remove any `browsers.obscura_version` or `browsers.obscura_sha256` left in an older `.local/host.yml`, which validation now rejects.
+- `fleet_guards` needs `docker` and `firstmate`. Obscura is always its latest release. An older `.local/host.yml` that still sets `browsers.obscura_version` or `browsers.obscura_sha256` keeps working: both keys are deprecated, ignored, and reported in one warning on stderr. No edit is required.
 
 The Firstmate checkout tracks the default branch of upstream Firstmate, not a sha. Every apply fetches `origin/main` and fast-forwards `main`, so tracking it is how a host stays current. Do not re-pin it to a sha. Each run resolves `origin/main` once and reports the sha it installed. To track a fork, set `firstmate.url` in `.local/host.yml`. The URL applies to a fresh clone; verification fails when an existing checkout's `origin` is a different URL, and provisioning never changes it for you. To switch an existing checkout, run `git -C <workspace>/firstmate remote set-url origin <url>` and `git -C <workspace>/firstmate fetch origin`, reconcile any local commits on `main` with `origin/main` by hand, then run `./factory apply`.
 

@@ -32,6 +32,29 @@ seed_one() {
   install -m 600 "$SRC" "$f" && log "seeded $f"
 }
 
+# Heap cap for what a lane runs through bun, npm or npx (next dev, tsc): those
+# put the worktree's node_modules/.bin first on PATH, so a `node` there is the
+# only node they start, and the cap reaches the dev server instead of the
+# shell or Herdr environment (the chrome-devtools-axi bridge, chrome-devtools-mcp
+# and acpx never see it). bun passes neither .env files nor NODE_OPTIONS set in
+# them to a script's children. A runaway compile then fails fast with a heap
+# error the agent can see, instead of growing to 4 GB and swapping the host.
+HEAP_MB=${FLEET_NODE_HEAP_MB:-2048}
+seed_node_cap() {
+  local dir=$1/node_modules/.bin real tmp
+  [ -d "$dir" ] || return 0
+  real=$(command -v node) || return 0
+  if [ -e "$dir/node" ] && ! grep -qF "$MARK" "$dir/node"; then
+    return 0   # a dependency ships its own node bin; never replace it
+  fi
+  tmp=$(mktemp) || return 0
+  printf '#!/bin/sh\n%s  (fleet-managed heap cap for scripts run in this worktree)\nexec %q --max-old-space-size=%s "$@"\n' \
+    "$MARK" "$real" "$HEAP_MB" > "$tmp"
+  if [ -f "$dir/node" ] && cmp -s "$tmp" "$dir/node"; then rm -f "$tmp"; return 0; fi
+  install -m 755 "$tmp" "$dir/node" && log "seeded $dir/node (heap cap ${HEAP_MB} MB)"
+  rm -f "$tmp"
+}
+
 # Worktree pools: ~/.treehouse/<repo>-<hash>/<n>/swarms-platform. A pool slot
 # directory can exist for a moment before `git worktree add` fills it; give the
 # checkout up to 2 minutes to appear so a brand-new lane is covered before its
@@ -45,6 +68,7 @@ for slot in "$HOME"/.treehouse/swarms-platform-*/*/; do
   fi
   [ -e "$wt/package.json" ] || continue
   seed_one "$wt"
+  seed_node_cap "$wt"
 done
 # Firstmate's primary checkout of the project.
 for wt in "$HOME"/.treehouse/firstmate-*/*/firstmate/projects/swarms-platform; do

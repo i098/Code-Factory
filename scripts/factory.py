@@ -15,6 +15,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 STALE_FIRSTMATE_URL = "https://github.com/undeemed/firstmate.git"
+LEGACY_BROWSER_KEYS = ("obscura_version", "obscura_sha256")
 
 
 def validate_document(document, schema_name):
@@ -67,7 +68,15 @@ def load_config(path):
         document = yaml.safe_load(path.read_text())
     except yaml.YAMLError:
         raise ValueError("malformed host YAML; configuration contents omitted") from None
-    return validate_config(document)
+    validate_config(document)
+    if any(key in document["factory"].get("browsers", {}) for key in LEGACY_BROWSER_KEYS):
+        print(
+            "WARNING: factory.browsers.obscura_version and factory.browsers.obscura_sha256 "
+            "are no longer used and are ignored; Obscura always resolves to its latest release. "
+            f"Remove them from {path} when convenient.",
+            file=sys.stderr,
+        )
+    return document
 
 
 def initialize(args):

@@ -1,7 +1,6 @@
 import argparse
 import importlib.util
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -23,6 +22,29 @@ def configuration():
 
 def test_valid_configuration_is_accepted_by_real_schema(configuration):
     assert factory.validate_config(configuration) is configuration
+
+
+def test_legacy_obscura_keys_are_ignored_with_one_warning_and_apply_proceeds(
+    configuration, tmp_path, monkeypatch, capsys
+):
+    legacy = tmp_path / "legacy.yml"
+    current = tmp_path / "current.yml"
+    current.write_text(yaml.safe_dump(configuration))
+    configuration["factory"]["browsers"].update(obscura_version="0.2.2", obscura_sha256="c" * 64)
+    legacy.write_text(yaml.safe_dump(configuration))
+    provisioned = []
+    monkeypatch.setattr(
+        factory, "provision", lambda document, check: provisioned.append(check) or 0
+    )
+    monkeypatch.setattr(factory, "questions", lambda document: 0)
+    for host in (current, legacy):
+        monkeypatch.setattr(factory.sys, "argv", ["factory", "apply", "--config", str(host)])
+        assert factory.main() == 0
+    warning = capsys.readouterr().err
+    assert provisioned == [False, False]
+    assert warning.count("WARNING") == 1
+    assert "obscura_version" in warning and "obscura_sha256" in warning
+    assert "no longer used" in warning
 
 
 @pytest.mark.parametrize(
@@ -474,41 +496,6 @@ def _managed_environment(tmp_path, fleet_guards):
     return json.loads(result.stdout.split("=>", 1)[1])["factory_managed_shell_env"]
 
 
-def test_the_managed_environment_carries_the_heap_cap_only_with_fleet_guards(tmp_path):
-    assert set(_managed_environment(tmp_path, False)) == {"CHROME_DEVTOOLS_AXI_MCP_PATH"}
-    guarded = _managed_environment(tmp_path, True)
-    assert guarded["NODE_OPTIONS"] == "--max-old-space-size=2048"
-    assert "BUN_OPTIONS" not in guarded
-
-
-@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("node")), reason="needs bun and node")
-def test_fleet_guards_cap_the_node_heap_and_leave_bun_env_loading_alone(tmp_path):
-    project = tmp_path / "project"
-    project.mkdir()
-    (project / ".env").write_text("FROM_DOTENV=1\n")
-    (project / ".env.test").write_text("FROM_TEST=1\n")
-    (project / "probe.test.ts").write_text(
-        'import { expect, test } from "bun:test";\n'
-        'test("env", () => {\n'
-        '  expect([process.env.FROM_DOTENV, process.env.FROM_TEST]).toEqual(["1", "1"]);\n'
-        "});\n"
-    )
-    (project / "package.json").write_text(
-        json.dumps(
-            {"scripts": {"heap": "node -p \"require('v8').getHeapStatistics().heap_size_limit\""}}
-        )
-    )
-    inherited = {
-        key: value
-        for key, value in os.environ.items()
-        if key not in ("BUN_OPTIONS", "NODE_OPTIONS")
-    }
-    env = {**inherited, **_managed_environment(tmp_path, True)}
-    tests = subprocess.run(["bun", "test"], cwd=project, env=env, capture_output=True, text=True)
-    assert tests.returncode == 0, tests.stdout + tests.stderr
-    heap = subprocess.run(
-        ["bun", "run", "heap"], cwd=project, env=env, capture_output=True, text=True
-    )
-    assert heap.returncode == 0, heap.stderr
-    limit = int(heap.stdout.strip().splitlines()[-1])
-    assert 2048 * 2**20 <= limit < 2560 * 2**20
+@pytest.mark.parametrize("fleet_guards", [False, True])
+def test_the_managed_environment_never_carries_a_process_wide_runtime_limit(tmp_path, fleet_guards):
+    assert set(_managed_environment(tmp_path, fleet_guards)) == {"CHROME_DEVTOOLS_AXI_MCP_PATH"}
