@@ -474,7 +474,7 @@ def test_seeded_acpx_config_defaults_to_omp_and_absent_one_is_not_created(tmp_pa
 
 PI_AGENT = {
     "agent": ["pi", "acp:omp"],
-    "agent_config": {"pi": {"model": "anthropic/claude-sonnet-5-5", "effort": "xhigh"}},
+    "agent_config": {"pi": {"model": "anthropic/claude-sonnet-5-5", "effort": "high"}},
 }
 
 
@@ -504,6 +504,20 @@ def test_verified_pi_adapter_moves_the_seeded_agent_to_pi_once(tmp_path):
     written = config.read_text()
     assert _set_pipeline_agent(tmp_path, rc=0) == 0
     assert config.read_text() == written
+
+
+def test_a_host_already_on_pi_moves_from_xhigh_to_high_once(tmp_path):
+    config = tmp_path / ".no-mistakes/config.yaml"
+    config.parent.mkdir()
+    previous = {
+        **PI_AGENT,
+        "agent_config": {"pi": {"model": "anthropic/claude-sonnet-5-5", "effort": "xhigh"}},
+        "agent_path_override": {"pi": "/w/omp-as-pi"},
+    }
+    config.write_text(yaml.safe_dump(previous))
+    assert _set_pipeline_agent(tmp_path, rc=0) == 1
+    assert yaml.safe_load(config.read_text())["agent_config"] == PI_AGENT["agent_config"]
+    assert _set_pipeline_agent(tmp_path, rc=0) == 0
 
 
 def test_a_pin_mismatch_moves_the_agent_to_acp_omp_alone(tmp_path):

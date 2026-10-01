@@ -102,7 +102,7 @@ RELEASES = {
     "herdrdev/herdr": ("v9.9.9", "herdr-linux-x86_64"),
     "oven-sh/bun": ("bun-v9.9.9", "bun-linux-x64-baseline.zip"),
     "cli/cli": ("v9.9.9", "gh_9.9.9_linux_amd64.tar.gz"),
-    "kunchenguid/no-mistakes": ("v9.9.9", "no-mistakes-v9.9.9-linux-amd64.tar.gz"),
+    "kunchenguid/no-mistakes": ("v9.9.10-beta.1", "no-mistakes-v9.9.10-beta.1-linux-amd64.tar.gz"),
     "kunchenguid/treehouse": ("v9.9.9", "treehouse-v9.9.9-linux-amd64.tar.gz"),
     "astral-sh/uv": ("9.9.9", "uv-x86_64-unknown-linux-gnu.tar.gz"),
     "h4ckf0r0day/obscura": ("v9.9.9", "obscura-x86_64-linux.tar.gz"),
@@ -110,24 +110,42 @@ RELEASES = {
 
 
 def upstream(monkeypatch, unverified=None, seen=None):
-    """Fake GitHub, nodejs.org, rustup, npm and PyPI; `unverified` publishes no SHA-256 for that source."""
+    """Fake GitHub, nodejs.org, rustup, npm and PyPI; `unverified` publishes no SHA-256 for that source.
+
+    Every repository's latest stable release is v9.9.9. no-mistakes also lists a
+    newer prerelease, and a still newer draft above it, as GitHub's release list does.
+    """
 
     def urlopen(request, **kwargs):
         url = request.full_url
         if seen is not None:
             seen.append((url, request.get_header("Authorization")))
         if url.startswith("https://api.github.com/repos/"):
-            repo = url.removeprefix("https://api.github.com/repos/").removesuffix(
-                "/releases/latest"
+            repo, _, listing = url.removeprefix("https://api.github.com/repos/").partition(
+                "/releases"
             )
-            tag, name = RELEASES[repo]
             digest = None if repo == unverified else "sha256:" + "a" * 64
-            asset = {
-                "name": name,
-                "browser_download_url": f"https://github.com/{name}",
-                "digest": digest,
-            }
-            body = {"tag_name": tag, "assets": [asset]}
+
+            def release(tag, name, draft=False):
+                asset = {
+                    "name": name,
+                    "browser_download_url": f"https://github.com/{name}",
+                    "digest": digest,
+                }
+                return {"tag_name": tag, "draft": draft, "assets": [asset]}
+
+            if listing == "?per_page=10":
+                assert repo == "kunchenguid/no-mistakes", f"{repo} is on the stable channel"
+                tag, name = RELEASES[repo]
+                body = [
+                    release("v9.9.11", "no-mistakes-v9.9.11-linux-amd64.tar.gz", draft=True),
+                    release(tag, name),
+                    release("v9.9.9", "no-mistakes-v9.9.9-linux-amd64.tar.gz"),
+                ]
+            else:
+                assert listing == "/latest", url
+                assert repo != "kunchenguid/no-mistakes", "no-mistakes is on the prerelease channel"
+                body = release(*RELEASES[repo])
         elif url == "https://nodejs.org/dist/index.json":
             body = [{"version": "v9.99.0"}, {"version": "v30.1.0"}]
         elif url == "https://nodejs.org/dist/v30.1.0/SHASUMS256.txt":
@@ -162,8 +180,9 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
     upstream(monkeypatch)
     latest = installer.resolve_latest("linux-x86_64", EVERYTHING)
     for tool in ("herdr", "bun", "gh", "no-mistakes", "treehouse", "uv", "obscura"):
-        assert latest[tool]["version"] == "9.9.9"
         assert latest[tool]["assets"]["linux-x86_64"]["sha256"] == "a" * 64
+    for tool in ("herdr", "bun", "gh", "treehouse", "uv", "obscura"):
+        assert latest[tool]["version"] == "9.9.9"
     assert latest["gh"]["assets"]["linux-x86_64"]["format"] == "tar"
     assert latest["bun"]["assets"]["linux-x86_64"]["format"] == "zip"
     # The newest Node release, not the first index entry, verified by SHASUMS256.
@@ -177,6 +196,33 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
     assert latest["psutil"] == {"version": "9.9.9", "sha256": ["e" * 64]}
     for tool in (*installer.NPM_LATEST, "supabase"):
         assert latest[tool] == "18.9.9"
+
+
+def test_no_mistakes_follows_the_prerelease_channel_and_skips_drafts(monkeypatch):
+    seen = []
+    upstream(monkeypatch, seen=seen)
+    latest = installer.resolve_latest("linux-x86_64", EVERYTHING)
+    # Newer than the latest stable v9.9.9, older than the unpublished draft v9.9.11.
+    no_mistakes = latest["no-mistakes"]
+    assert no_mistakes["version"] == "9.9.10-beta.1"
+    assert no_mistakes["assets"]["linux-x86_64"]["url"].endswith(
+        "no-mistakes-v9.9.10-beta.1-linux-amd64.tar.gz"
+    )
+    requested = {url for url, _ in seen if url.startswith("https://api.github.com/repos/")}
+    assert "https://api.github.com/repos/kunchenguid/no-mistakes/releases?per_page=10" in requested
+    assert "https://api.github.com/repos/kunchenguid/no-mistakes/releases/latest" not in requested
+    assert "https://api.github.com/repos/kunchenguid/treehouse/releases/latest" in requested
+
+
+def test_a_release_list_with_only_drafts_is_refused(monkeypatch):
+    def urlopen(request, **kwargs):
+        return io.BytesIO(
+            json.dumps([{"tag_name": "v9.9.11", "draft": True, "assets": []}]).encode()
+        )
+
+    monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
+    with pytest.raises(ValueError, match="no-mistakes has no published release"):
+        installer.resolve_latest("linux-x86_64", {"no-mistakes"})
 
 
 @pytest.mark.parametrize("source", [*RELEASES, "node", "rustup-init", "psutil"])

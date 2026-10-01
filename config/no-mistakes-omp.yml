@@ -6,7 +6,7 @@
 # the acp:omp fallback; the pi path passes its own --model and --thinking from
 # agent_config.pi in ~/.no-mistakes/config.yaml, which override the default role.
 modelRoles:
-  default: anthropic/claude-sonnet-5-5:xhigh
+  default: anthropic/claude-sonnet-5-5:high
   advisor: anthropic/claude-opus-5-5:medium
 advisor:
   enabled: true

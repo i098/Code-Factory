@@ -4,7 +4,8 @@
 Stdlib-only: also bootstraps uv before repository dependencies exist. stdout is
 one JSON result; installer progress goes to stderr. Existing unmanaged commands
 are never replaced. Archives cannot write outside their staging directory.
-Nothing is pinned: every tool tracks its latest release. Native assets are
+Nothing is pinned: every tool tracks its latest release (no-mistakes its newest
+non-draft one, prereleases included). Native assets are
 verified against the SHA-256 their publisher lists for that exact release (the
 GitHub release-asset digest, Node's SHASUMS256.txt, rustup's .sha256), npm tools
 against the integrity npm records for the resolved version, psutil against the
@@ -32,7 +33,7 @@ import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
 
-GITHUB_API = "https://api.github.com/repos/{}/releases/latest"
+GITHUB_API = "https://api.github.com/repos/{}/releases"
 # How release asset names spell each platform.
 ARCH = {
     "linux-x86_64": {"node": "x64", "go": "amd64", "bun": "x64-baseline", "gnu": "x86_64"},
@@ -81,6 +82,9 @@ NPM_LATEST = {
     "acpx": "acpx",
     "chrome-devtools-mcp": "chrome-devtools-mcp",
 }
+# Tools that follow the prerelease channel: the newest non-draft release, betas
+# included, instead of the latest stable one.
+PRERELEASE_CHANNEL = {"no-mistakes"}
 # Native tools the agents profile adds.
 AGENT_TOOLS = ["gh", "no-mistakes", "treehouse"]
 
@@ -136,7 +140,15 @@ def resolve_latest(key, names):
     for tool, (repo, prefix, pattern, binaries) in GITHUB_LATEST.items():
         if tool not in names:
             continue
-        release = json.loads(fetch(GITHUB_API.format(repo), f"{tool} release"))
+        if tool in PRERELEASE_CHANNEL:
+            releases = json.loads(
+                fetch(GITHUB_API.format(repo) + "?per_page=10", f"{tool} release")
+            )
+            release = next((r for r in releases if not r["draft"]), None)
+            if release is None:
+                raise ValueError(f"{tool} has no published release")
+        else:
+            release = json.loads(fetch(GITHUB_API.format(repo) + "/latest", f"{tool} release"))
         version = release["tag_name"].removeprefix(prefix)
         name = pattern.format(v=version, key=key, **ARCH[key])
         asset = next((a for a in release["assets"] if a["name"] == name), {})

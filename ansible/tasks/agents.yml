@@ -168,15 +168,14 @@
 
 # no-mistakes installs at its latest release, but omp-as-pi translates only the
 # argv the pinned pi adapter builds. The adapter sources of the release this run
-# installs must match the pins in switch-when-idle.sh: exit 0 selects pi, exit 1
-# (a pin differs) selects acp:omp alone, and any other outcome (exit 2, a fetch
-# that failed) is inconclusive and leaves the agent setting as it is.
+# installs must match the pins in check-adapter.sh: exit 0 selects pi, exit 1
+# (a pin differs or its file is gone) selects acp:omp alone, and any other outcome
+# (exit 2, a fetch that could not prove anything) leaves the agent setting as it is.
 - name: Check the pi adapter of the no-mistakes release this run installs
   ansible.builtin.command:
     argv:
       - bash
-      - "{{ code_factory_repo }}/config/omp-as-pi/switch-when-idle.sh"
-      - --check-adapter
+      - "{{ code_factory_repo }}/config/omp-as-pi/check-adapter.sh"
       - "v{{ factory_latest['no-mistakes'].version }}"
   become: true
   register: factory_pi_adapter
@@ -201,7 +200,7 @@
       {{ current | combine({
            'agent': ['pi', 'acp:omp'],
            'agent_path_override': {'pi': factory_omp_as_pi_dir ~ '/omp-as-pi'},
-           'agent_config': {'pi': {'model': 'anthropic/claude-sonnet-5-5', 'effort': 'xhigh'}}}, recursive=true)
+           'agent_config': {'pi': {'model': 'anthropic/claude-sonnet-5-5', 'effort': 'high'}}}, recursive=true)
          if factory_pi_adapter.rc == 0
          else (current | combine({'agent': ['acp:omp']}) if factory_pi_adapter.rc == 1 else current) }}
   ansible.builtin.copy:
