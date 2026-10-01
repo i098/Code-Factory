@@ -5,7 +5,7 @@
 # changed_when: false, so verification can never make a second apply report a
 # change. Individual task files already assert their own outputs; this file
 # checks the wiring that crosses them - the Herdr and omp releases this run
-# resolved, the static enablement symlinks, the managed shell environment, the pruner runtime, the
+# resolved, Herdr's omp integration, the static enablement symlinks, the managed shell environment, the pruner runtime, the
 # Firstmate revision this run resolved and the loopback-only desktop listeners.
 #
 # A check-mode run cannot observe files it did not create, so verification
@@ -223,6 +223,26 @@
       become: true
       changed_when: false
       check_mode: false
+      when: factory_cfg.profiles.agents | bool
+
+    # Without Herdr's omp integration every omp pane shows as idle in the sidebar.
+    - name: Read the Herdr integration status
+      ansible.builtin.command:
+        argv: ["{{ factory_herdr_bin }}", integration, status]
+      register: factory_verify_herdr_integrations
+      changed_when: false
+      check_mode: false
+      when: factory_cfg.profiles.agents | bool
+
+    - name: Assert Herdr's omp integration is current
+      ansible.builtin.assert:
+        that:
+          - "factory_verify_herdr_integrations.stdout is search('(?m)^omp: current')"
+        fail_msg: >-
+          `herdr integration status` does not report `omp: current`, so Herdr
+          shows every omp agent as idle:
+          {{ factory_verify_herdr_integrations.stdout_lines | select('match', 'omp:') | join(' ') }}
+        quiet: true
       when: factory_cfg.profiles.agents | bool
 
     # --- managed shell environment -----------------------------------------

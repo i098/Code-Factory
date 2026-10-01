@@ -123,6 +123,10 @@ herdr agent get <pane_id>
 
 The result carries `terminal_title` and `tokens.who`, `tokens.pr`, and so on.
 
+### Pane state
+
+Herdr learns whether an omp agent is working, blocked or idle from its own omp extension, `~/.omp/agent/extensions/herdr-omp-agent-state.ts`. With the `agents` profile on, every `./factory apply` runs `herdr integration install omp` with the herdr it installed, so a herdr upgrade refreshes the extension; apply reports a change only when herdr rewrote the file, and verification fails unless `herdr integration status` reports `omp: current`. Without the extension Herdr shows every omp agent as idle. Apply installs no integration for other agents.
+
 ## Override the layouts or turn parts off
 
 Set these keys under `factory.herdr` in `.local/host.yml`, then run `./factory apply`:
@@ -209,6 +213,8 @@ ssh <host> cat .local/bin/herdr-sidebar-to-client.py | python3 - <host>
 ```
 
 It copies the host's `sidebar_width`, `sidebar_max_width`, `[ui.sidebar.agents]`, `[ui.sidebar.spaces]` and `[theme.custom] sidebar_bg` into `~/.config/herdr/config.toml` on the viewing machine, or into the path given as a second argument, and leaves every other setting there as is. It writes a timestamped `.bak-sidebar-` copy of that file first. Run it again after the host's layout changes.
+
+Pane state (the sidebar dots) is reported on the host by the omp integration `./factory apply` installs, so the host needs nothing more. A machine that views the host with `herdr --remote` should run the same Herdr release as the host: the host runs the latest, so on the viewing machine run `herdr update`, then compare `herdr --version` with the host's.
 
 ## Known limits
 
