@@ -504,21 +504,23 @@ def test_mobile_layout_carries_the_same_data(fixture, tmp_path):
         return [a for s in spaces.STATES for a in ("--state-label", f"{s}={text}")]
 
     home = reports.pop("w1:p2")
-    assert home[:4] == [
+    assert home[:6] == [
         "--source",
         "code-factory:spaces",
+        "--agent",
+        "omp",
         "--display-agent",
         "Planning the release",
     ]
     # The home's shares sit between its counts and its alert; CPU waits for
     # the second run's baseline.
-    sent = home[4:]
+    sent = home[6:]
     assert sent[::2] == ["--state-label"] * len(spaces.STATES)
     states, texts = zip(*(s.split("=", 1) for s in sent[1::2]))
     assert list(states) == list(spaces.STATES) and len(set(texts)) == 1
     assert re.fullmatch(r"⚑1 ▶3 ◷4 ▤\d+% ⛁\d+% ⚠watcher ⎇1561 \+84 −12 ✎3", texts[0])
     # A worker keeps Firstmate's display agent and shows its size only.
-    source = ["--source", "code-factory:spaces"]
+    source = ["--source", "code-factory:spaces", "--agent", "omp"]
     assert reports == {
         "w1:p3": source + labels("⎇1537 +5"),
         "w3:p2": source + ["--clear-state-labels"],
@@ -552,13 +554,15 @@ def test_mobile_reports_settle_and_follow_a_changed_pane(fixture, tmp_path):
     run()
     sent = reports()
     assert list(sent) == ["w1:p2"]
-    assert sent["w1:p2"][:4] == [
+    assert sent["w1:p2"][:6] == [
         "--source",
         "code-factory:spaces",
+        "--agent",
+        "omp",
         "--display-agent",
         "Planning the release",
     ]
-    texts = {s.partition("=")[2] for s in sent["w1:p2"][5::2]}
+    texts = {s.partition("=")[2] for s in sent["w1:p2"][7::2]}
     assert len(texts) == 1
     assert re.fullmatch(r"⚑1 ▶3 ◷4 ⚙\d+% ▤\d+% ⛁\d+% ⚠watcher ⎇1561 \+90 −12 ✎3", texts.pop())
     run()

@@ -429,7 +429,17 @@ def main() -> None:
                 args.append("--clear-state-labels")
             pid = pane["pane_id"]
             try:
-                run(HERDR, "pane", "report-metadata", pid, "--source", SOURCE, *args)
+                run(
+                    HERDR,
+                    "pane",
+                    "report-metadata",
+                    pid,
+                    "--source",
+                    SOURCE,
+                    "--agent",
+                    pane["agent"],
+                    *args,
+                )
             except (OSError, subprocess.SubprocessError) as err:
                 print(f"{pid}: mobile: {err}", file=sys.stderr)
 
