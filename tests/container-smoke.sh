@@ -31,8 +31,8 @@
 #   CF_SMOKE_CPUS     container CPU cap           (default 2)
 #   CF_SMOKE_PIDS     container PID cap           (default 4096)
 #   CF_SMOKE_TIMEOUT  whole-container deadline, s (default 2700)
-#   GITHUB_TOKEN      optional; authenticates the latest-herdr lookup (build
-#                     secret and run env, never baked into the image)
+#   GITHUB_TOKEN      optional; authenticates the herdr, nvim and yazi release
+#                     lookups (build secret and run env, never baked into the image)
 # Environment knobs (container mode):
 #   CF_SMOKE_ONLY           comma-separated check names
 #   CF_SMOKE_APPLY_TIMEOUT  seconds for the second ansible pass (default 1800)
@@ -102,8 +102,8 @@ host_mode() {
     }
     trap cleanup_host EXIT
 
-    # GITHUB_TOKEN, when set, authenticates the latest-herdr lookup as a
-    # BuildKit secret; unset, the secret is empty and the lookup is anonymous.
+    # GITHUB_TOKEN, when set, authenticates the herdr, nvim and yazi release
+    # lookups as a BuildKit secret; unset, the secret is empty and they are anonymous.
     if [ -z "${IMAGE_REF}" ]; then
         printf '==> docker build --target smoke --tag %s\n' "${SMOKE_TAG}"
         docker build --secret id=github_token,env=GITHUB_TOKEN \
