@@ -18,7 +18,7 @@
 
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { lstat, open } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -33,7 +33,7 @@ const workspaceId = process.env.HERDR_WORKSPACE_ID;
 const herdr = process.env.HERDR_BIN_PATH || "herdr";
 
 const run = async (cmd: string, args: string[], cwd?: string): Promise<string> =>
-  (await promisify(execFile)(cmd, args, { cwd, timeout: 15_000, encoding: "utf8" })).stdout;
+  (await promisify(execFile)(cmd, args, { cwd, timeout: 15_000, encoding: "utf8", maxBuffer: 64 << 20 })).stdout;
 
 export function titleFor(topic: string): string {
   return (taskId ? "└ " : "") + topic;
@@ -69,6 +69,30 @@ export function shortstat(out: string) {
   return { files: n(/(\d+) files? changed/), add: n(/(\d+) insertions?/), del: n(/(\d+) deletions?/) };
 }
 
+// Lines git counts in a new file: one for a symlink, none for a binary file (a
+// NUL in its first 8000 bytes, so a binary file is never read past that).
+async function newFileLines(file: string): Promise<number> {
+  const st = await lstat(file);
+  if (st.isSymbolicLink()) return 1;
+  if (!st.isFile()) return 0;
+  const fh = await open(file, "r");
+  try {
+    const buf = Buffer.alloc(8192);
+    let lines = 0;
+    let last = 10;
+    for (let first = true; ; first = false) {
+      const { bytesRead } = await fh.read(buf, 0, buf.length, null);
+      if (!bytesRead) return lines + (last === 10 ? 0 : 1);
+      const chunk = buf.subarray(0, bytesRead);
+      if (first && chunk.subarray(0, 8000).includes(0)) return 0;
+      for (let i = chunk.indexOf(10); i >= 0; i = chunk.indexOf(10, i + 1)) lines++;
+      last = chunk[bytesRead - 1];
+    }
+  } finally {
+    await fh.close();
+  }
+}
+
 // Size of the work in the checkout: committed, staged and unstaged tracked
 // changes since the merge base of `base` and HEAD, plus untracked files that
 // are not ignored. `base` falls back to origin/main, then origin/master; with
@@ -83,14 +107,13 @@ async function diffStat(cwd: string, base: string) {
     }
   }
   if (!ref) return {};
-  const stat = shortstat(await git("diff", "--shortstat", "--merge-base", ref));
-  // Counted the way git counts a new file: lines, or none for a binary one.
-  // ponytail: reads every untracked file each refresh; cap the size read if huge untracked files show up.
+  const stat = shortstat(await git("-c", "diff.autorefreshindex=false", "diff", "--shortstat", "--merge-base", ref));
+  // Counted the way git counts a new file: lines, one for a symlink, none for a binary file.
+  // ponytail: reads every untracked text file each refresh; cap the size read if huge untracked files show up.
   for (const f of (await git("ls-files", "-z", "--others", "--exclude-standard", ":/")).split("\0")) {
     if (!f || f.endsWith("/")) continue; // "" ends the list; "dir/" is a nested repository
-    const b = await readFile(path.resolve(cwd, f)).catch(() => Buffer.alloc(0));
     stat.files++;
-    if (b.length && !b.subarray(0, 8000).includes(0)) stat.add += b.toString("latin1").split("\n").length - (b.at(-1) === 10 ? 1 : 0);
+    stat.add += await newFileLines(path.resolve(cwd, f)).catch(() => 0);
   }
   return stat.files ? stat : {};
 }
@@ -159,6 +182,7 @@ export default function (pi) {
   let pr; // open pull request for the current branch, from the REST API
   let taskIssue = "";
   let stat = {};
+  let reported; // the size last reported successfully
   let lookedUpAt = 0;
   let refreshing = false;
   let sizeTimer;
@@ -185,6 +209,7 @@ export default function (pi) {
   }
 
   async function report() {
+    const sent = JSON.stringify(stat);
     let who = "";
     if (!taskId) {
       const label = JSON.parse(await run(herdr, ["workspace", "get", workspaceId])).result?.workspace?.label;
@@ -199,13 +224,14 @@ export default function (pi) {
     const args = ["pane", "report-metadata", paneId, "--source", SOURCE];
     for (const [k, v] of Object.entries({ who, ...parts })) args.push(...(v ? ["--token", `${k}=${v}`] : ["--clear-token", k]));
     await run(herdr, args);
+    reported = sent;
   }
 
   // Display-only: a failed lookup keeps the previous value. Re-reporting on
   // every call also restores tokens a Herdr restart dropped. A lookup asked
   // for while one runs or inside the throttle window is put off to the
   // window's end, not dropped. `lookup` false (the size timer) skips the pull
-  // request lookup and reports only a changed size.
+  // request lookup and reports only a size not yet reported successfully.
   async function refresh(cwd?: string, lookup = true) {
     const wait = lookedUpAt + PR_REFRESH_MS - Date.now();
     if (lookup && cwd && (refreshing || wait > 0) && !trailing) {
@@ -226,12 +252,11 @@ export default function (pi) {
       }
       // A worker's size shows as soon as its diff is non-empty, before any
       // commit or PR: against the PR base, else the remote's default branch.
-      const before = JSON.stringify(stat);
       if (cwd && (pr || taskId)) {
         const base = pr ? `origin/${pr.base?.repo?.default_branch || pr.base?.ref}` : "origin/HEAD";
         stat = await diffStat(cwd, base).catch(() => stat);
       }
-      if (lookup || JSON.stringify(stat) !== before) await report();
+      if (lookup || JSON.stringify(stat) !== reported) await report();
     } catch {
     } finally {
       refreshing = false;

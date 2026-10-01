@@ -395,8 +395,12 @@ def test_reporter_waits_out_a_failed_disk_measurement(fixture, tmp_path):
     assert len(calls.read_text().splitlines()) == 1
 
 
-def worker_report(tmp_path, origin_head=True, commit=True, setup=None):
-    """The last report of a worker's pane with no pull request."""
+def worker_log(tmp_path, origin_head=True, commit=True, setup=None, live=""):
+    """A worker pane with no pull request: its `report-metadata` calls in order,
+    and the `--- <name>` lines that `live` marks. `live` is JS run after session
+    start, with the checkout `work`, `tick()` for the 10-second size timer,
+    `settled()` to wait out the reports, `mark(name)`, and `fail`, a file whose
+    presence makes the stub herdr exit 1."""
     git_env = {
         **os.environ,
         "GIT_AUTHOR_NAME": "t",
@@ -424,12 +428,29 @@ def worker_report(tmp_path, origin_head=True, commit=True, setup=None):
         git("commit", "-q", "-m", "work")
     if setup:
         setup(work, git)
-    log = tmp_path / "herdr.log"
-    write(tmp_path / "stub/herdr", f'#!/bin/sh\necho "$@" >> {log}\necho "{{}}"\n', 0o755)
+    log, fail = tmp_path / "herdr.log", tmp_path / "fail"
+    log.write_text("")
+    write(tmp_path / "stub/herdr", f'#!/bin/sh\necho "$@" >> {log}\n[ -e {fail} ] && exit 1\necho "{{}}"\n', 0o755)
     write(tmp_path / "stub/gh", "#!/bin/sh\necho '[]'\n", 0o755)
-    ext = json.dumps(str(ROOT / "config/herdr-sidebar.ts"))
-    ctx = f"{{hasUI: true, cwd: {json.dumps(str(work))}, ui: {{setTitle() {{}}}}}}"
-    code = f"import ext from {ext}; const on = {{}}; ext({{on: (e, f) => (on[e] = f)}}); on.session_start({{}}, {ctx});"
+    ctx = f"{{hasUI: true, cwd: work, ui: {{setTitle() {{}}}}}}"
+    code = f"""
+import ext from {json.dumps(str(ROOT / "config/herdr-sidebar.ts"))};
+import {{ appendFileSync, readFileSync, rmSync, writeFileSync }} from "node:fs";
+const work = {json.dumps(str(work))};
+const fail = {json.dumps(str(fail))};
+const lines = () => readFileSync({json.dumps(str(log))}, "utf8").split("\\n").length;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const settled = async () => {{ let n; do {{ n = lines(); await sleep(800); }} while (lines() !== n); }};
+const mark = (name) => appendFileSync({json.dumps(str(log))}, `--- ${{name}}\\n`);
+const ticks = [];
+const setInterval0 = globalThis.setInterval;
+globalThis.setInterval = (f, ms) => (ms === 10000 ? (ticks.push(f), {{ unref() {{}} }}) : setInterval0(f, ms));
+const tick = () => ticks.forEach((f) => f());
+const on = {{}};
+ext({{ on: (e, f) => (on[e] = f) }});
+on.session_start({{}}, {ctx});
+{live}
+"""
     env = {k: v for k, v in os.environ.items() if k != "OMPCODE"}
     env.update(
         HERDR_ENV="1",
@@ -439,8 +460,13 @@ def worker_report(tmp_path, origin_head=True, commit=True, setup=None):
         HERDR_BIN_PATH=str(tmp_path / "stub/herdr"),
         PATH=f"{tmp_path / 'stub'}:{os.environ['PATH']}",
     )
-    subprocess.run(["bun", "-e", code], env=env, check=True, timeout=30)
-    return [line for line in log.read_text().splitlines() if "report-metadata" in line][-1]
+    subprocess.run(["bun", "-e", code], env=env, check=True, timeout=60)
+    return [line for line in log.read_text().splitlines() if "report-metadata" in line or line.startswith("---")]
+
+
+def worker_report(tmp_path, **kwargs):
+    """The last report of a worker's pane with no pull request."""
+    return worker_log(tmp_path, **kwargs)[-1]
 
 
 @needs_bun
@@ -484,12 +510,68 @@ def test_worker_size_counts_uncommitted_staged_and_untracked_work(tmp_path):
         (work / "new").write_text("n1\nn2")  # untracked, no final newline: +2
         (work / ".gitignore").write_text("ignored\n")  # untracked: +1
         (work / "ignored").write_text("skip\n")
+        (work / "binary").write_bytes(b"\0\n")  # untracked binary: a file, no lines
+        (work / "link").symlink_to("new")  # untracked symlink: one line
 
     report = worker_report(tmp_path, setup=edit)
-    # f (committed), base, staged, new, .gitignore
-    assert f"add={BLANK * 2}+7" in report
+    # f (committed), base, staged, new, .gitignore, binary, link
+    assert f"add={BLANK * 2}+8" in report
     assert "del=−1" in report
-    assert "files=✎ 5" in report
+    assert "files=✎ 7" in report
+
+
+@needs_bun
+def test_worker_size_never_rewrites_the_index(tmp_path):
+    before = []
+
+    def touch(work, git):
+        os.utime(work / "base", (1, 1))  # stale stat info: a plain `git diff` would refresh the index
+        before.append((work / ".git/index").read_bytes())
+
+    worker_report(tmp_path, setup=touch)
+    assert (tmp_path / "work/.git/index").read_bytes() == before[0]
+
+
+@needs_bun
+def test_worker_size_follows_edits_without_a_turn_end(tmp_path):
+    live = """
+await settled();
+writeFileSync(`${work}/live`, "l1\\nl2\\n");
+mark("edited");
+tick();
+await settled();
+mark("idle");
+tick();
+await settled();
+"""
+    log = worker_log(tmp_path, live=live)
+    edited, idle = log.index("--- edited"), log.index("--- idle")
+    assert "files=✎ 1" in log[edited - 1]
+    assert len(log[edited + 1 : idle]) == 1
+    assert f"add={BLANK * 2}+3" in log[edited + 1]
+    assert "files=✎ 2" in log[edited + 1]
+    assert log[idle + 1 :] == []
+
+
+@needs_bun
+def test_worker_retries_a_size_report_that_failed(tmp_path):
+    live = """
+await settled();
+writeFileSync(`${work}/live`, "l\\n");
+writeFileSync(fail, "");
+mark("failing");
+tick();
+await settled();
+rmSync(fail);
+mark("recovered");
+tick();
+await settled();
+"""
+    log = worker_log(tmp_path, live=live)
+    failing, recovered = log.index("--- failing"), log.index("--- recovered")
+    assert len(log[failing + 1 : recovered]) == 1
+    assert len(log[recovered + 1 :]) == 1
+    assert "files=✎ 2" in log[recovered + 1]
 
 
 client_spec = importlib.util.spec_from_file_location(
