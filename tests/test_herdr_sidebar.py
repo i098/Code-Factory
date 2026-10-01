@@ -432,7 +432,7 @@ def worker_log(tmp_path, origin_head=True, commit=True, setup=None, live=""):
     log.write_text("")
     write(tmp_path / "stub/herdr", f'#!/bin/sh\necho "$@" >> {log}\n[ -e {fail} ] && exit 1\necho "{{}}"\n', 0o755)
     write(tmp_path / "stub/gh", "#!/bin/sh\necho '[]'\n", 0o755)
-    ctx = f"{{hasUI: true, cwd: work, ui: {{setTitle() {{}}}}}}"
+    ctx = "{hasUI: true, cwd: work, ui: {setTitle() {}}}"
     code = f"""
 import ext from {json.dumps(str(ROOT / "config/herdr-sidebar.ts"))};
 import {{ appendFileSync, readFileSync, rmSync, writeFileSync }} from "node:fs";
