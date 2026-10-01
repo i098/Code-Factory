@@ -176,9 +176,11 @@ factory_desktop_packages:
   - iproute2
 
 # Editor profile: the C compiler builds treesitter parsers; luarocks and lua5.1
-# let lazy.nvim's health check pass without its hererocks fallback.
+# let lazy.nvim's health check pass without its hererocks fallback; yazi calls
+# `file` for mime detection.
 factory_editor_packages:
   - build-essential
+  - file
   - luarocks
   - lua5.1
 

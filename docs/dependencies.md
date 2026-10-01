@@ -40,7 +40,7 @@ Not pinned: every `./factory apply` resolves the newest release of each tool it 
 - `development`: build-essential, pkg-config, libssl-dev, python3-dev, cmake, ripgrep.
 - `docker`: docker.io, docker-compose-v2 (Ubuntu's packages, never Docker CE).
 - `desktop`: xfce4, xfce4-terminal, dbus-x11, xauth, x11-xserver-utils, fonts-dejavu-core, tigervnc-standalone-server, tigervnc-common, tigervnc-tools, novnc, websockify, iproute2.
-- `editor`: build-essential (compiles treesitter parsers), luarocks, lua5.1 (lazy.nvim's health check).
+- `editor`: build-essential (compiles treesitter parsers), file (yazi's mime detection), luarocks, lua5.1 (lazy.nvim's health check).
 - `tailscale`: `tailscale` from pkgs.tailscale.com, stable track. `factory_tailscale_version` pins it; empty by default.
 - Google Chrome: `google-chrome-stable` from dl.google.com (`ansible/tasks/browser.yml`). Installed when `factory_chrome_install` is `true`, or `auto` (the default) with the `desktop` profile. `factory_chrome_version` pins it; empty by default.
 
