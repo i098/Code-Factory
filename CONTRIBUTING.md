@@ -20,7 +20,7 @@ Every task is idempotent; a second unchanged `apply` reports `changed=0`.
 
 Every task is check-mode safe: `plan` (Ansible `--check`) previews without mutating.
 
-Nothing is pinned: every tool tracks its latest release, resolved once per apply and verified by the checksum its publisher posts. Native assets are refused without a published SHA-256, npm tools install the exact resolved version, and the Rust toolchain follows `stable`. The installer records what it resolved in `~/.local/share/code-factory/resolved.json`. Only the repository's own Python environment (`uv.lock`) and the GitHub Actions in CI stay locked.
+Nothing is pinned: every tool tracks its latest release, resolved once per apply and verified by the checksum its publisher posts. Native assets are refused without a published SHA-256, npm tools install the exact resolved version, and the Rust toolchain follows `stable`. The installer records what it resolved in `~/.local/share/code-factory/resolved.json`. Only the repository's own Python environment (`uv.lock`) stays locked, and CI pins each GitHub Action to the commit SHA of its latest release, kept current by Dependabot.
 
 No unconditional restarts, daemon-reloads, or bare commands.
 

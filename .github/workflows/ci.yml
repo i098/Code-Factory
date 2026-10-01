@@ -6,10 +6,9 @@
 # behavior smoke in tests/container-smoke.sh.
 #
 # Supply chain: least-privilege token, no write permissions anywhere, and every
-# third-party action pinned to an immutable commit SHA (verified 2026-09-15 via
-# api.github.com):
-#   actions/checkout    v7.0.1  -> 3d3c42e5aac5ba805825da76410c181273ba90b1
-#   astral-sh/setup-uv  v10.1.0 -> bec219d24cd3e171d82865faccec33120bb574f4 (immutable release)
+# third-party action pinned to the commit SHA of its latest release, with the
+# tag in a trailing comment (verified 2026-10-01 via the GitHub REST API).
+# .github/dependabot.yml moves the pins to each new release weekly.
 # uv and Bun are not pinned: like every ./factory apply, CI installs their
 # latest releases.
 name: ci
@@ -46,7 +45,7 @@ jobs:
           persist-credentials: false
 
       - name: Install latest uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: latest
           enable-cache: true

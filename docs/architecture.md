@@ -55,7 +55,7 @@ Host sizing and every auto pruner are listed in [Capacity and pruners](capacity.
 
 1. Everything latest, verified by published checksums. Each apply resolves every tool's newest release once (`scripts/install_tools.py --resolve`), installs exactly that, and verifies each download against the checksum its publisher posts for that exact release: the GitHub release-asset digest (herdr, bun, uv, gh, no-mistakes, treehouse, Obscura), Node's `SHASUMS256.txt` (the newest Node, not the LTS line), rustup's `.sha256` (rustup-init), the npm registry's integrity (omp, the AXI tools, acpx, chrome-devtools-mcp, the Supabase CLI), and PyPI's digests (psutil). A release without a published checksum is refused. The Rust toolchain follows `stable`, omp plugins are upgraded in place, and the worker image builds `FROM ubuntu:latest`.
 2. Do not copy a live global package directory.
-3. Two locks stay, because they are this repository's own development environment rather than installed tools: change Python dependencies with `uv lock` and commit the lock, and keep GitHub Actions pinned to commit SHAs.
+3. Two locks stay, because they are this repository's own development environment rather than installed tools: change Python dependencies with `uv lock` and commit the lock, and keep each GitHub Action pinned to the commit SHA of its latest release, which `.github/dependabot.yml` advances weekly.
 4. Keep machine differences in ignored `.local/host.yml`; schema validation precedes provisioning.
 5. Do not force, stash, reset, or overwrite a modified Firstmate checkout or an unmanaged command. Resolve that conflict explicitly.
 6. Keep authentication and mutable application state outside the recipe. Provider model access must be checked on the destination account.
@@ -69,7 +69,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on pushes to `main`, on every p
 - Audits of the Dockerfile, devcontainer, and Compose definitions (the image builds from `ubuntu:latest`, Compose services are digest-pinned, no host namespaces or socket, resource caps).
 - A full worker image build and the behavior smoke in `tests/container-smoke.sh`.
 
-Every action is pinned to an immutable commit SHA, and the token is read-only. uv and Bun are their latest releases, the same as `./bootstrap.sh` and `./factory apply` install.
+Every action is pinned to the commit SHA of its latest release (Dependabot moves the pins weekly), and the token is read-only. uv and Bun are their latest releases, the same as `./bootstrap.sh` and `./factory apply` install.
 
 ## Primary sources
 

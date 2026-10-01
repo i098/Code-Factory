@@ -1,0 +1,7 @@
+# Keeps every SHA-pinned GitHub Action at the commit of its latest release.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
