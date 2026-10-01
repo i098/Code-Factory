@@ -17,10 +17,6 @@ Restart=always
 RestartSec=3
 MemoryMax=3G
 Nice=2
-# Cap journald intake: a page stuck in a loop once logged ~17 MB/s and filled
-# the disk via syslog. 1000 lines per 30s keeps startup and real errors.
-LogRateLimitIntervalSec=30s
-LogRateLimitBurst=1000
 
 [Install]
 WantedBy=default.target
