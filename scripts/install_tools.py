@@ -127,6 +127,8 @@ def fetch(url, what):
 
 def verified(tool, version, key, name, url, checksum, binaries):
     """A lock-shaped spec, only when the publisher lists a SHA-256 for the asset."""
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", version):
+        raise ValueError(f"{tool} release tag {version!r} is not a safe version; refusing it")
     if not re.fullmatch(r"[0-9a-f]{64}", checksum):
         raise ValueError(
             f"{tool} {version} publishes no SHA-256 for {name}; refusing an unverified binary"

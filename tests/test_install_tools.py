@@ -233,6 +233,14 @@ def test_release_without_a_published_checksum_is_refused(monkeypatch, source):
         installer.resolve_latest("linux-x86_64", EVERYTHING)
 
 
+@pytest.mark.parametrize("tag", ["v1.0$(id)", "v1;id", 'v1"x', "v1`id`", "v1|id", "v1 2", "v/1"])
+def test_release_tag_that_is_not_a_plain_version_is_refused(monkeypatch, tag):
+    monkeypatch.setitem(RELEASES, "jimididit/koncreet", (tag, "koncreet.tar.gz"))
+    upstream(monkeypatch)
+    with pytest.raises(ValueError, match="not a safe version"):
+        installer.resolve_latest("linux-x86_64", EVERYTHING)
+
+
 @pytest.mark.parametrize(("env", "expected"), [("env-token", "Bearer env-token"), ("", None)])
 def test_github_token_goes_only_to_the_github_api(monkeypatch, env, expected):
     seen = []

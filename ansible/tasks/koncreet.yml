@@ -67,11 +67,11 @@
       ansible.builtin.shell: |
         cd koncreet || exit 1
         if grep -q '26\.04' lib/os.sh; then
-          echo "patch skipped: koncreet {{ factory_latest.koncreet.version }} already supports Ubuntu 26.04"
+          echo "patch skipped: this release already supports Ubuntu 26.04"
         elif git apply {{ factory_koncreet_patch | quote }} 2>/dev/null; then
-          echo "patch applied: Ubuntu 26.04 support on koncreet {{ factory_latest.koncreet.version }}"
+          echo "patch applied: Ubuntu 26.04 support layered on this release"
         else
-          echo "patch skipped: it no longer applies to koncreet {{ factory_latest.koncreet.version }}, installed as released"
+          echo "patch skipped: it no longer applies, installed as released"
         fi | tee ../patch-outcome.new && mv ../patch-outcome.new ../patch-outcome
       args:
         chdir: "{{ factory_koncreet_dir }}"
