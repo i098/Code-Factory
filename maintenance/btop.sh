@@ -16,7 +16,7 @@ while :; do
     p=$(preset) again=
     "${0%/*}/btop-bin" -p "$p" "$@" <&3 3<&- &
     pid=$!
-    trap '[ "$(preset)" = "$p" ] || { again=1; kill "$pid"; }' WINCH
+    trap '[ "$(preset)" = "$p" ] || { again=1; kill -INT "$pid"; }' WINCH
     # wait returns early when WINCH runs the trap; keep waiting until btop exits.
     while wait "$pid"; rc=$?; kill -0 "$pid" 2>/dev/null; do :; done
     [ "$again" ] || exit "$rc"
