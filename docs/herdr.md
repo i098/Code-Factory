@@ -214,6 +214,8 @@ ssh <host> cat .local/bin/herdr-sidebar-to-client.py | python3 - <host>
 
 It copies the host's `sidebar_width`, `sidebar_max_width`, `[ui.sidebar.agents]`, `[ui.sidebar.spaces]` and `[theme.custom] sidebar_bg` into `~/.config/herdr/config.toml` on the viewing machine, or into the path given as a second argument, and leaves every other setting there as is. It writes a timestamped `.bak-sidebar-` copy of that file first. Run it again after the host's layout changes.
 
+Pane state (the sidebar dots) is reported on the host by the omp integration `./factory apply` installs, so the host needs nothing more. A machine that views the host with `herdr --remote` should run the same Herdr release as the host: the host runs the latest, so on the viewing machine run `herdr update`, then compare `herdr --version` with the host's.
+
 ## Known limits
 
 - Agents without the extension, including non-omp agents, show only their dot on line 1: nothing reports their `who` token.
