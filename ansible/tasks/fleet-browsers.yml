@@ -5,6 +5,34 @@
 # chrome and vnc are started on demand by the operator or the fleet-browser
 # CLI and gc'd after idle_timeout_min.
 
+- name: Ensure the journald drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+# A user unit's own LogRateLimit* is ignored (journald rate-limits user-manager
+# units as one user@<uid>.service bucket), so the cap lives in journald itself.
+# It is host-wide: every service, and all of a user's units together, get 1000
+# lines per 30s (scaled up by journald with free disk). A page stuck in a loop
+# once logged ~17 MB/s and filled the disk via syslog.
+- name: Cap journald intake host-wide
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/50-fleet-ratelimit.conf
+    content: |
+      {{ ansible_managed | comment }}
+      [Journal]
+      RateLimitIntervalSec=30s
+      RateLimitBurst=1000
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: restart journald
+
 - name: Ensure fleet browser directories
   ansible.builtin.file:
     path: "{{ item }}"

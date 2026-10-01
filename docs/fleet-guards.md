@@ -126,6 +126,13 @@ A new release never restarts a running tier: apply repoints the `obscura`
 symlink, and the tier picks up the new binary at its next idle refresh or
 restart, because Obscura restarts only when no lane is connected to it.
 
+Log flood cap: apply writes `/etc/systemd/journald.conf.d/50-fleet-ratelimit.conf`
+(`RateLimitIntervalSec=30s`, `RateLimitBurst=1000`) and restarts journald. The cap
+is host-wide, counts lines not bytes, and is the only limit on journald intake:
+a user unit's own `LogRateLimit*` is ignored, and the `page task error` warning
+Obscura logs for a page whose top-level await never resolves is not suppressed
+at its source. rsyslog still rotates `/var/log/syslog` weekly only.
+
 All three tiers share one session. `cookie-sync.ts` keeps a canonical jar at
 `~/.fleet-browser/cookies.json` and converges every live tier to it over CDP.
 `fleet-browser-sync.timer` runs it every 2 minutes, and
