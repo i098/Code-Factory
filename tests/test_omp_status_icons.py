@@ -42,7 +42,15 @@ def install_caveman(home: Path) -> None:
     )
 
 
-def row(home: Path, statuses=None, prompt="", branch=(), inputs=(), end_branch=None, end_event="agent_end") -> str:
+def row(
+    home: Path,
+    statuses=None,
+    prompt="",
+    branch=(),
+    inputs=(),
+    end_branch=None,
+    end_event="agent_end",
+) -> str:
     """The icons row as omp's status segment shows it after the given events."""
     ext = json.dumps(str(ROOT / "config/omp-status-icons.ts"))
     ctx = f"{{ hasUI: true, cwd: {json.dumps(str(home))}, ui, getSystemPrompt: async () => {json.dumps(prompt)}, sessionManager: {{ getBranch: () => branch }} }}"
@@ -134,4 +142,6 @@ def test_tree_navigation_resyncs_caveman_to_the_new_branch(tmp_path):
     install_caveman(tmp_path)
     rule = "keep skill://caveman in force"
     before = [user("stop caveman")]
-    assert CAVEMAN in row(tmp_path, prompt=rule, branch=before, end_branch=[], end_event="session_tree")
+    assert CAVEMAN in row(
+        tmp_path, prompt=rule, branch=before, end_branch=[], end_event="session_tree"
+    )
