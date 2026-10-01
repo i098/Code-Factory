@@ -267,6 +267,6 @@
       ansible.builtin.debug:
         msg: >-
           no-mistakes pipeline agent settings changed. Restart the daemon when
-          no run is active (`no-mistakes daemon status`), so new runs load them:
+          no pipeline run is active, so new runs load them:
           no-mistakes daemon restart
       listen: no-mistakes daemon restart required

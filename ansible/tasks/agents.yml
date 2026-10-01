@@ -123,7 +123,7 @@
     dest: "{{ factory_omp_as_pi_dir }}/"
     owner: "{{ factory_cfg.user }}"
     group: "{{ factory_group }}"
-    mode: preserve
+    mode: "u=rwX,go=rX"
     directory_mode: "0755"
     remote_src: true
   become: true
