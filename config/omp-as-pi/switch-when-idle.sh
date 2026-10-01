@@ -5,7 +5,8 @@
 # across review-fix rounds. Every step is checked; any failed check restores the
 # previous config.yaml and restarts the daemon on it. Log: LOG below.
 # Every ./factory apply runs `switch-when-idle.sh --check-adapter <tag>` to decide
-# between the same two agents without updating or restarting anything.
+# between the same two agents without updating or restarting anything; exit 0
+# verified, 1 a pin differs, 2 inconclusive (a source could not be fetched).
 set -uo pipefail
 NMH=$HOME/.no-mistakes
 NM=$NMH/bin/no-mistakes
@@ -22,15 +23,18 @@ declare -A PINNED=(
 	["internal/agent/ompgate.go"]=8a598685618334afcb689ea7b1006957855f4c694fc0dcc6447faf086e49aed9
 )
 
-# Exit 0 when every pinned adapter source at no-mistakes tag $1 matches its pin;
-# otherwise print why not and exit 1.
+# Exit 0 when every pinned adapter source at no-mistakes tag $1 matches its pin.
+# Exit 1 as soon as one source differs from its pin, which proves the adapter
+# moved. Exit 2 when no source differs but one could not be fetched, which proves
+# nothing. Either way print why.
 check_adapter() {
-	local f got
+	local f got inconclusive=0
 	for f in "${!PINNED[@]}"; do
 		got=$(curl -fsSL --connect-timeout 10 --max-time 30 "https://raw.githubusercontent.com/kunchenguid/no-mistakes/$1/$f" | sha256sum) ||
 			{
 				echo "could not fetch $f at $1 to verify it"
-				return 1
+				inconclusive=1
+				continue
 			}
 		[ "${got%% *}" = "${PINNED[$f]}" ] ||
 			{
@@ -38,6 +42,7 @@ check_adapter() {
 				return 1
 			}
 	done
+	[ "$inconclusive" = 0 ] || return 2
 	echo "pi adapter sources at $1 match the pins"
 }
 if [ "${1:-}" = --check-adapter ]; then

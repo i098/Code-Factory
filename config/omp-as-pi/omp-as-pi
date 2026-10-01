@@ -86,19 +86,14 @@ while [ $# -gt 0 ]; do
 		mode=$1
 		shift
 		;;
-	--mode=*) mode=${arg#--mode=} ;;
 	--no-session)
 		sessions=$((sessions + 1))
 		out+=(--no-session)
 		;;
-	--session | --session=*)
-		if [ "$arg" = --session ]; then
-			need_value "$arg" $#
-			id=$1
-			shift
-		else
-			id=${arg#--session=}
-		fi
+	--session)
+		need_value "$arg" $#
+		id=$1
+		shift
 		is_uuid "$id" || die "--session '$id' is not a canonical session UUID"
 		sessions=$((sessions + 1))
 		out+=(--resume "$id")
@@ -108,7 +103,6 @@ while [ $# -gt 0 ]; do
 		out+=("$arg" "$1")
 		shift
 		;;
-	--model=* | --thinking=* | --provider=*) out+=("$arg") ;;
 	*) die "refusing unrecognized argument '$arg': the no-mistakes pi adapter changed, so omp-as-pi must be updated before it can be trusted" ;;
 	esac
 done

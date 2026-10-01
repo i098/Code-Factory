@@ -17,19 +17,10 @@ interface GuardExtensionApi {
 	on(event: "tool_call", handler: (event: ToolCallEvent) => Promise<ToolCallResult>): void;
 }
 
-const SEP = String.raw`[\s"',]+`;
-const LAUNCHERS = String.raw`sudo|doas|env|exec|nohup|time|setsid|xargs|nice|ionice|stdbuf|(?:ba|z|da|k)?sh`;
-const OPTS = String.raw`(?:-[\w=.{}-]+${SEP}(?:(?!(?:${LAUNCHERS}|timeout|ssh|docker|podman|kubectl|pkill|killall)\b)\w+${SEP})?)*`;
-const LEAD = String.raw`(?:^|[;&|({\[\x60]|\$\(|\b(?:if|elif|then|else|do|while|until)\s)\s*(?:!\s*)?["']?`;
-const WRAPPERS = String.raw`(?:(?:${LAUNCHERS})${SEP}${OPTS}|timeout${SEP}${OPTS}\d\w*${SEP}|(?:ssh|(?:docker|podman|kubectl)${SEP}exec)${SEP}${OPTS}[^\s"',]+${SEP}|\w+=\S*\s+["']?){0,16}`;
-const NAME = String.raw`(?:[\w.~-]*/)*(?:pkill|killall)(?!["']\s*\))(?=[\s;&|)"'\x60,\]]|$)`;
-const SELECTOR = String.raw`\b(?:pgrep|pidof|ps|grep|awk)\b`;
-
 const PATTERN_KILLS: RegExp[] = [
-	new RegExp(LEAD + WRAPPERS + NAME, "m"), // pkill / killall by name or pattern
-	new RegExp(String.raw`${SELECTOR}[^\n;]{0,500}\|\s*xargs\s+${OPTS}kill\b`), // pgrep ... | xargs kill
-	new RegExp(String.raw`${SELECTOR}[^\n]{0,500}\|\s*while\b[^\n]{0,500}\bdo\s+kill\b`), // pgrep ... | while read p; do kill $p
-	new RegExp(String.raw`\bkill\b[^\n;&|]{0,500}(?:\$\(|\x60)[^)\x60\n]{0,500}\b(?:pgrep|pidof|grep|awk)\b`), // kill $(ps ... | grep ...)
+	/(^|[^\w./-])(pkill|killall)(\s|$)/m, // pkill / killall by name or pattern
+	/\bpgrep\b[^\n;]*\|\s*xargs\b[^\n;]*\bkill\b/, // pgrep ... | xargs kill
+	/\bkill\b[^\n;]*(\$\(|`)\s*pgrep\b/, // kill $(pgrep ...)
 ];
 
 const REASON =
@@ -38,11 +29,20 @@ const REASON =
 	"(their briefs sit in their argv). Kill only PIDs you started: `cmd & pid=$!`, then " +
 	'`kill "$pid"`, or `kill` a PID you verified under your own process tree.';
 
+export function isPatternKill(command: string): boolean {
+	return PATTERN_KILLS.some((re) => re.test(command));
+}
+
 export default function (pi: GuardExtensionApi) {
 	pi.on("tool_call", async (event) => {
-		const tool = event.toolName;
+		const tool = String(event.toolName ?? "");
 		if (tool !== "bash" && tool !== "eval") return {};
-		const text = event.input?.[tool === "bash" ? "command" : "code"];
-		return typeof text === "string" && PATTERN_KILLS.some((re) => re.test(text)) ? { block: true, reason: REASON } : {};
+		let text = "";
+		try {
+			text = typeof event.input?.command === "string" ? event.input.command : JSON.stringify(event.input ?? {});
+		} catch {
+			return {};
+		}
+		return isPatternKill(text) ? { block: true, reason: REASON } : {};
 	});
 }

@@ -168,7 +168,9 @@
 
 # no-mistakes installs at its latest release, but omp-as-pi translates only the
 # argv the pinned pi adapter builds. The adapter sources of the release this run
-# installs must match the pins in switch-when-idle.sh, or the agent stays acp:omp.
+# installs must match the pins in switch-when-idle.sh: exit 0 selects pi, exit 1
+# (a pin differs) selects acp:omp alone, and any other outcome (exit 2, a fetch
+# that failed) is inconclusive and leaves the agent setting as it is.
 - name: Check the pi adapter of the no-mistakes release this run installs
   ansible.builtin.command:
     argv:
@@ -192,7 +194,7 @@
 
 # Only the two agent lists Code Factory writes are managed; any other agent
 # choice is the operator's and stays.
-- name: Run omp through the pi adapter when it is verified, else keep acp:omp
+- name: Set the no-mistakes pipeline agent from the pi adapter check
   vars:
     current: "{{ factory_no_mistakes_config_raw.content | b64decode | from_yaml }}"
     wanted: >-
@@ -201,7 +203,7 @@
            'agent_path_override': {'pi': factory_omp_as_pi_dir ~ '/omp-as-pi'},
            'agent_config': {'pi': {'model': 'anthropic/claude-sonnet-5-5', 'effort': 'xhigh'}}}, recursive=true)
          if factory_pi_adapter.rc == 0
-         else current | combine({'agent': ['acp:omp']}) }}
+         else (current | combine({'agent': ['acp:omp']}) if factory_pi_adapter.rc == 1 else current) }}
   ansible.builtin.copy:
     content: "{{ wanted | to_nice_yaml(indent=2, sort_keys=false) }}"
     dest: "{{ factory_cfg.home }}/.no-mistakes/config.yaml"
@@ -218,7 +220,15 @@
       Not switching the no-mistakes pipeline agent to pi: {{
       factory_pi_adapter.stdout | default('', true) or factory_pi_adapter.stderr | default('') }}.
       It stays acp:omp until omp-as-pi is re-proven against this release.
-  when: factory_pi_adapter.rc != 0
+  when: factory_pi_adapter.rc == 1
+
+- name: Warn that the no-mistakes pi adapter could not be verified
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: could not verify the pi adapter of this no-mistakes release: {{
+      factory_pi_adapter.stdout | default('', true) or factory_pi_adapter.stderr | default('') }}.
+      The pipeline agent setting is left as it is; the next apply checks again.
+  when: factory_pi_adapter.rc not in [0, 1]
 
 # The omp config is first-write-only, but the status icons row needs two of its
 # keys on every host: `status` in statusLine.leftSegments and no separate hooks

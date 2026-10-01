@@ -73,6 +73,11 @@ expect_refuse "non-UUID session" --mode json --session ../../etc/passwd
 expect_refuse "partial session id" --mode json --session 01a0f611
 expect_refuse "two session flags" --mode json --no-session --session "$UUID"
 expect_refuse "flag missing value" --mode json --model
+expect_refuse "--mode=json spelling" --mode=json
+expect_refuse "--session=<uuid> spelling" --mode json --session="$UUID"
+expect_refuse "--model=<id> spelling" --mode json --model=anthropic/claude-sonnet-5-5
+expect_refuse "--thinking=<level> spelling" --mode json --thinking=xhigh
+expect_refuse "--provider=<id> spelling" --mode json --provider=anthropic
 
 mkdir "$T/tampered" && cp "$W" "$HERE/gate-overlay.yml" "$T/tampered/"
 printf '\n# tampered\n' >>"$T/tampered/gate-overlay.yml"
