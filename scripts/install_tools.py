@@ -360,11 +360,26 @@ def npm_latest_install(home, tool, version, environment):
             )
             staging.rename(final)
         changed = True
-    return link_package_bins(home, final, [package_name]) or changed
+    changed = link_package_bins(home, final, [package_name]) or changed
+    if tool == "chrome-devtools-mcp":
+        changed = point_current(final) or changed
+    return changed
+
+
+def point_current(target):
+    """Re-point `current` beside a version directory at it, so unit and profile text never change."""
+    link = target.parent / "current"
+    if link.is_symlink() and link.resolve() == target.resolve():
+        return False
+    staged = target.parent / ".current.new"
+    staged.unlink(missing_ok=True)
+    staged.symlink_to(target.name)
+    os.replace(staged, link)
+    return True
 
 
 def retire_legacy_npm(home):
-    """Remove the codex, pnpm and pnpx links into the dropped npm prefix, then that prefix."""
+    """Remove the codex, pnpm and pnpx links into the dropped npm prefix; the prefix stays for live shells."""
     legacy = home / ".local/share/code-factory/npm"
     changed = False
     for name in ("codex", "pnpm", "pnpx"):
@@ -372,9 +387,6 @@ def retire_legacy_npm(home):
         if link.is_symlink() and Path(os.readlink(link)).is_relative_to(legacy):
             link.unlink()
             changed = True
-    if legacy.is_dir():
-        shutil.rmtree(legacy)
-        changed = True
     return changed
 
 

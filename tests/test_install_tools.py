@@ -239,7 +239,7 @@ def test_resolve_refuses_a_source_that_does_not_exist(monkeypatch, capsys, tmp_p
         run_cli(monkeypatch, capsys, tmp_path, "--tools", "uv", "--also", "nonesuch")
 
 
-def test_the_dropped_npm_set_is_retired_but_commands_installed_elsewhere_are_kept(tmp_path):
+def test_the_dropped_npm_set_loses_its_links_but_keeps_the_prefix_and_other_installs(tmp_path):
     bin_dir = tmp_path / ".local/bin"
     bin_dir.mkdir(parents=True)
     legacy = tmp_path / ".local/share/code-factory/npm/node_modules"
@@ -255,9 +255,22 @@ def test_the_dropped_npm_set_is_retired_but_commands_installed_elsewhere_are_kep
     assert installer.retire_legacy_npm(tmp_path)
     assert not (bin_dir / "codex").is_symlink()
     assert not (bin_dir / "pnpm").is_symlink()
-    assert not (tmp_path / ".local/share/code-factory/npm").exists()
+    assert (legacy / "codex/bin.js").is_file()
+    assert (legacy / "pnpm/bin.js").is_file()
     assert (bin_dir / "pnpx").resolve() == elsewhere
     assert not installer.retire_legacy_npm(tmp_path)
+
+
+def test_current_follows_the_newest_release_and_a_repeat_changes_nothing(tmp_path):
+    tool = tmp_path / "chrome-devtools-mcp"
+    for version in ("1.0.0", "1.1.0"):
+        (tool / version).mkdir(parents=True)
+    assert installer.point_current(tool / "1.0.0")
+    assert not installer.point_current(tool / "1.0.0")
+    assert (tool / "current").resolve() == tool / "1.0.0"
+    assert installer.point_current(tool / "1.1.0")
+    assert (tool / "current").resolve() == tool / "1.1.0"
+    assert (tool / "1.0.0").is_dir()
 
 
 @pytest.mark.parametrize(

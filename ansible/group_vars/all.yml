@@ -49,11 +49,12 @@ factory_local_bin: "{{ factory_cfg.home }}/.local/bin"
 factory_share_dir: "{{ factory_cfg.home }}/.local/share/code-factory"
 factory_tools_root: "{{ factory_share_dir }}/tools"
 factory_omp_root: "{{ factory_share_dir }}/omp/{{ factory_omp_version }}"
-# AXI must launch the chrome-devtools MCP build this run installed (the latest
-# release, under its versioned prefix) instead of resolving `npx ...@latest`
-# at runtime. Exported to the managed shell environment and to the Herdr
-# service environment.
-factory_chrome_devtools_mcp_path: "{{ factory_share_dir }}/chrome-devtools-mcp/{{ factory_latest['chrome-devtools-mcp'] }}/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
+# AXI must launch the chrome-devtools MCP build the installer installed (the
+# latest release) instead of resolving `npx ...@latest` at runtime. The
+# installer re-points `current` at that release, so this text, and with it the
+# Herdr unit and the profile block, stays the same between releases. Exported
+# to the managed shell environment and to the Herdr service environment.
+factory_chrome_devtools_mcp_path: "{{ factory_share_dir }}/chrome-devtools-mcp/current/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
 # Environment shared by the interactive shell profile and the Herdr unit.
 # Consumed only when the agents profile is on, because the npm set that
 # provides the MCP entrypoint is installed by `--npm`. Nothing here may be a

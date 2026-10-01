@@ -15,7 +15,7 @@ CAP_FLAG = "--max-old-space-size=2048"
 needs_node = pytest.mark.skipif(not shutil.which("node"), reason="needs node")
 
 
-def seeded_worktree(home, bins=True):
+def seeded_worktree(home):
     (home / "oss-fleet/doctor").mkdir(parents=True)
     shared = home / "oss-fleet/shared-supabase"
     shared.mkdir()
@@ -23,8 +23,6 @@ def seeded_worktree(home, bins=True):
     worktree = home / ".treehouse/swarms-platform-abc123/1/swarms-platform"
     worktree.mkdir(parents=True)
     (worktree / "package.json").write_text(json.dumps({"scripts": {"probe": f'node -p "{PROBE}"'}}))
-    if bins:
-        (worktree / "node_modules/.bin").mkdir(parents=True)
     return worktree
 
 
@@ -49,10 +47,19 @@ def probed(command, worktree, env):
 
 @needs_node
 @pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
-def test_a_seeded_lane_script_gets_the_heap_cap_and_other_node_processes_do_not(tmp_path):
+def test_a_fresh_lane_gets_the_heap_cap_before_and_after_its_first_install(tmp_path):
     worktree = seeded_worktree(tmp_path)
     env = seed(tmp_path)
+    assert not (worktree / "node_modules").exists()
     flags, limit = probed(["bun", "run", "probe"], worktree, env)
+    assert CAP_FLAG in flags
+    assert 2048 * 2**20 <= limit < 2560 * 2**20
+    dev = worktree / "node_modules/.bin/dev"
+    dev.parent.mkdir(parents=True)
+    dev.write_text(f"#!/usr/bin/env node\nconsole.log({PROBE})\n")
+    dev.chmod(0o755)
+    (worktree / "package.json").write_text(json.dumps({"scripts": {"dev": "dev"}}))
+    flags, limit = probed(["bun", "run", "dev"], worktree, env)
     assert CAP_FLAG in flags
     assert 2048 * 2**20 <= limit < 2560 * 2**20
     flags, _ = probed(["node", "-p", PROBE], worktree, env)
@@ -61,21 +68,12 @@ def test_a_seeded_lane_script_gets_the_heap_cap_and_other_node_processes_do_not(
 
 
 @needs_node
-def test_seeding_is_idempotent_and_never_replaces_a_dependencys_node_bin(tmp_path):
+def test_seeding_is_idempotent_and_never_touches_the_checkouts_node_modules(tmp_path):
     worktree = seeded_worktree(tmp_path)
     seed(tmp_path)
-    wrapper = worktree / "node_modules/.bin/node"
+    wrapper = worktree.parent / "node_modules/.bin/node"
     first = wrapper.stat().st_mtime_ns
     seed(tmp_path)
     assert wrapper.stat().st_mtime_ns == first
-    wrapper.write_text("#!/bin/sh\necho dependency node\n")
-    seed(tmp_path)
-    assert wrapper.read_text() == "#!/bin/sh\necho dependency node\n"
-
-
-@needs_node
-def test_seeding_creates_no_node_modules_before_dependencies_are_installed(tmp_path):
-    worktree = seeded_worktree(tmp_path, bins=False)
-    seed(tmp_path)
     assert not (worktree / "node_modules").exists()
     assert (worktree / ".env.local").is_file()

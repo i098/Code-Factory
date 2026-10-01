@@ -466,10 +466,10 @@ def test_seeded_acpx_config_defaults_to_omp_and_absent_one_is_not_created(tmp_pa
     assert config.read_text() == seed
 
 
-def _managed_environment(tmp_path, fleet_guards):
+def _managed_environment(tmp_path, fleet_guards, release="1.0.0"):
     variables = {
         "factory_cfg": {"home": str(tmp_path), "profiles": {"fleet_guards": fleet_guards}},
-        "factory_latest": {"chrome-devtools-mcp": "1.0.0"},
+        "factory_latest": {"chrome-devtools-mcp": release},
     }
     result = subprocess.run(
         [
@@ -499,3 +499,11 @@ def _managed_environment(tmp_path, fleet_guards):
 @pytest.mark.parametrize("fleet_guards", [False, True])
 def test_the_managed_environment_never_carries_a_process_wide_runtime_limit(tmp_path, fleet_guards):
     assert set(_managed_environment(tmp_path, fleet_guards)) == {"CHROME_DEVTOOLS_AXI_MCP_PATH"}
+
+
+def test_a_new_chrome_devtools_mcp_release_leaves_the_managed_environment_unchanged(tmp_path):
+    before = _managed_environment(tmp_path, True, "1.0.0")
+    assert _managed_environment(tmp_path, True, "1.1.0") == before
+    assert before["CHROME_DEVTOOLS_AXI_MCP_PATH"].endswith(
+        "/chrome-devtools-mcp/current/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
+    )

@@ -763,7 +763,8 @@ check_agent_gate() {
         printf '%s %s (floor %s)\n' "${name}" "${version}" "${floor}"
     done
     for name in ponytail i-have-adhd caveman; do
-        [ -d "${HOME}/.omp/plugins/cache/marketplaces/${name}" ] || fail "omp plugin ${name} is not installed"
+        jq -e --arg id "${name}@${name}" '.plugins[$id] | length > 0' "${HOME}/.omp/plugins/installed_plugins.json" >/dev/null \
+            || fail "omp plugin ${name} is not installed"
     done
     printf 'gate agent acp:omp via acpx, ponytail-review on omp, omp plugins installed\n'
 }
