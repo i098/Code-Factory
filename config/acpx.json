@@ -1,5 +1,5 @@
 {
-  "defaultAgent": "codex",
+  "defaultAgent": "omp",
   "defaultPermissions": "approve-all",
   "nonInteractivePermissions": "deny",
   "authPolicy": "skip",

@@ -27,7 +27,7 @@ Services that hold state other hosts share, such as a model relay, a monitoring 
 
 | Item | How it moves |
 | --- | --- |
-| omp, Codex, gh and other CLI logins | Sign in again on the new host: [Sign in](omp.md#sign-in), `gh auth login`. Never copy a credential store ([Security](security.md)). |
+| omp, gh and other CLI logins | Sign in again on the new host: [Sign in](omp.md#sign-in), `gh auth login`. Never copy a credential store ([Security](security.md)). |
 | Fleet-browser web sessions | Sign in again on the new host through the fleet-browser VNC tier: run `~/oss-fleet/browsers/fleet-browser up vnc`, then open noVNC at `http://127.0.0.1:6909/vnc.html?autoconnect=1` over an SSH tunnel (`ssh -L 6909:127.0.0.1:6909 <host>`). `cookie-sync` then shares that session with every tier ([Browser ladder](fleet-guards.md#browser-ladder)). Sign in to Google by hand in the VNC tier; `cookie-sync` keeps Google cookies in that tier only. |
 | Each home's `.env` | Enter it by hand on the new host, in a file with mode `600`. |
 | Project clones with unpushed commits | List them on the old host with the loop below. Push each branch to its fork, except branches the [Warnings](#warnings) exclude. |
@@ -37,7 +37,7 @@ Services that hold state other hosts share, such as a model relay, a monitoring 
 | Each home's untracked `.omp/mcp.json` and `.omp/rules/` | `rsync -a` them with the home's `data/` and `config/` when they hold no credentials. Then rewrite the home path in `.omp/mcp.json` with the `sed` of the crontab row. |
 | no-mistakes | Apply seeds `~/.no-mistakes/config.yaml` with the gate agent. Merge any other settings from the old host's file by hand, without host-specific paths such as `acpx_path`. Then run `no-mistakes init` in every gated clone on the new host that has no `no-mistakes` remote yet (provisioning initializes the clones it makes). List the gated clones on the old host with `python3 -c "import sqlite3; [print(r[0]) for r in sqlite3.connect('file:$HOME/.no-mistakes/state.sqlite?mode=ro', uri=True).execute('select working_path from repos')]"`, and keep only paths that still exist under a home's `projects/`. Do not copy `state.sqlite` or `repos/`. |
 | omp settings (`~/.omp/agent/config.yml`) | Apply writes `config/omp.yml` there only when the file is absent, so the new host starts from the seed. Diff the old host's file against the new one and merge by hand ([Updating an existing host](omp.md#updating-an-existing-host)). Review host-specific keys such as `browser.cdpUrl` before merging them. |
-| omp plugins and skill roots | Run `omp plugin marketplace add` and `omp plugin install` for each plugin the old host lists in `omp plugin list`, then confirm with `omp plugin list` on the new host. `rsync -a` the skill roots `~/.omp/agent/skills`, `~/.omp/agent/managed-skills` and `~/.agents/skills`. |
+| omp plugins and skill roots | Apply installs ponytail, i-have-adhd and caveman and upgrades them to their latest release. For any other plugin the old host lists in `omp plugin list`, run `omp plugin marketplace add` and `omp plugin install`, then confirm with `omp plugin list` on the new host. `rsync -a` the skill roots `~/.omp/agent/skills`, `~/.omp/agent/managed-skills` and `~/.agents/skills`. |
 | systemd user units | Apply writes its own. After apply, list what the new host lacks: `comm -23 <(ssh <old host> 'ls ~/.config/systemd/user' \| sort) <(ls ~/.config/systemd/user \| sort)`. Move only agent-side units from that list. Never move units for services that stay on the old host, and never copy a unit or drop-in that holds an inline credential ([Never export](security.md#never-export)). |
 | User crontab | Crontab entries and the scripts they run often name a home's path. After every sync of a home's `data/` to a host where its path differs, run `sed -i 's#<old path>#<new path>#g'` on those scripts there. [Cutover](#cutover) comments the entries out on the old host at step 1, adds them with the new path on the new host at step 6, and deletes them on the old host at step 8. |
 | Hand-installed tools in `~/.local/bin` | After apply, list what the new host lacks: `comm -23 <(ssh <old host> 'ls ~/.local/bin' \| sort) <(ls ~/.local/bin \| sort)`. Reinstall each agent-side tool from its source and skip backups. |
@@ -62,8 +62,8 @@ CI runs the `agent-gate` check in `tests/container-smoke.sh` for the gate agent,
 | The VNC browser tier finds a Chrome binary | `test -x /usr/bin/google-chrome` | Exit `0`. |
 | Crew advisor calls skip the server-side fallback | `grep -A2 '^providers:' ~/Dev/firstmate/config/omp-crew-overlay.yml` | `serverSideFallback: false` under `anthropic:`. |
 | ponytail-review runs | `git -C <Code Factory checkout> diff HEAD~1 \| ponytail-review --stdin; echo $?` | Exit `0` or `2`, never `1`. |
-| no-mistakes gate agent | `no-mistakes --version`, `no-mistakes doctor`, `jq -r .agents.omp.command ~/.acpx/config.json`, `grep -c '^acp_registry_overrides' ~/.no-mistakes/config.yaml` | The version in `toolchain.lock.json`, doctor reports `acp:omp` runnable, `omp acp`, `0`. |
-| AXI tool floors | `quota-axi --version; tasks-axi --version` | At least the floors in [Dependencies](dependencies.md#agent-clis). |
+| no-mistakes gate agent | `no-mistakes --version`, `no-mistakes doctor`, `jq -r .agents.omp.command ~/.acpx/config.json`, `grep -c '^acp_registry_overrides' ~/.no-mistakes/config.yaml` | The version in `~/.local/share/code-factory/resolved.json`, doctor reports `acp:omp` runnable, `omp acp`, `0`. |
+| AXI tool floors | `quota-axi --version; tasks-axi --version` | At least the floors in [Dependencies](dependencies.md#latest-releases). |
 
 ## Cutover
 

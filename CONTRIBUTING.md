@@ -10,8 +10,7 @@ Code Factory is an Ansible playbook with a Python CLI wrapper (`scripts/factory.
 - `ansible/tasks/*.yml` — the tasks themselves (one file per concern)
 - `ansible/templates/*.j2` — systemd unit templates
 - `scripts/factory.py` — CLI (`init`, `validate`, `plan`, `apply`, `doctor`)
-- `scripts/install_tools.py` — pinned binary installer (idempotent)
-- `toolchain.lock.json` — every binary, every version, every sha256
+- `scripts/install_tools.py` — latest-release tool installer (idempotent)
 - `fleet/` — runtime scripts deployed to `~/oss-fleet/` on the target host
 - `config/` — per-tool config templates deployed to Firstmate homes
 
@@ -21,7 +20,7 @@ Every task is idempotent; a second unchanged `apply` reports `changed=0`.
 
 Every task is check-mode safe: `plan` (Ansible `--check`) previews without mutating.
 
-Every binary is sha256-pinned in `toolchain.lock.json`. No floating `@latest` tags. Exceptions by design: herdr and omp track their latest release, resolved once per apply (herdr is verified against the SHA-256 its release publishes), and `verify.yml` asserts the resolved version is the installed one.
+Nothing is pinned: every tool tracks its latest release, resolved once per apply and verified by the checksum its publisher posts; what each source is verified against, and the omp marketplace plugin exception, are in [Dependencies](docs/dependencies.md). Only the repository's own Python environment (`uv.lock`) stays locked, and CI pins each GitHub Action to the commit SHA of its latest release, kept current by Dependabot.
 
 No unconditional restarts, daemon-reloads, or bare commands.
 
@@ -48,8 +47,8 @@ uv run ansible-playbook -i ansible/inventory.yml ansible/site.yml --syntax-check
 
 ## Adding a new tool
 
-1. Add the release asset to `toolchain.lock.json` with the correct `format` (`file` or `tar`), sha256, URL, and `binaries` map.
-2. Add the tool name to `factory_core_tools` in `group_vars/all.yml` (or a profile-gated list).
+1. Add it to `GITHUB_LATEST` (a GitHub release whose assets carry a SHA-256 digest) or `NPM_LATEST` in `scripts/install_tools.py`. A tool from elsewhere needs its own resolver in `resolve_latest` that reads the checksum its publisher posts for the release.
+2. Register where it installs: `factory_core_tools` in `group_vars/all.yml` for every host, `AGENT_TOOLS` in `scripts/install_tools.py` for the `agents` profile's native tools (npm tools in `NPM_LATEST` need no step), or `factory_installer_also` in `group_vars/all.yml` for a source Ansible installs itself.
 3. If it needs a systemd unit, add a `.j2` template in `ansible/templates/` and wire it in the relevant task file.
 4. If it needs environment variables, add them to `group_vars/all.yml` (not to shell rc files).
 5. Update `docs/architecture.md` if the tool changes the host's architecture.

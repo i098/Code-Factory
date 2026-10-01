@@ -4,9 +4,13 @@
 Stdlib-only: also bootstraps uv before repository dependencies exist. stdout is
 one JSON result; installer progress goes to stderr. Existing unmanaged commands
 are never replaced. Archives cannot write outside their staging directory.
-Every tool is pinned in the lock except herdr and omp, which track their latest
-release: herdr is verified against the SHA-256 its GitHub release publishes,
-omp against the integrity npm records for the resolved version.
+Nothing is pinned: every tool tracks its latest release. Native assets are
+verified against the SHA-256 their publisher lists for that exact release (the
+GitHub release-asset digest, Node's SHASUMS256.txt, rustup's .sha256), npm tools
+against the integrity npm records for the resolved version, psutil against the
+digests PyPI publishes. The Rust toolchain follows the stable channel. The omp
+marketplace plugins are the one exception: no publisher checksums them, so they
+track each author's default branch.
 """
 
 import argparse
@@ -28,8 +32,57 @@ import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
 
-HERDR_LATEST = "https://api.github.com/repos/herdrdev/herdr/releases/latest"
-OMP_PACKAGE = "@oh-my-pi/pi-coding-agent"
+GITHUB_API = "https://api.github.com/repos/{}/releases/latest"
+# How release asset names spell each platform.
+ARCH = {
+    "linux-x86_64": {"node": "x64", "go": "amd64", "bun": "x64-baseline", "gnu": "x86_64"},
+    "linux-aarch64": {"node": "arm64", "go": "arm64", "bun": "aarch64", "gnu": "aarch64"},
+}
+# Native tools on their latest GitHub release: repository, tag prefix, asset
+# name, and where each command sits inside the asset.
+GITHUB_LATEST = {
+    "herdr": ("herdrdev/herdr", "v", "herdr-{key}", {"herdr": "herdr"}),
+    "bun": ("oven-sh/bun", "bun-v", "bun-linux-{bun}.zip", {"bun": "bun-linux-*/bun"}),
+    "gh": ("cli/cli", "v", "gh_{v}_linux_{go}.tar.gz", {"gh": "gh_*/bin/gh"}),
+    "no-mistakes": (
+        "kunchenguid/no-mistakes",
+        "v",
+        "no-mistakes-v{v}-linux-{go}.tar.gz",
+        {"no-mistakes": "no-mistakes"},
+    ),
+    "treehouse": (
+        "kunchenguid/treehouse",
+        "v",
+        "treehouse-v{v}-linux-{go}.tar.gz",
+        {"treehouse": "treehouse"},
+    ),
+    "uv": (
+        "astral-sh/uv",
+        "",
+        "uv-{gnu}-unknown-linux-gnu.tar.gz",
+        {"uv": "uv-*/uv", "uvx": "uv-*/uvx"},
+    ),
+    # Resolved for the fleet browser ladder (ansible/tasks/fleet-browsers.yml), not installed here.
+    "obscura": (
+        "h4ckf0r0day/obscura",
+        "v",
+        "obscura-{gnu}-linux.tar.gz",
+        {"obscura": "obscura", "obscura-worker": "obscura-worker"},
+    ),
+}
+# npm tools on the registry's latest version, each installed into its own prefix.
+NPM_LATEST = {
+    "omp": "@oh-my-pi/pi-coding-agent",
+    "chrome-devtools-axi": "chrome-devtools-axi",
+    "gh-axi": "gh-axi",
+    "lavish-axi": "lavish-axi",
+    "quota-axi": "quota-axi",
+    "tasks-axi": "tasks-axi",
+    "acpx": "acpx",
+    "chrome-devtools-mcp": "chrome-devtools-mcp",
+}
+# Native tools the agents profile adds.
+AGENT_TOOLS = ["gh", "no-mistakes", "treehouse"]
 
 
 def digest(path):
@@ -48,45 +101,94 @@ def platform_key():
     return "linux-" + machine
 
 
-def resolve_latest(key):
-    """The newest herdr release as a lock-shaped spec, and the newest omp version."""
-    # Unauthenticated GitHub API calls share a 60/hour budget per IP.
+def fetch(url, what):
+    # The GitHub token only ever goes to the GitHub API. Unauthenticated calls
+    # there share a 60/hour budget per IP.
     token = os.environ.get("GITHUB_TOKEN")
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    github = url.startswith("https://api.github.com/")
+    headers = {"Authorization": f"Bearer {token}"} if token and github else {}
     try:
         with urllib.request.urlopen(
-            urllib.request.Request(HERDR_LATEST, headers=headers), timeout=60
+            urllib.request.Request(url, headers=headers), timeout=60
         ) as response:
-            release = json.load(response)
+            return response.read()
     except urllib.error.HTTPError as error:
         raise ValueError(
-            f"cannot resolve the latest herdr release (HTTP {error.code}); "
+            f"cannot resolve the latest {what} (HTTP {error.code}); "
             "if rate limited, set GITHUB_TOKEN and re-run"
         ) from None
-    version = release["tag_name"].removeprefix("v")
-    name = f"herdr-{key}"
-    asset = next((a for a in release["assets"] if a["name"] == name), {})
-    checksum = (asset.get("digest") or "").removeprefix("sha256:")
+
+
+def verified(tool, version, key, name, url, checksum, binaries):
+    """A lock-shaped spec, only when the publisher lists a SHA-256 for the asset."""
     if not re.fullmatch(r"[0-9a-f]{64}", checksum):
         raise ValueError(
-            f"herdr {version} publishes no SHA-256 for {name}; refusing an unverified binary"
+            f"{tool} {version} publishes no SHA-256 for {name}; refusing an unverified binary"
         )
-    herdr = {
-        "version": version,
-        "assets": {
-            key: {
-                "url": asset["browser_download_url"],
-                "sha256": checksum,
-                "format": "file",
-                "binaries": {"herdr": "herdr"},
-            }
-        },
-    }
-    with urllib.request.urlopen(
-        f"https://registry.npmjs.org/{OMP_PACKAGE}/latest", timeout=60
-    ) as response:
-        omp = json.load(response)["version"]
-    return {"herdr": herdr, "omp": omp}
+    kind = "zip" if name.endswith(".zip") else "tar" if ".tar." in name else "file"
+    asset = {"url": url, "sha256": checksum, "format": kind, "binaries": binaries}
+    return {"version": version, "assets": {key: asset}}
+
+
+def resolve_latest(key, names):
+    """Specs for the newest releases of exactly these tools, and nothing else."""
+    latest = {}
+    for tool, (repo, prefix, pattern, binaries) in GITHUB_LATEST.items():
+        if tool not in names:
+            continue
+        release = json.loads(fetch(GITHUB_API.format(repo), f"{tool} release"))
+        version = release["tag_name"].removeprefix(prefix)
+        name = pattern.format(v=version, key=key, **ARCH[key])
+        asset = next((a for a in release["assets"] if a["name"] == name), {})
+        checksum = (asset.get("digest") or "").removeprefix("sha256:")
+        url = asset.get("browser_download_url", "")
+        latest[tool] = verified(tool, version, key, name, url, checksum, binaries)
+    if "node" in names:
+        releases = json.loads(fetch("https://nodejs.org/dist/index.json", "node release"))
+        tag = max((r["version"] for r in releases), key=lambda v: tuple(map(int, v[1:].split("."))))
+        name = f"node-{tag}-linux-{ARCH[key]['node']}.tar.xz"
+        sums = fetch(f"https://nodejs.org/dist/{tag}/SHASUMS256.txt", "node checksums").decode()
+        match = re.search(rf"^([0-9a-f]{{64}})  {re.escape(name)}$", sums, re.M)
+        binaries = {command: f"node-v*/bin/{command}" for command in ("node", "npm", "npx")}
+        latest["node"] = verified(
+            "node",
+            tag.removeprefix("v"),
+            key,
+            name,
+            f"https://nodejs.org/dist/{tag}/{name}",
+            match[1] if match else "",
+            binaries,
+        )
+    if "rustup-init" in names:
+        toml = fetch("https://static.rust-lang.org/rustup/release-stable.toml", "rustup").decode()
+        match = re.search(r"^version = '([0-9.]+)'$", toml, re.M)
+        if not match:
+            raise ValueError("cannot read the latest rustup version")
+        version = match[1]
+        url = f"https://static.rust-lang.org/rustup/archive/{version}/{ARCH[key]['gnu']}-unknown-linux-gnu/rustup-init"
+        checksum = fetch(url + ".sha256", "rustup-init checksum").decode().split(" ")[0]
+        binaries = {"rustup-init": "rustup-init"}
+        latest["rustup-init"] = verified(
+            "rustup-init", version, key, "rustup-init", url, checksum, binaries
+        )
+    for tool, package in NPM_LATEST.items():
+        if tool in names:
+            registry = fetch(f"https://registry.npmjs.org/{package}/latest", f"{tool} version")
+            latest[tool] = json.loads(registry)["version"]
+    if "supabase" in names:
+        # Resolved for the fleet guards' shared Supabase stack, installed by Ansible.
+        registry = fetch("https://registry.npmjs.org/supabase/latest", "supabase version")
+        latest["supabase"] = json.loads(registry)["version"]
+    if "psutil" in names:
+        # The Chrome pruner's runtime, installed by Ansible with uv --require-hashes.
+        pypi = json.loads(fetch("https://pypi.org/pypi/psutil/json", "psutil release"))
+        hashes = [file["digests"]["sha256"] for file in pypi["urls"]]
+        if not hashes or not all(re.fullmatch(r"[0-9a-f]{64}", h) for h in hashes):
+            raise ValueError("psutil publishes no SHA-256 digests; refusing an unverified binary")
+        latest["psutil"] = {"version": pypi["info"]["version"], "sha256": hashes}
+    if unknown := sorted(set(names) - latest.keys()):
+        raise ValueError(f"no latest release source for: {', '.join(unknown)}")
+    return latest
 
 
 def download(url, checksum, destination):
@@ -210,39 +312,6 @@ def command(argv, environment):
     subprocess.run([str(arg) for arg in argv], env=environment, check=True, stdout=sys.stderr)
 
 
-def npm_install(repo, home, environment):
-    source = repo / "tools/npm"
-    manifest = json.loads((source / "package.json").read_text())
-    lock_hash = digest(source / "package-lock.json")
-    destination = home / ".local/share/code-factory/npm"
-    stamp = destination / ".code-factory-lock"
-    expected = lock_hash + ":" + digest(source / "package.json")
-    installed = stamp.is_file() and stamp.read_text().strip() == expected
-    for name, version in manifest["dependencies"].items():
-        package = destination / "node_modules" / name / "package.json"
-        if not package.is_file() or json.loads(package.read_text()).get("version") != version:
-            installed = False
-    changed = False
-    if not installed:
-        if (
-            destination.exists()
-            and any(destination.iterdir())
-            and not stamp.exists()
-            and not (destination / "package-lock.json").exists()
-        ):
-            raise ValueError(f"refusing unmanaged npm prefix: {destination}")
-        destination.mkdir(parents=True, exist_ok=True)
-        for name in ("package.json", "package-lock.json"):
-            shutil.copyfile(source / name, destination / name)
-        command(
-            [home / ".local/bin/npm", "ci", "--prefix", destination, "--no-audit", "--no-fund"],
-            environment,
-        )
-        stamp.write_text(expected + "\n")
-        changed = True
-    return link_package_bins(home, destination, manifest["dependencies"]) or changed
-
-
 def link_package_bins(home, destination, package_names):
     # Only expose explicitly requested packages, not incidental dependency bins.
     changed = False
@@ -260,18 +329,19 @@ def link_package_bins(home, destination, package_names):
     return changed
 
 
-def omp_install(home, version, environment):
-    """Install exactly this omp version into its own prefix; a new version relinks omp."""
+def npm_latest_install(home, tool, version, environment):
+    """Install exactly this version into its own prefix; a new version relinks the tool."""
+    package_name = NPM_LATEST[tool]
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+-]*", version):
-        raise ValueError("unsafe omp version")
+        raise ValueError(f"unsafe {tool} version")
     # ponytail: superseded versions stay on disk so running agents keep their files;
     # prune them by hand or add a sweep if disk use matters.
-    final = home / ".local/share/code-factory/omp" / version
-    package = final / "node_modules" / OMP_PACKAGE / "package.json"
+    final = home / ".local/share/code-factory" / tool / version
+    package = final / "node_modules" / package_name / "package.json"
     changed = False
     if not package.is_file() or json.loads(package.read_text()).get("version") != version:
         if final.exists():
-            raise ValueError(f"incomplete omp install: {final}; inspect it before replacing")
+            raise ValueError(f"incomplete {tool} install: {final}; inspect it before replacing")
         final.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=".install-", dir=final.parent) as temporary:
             staging = Path(temporary) / "prefix"
@@ -284,65 +354,68 @@ def omp_install(home, version, environment):
                     staging,
                     "--no-audit",
                     "--no-fund",
-                    f"{OMP_PACKAGE}@{version}",
+                    f"{package_name}@{version}",
                 ],
                 environment,
             )
             staging.rename(final)
         changed = True
-    return link_package_bins(home, final, [OMP_PACKAGE]) or changed
+    changed = link_package_bins(home, final, [package_name]) or changed
+    if tool == "chrome-devtools-mcp":
+        changed = point_current(final) or changed
+    return changed
 
 
-def rust_install(home, version, environment):
+def point_current(target):
+    """Re-point `current` beside a version directory at it, so unit and profile text never change."""
+    link = target.parent / "current"
+    if link.is_symlink() and link.resolve() == target.resolve():
+        return False
+    staged = target.parent / ".current.new"
+    staged.unlink(missing_ok=True)
+    staged.symlink_to(target.name)
+    os.replace(staged, link)
+    return True
+
+
+def retire_legacy_npm(home):
+    """Remove the codex, pnpm and pnpx links into the dropped npm prefix; the prefix stays for live shells."""
+    legacy = home / ".local/share/code-factory/npm"
+    changed = False
+    for name in ("codex", "pnpm", "pnpx"):
+        link = home / ".local/bin" / name
+        if link.is_symlink() and Path(os.readlink(link)).is_relative_to(legacy):
+            link.unlink()
+            changed = True
+    return changed
+
+
+def rust_install(home, environment):
+    """The stable toolchain with rustfmt and clippy; an apply moves it to the newest stable."""
+    version = "stable"
     rustup = home / ".cargo/bin/rustup"
     environment = {
         **environment,
         "CARGO_HOME": str(home / ".cargo"),
         "RUSTUP_HOME": str(home / ".rustup"),
     }
+    profile = ["--profile", "minimal", "--component", "rustfmt", "--component", "clippy"]
     changed = False
     if not rustup.exists():
-        command(
-            [
-                home / ".local/bin/rustup-init",
-                "-y",
-                "--no-modify-path",
-                "--profile",
-                "minimal",
-                "--default-toolchain",
-                version,
-                "--component",
-                "rustfmt",
-                "--component",
-                "clippy",
-            ],
-            environment,
-        )
+        init = [home / ".local/bin/rustup-init", "-y", "--no-modify-path", "--default-toolchain"]
+        command([*init, version, *profile], environment)
         changed = True
     else:
+        # ponytail: the rustup binary itself only changes on a fresh account;
+        # add `rustup self update` here if an old rustup ever matters.
         result = subprocess.run(
-            [rustup, "run", version, "rustc", "--version"],
+            [rustup, "toolchain", "install", version, *profile, "--no-self-update"],
             env=environment,
             capture_output=True,
             text=True,
+            check=True,
         )
-        if result.returncode or not result.stdout.startswith(f"rustc {version} "):
-            command(
-                [
-                    rustup,
-                    "toolchain",
-                    "install",
-                    version,
-                    "--profile",
-                    "minimal",
-                    "--component",
-                    "rustfmt",
-                    "--component",
-                    "clippy",
-                ],
-                environment,
-            )
-            changed = True
+        changed = " unchanged - " not in result.stdout
         components = subprocess.run(
             [rustup, "component", "list", "--installed", "--toolchain", version],
             env=environment,
@@ -377,36 +450,76 @@ def rust_install(home, version, environment):
     return changed
 
 
+# omp marketplace plugins, upgraded on every apply to the default branch: name -> repository.
+OMP_PLUGINS = {
+    "ponytail": "DietrichGebert/ponytail",
+    "i-have-adhd": "ayghri/i-have-adhd",
+    "caveman": "JuliusBrussee/caveman",
+}
+
+
+def omp_plugins(home, environment):
+    """Install each plugin from its marketplace, then upgrade all to its default branch."""
+
+    def omp(*argv):
+        result = subprocess.run(
+            [home / ".local/bin/omp", "plugin", *argv],
+            env=environment,
+            cwd=home,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout
+
+    changed = False
+    marketplaces = home / ".omp/marketplaces.json"
+    known = marketplaces.read_text() if marketplaces.is_file() else ""
+    installed = {plugin["id"] for plugin in json.loads(omp("list", "--json"))["marketplace"]}
+    for name, repository in OMP_PLUGINS.items():
+        if repository not in known:
+            omp("marketplace", "add", repository)
+            changed = True
+        if f"{name}@{name}" not in installed:
+            omp("install", f"{name}@{name}")
+            changed = True
+    omp("marketplace", "update")
+    return "up to date" not in omp("upgrade") or changed
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--lock", type=Path, required=True)
     parser.add_argument("--home", type=Path, required=True)
     parser.add_argument("--tools", default="herdr,node,bun,uv")
     parser.add_argument("--npm", action="store_true")
     parser.add_argument("--development", action="store_true")
     parser.add_argument(
-        "--resolve", action="store_true", help="print the latest herdr and omp as JSON and exit"
+        "--also",
+        default="",
+        help="comma-separated extra sources to resolve that Ansible installs itself: "
+        "obscura, supabase, psutil",
+    )
+    parser.add_argument(
+        "--resolve",
+        action="store_true",
+        help="print the latest release of every selected source as JSON and exit",
     )
     parser.add_argument(
         "--resolved", type=json.loads, help="--resolve output to install instead of resolving"
     )
     args = parser.parse_args()
     key = platform_key()
+    names = list(dict.fromkeys(args.tools.split(",") + (AGENT_TOOLS if args.npm else [])))
+    if args.development:
+        names.append("rustup-init")
+    sources = {*names, *(NPM_LATEST if args.npm else ()), *filter(None, args.also.split(","))}
     if args.resolve:
-        print(json.dumps(resolve_latest(key)))
+        print(json.dumps(resolve_latest(key, sources)))
         return
     home = args.home.resolve(strict=True)
     if home.stat().st_uid != os.geteuid():
         parser.error("run as the user who owns --home")
-    lock = json.loads(args.lock.read_text())
-    if lock.get("schema_version") != 1:
-        parser.error("unsupported toolchain lock schema")
-    names = list(dict.fromkeys(args.tools.split(",")))
-    if args.npm:
-        names = list(dict.fromkeys([*names, *lock["npm_required_tools"]]))
-    if args.development:
-        names.append("rustup-init")
-    latest = args.resolved or (resolve_latest(key) if "herdr" in names or args.npm else {})
+    latest = args.resolved or resolve_latest(key, sources)
     environment = {
         **os.environ,
         "HOME": str(home),
@@ -418,17 +531,20 @@ def main():
         fcntl.flock(guard, fcntl.LOCK_EX)
         changed = False
         for name in names:
-            spec = latest["herdr"] if name == "herdr" else lock["tools"][name]
-            changed = install_asset(home, name, spec, key) or changed
+            changed = install_asset(home, name, latest[name], key) or changed
         if args.npm:
-            changed = npm_install(args.lock.resolve().parent, home, environment) or changed
-            changed = omp_install(home, latest["omp"], environment) or changed
+            for tool in NPM_LATEST:
+                changed = npm_latest_install(home, tool, latest[tool], environment) or changed
+            changed = retire_legacy_npm(home) or changed
+            changed = omp_plugins(home, environment) or changed
         if args.development:
-            changed = rust_install(home, lock["rust_toolchain"], environment) or changed
-        # The record checks compare against, so a later upstream release cannot
-        # make an unchanged install look wrong.
-        if latest:
-            (prefix / "resolved.json").write_text(json.dumps(latest, sort_keys=True) + "\n")
+            changed = rust_install(home, environment) or changed
+        if args.resolved:
+            # The record checks compare against, so a later upstream release cannot
+            # make an unchanged install look wrong.
+            record = prefix / "resolved.json"
+            known = json.loads(record.read_text()) if record.is_file() else {}
+            record.write_text(json.dumps({**known, **latest}, sort_keys=True) + "\n")
     print(
         json.dumps(
             {
@@ -446,4 +562,5 @@ if __name__ == "__main__":
         main()
     except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
         print(f"install_tools: {error}", file=sys.stderr)
+        print(getattr(error, "stderr", None) or "", end="", file=sys.stderr)
         sys.exit(1)

@@ -15,6 +15,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 STALE_FIRSTMATE_URL = "https://github.com/undeemed/firstmate.git"
+LEGACY_BROWSER_KEYS = ("obscura_version", "obscura_sha256")
 
 
 def validate_document(document, schema_name):
@@ -48,12 +49,6 @@ def validate_config(document):
     if config["profiles"].get("fleet_guards"):
         if not (config["profiles"]["docker"] and config["profiles"]["firstmate"]):
             raise ValueError("fleet guards require the docker and firstmate profiles")
-        browsers = config.get("browsers")
-        if not browsers or not browsers.get("obscura_version") or not browsers.get("obscura_sha256"):
-            raise ValueError("fleet_guards requires factory.browsers.obscura_version and obscura_sha256")
-        sha = browsers["obscura_sha256"]
-        if len(sha) != 64 or not all(c in "0123456789abcdef" for c in sha.lower()):
-            raise ValueError("factory.browsers.obscura_sha256 must be a 64-char lowercase hex string")
         fixture = config.get("fleet", {}).get("fixture_archive", "")
         if fixture and ".." in Path(fixture).parts:
             raise ValueError("fleet.fixture_archive must not traverse; give a plain path")
@@ -65,10 +60,6 @@ def validate_config(document):
         or prune["idle_seconds"] < 2 * prune["poll_seconds"]
     ):
         raise ValueError("pruning idle/gap windows must allow at least two observation intervals")
-    lock = json.loads((ROOT / "toolchain.lock.json").read_text())
-    validate_document(lock, "toolchain.schema.json")
-    if not set(lock["npm_required_tools"]).issubset(lock["tools"]):
-        raise ValueError("npm support tool missing from artifact lock")
     return document
 
 
@@ -77,7 +68,15 @@ def load_config(path):
         document = yaml.safe_load(path.read_text())
     except yaml.YAMLError:
         raise ValueError("malformed host YAML; configuration contents omitted") from None
-    return validate_config(document)
+    validate_config(document)
+    if any(key in document["factory"].get("browsers", {}) for key in LEGACY_BROWSER_KEYS):
+        print(
+            "WARNING: factory.browsers.obscura_version and factory.browsers.obscura_sha256 "
+            "are no longer used and are ignored; Obscura always resolves to its latest release. "
+            f"Remove them from {path} when convenient.",
+            file=sys.stderr,
+        )
+    return document
 
 
 def initialize(args):
@@ -141,7 +140,6 @@ def doctor(document):
     if config["profiles"]["agents"]:
         tools += [
             "omp",
-            "codex",
             "gh",
             "no-mistakes",
             "treehouse",
@@ -192,7 +190,7 @@ def doctor(document):
             + ("present" if authenticated else "manual gh auth login required")
         )
         print(
-            "Provider access: authenticate OMP/Codex interactively; subscriptions/model availability are not inferred."
+            "Provider access: authenticate OMP interactively; subscriptions/model availability are not inferred."
         )
     if config["start_services"]:
         print(
@@ -316,7 +314,7 @@ def main():
     )
     document = load_config(path.resolve())
     if args.command == "validate":
-        print(f"Valid host configuration and artifact lock: {path}")
+        print(f"Valid host configuration: {path}")
         return 0
     if args.command == "doctor":
         return doctor(document)

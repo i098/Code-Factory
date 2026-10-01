@@ -24,6 +24,29 @@ def test_valid_configuration_is_accepted_by_real_schema(configuration):
     assert factory.validate_config(configuration) is configuration
 
 
+def test_legacy_obscura_keys_are_ignored_with_one_warning_and_apply_proceeds(
+    configuration, tmp_path, monkeypatch, capsys
+):
+    legacy = tmp_path / "legacy.yml"
+    current = tmp_path / "current.yml"
+    current.write_text(yaml.safe_dump(configuration))
+    configuration["factory"]["browsers"].update(obscura_version="0.2.2", obscura_sha256="c" * 64)
+    legacy.write_text(yaml.safe_dump(configuration))
+    provisioned = []
+    monkeypatch.setattr(
+        factory, "provision", lambda document, check: provisioned.append(check) or 0
+    )
+    monkeypatch.setattr(factory, "questions", lambda document: 0)
+    for host in (current, legacy):
+        monkeypatch.setattr(factory.sys, "argv", ["factory", "apply", "--config", str(host)])
+        assert factory.main() == 0
+    warning = capsys.readouterr().err
+    assert provisioned == [False, False]
+    assert warning.count("WARNING") == 1
+    assert "obscura_version" in warning and "obscura_sha256" in warning
+    assert "no longer used" in warning
+
+
 @pytest.mark.parametrize(
     "workspace", ["/home/other/Dev", "/home/coder/../other/Dev", "/home/coder"]
 )
@@ -67,13 +90,6 @@ def test_fleet_guards_accept_the_default_document_when_enabled(configuration):
     assert factory.validate_config(configuration) is configuration
 
 
-def test_fleet_guards_require_browsers_block(configuration):
-    configuration["factory"]["profiles"]["fleet_guards"] = True
-    configuration["factory"].pop("browsers", None)
-    with pytest.raises(ValueError, match="obscura"):
-        factory.validate_config(configuration)
-
-
 def test_browsers_valid_block_accepted(configuration):
     assert factory.validate_config(configuration) is configuration
 
@@ -100,7 +116,6 @@ def test_bad_polling_window_cannot_disable_idle_accrual(configuration):
 def test_init_preserves_existing_local_configuration(tmp_path, monkeypatch):
     for path in ("config", "schemas"):
         shutil.copytree(ROOT / path, tmp_path / path)
-    shutil.copyfile(ROOT / "toolchain.lock.json", tmp_path / "toolchain.lock.json")
     monkeypatch.setattr(factory, "ROOT", tmp_path)
     args = argparse.Namespace(user="coder", home="/home/coder", container=True)
     factory.initialize(args)
@@ -117,7 +132,6 @@ def test_init_preserves_existing_local_configuration(tmp_path, monkeypatch):
 def test_root_operator_is_rejected_before_config_is_written(tmp_path, monkeypatch):
     for path in ("config", "schemas"):
         shutil.copytree(ROOT / path, tmp_path / path)
-    shutil.copyfile(ROOT / "toolchain.lock.json", tmp_path / "toolchain.lock.json")
     monkeypatch.setattr(factory, "ROOT", tmp_path)
     with pytest.raises(ValueError, match="non-root"):
         factory.initialize(argparse.Namespace(user="root", home="/home/root", container=False))
@@ -311,7 +325,7 @@ def test_verify_passes_when_firstmate_origin_is_the_configured_url(tmp_path):
     assert result.returncode == 0, result.stdout
 
 
-def _ensure_status_row(tmp_path, config):
+def _run_agents(tmp_path, start_at, **variables):
     playbook = tmp_path / "agents.yml"
     playbook.write_text(
         yaml.safe_dump(
@@ -334,9 +348,9 @@ def _ensure_status_row(tmp_path, config):
             "localhost,",
             str(playbook),
             "--start-at-task",
-            "Read the omp config for the status row keys",
+            start_at,
             "--extra-vars",
-            json.dumps({"factory_omp_config": str(config), "ansible_become": False}),
+            json.dumps({"ansible_become": False, **variables}),
         ],
         cwd=tmp_path,
         capture_output=True,
@@ -344,6 +358,21 @@ def _ensure_status_row(tmp_path, config):
     )
     assert result.returncode == 0, result.stdout
     return int(result.stdout.rsplit("changed=", 1)[1].split()[0])
+
+
+def _ensure_status_row(tmp_path, config):
+    return _run_agents(
+        tmp_path,
+        "Read the omp config for the status row keys",
+        factory_omp_config=str(config),
+        factory_acpx_config=str(tmp_path / "absent-acpx.json"),
+    )
+
+
+def _ensure_acpx_default(tmp_path, config):
+    return _run_agents(
+        tmp_path, "Read the acpx config for the default agent", factory_acpx_config=str(config)
+    )
 
 
 def test_existing_omp_config_gets_the_status_row_keys_once(tmp_path):
@@ -404,3 +433,77 @@ def test_absent_omp_config_is_not_created_by_the_status_row_step(tmp_path):
     config = tmp_path / "config.yml"
     assert _ensure_status_row(tmp_path, config) == 0
     assert not config.exists()
+
+
+def test_acpx_config_that_still_defaults_to_codex_gets_omp_once(tmp_path):
+    config = tmp_path / "config.json"
+    seed = json.loads((ROOT / "config/acpx.json").read_text())
+    config.write_text(json.dumps({**seed, "defaultAgent": "codex", "ttl": 900}))
+    config.chmod(0o600)
+    assert _ensure_acpx_default(tmp_path, config) == 1
+    assert json.loads(config.read_text()) == {**seed, "ttl": 900}
+    assert config.stat().st_mode & 0o777 == 0o600
+    written = config.read_text()
+    assert _ensure_acpx_default(tmp_path, config) == 0
+    assert config.read_text() == written
+
+
+@pytest.mark.parametrize("text", ['{"defaultAgent": "claude"}\n', '{"ttl": 300}\n'])
+def test_acpx_config_with_another_default_is_left_alone(tmp_path, text):
+    config = tmp_path / "config.json"
+    config.write_text(text)
+    assert _ensure_acpx_default(tmp_path, config) == 0
+    assert config.read_text() == text
+
+
+def test_seeded_acpx_config_defaults_to_omp_and_absent_one_is_not_created(tmp_path):
+    config = tmp_path / "config.json"
+    assert _ensure_acpx_default(tmp_path, config) == 0
+    assert not config.exists()
+    seed = (ROOT / "config/acpx.json").read_text()
+    config.write_text(seed)
+    assert _ensure_acpx_default(tmp_path, config) == 0
+    assert config.read_text() == seed
+
+
+def _managed_environment(tmp_path, fleet_guards, release="1.0.0"):
+    variables = {
+        "factory_cfg": {"home": str(tmp_path), "profiles": {"fleet_guards": fleet_guards}},
+        "factory_latest": {"chrome-devtools-mcp": release},
+    }
+    result = subprocess.run(
+        [
+            Path(sys.executable).parent / "ansible",
+            "localhost",
+            "-i",
+            "localhost,",
+            "-c",
+            "local",
+            "-m",
+            "ansible.builtin.debug",
+            "-a",
+            "var=factory_managed_shell_env",
+            "-e",
+            f"@{ROOT / 'ansible/group_vars/all.yml'}",
+            "-e",
+            json.dumps(variables),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout
+    return json.loads(result.stdout.split("=>", 1)[1])["factory_managed_shell_env"]
+
+
+@pytest.mark.parametrize("fleet_guards", [False, True])
+def test_the_managed_environment_never_carries_a_process_wide_runtime_limit(tmp_path, fleet_guards):
+    assert set(_managed_environment(tmp_path, fleet_guards)) == {"CHROME_DEVTOOLS_AXI_MCP_PATH"}
+
+
+def test_a_new_chrome_devtools_mcp_release_leaves_the_managed_environment_unchanged(tmp_path):
+    before = _managed_environment(tmp_path, True, "1.0.0")
+    assert _managed_environment(tmp_path, True, "1.1.0") == before
+    assert before["CHROME_DEVTOOLS_AXI_MCP_PATH"].endswith(
+        "/chrome-devtools-mcp/current/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
+    )

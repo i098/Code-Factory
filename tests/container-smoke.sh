@@ -10,8 +10,8 @@
 # Container mode (inside the image; CMD of the `smoke` target):
 #   tests/container-smoke.sh --in-container [--only NAME,NAME]
 #   Exercises what the image actually contains, through the programs a user
-#   would run: managed tool versions compared with toolchain.lock.json, herdr
-#   and omp compared with the release the build resolved, a Herdr
+#   would run: managed tool versions compared with the releases the build
+#   resolved, a Herdr
 #   configuration that Herdr itself accepts and that matches the factory
 #   document, the user unit's ExecStart resolved and executed, a real headless
 #   `herdr server` brought up and shut down over its API socket, the repository
@@ -208,13 +208,9 @@ cf_python() {
     fi
 }
 
-lock_version() {
-    jq -er --arg tool "$1" '.tools[$tool].version' "${CF_ROOT}/toolchain.lock.json"
-}
-
-# herdr and omp track their latest release. The installer records the release
-# it installed in RESOLVED_STAMP; checks compare against that record, so an
-# upstream release published after the build cannot turn them red.
+# Every tool tracks its latest release. The installer records the releases it installed in RESOLVED_STAMP; checks compare
+# against that record, so an upstream release published after the build cannot
+# turn them red.
 RESOLVED_STAMP="${HOME}/.local/share/code-factory/resolved.json"
 resolved_version() {
     jq -er "$1" "${RESOLVED_STAMP}"
@@ -230,13 +226,14 @@ herdr_installed_bin() {
 # A second apply resolves upstream again and upgrades an image that upstream
 # has since overtaken; that is an upgrade, not a repeat change.
 image_is_current() {
-    local latest
-    latest=$(python3 "${CF_ROOT}/scripts/install_tools.py" --lock "${CF_ROOT}/toolchain.lock.json" \
-        --home "${HOME}" --resolve) || fail "could not resolve the latest herdr and omp releases"
-    [ "$(jq -c '[.herdr.version, .omp]' <<<"${latest}")" = "$(jq -c '[.herdr.version, .omp]' "${RESOLVED_STAMP}")" ] \
+    local latest versions='map_values(.version? // .)'
+    latest=$(python3 "${CF_ROOT}/scripts/install_tools.py" \
+        --home "${HOME}" --tools herdr,node,bun,uv --npm --development --resolve) \
+        || fail "could not resolve the latest releases"
+    [ "$(jq -cS "${versions}" <<<"${latest}")" = "$(jq -cS "${versions}" "${RESOLVED_STAMP}")" ] \
         && return 0
     printf 'image has %s but upstream now has %s; idempotence not measured\n' \
-        "$(jq -c '[.herdr.version, .omp]' "${RESOLVED_STAMP}")" "$(jq -c '[.herdr.version, .omp]' <<<"${latest}")"
+        "$(jq -cS "${versions}" "${RESOLVED_STAMP}")" "$(jq -cS "${versions}" <<<"${latest}")"
     return 1
 }
 
@@ -319,7 +316,7 @@ check_workspace() {
 }
 
 check_core_tools() {
-    local tool bin locked version
+    local tool bin expected version
     for tool in node bun uv; do
         bin="${HOME}/.local/bin/${tool}"
         [ -x "${bin}" ] || fail "missing managed launcher ${bin}"
@@ -327,36 +324,45 @@ check_core_tools() {
         version=$("${bin}" --version 2>&1) || fail "${tool} --version exited nonzero: ${version}"
         version=${version%%$'\n'*}
         [ -n "${version}" ] || fail "${tool} --version produced no output"
-        # An existing command is not enough: it must be the build the lock pins.
-        locked=$(lock_version "${tool}") || fail "toolchain.lock.json pins no version for ${tool}"
+        # An existing command is not enough: it must be the release the build resolved.
+        expected=$(resolved_version ".${tool}.version") || fail "${RESOLVED_STAMP} records no ${tool}"
         case "${version}" in
-            *"${locked}"*) ;;
-            *) fail "${tool} reports '${version}' but the lock pins ${locked}" ;;
+            *"${expected}"*) ;;
+            *) fail "${tool} reports '${version}' but expected ${expected}" ;;
         esac
-        printf '%-6s %-32s (lock %s)\n' "${tool}" "${version}" "${locked}"
+        printf '%-6s %-32s (expected %s)\n' "${tool}" "${version}" "${expected}"
     done
 }
 
-# The installed herdr and omp are exactly the releases the build resolved and
-# recorded in RESOLVED_STAMP.
+# The installed herdr, gh, no-mistakes, treehouse, omp, AXI tools, acpx and
+# chrome-devtools-mcp are exactly
+# the releases the build resolved and recorded in RESOLVED_STAMP.
 check_resolved_releases() {
-    local herdr omp banner prefix
+    local tool version banner package prefix
     [ -f "${RESOLVED_STAMP}" ] || fail "installer wrote no ${RESOLVED_STAMP}"
-    herdr=$(resolved_version .herdr.version)
-    omp=$(resolved_version .omp)
-    banner=$("${HOME}/.local/bin/herdr" --version 2>&1) || fail "herdr --version exited nonzero: ${banner}"
-    case "${banner%%$'\n'*}" in
-        *"${herdr}"*) ;;
-        *) fail "herdr reports '${banner%%$'\n'*}' but the build resolved ${herdr}" ;;
-    esac
-    prefix="${HOME}/.local/share/code-factory/omp/${omp}"
-    case "$(readlink -f "${HOME}/.local/bin/omp")" in
-        "${prefix}"/*) ;;
-        *) fail "omp resolves to $(readlink -f "${HOME}/.local/bin/omp"), expected the resolved release under ${prefix}" ;;
-    esac
-    [ "$(jq -r .version "${prefix}/node_modules/@oh-my-pi/pi-coding-agent/package.json")" = "${omp}" ] \
-        || fail "omp under ${prefix} is not version ${omp}"
-    printf 'herdr %s and omp %s match %s\n' "${herdr}" "${omp}" "${RESOLVED_STAMP}"
+    for tool in herdr gh no-mistakes treehouse; do
+        version=$(resolved_version ".\"${tool}\".version")
+        banner=$("${HOME}/.local/bin/${tool}" --version 2>&1) || fail "${tool} --version exited nonzero: ${banner}"
+        case "${banner%%$'\n'*}" in
+            *"${version}"*) ;;
+            *) fail "${tool} reports '${banner%%$'\n'*}' but the build resolved ${version}" ;;
+        esac
+        printf '%s %s\n' "${tool}" "${version}"
+    done
+    for tool in omp:@oh-my-pi/pi-coding-agent chrome-devtools-axi gh-axi lavish-axi quota-axi tasks-axi acpx \
+        chrome-devtools-mcp; do
+        package=${tool#*:}; tool=${tool%%:*}
+        version=$(resolved_version ".\"${tool}\"")
+        prefix="${HOME}/.local/share/code-factory/${tool}/${version}"
+        case "$(readlink -f "${HOME}/.local/bin/${tool}")" in
+            "${prefix}"/*) ;;
+            *) fail "${tool} resolves to $(readlink -f "${HOME}/.local/bin/${tool}"), expected the resolved release under ${prefix}" ;;
+        esac
+        [ "$(jq -r .version "${prefix}/node_modules/${package}/package.json")" = "${version}" ] \
+            || fail "${tool} under ${prefix} is not version ${version}"
+        printf '%s %s\n' "${tool}" "${version}"
+    done
+    printf 'installed releases match %s\n' "${RESOLVED_STAMP}"
 }
 
 check_herdr_install_layout() {
@@ -376,26 +382,6 @@ check_herdr_install_layout() {
         *) fail "versioned herdr executable did not identify itself" ;;
     esac
     printf 'herdr symlink -> %s\n' "${target}"
-}
-
-check_npm_tooling() {
-    local npm_root link target linked=0
-    npm_root="${HOME}/.local/share/code-factory/npm"
-    [ -d "${npm_root}" ] || fail "agents profile selected but ${npm_root} is missing"
-    for link in "${HOME}"/.local/bin/*; do
-        [ -L "${link}" ] || continue
-        target=$(readlink -f "${link}" 2>/dev/null || true)
-        case "${target}" in
-            "${npm_root}"/*)
-                [ -x "${target}" ] || fail "npm-linked command ${link} resolves to non-executable ${target}"
-                linked=$((linked + 1))
-                ;;
-        esac
-    done
-    [ "${linked}" -ge 1 ] || fail "no .local/bin command links point into ${npm_root}"
-    # Support binaries are only probed for presence: no agent CLI is executed
-    # here, so nothing can trigger first-run authentication or profile creation.
-    printf '%s npm-linked commands resolve into %s\n' "${linked}" "${npm_root}"
 }
 
 check_development_toolchain() {
@@ -668,7 +654,6 @@ check_factory_init_refuses_overwrite() {
 check_installer_idempotent() {
     local out
     out=$(python3 "${CF_ROOT}/scripts/install_tools.py" \
-            --lock "${CF_ROOT}/toolchain.lock.json" \
             --home "${HOME}" \
             --tools herdr,node,bun,uv \
             --resolved "$(cat "${RESOLVED_STAMP}")" \
@@ -740,10 +725,10 @@ check_login_shell_environment() {
 # What the no-mistakes gate and the PR review need on a fresh host: acp:omp as
 # the gate agent with acpx mapping omp to `omp acp`, no omp registry override,
 # ponytail-review's exit codes against a stub omp, and the fleet's minimum AXI
-# versions. Versions come from the installed package.json, so no agent CLI is executed.
+# versions. Versions come from RESOLVED_STAMP, which resolved-releases matched against
+# the installed package.json, so no agent CLI is executed.
 check_agent_gate() {
-    local npm_root name floor version stub row want omp_rc omp_out rc
-    npm_root="${HOME}/.local/share/code-factory/npm"
+    local name floor version stub row want omp_rc omp_out rc
     cf_python -c 'import sys, yaml; c = yaml.safe_load(open(sys.argv[1])); assert c["agent"] == ["acp:omp"] and "acp_registry_overrides" not in c' \
         "${HOME}/.no-mistakes/config.yaml" || fail "~/.no-mistakes/config.yaml does not make acp:omp the gate agent"
     jq -e '.agents.omp.command == "omp acp"' "${HOME}/.acpx/config.json" >/dev/null || fail "~/.acpx/config.json does not map omp to omp acp"
@@ -773,11 +758,15 @@ check_agent_gate() {
     trap - EXIT
     for name in quota-axi:0.1.54 tasks-axi:0.2.6; do
         floor=${name#*:}; name=${name%%:*}
-        version=$(jq -r .version "${npm_root}/node_modules/${name}/package.json")
+        version=$(resolved_version ".\"${name}\"")
         printf '%s\n%s\n' "${floor}" "${version}" | sort -C -V || fail "${name} ${version} is below the fleet floor ${floor}"
         printf '%s %s (floor %s)\n' "${name}" "${version}" "${floor}"
     done
-    printf 'gate agent acp:omp via acpx, ponytail-review on omp\n'
+    for name in ponytail i-have-adhd caveman; do
+        jq -e --arg id "${name}@${name}" '.plugins[$id] | length > 0' "${HOME}/.omp/plugins/installed_plugins.json" >/dev/null \
+            || fail "omp plugin ${name} is not installed"
+    done
+    printf 'gate agent acp:omp via acpx, ponytail-review on omp, omp plugins installed\n'
 }
 
 container_mode() {
@@ -797,7 +786,6 @@ container_mode() {
     run_check resolved-releases            check_resolved_releases
     run_check herdr-install-layout         check_herdr_install_layout
     run_check herdr-unit                   check_herdr_unit
-    run_check npm-tooling                  check_npm_tooling
     run_check development-toolchain        check_development_toolchain
     run_check login-shell-environment      check_login_shell_environment
     run_check agent-gate                   check_agent_gate

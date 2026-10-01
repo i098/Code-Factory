@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import runpy
 import subprocess
 import tarfile
 import zipfile
@@ -96,50 +97,247 @@ def test_download_rejects_plain_http(tmp_path):
         installer.download("http://example.test/tool", "0" * 64, tmp_path / "download")
 
 
-def release(digest):
-    asset = {
-        "name": "herdr-linux-x86_64",
-        "browser_download_url": "https://github.com/herdrdev/herdr/releases/download/v9.9.9/herdr-linux-x86_64",
-        "digest": digest,
-    }
-    return {"tag_name": "v9.9.9", "assets": [asset]}
+# What each fake GitHub release publishes for linux-x86_64: tag and asset name.
+RELEASES = {
+    "herdrdev/herdr": ("v9.9.9", "herdr-linux-x86_64"),
+    "oven-sh/bun": ("bun-v9.9.9", "bun-linux-x64-baseline.zip"),
+    "cli/cli": ("v9.9.9", "gh_9.9.9_linux_amd64.tar.gz"),
+    "kunchenguid/no-mistakes": ("v9.9.9", "no-mistakes-v9.9.9-linux-amd64.tar.gz"),
+    "kunchenguid/treehouse": ("v9.9.9", "treehouse-v9.9.9-linux-amd64.tar.gz"),
+    "astral-sh/uv": ("9.9.9", "uv-x86_64-unknown-linux-gnu.tar.gz"),
+    "h4ckf0r0day/obscura": ("v9.9.9", "obscura-x86_64-linux.tar.gz"),
+}
 
 
-def registries(monkeypatch, herdr_release):
-    def urlopen(url, **kwargs):
-        url = getattr(url, "full_url", url)
-        body = herdr_release if url == installer.HERDR_LATEST else {"version": "18.9.9"}
+def upstream(monkeypatch, unverified=None, seen=None):
+    """Fake GitHub, nodejs.org, rustup, npm and PyPI; `unverified` publishes no SHA-256 for that source."""
+
+    def urlopen(request, **kwargs):
+        url = request.full_url
+        if seen is not None:
+            seen.append((url, request.get_header("Authorization")))
+        if url.startswith("https://api.github.com/repos/"):
+            repo = url.removeprefix("https://api.github.com/repos/").removesuffix(
+                "/releases/latest"
+            )
+            tag, name = RELEASES[repo]
+            digest = None if repo == unverified else "sha256:" + "a" * 64
+            asset = {
+                "name": name,
+                "browser_download_url": f"https://github.com/{name}",
+                "digest": digest,
+            }
+            body = {"tag_name": tag, "assets": [asset]}
+        elif url == "https://nodejs.org/dist/index.json":
+            body = [{"version": "v9.99.0"}, {"version": "v30.1.0"}]
+        elif url == "https://nodejs.org/dist/v30.1.0/SHASUMS256.txt":
+            sums = "" if unverified == "node" else "b" * 64 + "  node-v30.1.0-linux-x64.tar.xz\n"
+            return io.BytesIO(("c" * 64 + "  node-v30.1.0-linux-arm64.tar.xz\n" + sums).encode())
+        elif url == "https://static.rust-lang.org/rustup/release-stable.toml":
+            return io.BytesIO(b"schema-version = '1'\nversion = '9.9.9'\n")
+        elif url.endswith("/rustup-init.sha256"):
+            checksum = "" if unverified == "rustup-init" else "d" * 64
+            return io.BytesIO(f"{checksum} *./rustup-init\n".encode())
+        elif url == "https://pypi.org/pypi/psutil/json":
+            files = [] if unverified == "psutil" else [{"digests": {"sha256": "e" * 64}}]
+            body = {"info": {"version": "9.9.9"}, "urls": files}
+        else:
+            body = {"version": "18.9.9"}
         return io.BytesIO(json.dumps(body).encode())
 
     monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
 
 
-def test_latest_herdr_is_pinned_to_the_digest_its_release_publishes(monkeypatch):
-    registries(monkeypatch, release("sha256:" + "a" * 64))
-    latest = installer.resolve_latest("linux-x86_64")
-    assert latest["omp"] == "18.9.9"
-    assert latest["herdr"]["version"] == "9.9.9"
-    assert latest["herdr"]["assets"]["linux-x86_64"]["sha256"] == "a" * 64
+EVERYTHING = {
+    *installer.GITHUB_LATEST,
+    *installer.NPM_LATEST,
+    "node",
+    "rustup-init",
+    "supabase",
+    "psutil",
+}
 
 
-@pytest.mark.parametrize("digest", [None, "", "md5:abc"])
-def test_herdr_release_without_a_checksum_is_refused(monkeypatch, digest):
-    registries(monkeypatch, release(digest))
+def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeypatch):
+    upstream(monkeypatch)
+    latest = installer.resolve_latest("linux-x86_64", EVERYTHING)
+    for tool in ("herdr", "bun", "gh", "no-mistakes", "treehouse", "uv", "obscura"):
+        assert latest[tool]["version"] == "9.9.9"
+        assert latest[tool]["assets"]["linux-x86_64"]["sha256"] == "a" * 64
+    assert latest["gh"]["assets"]["linux-x86_64"]["format"] == "tar"
+    assert latest["bun"]["assets"]["linux-x86_64"]["format"] == "zip"
+    # The newest Node release, not the first index entry, verified by SHASUMS256.
+    node = latest["node"]["assets"]["linux-x86_64"]
+    assert latest["node"]["version"] == "30.1.0"
+    assert node["url"] == "https://nodejs.org/dist/v30.1.0/node-v30.1.0-linux-x64.tar.xz"
+    assert node["sha256"] == "b" * 64
+    rustup = latest["rustup-init"]["assets"]["linux-x86_64"]
+    assert rustup["url"].endswith("/9.9.9/x86_64-unknown-linux-gnu/rustup-init")
+    assert (rustup["sha256"], rustup["format"]) == ("d" * 64, "file")
+    assert latest["psutil"] == {"version": "9.9.9", "sha256": ["e" * 64]}
+    for tool in (*installer.NPM_LATEST, "supabase"):
+        assert latest[tool] == "18.9.9"
+
+
+@pytest.mark.parametrize("source", [*RELEASES, "node", "rustup-init", "psutil"])
+def test_release_without_a_published_checksum_is_refused(monkeypatch, source):
+    upstream(monkeypatch, unverified=source)
     with pytest.raises(ValueError, match="refusing an unverified binary"):
-        installer.resolve_latest("linux-x86_64")
+        installer.resolve_latest("linux-x86_64", EVERYTHING)
 
 
 @pytest.mark.parametrize(("env", "expected"), [("env-token", "Bearer env-token"), ("", None)])
-def test_herdr_lookup_authenticates_with_github_token_else_anonymous(monkeypatch, env, expected):
+def test_github_token_goes_only_to_the_github_api(monkeypatch, env, expected):
     seen = []
-
-    def urlopen(url, **kwargs):
-        if getattr(url, "full_url", url) == installer.HERDR_LATEST:
-            seen.append(url.get_header("Authorization"))
-            return io.BytesIO(json.dumps(release("sha256:" + "a" * 64)).encode())
-        return io.BytesIO(json.dumps({"version": "18.9.9"}).encode())
-
     monkeypatch.setenv("GITHUB_TOKEN", env)
-    monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
-    installer.resolve_latest("linux-x86_64")
-    assert seen == [expected]
+    upstream(monkeypatch, seen=seen)
+    installer.resolve_latest("linux-x86_64", EVERYTHING)
+    github = {auth for url, auth in seen if url.startswith("https://api.github.com/")}
+    assert github == {expected}
+    assert {auth for url, auth in seen if not url.startswith("https://api.github.com/")} == {None}
+
+
+def run_cli(monkeypatch, capsys, tmp_path, *argv):
+    monkeypatch.setattr(installer, "platform_key", lambda: "linux-x86_64")
+    monkeypatch.setattr(
+        installer.sys, "argv", ["install_tools.py", "--home", str(tmp_path), *argv, "--resolve"]
+    )
+    installer.main()
+    return json.loads(capsys.readouterr().out)
+
+
+def test_resolve_covers_only_the_requested_tools(monkeypatch, capsys, tmp_path):
+    seen = []
+    upstream(monkeypatch, unverified="psutil", seen=seen)
+    latest = run_cli(monkeypatch, capsys, tmp_path, "--tools", "uv")
+    assert set(latest) == {"uv"}
+    assert [url for url, _ in seen] == ["https://api.github.com/repos/astral-sh/uv/releases/latest"]
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (["--tools", "herdr,node"], {"herdr", "node"}),
+        (["--tools", "uv", "--development"], {"uv", "rustup-init"}),
+        (
+            ["--tools", "uv", "--npm"],
+            {"uv", *installer.AGENT_TOOLS, *installer.NPM_LATEST},
+        ),
+        (["--tools", "uv", "--also", "psutil,supabase"], {"uv", "psutil", "supabase"}),
+    ],
+)
+def test_resolve_selection_matches_what_the_flags_install(
+    monkeypatch, capsys, tmp_path, argv, expected
+):
+    upstream(monkeypatch)
+    assert set(run_cli(monkeypatch, capsys, tmp_path, *argv)) == expected
+
+
+def test_resolve_refuses_a_source_that_does_not_exist(monkeypatch, capsys, tmp_path):
+    upstream(monkeypatch)
+    with pytest.raises(ValueError, match="no latest release source for: nonesuch"):
+        run_cli(monkeypatch, capsys, tmp_path, "--tools", "uv", "--also", "nonesuch")
+
+
+def test_the_dropped_npm_set_loses_its_links_but_keeps_the_prefix_and_other_installs(tmp_path):
+    bin_dir = tmp_path / ".local/bin"
+    bin_dir.mkdir(parents=True)
+    legacy = tmp_path / ".local/share/code-factory/npm/node_modules"
+    for name in ("codex", "pnpm"):
+        script = legacy / name / "bin.js"
+        script.parent.mkdir(parents=True)
+        script.write_text("#!/bin/sh\n")
+        (bin_dir / name).symlink_to(script)
+    elsewhere = tmp_path / ".bun/bin/pnpx"
+    elsewhere.parent.mkdir(parents=True)
+    elsewhere.write_text("#!/bin/sh\n")
+    (bin_dir / "pnpx").symlink_to(elsewhere)
+    assert installer.retire_legacy_npm(tmp_path)
+    assert not (bin_dir / "codex").is_symlink()
+    assert not (bin_dir / "pnpm").is_symlink()
+    assert (legacy / "codex/bin.js").is_file()
+    assert (legacy / "pnpm/bin.js").is_file()
+    assert (bin_dir / "pnpx").resolve() == elsewhere
+    assert not installer.retire_legacy_npm(tmp_path)
+
+
+def test_omp_plugins_are_managed_from_the_target_home_whatever_the_installer_cwd(
+    monkeypatch, tmp_path
+):
+    home = tmp_path / "home"
+    omp = home / ".local/bin/omp"
+    omp.parent.mkdir(parents=True)
+    omp.write_text(
+        "#!/bin/sh\n"
+        f'pwd >> "{tmp_path}/cwds"\n'
+        'case "$2" in list) echo \'{"marketplace": []}\' ;; upgrade) echo "up to date" ;; esac\n'
+    )
+    omp.chmod(0o755)
+    elsewhere = tmp_path / "checkout-under-another-users-home"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    installer.omp_plugins(home, {})
+    assert set((tmp_path / "cwds").read_text().split()) == {str(home)}
+
+
+def test_current_follows_the_newest_release_and_a_repeat_changes_nothing(tmp_path):
+    tool = tmp_path / "chrome-devtools-mcp"
+    for version in ("1.0.0", "1.1.0"):
+        (tool / version).mkdir(parents=True)
+    assert installer.point_current(tool / "1.0.0")
+    assert not installer.point_current(tool / "1.0.0")
+    assert (tool / "current").resolve() == tool / "1.0.0"
+    assert installer.point_current(tool / "1.1.0")
+    assert (tool / "current").resolve() == tool / "1.1.0"
+    assert (tool / "1.0.0").is_dir()
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        ([], {"herdr": {"version": "1"}, "uv": {"version": "1"}}),
+        (
+            ["--resolved", json.dumps({"uv": {"version": "2"}})],
+            {"herdr": {"version": "1"}, "uv": {"version": "2"}},
+        ),
+    ],
+)
+def test_an_apply_merges_its_resolved_record_into_the_existing_one(
+    monkeypatch, tmp_path, argv, expected
+):
+    record = tmp_path / ".local/share/code-factory/resolved.json"
+    record.parent.mkdir(parents=True)
+    record.write_text(json.dumps({"herdr": {"version": "1"}, "uv": {"version": "1"}}) + "\n")
+    upstream(monkeypatch)
+    monkeypatch.setattr(installer, "platform_key", lambda: "linux-x86_64")
+    monkeypatch.setattr(installer, "install_asset", lambda *args: False)
+    monkeypatch.setattr(
+        installer.sys, "argv", ["install_tools.py", "--home", str(tmp_path), "--tools", "uv", *argv]
+    )
+    installer.main()
+    assert json.loads(record.read_text()) == expected
+
+
+def test_a_failed_command_reports_why_it_failed(monkeypatch, capsys, tmp_path):
+    rustup = tmp_path / ".cargo/bin/rustup"
+    rustup.parent.mkdir(parents=True)
+    rustup.write_text("#!/bin/sh\necho 'error: network down' >&2\nexit 1\n")
+    rustup.chmod(0o755)
+    payload = b"#!/bin/sh\n"
+    resolved = {}
+    for name in ("uv", "rustup-init"):
+        resolved[name] = asset(payload)
+        resolved[name]["assets"]["linux-x86_64"]["binaries"] = {name: name}
+    monkeypatch.setattr(installer.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(installer.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(installer.urllib.request, "urlopen", lambda *a, **k: Download(payload))
+    monkeypatch.setattr(
+        installer.sys,
+        "argv",
+        ["install_tools.py", "--home", str(tmp_path), "--tools", "uv", "--development"]
+        + ["--resolved", json.dumps(resolved)],
+    )
+    with pytest.raises(SystemExit) as exit_status:
+        runpy.run_path(str(SPEC.origin), run_name="__main__")
+    assert exit_status.value.code == 1
+    assert "error: network down" in capsys.readouterr().err

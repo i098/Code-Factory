@@ -14,9 +14,9 @@ ExecStart={{ factory_herdr_bin }} server
 WorkingDirectory={{ factory_cfg.workspace }}
 Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 {% if factory_cfg.profiles.agents | bool %}
+# The installed MCP entrypoint, so AXI never resolves a floating npx package.
 {% for key, value in factory_managed_shell_env | dictsort %}
-# Pinned MCP entrypoint, so AXI never resolves a floating npx package.
-Environment={{ key }}={{ value }}
+Environment="{{ key }}={{ value }}"
 {% endfor %}
 {% endif %}
 Restart=on-failure

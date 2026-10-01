@@ -20,13 +20,11 @@ factory_cfg: "{{ factory_defaults | combine(factory | default({}, true), recursi
 # the checkout.
 code_factory_repo: "{{ playbook_dir | dirname }}"
 factory_installer: "{{ code_factory_repo }}/scripts/install_tools.py"
-factory_lock_file: "{{ code_factory_repo }}/toolchain.lock.json"
 factory_pruner_source: "{{ code_factory_repo }}/maintenance/chrome-autoprune.py"
-factory_pruner_requirements: "{{ code_factory_repo }}/maintenance/requirements.txt"
 
-# herdr and omp track their latest release: tasks/preflight.yml resolves them
+# Nothing is pinned: tasks/preflight.yml resolves every tool's latest release
 # once per run into factory_latest, and that is what the run installs and
-# tasks/verify.yml asserts. Every other version comes from the reviewed lock.
+# tasks/verify.yml asserts for herdr and omp.
 factory_herdr_version: "{{ factory_latest.herdr.version }}"
 factory_omp_version: "{{ factory_latest.omp }}"
 
@@ -50,16 +48,18 @@ factory_allow_unsupported_os: false
 factory_local_bin: "{{ factory_cfg.home }}/.local/bin"
 factory_share_dir: "{{ factory_cfg.home }}/.local/share/code-factory"
 factory_tools_root: "{{ factory_share_dir }}/tools"
-# Locked npm set installed by `install_tools.py --npm` (agents profile).
-factory_npm_root: "{{ factory_share_dir }}/npm"
 factory_omp_root: "{{ factory_share_dir }}/omp/{{ factory_omp_version }}"
-# AXI must launch the pinned chrome-devtools MCP build instead of resolving
-# `npx ...@latest` at runtime. Exported to the managed shell environment and
-# to the Herdr service environment.
-factory_chrome_devtools_mcp_path: "{{ factory_npm_root }}/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
+# AXI must launch the chrome-devtools MCP build the installer installed (the
+# latest release) instead of resolving `npx ...@latest` at runtime. The
+# installer re-points `current` at that release, so this text, and with it the
+# Herdr unit and the profile block, stays the same between releases. Exported
+# to the managed shell environment and to the Herdr service environment.
+factory_chrome_devtools_mcp_path: "{{ factory_share_dir }}/chrome-devtools-mcp/current/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
 # Environment shared by the interactive shell profile and the Herdr unit.
 # Consumed only when the agents profile is on, because the npm set that
-# provides the MCP entrypoint is installed by `--npm`.
+# provides the MCP entrypoint is installed by `--npm`. Nothing here may be a
+# process-wide runtime limit (NODE_OPTIONS, BUN_OPTIONS): it would also reach
+# the chrome-devtools-axi bridge, chrome-devtools-mcp and acpx.
 factory_managed_shell_env:
   CHROME_DEVTOOLS_AXI_MCP_PATH: "{{ factory_chrome_devtools_mcp_path }}"
 # Contract: compute the unit ExecStart directly, never /usr/local/bin or $PATH.
@@ -77,8 +77,9 @@ factory_vnc_chrome_profile: "{{ factory_cfg.home }}/.vnc-chrome-profile"
 # psutil.Process.net_connections(), which exists from psutil 6 onwards, while
 # Ubuntu 24.04 ships python3-psutil 5.9. Instead of shimming the deprecated
 # API or pip-installing into the distribution interpreter, the pruner runs on
-# an account-owned virtualenv built by the managed uv and filled from
-# maintenance/requirements.txt with --require-hashes. The unit references only
+# an account-owned virtualenv built by the managed uv and filled with the latest
+# psutil, --require-hashes against the digests PyPI publishes for that release
+# (factory_latest.psutil). The unit references only
 # paths under the account's home, so the timer keeps working after the
 # repository checkout is gone.
 factory_uv_bin: "{{ factory_local_bin }}/uv"
@@ -86,12 +87,15 @@ factory_pruner_script: "{{ factory_local_bin }}/chrome-autoprune.py"
 factory_pruner_venv: "{{ factory_share_dir }}/pruner-venv"
 factory_pruner_python: "{{ factory_pruner_venv }}/bin/python"
 # Written after a successful install; carries the digest of the requirements
-# file that produced the runtime, so a changed pin reinstalls and an unchanged
-# pin is a no-op on the second apply.
+# that produced the runtime, so a new psutil release reinstalls and an
+# unchanged one is a no-op on the second apply.
 factory_pruner_stamp: "{{ factory_pruner_venv }}/.code-factory-runtime.json"
-factory_pruner_requirements_text: "{{ lookup('ansible.builtin.file', factory_pruner_requirements) }}"
+factory_pruner_requirements: "{{ factory_share_dir }}/pruner-requirements.txt"
+factory_pruner_psutil_version: "{{ factory_latest.psutil.version }}"
+factory_pruner_requirements_text: >-
+  psutil=={{ factory_pruner_psutil_version }}
+  {{ factory_latest.psutil.sha256 | map('regex_replace', '^', '--hash=sha256:') | join(' ') }}
 factory_pruner_requirements_digest: "{{ factory_pruner_requirements_text | hash('sha256') }}"
-factory_pruner_psutil_version: '{{ factory_pruner_requirements_text | regex_findall("(?m)^psutil==([A-Za-z0-9][A-Za-z0-9._-]*)") | first | default("", true) }}'
 # The base interpreter of that virtualenv. Pinned to the distribution
 # interpreter so no managed Python is downloaded behind the operator's back.
 factory_pruner_base_python: /usr/bin/python3
@@ -152,7 +156,7 @@ factory_development_packages:
   - python3-dev
   - cmake
   - ripgrep
-# No python3-psutil here on purpose: the pruner runs on its own hash-pinned
+# No python3-psutil here on purpose: the pruner runs on its own hash-verified
 # virtualenv (factory_pruner_venv), not on the distribution interpreter.
 factory_docker_packages:
   - docker.io
@@ -174,6 +178,18 @@ factory_desktop_packages:
 
 # --- Tool installer ---------------------------------------------------------
 factory_core_tools: [herdr, node, bun, uv]
+# The installer flags that choose which tools a run covers. tasks/preflight.yml
+# resolves exactly this set (plus the sources Ansible installs itself) and
+# tasks/tools.yml installs it, so a host never resolves, and never fails on, a
+# release it does not install.
+factory_installer_selection: >-
+  {{ ['--tools', factory_core_tools | join(',')]
+     + (['--npm'] if (factory_cfg.profiles.agents | bool) else [])
+     + (['--development'] if (factory_cfg.profiles.development | bool) else []) }}
+factory_installer_also: >-
+  {{ (['psutil'] if ((factory_cfg.profiles.agents | bool)
+                     and (factory_cfg.browser_prune.enabled | bool)) else [])
+     + (['obscura', 'supabase'] if (factory_cfg.profiles.fleet_guards | bool) else []) }}
 
 # --- Herdr static config ----------------------------------------------------
 # Only the reviewed, non-secret subset is templated. experimental.pane_history
@@ -203,6 +219,7 @@ factory_prune_timeout_seconds: 90
 # first_write: true means the file is written only when it does not exist, so
 # an account that already holds provider settings is never overwritten.
 factory_omp_config: "{{ factory_cfg.home }}/.omp/agent/config.yml"
+factory_acpx_config: "{{ factory_cfg.home }}/.acpx/config.json"
 factory_agent_config_files:
   - src: config/omp.yml
     dest: "{{ factory_omp_config }}"
@@ -223,7 +240,7 @@ factory_agent_config_files:
     mode: "0600"
     first_write: true
   - src: config/acpx.json
-    dest: "{{ factory_cfg.home }}/.acpx/config.json"
+    dest: "{{ factory_acpx_config }}"
     dir_mode: "0700"
     mode: "0600"
     first_write: true
@@ -276,11 +293,13 @@ factory_shared_supabase_cli: "{{ factory_shared_supabase_dir }}/node_modules/.bi
 factory_shared_supabase_project: "{{ factory_cfg.fleet.supabase_project_id }}"
 factory_shared_supabase_db_volume: "supabase_db_{{ factory_shared_supabase_project }}"
 factory_shared_supabase_storage_volume: "supabase_storage_{{ factory_shared_supabase_project }}"
-# Pinned by fleet/shared-supabase/package-lock.json; read here for the version check.
-factory_shared_supabase_cli_version: "{{ (lookup('ansible.builtin.file', factory_fleet_sources ~ '/shared-supabase/package.json') | from_json).dependencies.supabase }}"
+# The npm registry's latest supabase, resolved once per run (factory_latest).
+factory_shared_supabase_cli_version: "{{ factory_latest.supabase }}"
 factory_fleet_browsers_dir: "{{ factory_fleet_dir }}/browsers"
-factory_browser_obscura_url: "https://github.com/h4ckf0r0day/obscura/releases/download/v{{ factory_cfg.browsers.obscura_version }}/obscura-x86_64-linux.tar.gz"
-factory_browser_obscura_checksum: "sha256:{{ factory_cfg.browsers.obscura_sha256 }}"
+# The latest Obscura release for this platform, with the SHA-256 GitHub
+# publishes for the asset; each release extracts into its own directory.
+factory_browser_obscura: "{{ factory_latest.obscura.assets[factory_platform] }}"
+factory_browser_obscura_dir: "{{ factory_fleet_browsers_dir }}/obscura-{{ factory_latest.obscura.version }}"
 
 # Storage guard (fleet/doctor/storage-guard.sh, every 5 min). Use% of the
 # filesystems holding /, /var/log, the home and Docker's data root: WARN alerts

@@ -10,14 +10,8 @@
 # start_services=false and disables the docker/tailscale/desktop profiles, so the
 # playbook performs file/tool convergence only.
 #
-# Base image pinned by digest, verified 2026-09-15 against registry-1.docker.io:
-#   ubuntu:24.04
-#     index digest  sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254
-#     annotations   org.opencontainers.image.version=24.04
-#                   org.opencontainers.image.created=2026-09-05T00:00:00Z
-#                   org.opencontainers.image.source=https://git.launchpad.net/cloud-images/+oci/ubuntu-base
-#     linux/amd64   sha256:a61567bd31828687156d735ea8eb01ba4e37636e225dd6a48ba94136a70d9d61
-#     linux/arm64   sha256:ec0b1c9058e44c837a21c3f9d8a3d5e9aaa94ed28edceb18e154af5efecf0950
+# Base image: ubuntu:latest, the newest Ubuntu LTS. Nothing is pinned; the
+# registry's content digests verify the layers that are pulled.
 #
 # Build targets:
 #   base    OS packages and the factory account only (no repository content)
@@ -26,13 +20,13 @@
 #
 # Distribution packages are intentionally not version-frozen: docs/security.md
 # treats operating-system security updates as an OS responsibility rather than
-# pinning a whole vulnerable package index. Reproducibility comes from the base
-# image digest plus the checksum-pinned tool lock consumed by the installer.
+# pinning a whole vulnerable package index. Every tool the installer adds is
+# its latest release, verified against the checksum its publisher posts (the
+# three omp marketplace plugins are the one exception: no publisher posts one).
 
-ARG UBUNTU_IMAGE=ubuntu:24.04
-ARG UBUNTU_DIGEST=sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254
+ARG UBUNTU_IMAGE=ubuntu:latest
 
-FROM ${UBUNTU_IMAGE}@${UBUNTU_DIGEST} AS base
+FROM ${UBUNTU_IMAGE} AS base
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG FACTORY_USER=coder
@@ -44,7 +38,7 @@ ARG FACTORY_WORKSPACE=/home/coder/Dev
 # Prerequisites for: the uv bootstrap, ansible-core running against localhost
 # (ansible.builtin.apt imports python3-apt from the system interpreter, so it is
 # installed here instead of being auto-installed mid-playbook), the
-# checksum-pinned tool installer (curl/ca-certificates/unzip/xz), the
+# checksum-verifying tool installer (curl/ca-certificates/unzip/xz), the
 # development profile (rustup toolchains need a C toolchain and pkg-config),
 # and the behavior smoke script (procps/iproute2/jq).
 RUN set -eux; \
@@ -144,8 +138,10 @@ WORKDIR /opt/code-factory
 # smoke script are invoked directly, including from a context that lost them.
 RUN set -eux; chmod +x bootstrap.sh factory tests/container-smoke.sh
 
-# Pinned uv bootstrap + locked Python dependencies (no provisioning yet).
-RUN set -eux; ./bootstrap.sh
+# Latest uv bootstrap + locked Python dependencies (no provisioning yet). The
+# one uv lookup takes the same optional `github_token` secret as `apply`.
+RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
+    set -eux; ./bootstrap.sh
 
 # Schema validation through the repository's own validator.
 RUN set -eux; ./factory validate --config "${FACTORY_CONFIG}"
@@ -155,13 +151,14 @@ RUN set -eux; ./factory validate --config "${FACTORY_CONFIG}"
 # ordinary container cannot host.
 RUN set -eux; uv run --project . --locked python containers/assert-image-config.py "${FACTORY_CONFIG}"
 
-# The real convergence run. `apply` installs the checksum-pinned agent and
-# development toolchain through scripts/install_tools.py and renders the
-# user-scope files; start_services=false keeps it off systemd and linger.
-# The optional `github_token` BuildKit secret authenticates the latest-herdr
-# lookup (shared CI runner IPs exhaust the unauthenticated API budget). It is
-# exposed to this step only, never as an ARG, ENV, layer file or history entry;
-# without it the lookup runs unauthenticated.
+# The real convergence run. `apply` installs the latest, checksum-verified
+# agent and development toolchain (the three omp marketplace plugins are the one
+# unverified exception) through scripts/install_tools.py and renders
+# the user-scope files; start_services=false keeps it off systemd and linger.
+# The optional `github_token` BuildKit secret authenticates the latest-release
+# lookups (shared CI runner IPs exhaust the unauthenticated API budget). It is
+# exposed to the lookup steps only (bootstrap and this one), never as an ARG,
+# ENV, layer file or history entry; without it the lookup runs unauthenticated.
 RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
     set -eux; ./factory apply --config "${FACTORY_CONFIG}"
 
@@ -171,8 +168,7 @@ ENV CODE_FACTORY_IMAGE=worker \
 LABEL org.opencontainers.image.title="code-factory-worker" \
       org.opencontainers.image.description="Isolated non-root Code Factory worker; no systemd, Tailscale or desktop." \
       org.opencontainers.image.source="https://github.com/undeemed/Code-Factory" \
-      org.opencontainers.image.base.name="docker.io/library/ubuntu:24.04" \
-      org.opencontainers.image.base.digest="sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254"
+      org.opencontainers.image.base.name="docker.io/library/ubuntu:latest"
 
 WORKDIR ${FACTORY_WORKSPACE}
 CMD ["/bin/bash"]

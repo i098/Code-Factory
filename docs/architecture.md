@@ -4,7 +4,7 @@
 
 Use Ansible core for the native Ubuntu host and Docker Compose for isolated workloads. Keep Herdr, SSH, the user service manager, and browser lifecycle management on the host.
 
-The source machine already uses Ubuntu packages, user-level systemd services, home-directory tools, and SSH. Ansible manages those objects directly without moving the machine to a new package store or OS. The playbook consumes a validated host document; native tools have versioned URLs and SHA-256 values, npm has a dependency lock, and the provisioning Python environment has `uv.lock`.
+The source machine already uses Ubuntu packages, user-level systemd services, home-directory tools, and SSH. Ansible manages those objects directly without moving the machine to a new package store or OS. The playbook consumes a validated host document; native tools are verified against publisher checksums, npm tools against registry integrity, and the provisioning Python environment has `uv.lock`.
 
 | Candidate | Fit here | Decision |
 | --- | --- | --- |
@@ -15,7 +15,7 @@ The source machine already uses Ubuntu packages, user-level systemd services, ho
 | OpenTofu | Cloud instances, networks, DNS, resource lifecycle | Add when a provider/resource contract is chosen; no pretend provider configuration is shipped |
 | cloud-init | Initial VM prerequisites before configuration management | Small vendor-neutral bootstrap input only |
 
-This is repeatable configuration, not a bit-identical OS image. Ubuntu packages receive distribution security updates. Exact agent/native-tool versions are deliberately locked. Rebuilding an environment does not recreate authenticated accounts, databases, or running processes.
+This is repeatable configuration, not a bit-identical OS image. Ubuntu packages receive distribution security updates. Everything the recipe installs is latest, verified by published checksums (the three omp marketplace plugins are the one exception: no publisher checksums them), so a later rebuild installs newer versions. Rebuilding an environment does not recreate authenticated accounts, databases, or running processes.
 
 ## Host and container boundary
 
@@ -27,7 +27,7 @@ Use a Linux host for the native recipe. macOS and other client devices can reach
 
 ### Docker worker
 
-The Dockerfile's `worker` target is an isolated, non-root, devcontainer-style image built by the same recipe. It runs `./factory apply --config containers/factory.container.yml`, which sets `start_services: false` and `enable_linger: false` and turns off the `docker`, `tailscale`, `desktop`, and `firstmate` profiles and the browser pruner. The image carries the pinned agent and development toolchain and the rendered agent configs, with no systemd services, linger, or Docker-in-Docker. The devcontainer, Compose, and CI use the same image.
+The Dockerfile's `worker` target is an isolated, non-root, devcontainer-style image built by the same recipe. It runs `./factory apply --config containers/factory.container.yml`, which sets `start_services: false` and `enable_linger: false` and turns off the `docker`, `tailscale`, `desktop`, and `firstmate` profiles and the browser pruner. The image carries the agent and development toolchain and the rendered agent configs, with no systemd services, linger, or Docker-in-Docker. The devcontainer, Compose, and CI use the same image.
 
 ```bash
 docker build --target worker --tag code-factory/worker .
@@ -53,9 +53,9 @@ Host sizing and every auto pruner are listed in [Capacity and pruners](capacity.
 
 ## Reproducibility policy
 
-1. Update native versions and both architecture hashes together in `toolchain.lock.json`; never resolve a mutable `latest` installer during deployment. The one exception is herdr: each apply resolves its latest release once and verifies the asset against the SHA-256 that release publishes, refusing a release without one.
-2. Update exact npm dependencies and regenerate `tools/npm/package-lock.json` together. Do not copy a live global package directory. The one exception is omp, which each apply resolves to the registry's latest version and installs exactly.
-3. Change Python dependencies with `uv lock` and commit the lock.
+1. Everything latest, verified by published checksums. Each apply resolves the newest release of every tool the host installs, once (`scripts/install_tools.py --resolve`, with the same `--tools`, `--npm` and `--development` selection as the install), installs exactly that, and verifies each download against the checksum its publisher posts for that exact release. A release without a published checksum is refused; the one exception is the omp marketplace plugins, which no publisher checksums. What each source is verified against is in [Dependencies](dependencies.md) and [Primary sources](#primary-sources).
+2. Do not copy a live global package directory.
+3. Two locks stay, because they are this repository's own development environment rather than installed tools: change Python dependencies with `uv lock` and commit the lock, and keep each GitHub Action pinned to the commit SHA of its latest release, which `.github/dependabot.yml` advances weekly.
 4. Keep machine differences in ignored `.local/host.yml`; schema validation precedes provisioning.
 5. Do not force, stash, reset, or overwrite a modified Firstmate checkout or an unmanaged command. Resolve that conflict explicitly.
 6. Keep authentication and mutable application state outside the recipe. Provider model access must be checked on the destination account.
@@ -66,15 +66,17 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on pushes to `main`, on every p
 
 - `uv sync --locked --group dev`, then `ruff check` and `pytest`.
 - `./factory validate` for `config/default.yml` and `containers/factory.container.yml`.
-- Audits of the Dockerfile, devcontainer, and Compose definitions (digest-pinned images, no host namespaces or socket, resource caps).
+- Audits of the Dockerfile, devcontainer, and Compose definitions (the image builds from `ubuntu:latest`, Compose services are digest-pinned, no host namespaces or socket, resource caps).
 - A full worker image build and the behavior smoke in `tests/container-smoke.sh`.
 
-Every action is pinned to an immutable commit SHA, and the token is read-only. The uv version comes from `toolchain.lock.json`, the same pin `./bootstrap.sh` installs.
+Every action is pinned to the commit SHA of its latest release (Dependabot moves the pins weekly), and the token is read-only. uv and Bun are their latest releases, the same as `./bootstrap.sh` and `./factory apply` install.
 
 ## Primary sources
 
 - [Herdr installation](https://herdr.dev/docs/install/), [headless/SSH persistence](https://herdr.dev/docs/persistence-remote/), [session-state limits](https://herdr.dev/docs/session-state/), [config reference](https://herdr.dev/docs/config-reference/).
-- [Herdr latest release](https://github.com/herdrdev/herdr/releases/latest). Assets are verified against the SHA-256 digest GitHub publishes for each release asset; no claim is made that the release supplies an independent SBOM or signature bundle.
+- [Herdr latest release](https://github.com/herdrdev/herdr/releases/latest). GitHub-hosted assets (herdr, bun, uv, gh, no-mistakes, treehouse, Obscura) are verified against the SHA-256 digest GitHub publishes for each release asset; no claim is made that a release supplies an independent SBOM or signature bundle.
+- [Node.js release index](https://nodejs.org/dist/index.json). Node assets are verified against the `SHASUMS256.txt` published beside each release.
+- [rustup stable release](https://static.rust-lang.org/rustup/release-stable.toml). rustup-init is verified against the `.sha256` published beside it.
 - [Ansible introduction](https://docs.ansible.com/projects/ansible/latest/getting_started/index.html), [checksummed downloads](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/get_url_module.html), [user systemd/D-Bus requirements](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/systemd_service_module.html).
 - [systemd lingering](https://www.freedesktop.org/software/systemd/man/latest/loginctl.html).
 - [Docker process boundaries](https://docs.docker.com/engine/containers/multi-service_container/), [Docker and host firewall behavior](https://docs.docker.com/engine/network/firewall-iptables/).

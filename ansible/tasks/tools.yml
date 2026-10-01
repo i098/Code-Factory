@@ -1,8 +1,8 @@
 ---
 # Toolchain, installed by the repository installer as the target user: the
-# lock's pins plus the herdr and omp releases tasks/preflight.yml resolved.
+# latest releases tasks/preflight.yml resolved.
 #
-# Contract: python3 <repo>/scripts/install_tools.py --lock <repo>/toolchain.lock.json
+# Contract: python3 <repo>/scripts/install_tools.py
 #           --home <factory.home> --tools herdr,node,bun,uv [--npm] [--development]
 #           --resolved <factory_latest as JSON>
 # The installer is idempotent and prints a final JSON object
@@ -13,12 +13,9 @@
   ansible.builtin.set_fact:
     factory_installer_argv: >-
       {{ ['python3', factory_installer,
-          '--lock', factory_lock_file,
           '--home', factory_cfg.home,
-          '--tools', factory_core_tools | join(','),
           '--resolved', factory_latest | to_json]
-         + (['--npm'] if (factory_cfg.profiles.agents | bool) else [])
-         + (['--development'] if (factory_cfg.profiles.development | bool) else []) }}
+         + factory_installer_selection }}
 
 - name: Show the installer invocation
   ansible.builtin.debug:
@@ -35,7 +32,7 @@
       if (factory_cfg.profiles.agents | bool) else '' }}.
   when: ansible_check_mode
 
-- name: Install the pinned toolchain as the target user
+- name: Install the toolchain as the target user
   ansible.builtin.command:
     argv: "{{ factory_installer_argv }}"
     chdir: "{{ code_factory_repo }}"
@@ -100,7 +97,7 @@
   changed_when: false
   when: not ansible_check_mode
 
-- name: Assert the managed symlink resolves to the locked executable
+- name: Assert the managed symlink resolves to the resolved executable
   ansible.builtin.assert:
     that:
       - factory_herdr_link.stat.exists | default(false)

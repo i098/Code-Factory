@@ -258,21 +258,19 @@
           "additionalProperties": false,
           "properties": {
             "obscura_version": {
-              "type": "string"
+              "type": "string",
+              "deprecated": true
             },
             "obscura_sha256": {
               "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
+              "pattern": "^[0-9a-f]{64}$",
+              "deprecated": true
             },
             "idle_timeout_min": {
               "type": "integer",
               "minimum": 5
             }
-          },
-          "required": [
-            "obscura_version",
-            "obscura_sha256"
-          ]
+          }
         }
       },
       "required": [

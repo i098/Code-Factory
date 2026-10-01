@@ -11,7 +11,7 @@ loopback listener, is eligible. Headed/attached/persistent-profile browsers are
 excluded. No SIGKILL, profile deletion, package patching, or dev-server cleanup.
 The bridge drains HTTP requests and closes its own MCP/Chrome children on exit.
 
-Requires Linux pidfds and the pinned private psutil runtime. Timer: chrome-autoprune.timer.
+Requires Linux pidfds and the hash-verified private psutil runtime. Timer: chrome-autoprune.timer.
 Inspect with ~/.local/share/code-factory/pruner-venv/bin/python ~/.local/bin/chrome-autoprune.py
 Logs: journalctl --user -u chrome-autoprune.service
 Disable: systemctl --user disable --now chrome-autoprune.timer
@@ -34,16 +34,25 @@ import psutil
 
 HOME = Path.home()
 REGISTRY = HOME / ".chrome-devtools-axi"
-BRIDGE = (
-    HOME
-    / ".local/share/code-factory/npm/node_modules/chrome-devtools-axi/dist/bin/chrome-devtools-axi-bridge.js"
-)
+# chrome-devtools-axi tracks its latest release, one prefix per version:
+# <AXI_ROOT>/<version>/<BRIDGE>. Bridges from a superseded version stay prunable,
+# as do bridges still running from the retired shared npm prefix.
+AXI_ROOT = HOME / ".local/share/code-factory/chrome-devtools-axi"
+BRIDGE = Path("node_modules/chrome-devtools-axi/dist/bin/chrome-devtools-axi-bridge.js")
+LEGACY_BRIDGE = HOME / ".local/share/code-factory/npm" / BRIDGE
 DEFAULT_STATE = HOME / ".local/state/chrome-autoprune/state.json"
 UID = os.getuid()
 
 
 class Protected(Exception):
     pass
+
+
+def installed_bridge(path):
+    script, root = Path(path).resolve(), AXI_ROOT.resolve()
+    if script == LEGACY_BRIDGE.resolve():
+        return True
+    return script.is_relative_to(root) and script.relative_to(root).parts[1:] == BRIDGE.parts
 
 
 def owned_json(path):
@@ -73,11 +82,7 @@ def observe(name, path):
     if proc.uids().real != UID or proc.uids().effective != UID:
         raise Protected("different process owner")
     args = proc.cmdline()
-    if (
-        len(args) != 2
-        or Path(args[1]).resolve() != BRIDGE.resolve()
-        or Path(proc.exe()).name != "node"
-    ):
+    if len(args) != 2 or not installed_bridge(args[1]) or Path(proc.exe()).name != "node":
         raise Protected("not the installed AXI bridge")
     if os.getpgid(pid) != pid:
         raise Protected("bridge does not own its process group")

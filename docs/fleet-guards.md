@@ -23,13 +23,13 @@ Sizing per lane count and the full list of pruners are in
 
 | Path (under the account home) | Purpose |
 | --- | --- |
-| `oss-fleet/shared-supabase/` | The ONE stack: pinned CLI (`npm ci` from `fleet/shared-supabase/package-lock.json`), `supabase/config.toml` with `factory.fleet.supabase_project_id`, `check.sh` keeper, `guard.sql`, `README.md`. `check.sh` also generates the project's `<project>.env.local` from the running stack. |
+| `oss-fleet/shared-supabase/` | The ONE stack: the latest Supabase CLI (`npm install` of the registry's latest `supabase`), `supabase/config.toml` with `factory.fleet.supabase_project_id`, `check.sh` keeper, `guard.sql`, `README.md`. `check.sh` also generates the project's `<project>.env.local` from the running stack. |
 | `oss-fleet/doctor/docker-guard.sh` | `docker events` watcher. A container carrying `com.supabase.cli.project` other than an allowlisted project is removed on creation; bare Postgres-family images are logged and alerted, not killed (other projects may own them). `docker-guard-allow.txt` is written once and then operator-owned. |
-| `oss-fleet/doctor/worktree-env-seed.sh` | Installs the env file as `.env.local` in the project worktrees matched by the pool glob and Firstmate checkout path fixed in `fleet/doctor/worktree-env-seed.sh`; `factory.fleet.worktree_pools` only sets which pool directories the systemd path unit watches to trigger it. Files without the `# fleet-shared-supabase` marker are replaced with a backup left beside them. |
+| `oss-fleet/doctor/worktree-env-seed.sh` | Installs the env file as `.env.local` in the project worktrees matched by the pool glob and Firstmate checkout path fixed in `fleet/doctor/worktree-env-seed.sh`; `factory.fleet.worktree_pools` only sets which pool directories the systemd path unit watches to trigger it. Files without the `# fleet-shared-supabase` marker are replaced with a backup left beside them. For each pool worktree it also seeds a `node` wrapper in `<pool slot>/node_modules/.bin`, above the checkout, that runs the managed `node` with `--max-old-space-size=2048` (`FLEET_NODE_HEAP_MB`). See the heap cap row below. |
 | `oss-fleet/doctor/dev-server-reaper.sh` | Every 2 minutes: kills `next dev`/`next-server`/`tsc --noEmit` trees in treehouse worktrees whose lane last reported `done:`/`paused:`/`blocked:`/`failed:`, has no agent process, or whose agent transcript is idle >= 30 min (`REAPER_IDLE_MIN`). A dev server is 3-4 GB and restarts in 10 s; idle ones from finished lanes are what filled swap. One `next dev` per branch is inherent - Next compiles the whole app per process - so the fix is lifetime, not sharing. |
 | `oss-fleet/doctor/storage-guard.sh` | Every 5 minutes: use% of the filesystems holding `/`, `/var/log`, the home and Docker's data root. WARN (85%) alerts once per episode, CRIT (92%) prunes only regenerable Docker data, and a fill rate projecting the disk full within 6 hours alerts even below WARN. See [Storage guard](#storage-guard). |
 | `oss-fleet/doctor/devtools-bridge-reaper.sh` | Every 10 minutes: stops attached chrome-devtools-axi bridges (`CHROME_DEVTOOLS_AXI_BROWSER_URL` set) whose process tree used no CPU and whose session state files did not change for 60 min (`REAPER_IDLE_MIN`). See [Devtools-bridge reaper](#devtools-bridge-reaper). |
-| worktree `.npmrc` (seeded, git-excluded) | `node-options=--max-old-space-size=2048` (`FLEET_NODE_HEAP_MB`): pnpm passes it as `NODE_OPTIONS` to every script, so a runaway `next dev`/`tsc` fails fast with a heap error the agent sees instead of swapping the host. Hidden through the shared `.git/info/exclude`; never written when the repository tracks its own `.npmrc`. |
+| Lane node heap cap | `bun run dev`, `bun run tsc` and the other scripts a lane runs through bun, npm or npx put every ancestor directory's `node_modules/.bin` on `PATH`, existing or not, so the seeded `node` wrapper in the pool slot directory above the checkout caps the dev server and type-check at a 2048 MB heap: a runaway `next dev`/`tsc` fails fast with a heap error the agent sees instead of swapping the host. The wrapper is written when the worktree appears, before the first `bun install`, so a fresh lane's first dev server is capped, and it lives outside the checkout, so `rm -rf node_modules` does not remove it. A `node` bin that a dependency puts in the worktree's own `node_modules/.bin` comes first on `PATH` and is left alone. The cap is deliberately not in the `.profile` managed block, the Herdr unit or `BUN_OPTIONS`, which carry only `CHROME_DEVTOOLS_AXI_MCP_PATH`: a process-wide `NODE_OPTIONS` would also cap the chrome-devtools-axi bridge (about 2 GB idle), `chrome-devtools-mcp` and `acpx`, and `--env-file` would switch off bun's own `.env`, `.env.<NODE_ENV>` and `.env.local` autoload. bun does not pass those files, `.npmrc` or `bunfig.toml` settings to a script's node child, which is why the wrapper is the seeded mechanism. |
 | `.local/bin/supabase` | Shim: `status`/`--version` pass through; every lifecycle or schema subcommand is refused with the reason. `npx supabase` bypasses it, which is why the Docker guard exists. |
 | `.config/systemd/user/flotilla-*.{service,timer,path}` | Login start + 5-minute keeper for the stack; the guard as a restart-always service; the seeder on pool changes, every 2 minutes and at login. |
 | `/etc/docker/daemon.json` | `init: true` and `live-restore: true` merged in (tasks/docker.yml, any profile with docker). |
@@ -120,11 +120,11 @@ connected). Tier 3 needs the `desktop` profile's TigerVNC/noVNC packages
 Chrome/Chromium binary (`FLEET_CHROME_BIN`, Google Chrome, Chromium, or a
 Playwright Chromium).
 
-Obscura ships for x86_64 only (see [Dependencies](dependencies.md#fleet-browsers-and-supabase)).
-The defaults do not change on aarch64: `fleet/browsers/env.sh` and
-`herdr.service` still point at obscura on `:9222`, so tier 1 never answers
-there. An agent has to escalate by hand with `fleet-browser up chrome` and
-`eval "$(fleet-browser env chrome)"`.
+Obscura ships for x86_64 and aarch64; apply installs the latest release for the
+host's platform (see [Dependencies](dependencies.md#fleet-browsers-and-supabase)).
+A new release never restarts a running tier: apply repoints the `obscura`
+symlink, and the tier picks up the new binary at its next idle refresh or
+restart, because Obscura restarts only when no lane is connected to it.
 
 All three tiers share one session. `cookie-sync.ts` keeps a canonical jar at
 `~/.fleet-browser/cookies.json` and converges every live tier to it over CDP.

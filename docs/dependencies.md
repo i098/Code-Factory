@@ -1,35 +1,27 @@
 # Dependencies
 
-Everything the recipe installs, grouped by the file that pins it. A version appears only where a file pins one; everything else tracks its upstream repository or latest release. `./factory plan` installs none of this.
+Everything the recipe installs, grouped by where it comes from. Nothing is pinned: every `./factory apply` resolves each tool's newest release once and installs exactly that, so re-running apply upgrades an existing host. Every download is verified against the checksum its publisher posts for that exact release, and a release without one fails the apply instead of installing an unverified artifact. The one exception is the three omp marketplace plugins (ponytail, i-have-adhd, caveman): no publisher checksums them. The installer records the releases it resolved in `~/.local/share/code-factory/resolved.json`, which the container smoke compares against; `ansible/tasks/verify.yml` also asserts that the herdr service and omp run the resolved releases. `./factory plan` installs none of this.
 
 ## Repository tooling
 
-`bootstrap.sh`, `toolchain.lock.json`, `pyproject.toml`, `uv.lock`
+`bootstrap.sh`, `pyproject.toml`, `uv.lock`
 
-- uv 0.12.5 (sha256-locked), then `uv sync --locked`: ansible-core 2.21.4, jsonschema 4.26.0, PyYAML 6.0.3.
+- The latest uv (below), then `uv sync --locked`: ansible-core 2.21.4, jsonschema 4.26.0, PyYAML 6.0.3. `uv.lock` is this repository's own development environment, so it stays locked.
 - Dev group: pytest 9.0.2, ruff 0.16.3.
-
-## Pinned toolchain
-
-`toolchain.lock.json`, installed by `scripts/install_tools.py`. Every archive is sha256-locked and linked into `~/.local/bin`.
-
-- Always: node 24.19.0, bun 1.4.0, uv 0.12.5.
-- `agents` profile: gh 2.97.0, no-mistakes 1.79.0, treehouse 2.1.1.
-- `development` profile: rustup-init 1.29.0, installing Rust 1.97.1 (minimal profile + rustfmt + clippy).
 
 ## Latest releases
 
-Not pinned: every `./factory apply` resolves the newest release, installs exactly that, and `ansible/tasks/verify.yml` asserts the installed version equals the one the run resolved, so re-running apply upgrades an existing host. The installer records the releases it installed in `~/.local/share/code-factory/resolved.json`, which the container smoke compares against.
+`scripts/install_tools.py`. Native tools are linked into `~/.local/bin`; npm tools are each installed with `npm install` into `~/.local/share/code-factory/<tool>/<version>` (npm checks the registry integrity) and linked from there. Superseded versions stay on disk.
 
-- Always: herdr, the latest [herdrdev/herdr release](https://github.com/herdrdev/herdr/releases/latest), verified against the SHA-256 the release publishes for the platform asset. A release that publishes no checksum fails the apply instead of installing an unverified binary. The lookup uses the GitHub API, which allows 60 unauthenticated requests an hour per IP (shared IPs such as CI runners exhaust it). The lookup authenticates with `GITHUB_TOKEN` from the environment that runs `./factory apply`, else runs unauthenticated. Container builds take the token as the optional BuildKit secret `github_token` (`docker build --secret id=github_token,env=GITHUB_TOKEN ...`), so it never lands in the image. An upgrade rewrites and restarts `herdr.service`.
-- `agents` profile: omp (`@oh-my-pi/pi-coding-agent`), the npm registry's `latest` version, installed with `npm install` into `~/.local/share/code-factory/omp/<version>` (npm checks the registry integrity). Superseded versions stay on disk.
+- Always: herdr ([herdrdev/herdr](https://github.com/herdrdev/herdr/releases/latest)), bun ([oven-sh/bun](https://github.com/oven-sh/bun/releases/latest), the x64 `baseline` build), uv ([astral-sh/uv](https://github.com/astral-sh/uv/releases/latest)), verified against the GitHub release-asset digest. A herdr upgrade rewrites and restarts `herdr.service`.
+- Always: node, the newest release in the [nodejs.org index](https://nodejs.org/dist/index.json) (not the LTS line), verified against that release's `SHASUMS256.txt`.
+- `agents` profile, native: gh ([cli/cli](https://github.com/cli/cli/releases/latest)), no-mistakes ([kunchenguid/no-mistakes](https://github.com/kunchenguid/no-mistakes/releases/latest)), treehouse ([kunchenguid/treehouse](https://github.com/kunchenguid/treehouse/releases/latest)), verified against the GitHub release-asset digest.
+- `agents` profile, npm: omp (`@oh-my-pi/pi-coding-agent`), chrome-devtools-axi, gh-axi, lavish-axi, quota-axi, tasks-axi, acpx (runs the no-mistakes gate agent `acp:omp`), and chrome-devtools-mcp (the MCP build chrome-devtools-axi launches through `CHROME_DEVTOOLS_AXI_MCP_PATH`, which points at `~/.local/share/code-factory/chrome-devtools-mcp/current`, a link the installer re-points at each release, so a new release never changes the Herdr unit or the `.profile` block and never restarts `herdr.service`). The fleet requires at least quota-axi 0.1.54 and tasks-axi 0.2.6.
+- Retired: codex and pnpm are no longer installed (bun is the single package manager and runner; omp is the pi agent). An apply on a host that still has them removes the `codex`, `pnpm` and `pnpx` links in `~/.local/bin` that point into the old `~/.local/share/code-factory/npm` prefix and changes `defaultAgent` in `~/.acpx/config.json` from `codex` to `omp` when it is still `codex`. The old prefix stays on disk, like every superseded install, so shells and AXI bridges started before the upgrade keep their files; delete it by hand when nothing uses it. Commands of the same name installed any other way are left alone.
+- `agents` profile, omp plugins: ponytail ([DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)), i-have-adhd ([ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd)) and caveman ([JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman)) from their GitHub marketplaces, installed once and upgraded with `omp plugin upgrade` on every apply. These are the only installs that are not checksum-verified: no publisher posts a checksum for them, so they track each author's default branch and load as agent instructions and hooks. The operator accepted this to keep them at the latest commit.
+- `development` profile: rustup-init, the version in rustup's [stable release](https://static.rust-lang.org/rustup/release-stable.toml), verified against the `.sha256` published beside it, installing the Rust `stable` toolchain (minimal profile + rustfmt + clippy). Every apply moves the toolchain to the newest stable.
 
-## Agent CLIs
-
-`tools/npm/package.json`, installed with `npm ci` from `tools/npm/package-lock.json` under the `agents` profile.
-
-- codex (`@openai/codex`) 0.147.0, pnpm 10.33.2, acpx 0.18.0 (runs the no-mistakes gate agent `acp:omp`).
-- chrome-devtools-axi 0.1.29, chrome-devtools-mcp 1.9.0, gh-axi 0.1.30, lavish-axi 0.1.52, quota-axi 0.1.54, tasks-axi 0.2.6. The fleet requires at least quota-axi 0.1.54 and tasks-axi 0.2.6.
+The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests an hour per IP (shared IPs such as CI runners exhaust it); a resolution makes one request per GitHub-hosted tool the host installs, at most seven. Only the tools a run installs are resolved, so a source the host does not use cannot fail it. The lookups authenticate with `GITHUB_TOKEN` from the environment that runs `./factory apply` or `./bootstrap.sh`, else run unauthenticated; the token is sent to the GitHub API only. Container builds take the token as the optional BuildKit secret `github_token` (`docker build --secret id=github_token,env=GITHUB_TOKEN ...`), so it never lands in the image.
 
 ## Ubuntu packages
 
@@ -46,14 +38,14 @@ Not pinned: every `./factory apply` resolves the newest release, installs exactl
 
 `fleet_guards` profile.
 
-- Obscura `factory.browsers.obscura_version` (0.2.2 in `config/default.yml`) from github.com/h4ckf0r0day/obscura, verified against `factory.browsers.obscura_sha256` (`ansible/tasks/fleet-browsers.yml`). x86_64 only: `factory_browser_obscura_url` hardcodes the `obscura-x86_64-linux.tar.gz` asset, and the sha256 pins it. For aarch64 behavior, see [Browser ladder](fleet-guards.md#browser-ladder).
-- Supabase CLI 2.117.0 (`fleet/shared-supabase/package.json`, `npm ci` from its lockfile).
+- Obscura, the latest [h4ckf0r0day/obscura release](https://github.com/h4ckf0r0day/obscura/releases/latest) for the host's platform, verified against the GitHub release-asset digest (`ansible/tasks/fleet-browsers.yml`). Each release extracts into its own `~/oss-fleet/browsers/obscura-<version>/`.
+- Supabase CLI, the npm registry's latest `supabase`, installed with `npm install` into `~/oss-fleet/shared-supabase` (`ansible/tasks/fleet_guards.yml`).
 
 ## Chrome autopruner
 
 `agents` profile with `browser_prune.enabled`.
 
-- psutil 7.1.0, hash-pinned into a private venv (`maintenance/requirements.txt`, `ansible/tasks/browser_prune.yml`).
+- psutil, the latest PyPI release, installed into a private venv with `uv pip install --require-hashes` against the SHA-256 digests PyPI publishes for that release (`ansible/tasks/browser_prune.yml`).
 
 ## Firstmate
 
@@ -65,15 +57,15 @@ Not pinned: every `./factory apply` resolves the newest release, installs exactl
 
 `Dockerfile`, `compose.yml`
 
-- Worker base `ubuntu:24.04@sha256:224a1869…` plus apt: bash, build-essential, ca-certificates, curl, git, iproute2, jq, less, libssl-dev, openssh-client, pkg-config, procps, python3, python3-apt, python3-venv, sudo, tar, unzip, xz-utils, zstd.
-- Optional compose backing services (digest-pinned): `postgres:18-bookworm`, `redis:8-alpine`.
+- Worker base `ubuntu:latest` (the newest Ubuntu LTS) plus apt: bash, build-essential, ca-certificates, curl, git, iproute2, jq, less, libssl-dev, openssh-client, pkg-config, procps, python3, python3-apt, python3-venv, sudo, tar, unzip, xz-utils, zstd.
+- Optional compose backing services, never installed by apply: `postgres:18-bookworm`, `redis:8-alpine`, digest-pinned because a floating Postgres tag would move a data volume across major versions it cannot read.
 
 ## Assumed on the host
 
 The recipe never installs these. The base requirements (Ubuntu, sudo, Python, `git`, `gh`) are in the [Quick start](../README.md#quick-start). Notes on those:
 
 - `bootstrap.sh` refuses to run without Python 3.12+.
-- The recipe installs gh 2.97.0 later, under `agents`; the Quick start needs an authenticated `gh` before that.
+- The recipe installs the latest gh later, under `agents`; the Quick start needs an authenticated `gh` before that.
 
 Also needed, depending on profile:
 

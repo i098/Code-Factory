@@ -2,7 +2,8 @@
   // Dev Container for the Code Factory worker image.
   //
   // Same Dockerfile target as compose and CI: an isolated non-root container with
-  // the checksum-pinned agent/development toolchain already converged by
+  // the latest, checksum-verified agent/development toolchain (the three omp
+  // marketplace plugins are the one unverified exception) already converged by
   // `./factory apply --config containers/factory.container.yml`.
   //
   // Not provided, by design: systemd, user-manager linger, SSH server, Tailscale

@@ -93,9 +93,9 @@ agent_alive() {  # <worktree> -> 0 when an agent process has this cwd
   return 1
 }
 
-# Walk up from a target through the wrapper chain (pnpm -> sh -> node) that
+# Walk up from a target through the wrapper chain (bun -> sh -> node) that
 # shares its cwd, stopping before any interactive shell or agent, so the whole
-# `pnpm dev` tree dies and does not respawn a child. Never crosses out of the
+# `bun run dev` tree dies and does not respawn a child. Never crosses out of the
 # worktree.
 tree_root() {  # <pid> <worktree>
   local pid=$1 wt=$2 pp c
@@ -103,7 +103,7 @@ tree_root() {  # <pid> <worktree>
     pp=$(ppid_of "$pid"); [ -n "$pp" ] && [ "$pp" -gt 1 ] || break
     [ "$(cwd_of "$pp")" = "$wt" ] || break
     c=$(comm_of "$pp")
-    case "$c" in node|bun|sh|pnpm|npm|npx|MainThread|next-server*) pid=$pp ;; *) break ;; esac
+    case "$c" in node|bun|sh|npm|npx|MainThread|next-server*) pid=$pp ;; *) break ;; esac
   done
   echo "$pid"
 }
