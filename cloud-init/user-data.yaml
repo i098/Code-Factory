@@ -5,9 +5,9 @@
 #
 # What this does
 #   Installs the operating-system packages needed to *run* Code Factory:
-#   git to obtain the checkout, python3 + python3-venv for the pinned uv
-#   bootstrap, acl because Ansible escalates from one unprivileged account to
-#   another, and the archive/transport tools the pinned installer uses.
+#   git to obtain the checkout, python3 + python3-venv for the uv bootstrap,
+#   acl because Ansible escalates from one unprivileged account to another,
+#   and the archive/transport tools the tool installer uses.
 #
 # What this deliberately does not do
 #   * no SSH keys, passwords, API tokens, auth keys or node identities - add
@@ -53,7 +53,7 @@ packages:
   - unzip
   - xz-utils
   - zstd
-  # Used by the CLI, the pinned uv bootstrap and the playbook
+  # Used by the CLI, the uv bootstrap and the playbook
   - python3
   - python3-venv
   - jq

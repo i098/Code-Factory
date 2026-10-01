@@ -97,7 +97,7 @@
   changed_when: false
   when: not ansible_check_mode
 
-- name: Assert the managed symlink resolves to the locked executable
+- name: Assert the managed symlink resolves to the resolved executable
   ansible.builtin.assert:
     that:
       - factory_herdr_link.stat.exists | default(false)

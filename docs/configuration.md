@@ -76,11 +76,11 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 | Profile | Default | What it installs |
 | --- | --- | --- |
 | `agents` | on | omp, AXI tools, gh, no-mistakes, treehouse, acpx; safe omp presentation and model-role settings (see [omp configuration](omp.md)); first-write no-mistakes and acpx configs that make `acp:omp` the gate agent; `~/.local/bin/ponytail-review`; browser env defaults; Chrome autoprune timer. |
-| `development` | on | Rust toolchain, build essentials, development-mode npm packages. |
+| `development` | on | Rust toolchain (stable), build essentials. |
 | `firstmate` | on | Firstmate clone tracking upstream `main`, plus seeded Firstmate config: crew dispatch, crew and secondmate harness, the crew omp overlay (crew advisor, see [omp configuration](omp.md#advisor)), Herdr backend selection, startup memory budget, and the spawn memory floor. |
 | `docker` | on | Docker engine and Compose v2, with daemon defaults `init` (reaps orphaned children) and `live-restore`. Group membership is opt-in through the Ansible variable `factory_docker_group_users`. |
 | `fleet_guards` | off | Shared Supabase stack, Docker event guard, [browser ladder](fleet-guards.md#browser-ladder), dev-server reaper, devtools-bridge reaper, storage guard, env seeder. See [Fleet guards](fleet-guards.md). |
 | `tailscale` | off | Tailscale daemon only. Authentication is manual; see [Security](security.md#remote-access). |
 | `desktop` | off | Loopback-only XFCE + TigerVNC + noVNC operator desktop on `127.0.0.1:6080`, and the Google Chrome apt package. Needs an operator-created VNC password; see [Desktop access](recovery.md#desktop-access). Also supplies the TigerVNC/noVNC packages the browser ladder's `vnc` tier needs. |
 
-The latest Herdr release is always installed, with the captured UI preferences, the [Spaces and Agents sidebar layouts](herdr.md) with the reporter timer that feeds Spaces, and one canonical, versioned user-service executable. Exact versions for every profile are in [Dependencies](dependencies.md).
+The latest Herdr release is always installed, with the captured UI preferences, the [Spaces and Agents sidebar layouts](herdr.md) with the reporter timer that feeds Spaces, and one canonical, versioned user-service executable. What each profile installs, and where it comes from, is in [Dependencies](dependencies.md).

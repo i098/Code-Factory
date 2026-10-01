@@ -9,7 +9,8 @@
 #     any Supabase CLI project other than the shared one on creation and alerts
 #     on bare Postgres containers. Allowlist is first-write (operator-owned).
 #   * ~/oss-fleet/doctor/worktree-env-seed.sh - installs the stack's env file
-#     as .env.local in every swarms worktree; path unit + timer + login.
+#     as .env.local in every swarms worktree, plus a `node` wrapper in each
+#     pool slot that caps the lane heap; path unit + timer + login.
 #   * ~/oss-fleet/doctor/dev-server-reaper.sh - every 2 min, kills next dev /
 #     tsc trees in worktrees whose lane is done/paused/blocked, agent-less or
 #     idle >= 30 min. Dev servers are throwaway; idle ones filled swap.
@@ -31,8 +32,8 @@
 # useless stack.
 #
 # Everything is idempotent and check-mode safe: file/copy/template preview;
-# npm ci, volume restore and the first `supabase start` are skipped in check
-# mode and reported instead.
+# the Supabase CLI `npm install`, volume restore and the first
+# `supabase start` are skipped in check mode and reported instead.
 
 - name: Ensure the fleet directories
   ansible.builtin.file:
