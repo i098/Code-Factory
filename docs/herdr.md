@@ -56,7 +56,7 @@ Without a `machine` workspace, the machine line is the primary home's `$host` li
 
 [`maintenance/herdr-spaces.py`](../maintenance/herdr-spaces.py) is installed as `~/.local/bin/herdr-spaces.py` and run by the user timer `herdr-spaces.timer` every second. It uses only the Python standard library.
 
-For every Herdr workspace it finds the home from its panes' directories: the nearest git top-level that holds both `state/` and `data/`. It then reports the tokens above as workspace metadata under the source `code-factory:spaces`, with `herdr workspace report-metadata`, and clears every token that has no value. Helper spaces and per-task spaces (`└ …`) get `short` only. A space with no home gets `short` and CPU and RAM only. The `machine` workspace gets `machine` only; without one, the primary home gets `host`.
+For every Herdr workspace it finds the home from its panes' directories: the nearest git top-level that holds both `state/` and `data/`. It then reports the tokens above as workspace metadata under the source `code-factory:spaces`, with `herdr workspace report-metadata`, and clears every token that has no value. Helper spaces and per-task spaces (`└ …`) get `short` only. A space with no home gets `short` and CPU and RAM only. The `machine` workspace gets `machine` only; without one, the primary home gets `host`. It also writes the same data where the phone layout shows it (see [On a phone](#on-a-phone)).
 
 | Source | Refresh | Cost |
 | --- | --- | --- |
@@ -145,6 +145,52 @@ To check an override before applying, render it to a file and run Herdr's own va
 ```bash
 HERDR_CONFIG_PATH=/path/to/rendered.toml herdr config check
 ```
+
+## On a phone
+
+At or below Herdr's `mobile_width_threshold` (64 columns by default; a phone in portrait over SSH or mosh is about 50), Herdr switches to its single-column mobile layout: the full-width pane plus a switch menu (tap `switch`, or `prefix+w`). That layout ignores the sidebar rows above, so the reporter also writes a compact form of the same data into the fields the switch menu does show. Every entry starts with `Local · <workspace label>`; the second line is Herdr's own, built from these fields:
+
+```text
+  agents
+   ● Local · firstmate
+   1 · ⚑3 ▶1 ◷4 ⚙11% ▤36% ⛁71% · Planning the release checklist
+   ● Local · firstmate
+   fix-token-race · ⎇1537 +12847 −3902 ✎214 · └ f…
+   ● Local · 2ndmate-webapp-mate-s4
+   ⚑2 ◷3 ⚙4% ▤9% ⛁12% ⚠watcher ⎇1561 +84 −12 ✎3 · Fix ratings …
+  spaces
+   + new workspace
+   · Local · machine
+   shell · tab ⚙11% ▤36% ⛁71%
+   ● Local · firstmate
+   shell · tab 1 · 1/2
+```
+
+| Entry | Second line | Field the reporter writes |
+| --- | --- | --- |
+| Agent: a home's own agent (its pane has a `who` token) | The tab (only in a workspace with more than one), then the home's `⚑ ▶ ◷` counts, its `⚙ ▤ ⛁` shares, `⚠watcher` when its watcher is silent, and its pull request line, then its session topic. | The pane's `idle`, `working`, `done` and `unknown` state labels, and its display agent (the terminal title). `blocked` keeps Herdr's own word. |
+| Agent: any other agent, such as a worker | The tab, its pull request line, then the name Firstmate gave it (`└ <task>`). | The same state labels. The display agent is Firstmate's and is never written. |
+| Space: `machine` | The machine's CPU, RAM and disk shares, while its first tab is the active one. | The `machine` workspace's first tab, renamed under the rules below. |
+| Space: any other | Herdr's own (`shell · tab 1`). | None: workspace labels and Firstmate's tab names route work (the orchestrator finds its agents by tab label), so no home workspace's tabs are renamed. |
+
+Glyphs carry no space after them, and the parts are single-spaced, to fit more before Herdr cuts the line with `…`. The state label replaces Herdr's state word; the state dot still shows the state. A line longer than the screen loses its end: on a 50-column phone that is the session topic. The values follow the sidebar's: the same run reports both, every second. None of the desktop sidebar rows reads these fields, so the sidebar stays as above.
+
+The `machine` tab is renamed under these rules:
+
+- It is one pinned tab: the `machine` workspace's first tab, recorded by its tab id, never the active tab. Reordering the tabs does not move the pin; it moves to the new first tab only if the pinned tab is closed.
+- The reporter writes only over a label that is Herdr's own number (`1`, `2`, …) or the text it wrote last. Any other label, such as a name an operator chose, is left alone. Rename the tab back to its number to hand it back.
+- It looks at the tab at most once every 30 seconds, so it renames at most that often and its shares can be up to 30 seconds old.
+- The shares show in the desktop tab bar and navigator while `machine` is focused, and on the phone in the `machine` Space line while that tab is the active one.
+
+A home pane's display agent is its session topic. With `show_agent_labels_on_pane_borders` on (the factory default), a home pane in a split shows the topic on its border instead of `omp`, and the border follows the topic when the session is renamed. Every pane report names the pane's agent (`--agent`), so when that agent exits Herdr drops the topic and the state labels with it.
+
+What the mobile layout forces, compared with the desktop sidebar:
+
+- The switch menu lists agents before spaces, and the `machine` entry is not its first line.
+- Entries show the workspace label, not the short name, and no colors. Herdr builds the Space entries itself, so a home's Space entry keeps `shell · tab N`; its counts and shares are on its agent entry.
+- Each entry has one line of its own, so a home's counts, shares and pull request line come before its topic on the same line, and a long line loses its end, often the topic or worker name.
+- A home's counts and shares are on its own agent's entry, so a home with no agent pane carrying a `who` token shows none. Without a `machine` workspace, the machine's shares do not show either.
+- The issue (`○`) is left out for width.
 
 ## Viewing from another machine
 

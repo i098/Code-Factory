@@ -22,6 +22,14 @@ workspace tokens under the source `code-factory:spaces`:
 Zero counts are cleared. Disk is cached 15 minutes, and the queue count as
 above, in ~/.cache/code-factory/herdr-spaces.json. A source that fails keeps
 its previous value, and the script always exits 0.
+
+Herdr's mobile layout ignores sidebar rows, so the same data also goes where
+it shows. A home's agent pane (one with a `who` token) gets its session topic
+as its display agent, and every agent pane's state label (all but blocked)
+carries a compact form of its home's counts, CPU/RAM/disk shares and alert
+(home panes only) and its pull request line. The machine workspace's first
+tab is renamed to the machine's shares, at most every TAB_TTL seconds, and
+only while its label is Herdr's own number or the reporter's last text.
 """
 
 import json
@@ -30,6 +38,7 @@ import re
 import subprocess
 import sys
 import time
+import unicodedata
 from pathlib import Path
 
 SOURCE = "code-factory:spaces"
@@ -38,8 +47,11 @@ CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "code
 TOKENS = ("short", "decisions", "crew", "queue", "res", "alert", "host", "machine")
 DISK_TTL = 15 * 60
 QUEUE_TTL = 60  # "ready" also moves with date gates, so recount at least once a minute
+TAB_TTL = 30  # seconds between looks at the machine tab: its shares move every second
 TICK = os.sysconf("SC_CLK_TCK")
 PAGE = os.sysconf("SC_PAGE_SIZE")
+STATES = ("idle", "working", "done", "unknown")  # "blocked" keeps Herdr's own word
+GLYPH = re.compile(r"([⚑▶◷⎇✎]) ")
 
 
 def short_name(label: str) -> str:
@@ -226,6 +238,35 @@ def count(n: int, glyph: str) -> str:
     return f"{glyph}{n}" if n else ""
 
 
+def tight(*parts: str | None) -> str:
+    """Mobile form of sidebar parts: no indent, single spaces, no space after a glyph."""
+    return " ".join(GLYPH.sub(r"\1", " ".join(p for p in parts if p).replace("\u2800", "")).split())
+
+
+def shares(line: str) -> str:
+    """ "⚙41% ▤59% ⛁43%" from the machine line."""
+    return " ".join(g + p for g, p in re.findall(r"([⚙▤⛁]) (?:\S+ )?(\d+%)", line))
+
+
+def presentation(text: str) -> str:
+    """Herdr's metadata text form: trim, drop control characters, cap at 80, trim."""
+    text = "".join(c for c in text.strip() if unicodedata.category(c) != "Cc")
+    return text[:80].strip()
+
+
+def name_machine_tab(wid: str, text: str, pin: dict) -> dict:
+    """Name the machine workspace's pinned (first) tab, unless someone else named it."""
+    tabs = json.loads(run(HERDR, "tab", "list", "--workspace", wid))["result"]["tabs"]
+    if not tabs:
+        return pin
+    tab = next((t for t in tabs if t["tab_id"] == pin.get("id")), tabs[0])
+    label, written = tab["label"], pin.get("text")
+    if label != text and (label.isdigit() or label == written):
+        run(HERDR, "tab", "rename", tab["tab_id"], text)
+        written = text
+    return {"id": tab["tab_id"], "text": written}
+
+
 def main() -> None:
     cache_file = CACHE / "herdr-spaces.json"
     try:
@@ -340,6 +381,12 @@ def main() -> None:
             fill(["res"], lambda: [res(wid, home)])
         if wid == machine:
             fill(["machine"], host)
+            short, pin = shares(values["machine"] or ""), cache.get("machine_tab") or {}
+            if short and now - pin.get("at", 0) >= TAB_TTL:
+                try:
+                    cache["machine_tab"] = {**name_machine_tab(wid, short, pin), "at": now}
+                except Exception as err:  # noqa: BLE001 - display-only, never fatal
+                    print(f"{label}: tab: {err}", file=sys.stderr)
         elif wid == primary and not machine:
             fill(["host"], host)
 
@@ -352,6 +399,49 @@ def main() -> None:
             last[wid] = values
         except (OSError, subprocess.SubprocessError) as err:
             print(f"{label}: report: {err}", file=sys.stderr)
+
+    # The mobile layout (docs/herdr.md "On a phone"): only agent panes show there.
+    for pane in panes:
+        if not pane.get("agent"):
+            continue
+        tokens = pane.get("tokens") or {}
+        space, title = {}, ""
+        if tokens.get("who"):
+            # Firstmate names its task panes through the display agent; home
+            # panes are left free, so the topic can go there.
+            space = last.get(pane["workspace_id"], {})
+            title = presentation(pane.get("terminal_title") or "")
+        text = presentation(
+            tight(
+                *(space.get(k) for k in ("decisions", "crew", "queue")),
+                shares(space.get("res") or ""),
+                "⚠watcher" if space.get("alert") else "",
+                *(tokens.get(k) for k in ("pr", "add", "del", "files")),
+            )
+        )
+        stored = pane.get("state_labels")
+        wanted = dict.fromkeys(STATES, text) if text else None
+        if stored != wanted or (title and pane.get("display_agent") != title):
+            args = ["--display-agent", title] if title else []
+            if text:
+                args += [a for s in STATES for a in ("--state-label", f"{s}={text}")]
+            elif stored is not None:
+                args.append("--clear-state-labels")
+            pid = pane["pane_id"]
+            try:
+                run(
+                    HERDR,
+                    "pane",
+                    "report-metadata",
+                    pid,
+                    "--source",
+                    SOURCE,
+                    "--agent",
+                    pane["agent"],
+                    *args,
+                )
+            except (OSError, subprocess.SubprocessError) as err:
+                print(f"{pid}: mobile: {err}", file=sys.stderr)
 
     cache.update(
         tokens={k: v for k, v in last.items() if k in live_ids},
