@@ -465,6 +465,7 @@ def omp_plugins(home, environment):
         result = subprocess.run(
             [home / ".local/bin/omp", "plugin", *argv],
             env=environment,
+            cwd=home,
             capture_output=True,
             text=True,
             check=True,

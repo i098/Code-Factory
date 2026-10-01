@@ -261,6 +261,25 @@ def test_the_dropped_npm_set_loses_its_links_but_keeps_the_prefix_and_other_inst
     assert not installer.retire_legacy_npm(tmp_path)
 
 
+def test_omp_plugins_are_managed_from_the_target_home_whatever_the_installer_cwd(
+    monkeypatch, tmp_path
+):
+    home = tmp_path / "home"
+    omp = home / ".local/bin/omp"
+    omp.parent.mkdir(parents=True)
+    omp.write_text(
+        "#!/bin/sh\n"
+        f'pwd >> "{tmp_path}/cwds"\n'
+        'case "$2" in list) echo \'{"marketplace": []}\' ;; upgrade) echo "up to date" ;; esac\n'
+    )
+    omp.chmod(0o755)
+    elsewhere = tmp_path / "checkout-under-another-users-home"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    installer.omp_plugins(home, {})
+    assert set((tmp_path / "cwds").read_text().split()) == {str(home)}
+
+
 def test_current_follows_the_newest_release_and_a_repeat_changes_nothing(tmp_path):
     tool = tmp_path / "chrome-devtools-mcp"
     for version in ("1.0.0", "1.1.0"):
