@@ -65,6 +65,10 @@ jobs:
       - name: Python tests
         run: uv run pytest
 
+      # Offline: a stub omp records the argv omp-as-pi builds.
+      - name: omp-as-pi tests
+        run: bash config/omp-as-pi/test.sh
+
       - name: Validate default configuration
         run: ./factory validate --config config/default.yml
 

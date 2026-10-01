@@ -1,0 +1,19 @@
+# Byte-for-byte the overlay no-mistakes v1.85.3 writes for an omp gate run under
+# disable_project_settings: true (internal/agent/ompgate.go ompGateOverlayYAML).
+# omp-as-pi applies it when no-mistakes asks for --no-context-files. It disables
+# every discovery provider that contributes a context file (AGENTS.md/CLAUDE.md/
+# GEMINI.md, .omp/AGENTS.md, and the other supported conventions) and turns off
+# mnemopi memory so repo content the gate reads cannot be recalled later.
+# omp-as-pi pins this file's sha256; editing it makes every gated run refuse.
+disabledProviders:
+  - native
+  - claude
+  - codex
+  - gemini
+  - opencode
+  - github
+  - agents
+  - agents-md
+  - claude-md
+memory:
+  backend: off

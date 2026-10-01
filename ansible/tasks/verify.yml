@@ -42,7 +42,9 @@
               factory_user_units ~ '/timers.target.wants/herdr-spaces.timer',
               factory_cfg.home ~ '/.profile']
              + ([factory_chrome_devtools_mcp_path, factory_omp_sidebar_extension,
-                 factory_omp_status_icons_extension]
+                 factory_omp_status_icons_extension, factory_omp_no_pattern_kill_extension,
+                 factory_omp_as_pi_dir ~ '/omp-as-pi', factory_no_mistakes_omp_overlay,
+                 factory_user_units ~ '/no-mistakes-daemon-.service.d/code-factory.conf']
                 if (factory_cfg.profiles.agents | bool) else [])
              + ([factory_pruner_script,
                  factory_pruner_python,
@@ -208,6 +210,16 @@
           resolved, installed under {{ factory_omp_root }}. The symlink points at
           "{{ factory_verify_omp_link.stat.lnk_source | default('(missing)') }}".
         quiet: true
+      when: factory_cfg.profiles.agents | bool
+
+    # Every omp flag omp-as-pi relies on is still in the installed omp's --help,
+    # and its gate overlay matches the pinned sha256.
+    - name: Run the omp-as-pi preflight
+      ansible.builtin.command:
+        argv: ["{{ factory_omp_as_pi_dir }}/omp-as-pi", --omp-as-pi-check]
+      become: true
+      changed_when: false
+      check_mode: false
       when: factory_cfg.profiles.agents | bool
 
     # --- managed shell environment -----------------------------------------
