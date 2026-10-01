@@ -30,7 +30,6 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 GITHUB_LATEST = "https://api.github.com/repos/{}/releases/latest"
-HERDR_LATEST = GITHUB_LATEST.format("herdrdev/herdr")
 LATEST_TOOLS = ("herdr", "nvim", "yazi")
 OMP_PACKAGE = "@oh-my-pi/pi-coding-agent"
 
