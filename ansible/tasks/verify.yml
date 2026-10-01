@@ -47,7 +47,8 @@
                 if (factory_cfg.profiles.agents | bool) else [])
              + ([factory_local_bin ~ '/nvim',
                  factory_local_bin ~ '/yazi',
-                 factory_local_bin ~ '/ya']
+                 factory_local_bin ~ '/ya',
+                 factory_local_bin ~ '/tree-sitter']
                 + (factory_editor_config_files | map(attribute='dest') | list)
                 if (factory_cfg.profiles.editor | bool) else [])
              + ([factory_pruner_script,
@@ -218,7 +219,7 @@
 
     # --- the editor runs the resolved releases and loads cleanly -----------
 
-    - name: Stat the managed nvim, yazi and ya symlinks
+    - name: Stat the managed nvim, yazi, ya and tree-sitter symlinks
       ansible.builtin.stat:
         path: "{{ factory_local_bin }}/{{ item.name }}"
         follow: false
@@ -228,12 +229,13 @@
         - { name: nvim, tool: nvim, version: "{{ factory_nvim_version }}" }
         - { name: yazi, tool: yazi, version: "{{ factory_yazi_version }}" }
         - { name: ya, tool: yazi, version: "{{ factory_yazi_version }}" }
+        - { name: tree-sitter, tool: tree-sitter, version: "{{ factory_tree_sitter_version }}" }
       register: factory_verify_editor_links
       changed_when: false
       check_mode: false
       when: factory_cfg.profiles.editor | bool
 
-    - name: Assert nvim, yazi and ya are the releases this run resolved
+    - name: Assert nvim, yazi, ya and tree-sitter are the releases this run resolved
       ansible.builtin.assert:
         that:
           - (item.stat.lnk_source | default('')).startswith(factory_tools_root ~ '/' ~ item.item.tool ~ '/' ~ item.item.version ~ '/')
@@ -277,6 +279,7 @@
           - "+checkhealth lazy nvim-treesitter"
           - '+lua io.stdout:write(table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"))'
           - +qa
+      environment: "{{ factory_user_env }}"
       register: factory_verify_nvim_health
       changed_when: false
       failed_when: >-

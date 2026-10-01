@@ -91,8 +91,8 @@
 # Resolved once per run, in plan too, so a release landing mid-run cannot
 # split what is installed from what the unit runs and verify asserts. Only the
 # tools this run installs are looked up (a host without the editor profile
-# never calls the neovim or yazi API). The installer refuses a herdr, nvim or
-# yazi release that publishes no SHA-256 for the asset.
+# never calls the neovim, yazi or tree-sitter API). The installer refuses a herdr,
+# nvim, yazi or tree-sitter release that publishes no SHA-256 for the asset.
 - name: Resolve the latest releases of the tools this run installs
   ansible.builtin.command:
     argv: >-
@@ -130,7 +130,7 @@
       - "platform           : {{ ansible_distribution }} {{ ansible_distribution_version }} {{ ansible_architecture }} -> {{ factory_platform }} / {{ factory_deb_arch }}"
       - "herdr              : {{ factory_herdr_version }} (latest release) at {{ factory_herdr_bin }}"
       - "omp                : {{ factory_omp_version if (factory_cfg.profiles.agents | bool) else 'not installed' }} (latest release)"
-      - "editor             : {{ ('nvim ' ~ factory_nvim_version ~ ', yazi ' ~ factory_yazi_version ~ ' (latest releases)') if (factory_cfg.profiles.editor | bool) else 'not installed' }}"
+      - "editor             : {{ ('nvim ' ~ factory_nvim_version ~ ', yazi ' ~ factory_yazi_version ~ ', tree-sitter ' ~ factory_tree_sitter_version ~ ' (latest releases)') if (factory_cfg.profiles.editor | bool) else 'not installed' }}"
       - "profiles           : {{ factory_cfg.profiles | dict2items | selectattr('value') | map(attribute='key') | list | join(', ') | default('none', true) }}"
       - "services           : start_services={{ factory_cfg.start_services }} linger={{ factory_manage_linger }}"
       - "pruner runtime     : {{ ('psutil ' ~ factory_pruner_psutil_version ~ ' in ' ~ factory_pruner_venv) if ((factory_cfg.profiles.agents | bool) and (factory_cfg.browser_prune.enabled | bool)) else 'disabled' }}"

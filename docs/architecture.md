@@ -53,7 +53,7 @@ Host sizing and every auto pruner are listed in [Capacity and pruners](capacity.
 
 ## Reproducibility policy
 
-1. Update native versions and both architecture hashes together in `toolchain.lock.json`; never resolve a mutable `latest` installer during deployment. The exceptions are herdr and, under the `editor` profile, Neovim and yazi: each apply resolves the latest release once and verifies the asset against the SHA-256 that release publishes, refusing a release without one. The same profile also moves every lazy.nvim plugin to its latest commit on each apply instead of pinning it; treesitter parsers install at the revision nvim-treesitter's own lockfile names.
+1. Update native versions and both architecture hashes together in `toolchain.lock.json`; never resolve a mutable `latest` installer during deployment. The exceptions are herdr and, under the `editor` profile, Neovim, yazi and tree-sitter-cli: each apply resolves the latest release once and verifies the asset against the SHA-256 that release publishes, refusing a release without one. The same profile also moves every lazy.nvim plugin to its latest commit on each apply instead of pinning it; treesitter parsers install at the revision nvim-treesitter's own `parsers.lua` names.
 2. Update exact npm dependencies and regenerate `tools/npm/package-lock.json` together. Do not copy a live global package directory. The one exception is omp, which each apply resolves to the registry's latest version and installs exactly.
 3. Change Python dependencies with `uv lock` and commit the lock.
 4. Keep machine differences in ignored `.local/host.yml`; schema validation precedes provisioning.

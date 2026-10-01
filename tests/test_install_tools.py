@@ -101,16 +101,18 @@ ASSETS = {
         "herdr-linux-x86_64",
         "nvim-linux-x86_64.tar.gz",
         "yazi-x86_64-unknown-linux-gnu.zip",
+        "tree-sitter-cli-linux-x64.zip",
     ],
     "linux-aarch64": [
         "herdr-linux-aarch64",
         "nvim-linux-arm64.tar.gz",
         "yazi-aarch64-unknown-linux-gnu.zip",
+        "tree-sitter-cli-linux-arm64.zip",
     ],
 }
 
 
-ALL = {"herdr", "nvim", "yazi", "omp"}
+ALL = {"herdr", "nvim", "yazi", "tree-sitter", "omp"}
 
 
 def release(digest, key="linux-x86_64"):
@@ -140,12 +142,29 @@ def test_latest_releases_are_pinned_to_the_digests_they_publish(monkeypatch, key
     registries(monkeypatch, release("sha256:" + "a" * 64, key))
     latest = installer.resolve_latest(key, ALL)
     assert latest["omp"] == "18.9.9"
-    for tool, kind in [("herdr", "file"), ("nvim", "tar"), ("yazi", "zip")]:
+    for tool, kind in [("herdr", "file"), ("nvim", "tar"), ("yazi", "zip"), ("tree-sitter", "zip")]:
         asset = latest[tool]["assets"][key]
         assert latest[tool]["version"] == "9.9.9"
         assert asset["sha256"] == "a" * 64
         assert asset["format"] == kind
     assert latest["yazi"]["assets"][key]["binaries"] == {"yazi": "*/yazi", "ya": "*/ya"}
+    assert latest["tree-sitter"]["assets"][key]["binaries"] == {"tree-sitter": "tree-sitter"}
+
+
+def test_tree_sitter_zip_with_a_top_level_binary_installs_and_runs(tmp_path, monkeypatch):
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as stream:
+        member = zipfile.ZipInfo("tree-sitter")
+        member.external_attr = 0o755 << 16
+        stream.writestr(member, "#!/bin/sh\nprintf 'tree-sitter 9.9.9\\n'\n")
+    payload = archive.getvalue()
+    registries(monkeypatch, release("sha256:" + "a" * 64))
+    spec = installer.resolve_latest("linux-x86_64", {"tree-sitter"})["tree-sitter"]
+    spec["assets"]["linux-x86_64"]["sha256"] = hashlib.sha256(payload).hexdigest()
+    monkeypatch.setattr(installer.urllib.request, "urlopen", lambda *a, **k: Download(payload))
+    assert installer.install_asset(tmp_path, "tree-sitter", spec, "linux-x86_64")
+    command = tmp_path / ".local/bin/tree-sitter"
+    assert subprocess.check_output([command], text=True).strip() == "tree-sitter 9.9.9"
 
 
 @pytest.mark.parametrize("digest", [None, "", "md5:abc"])
@@ -168,7 +187,7 @@ def test_github_lookups_authenticate_with_github_token_else_anonymous(monkeypatc
     monkeypatch.setenv("GITHUB_TOKEN", env)
     monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
     installer.resolve_latest("linux-x86_64", ALL)
-    assert seen == [expected] * 3
+    assert seen == [expected] * 4
 
 
 @pytest.mark.parametrize(
@@ -180,6 +199,7 @@ def test_github_lookups_authenticate_with_github_token_else_anonymous(monkeypatc
             {"herdr", "nvim", "yazi"},
             ["herdrdev/herdr", "neovim/neovim", "sxyazi/yazi"],
         ),
+        (["--tools", "tree-sitter"], {"tree-sitter"}, ["tree-sitter/tree-sitter"]),
         (["--tools", "uv", "--npm"], {"omp"}, ["registry.npmjs.org"]),
         (["--tools", "node,uv"], set(), []),
     ],

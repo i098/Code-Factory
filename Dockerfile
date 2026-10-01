@@ -158,8 +158,8 @@ RUN set -eux; uv run --project . --locked python containers/assert-image-config.
 # The real convergence run. `apply` installs the checksum-pinned agent and
 # development toolchain through scripts/install_tools.py and renders the
 # user-scope files; start_services=false keeps it off systemd and linger.
-# The optional `github_token` BuildKit secret authenticates the herdr, nvim and
-# yazi release lookups (shared CI runner IPs exhaust the unauthenticated API budget). It is
+# The optional `github_token` BuildKit secret authenticates the herdr, nvim, yazi
+# and tree-sitter release lookups (shared CI runner IPs exhaust the unauthenticated API budget). It is
 # exposed to this step only, never as an ARG, ENV, layer file or history entry;
 # without it the lookups run unauthenticated.
 RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN \

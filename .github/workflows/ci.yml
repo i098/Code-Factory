@@ -283,7 +283,7 @@ jobs:
           print(f"compose audit passed for {len(doc.get('services', {}))} service(s)")
           PY
 
-      # The job's read-only GITHUB_TOKEN authenticates the herdr, nvim and yazi
+      # The job's read-only GITHUB_TOKEN authenticates the herdr, nvim, yazi and tree-sitter
       # release lookups: shared runner IPs exhaust the unauthenticated API budget. It enters
       # builds only as a BuildKit secret.
       - name: Build worker image

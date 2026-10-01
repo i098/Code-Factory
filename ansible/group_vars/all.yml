@@ -24,7 +24,7 @@ factory_lock_file: "{{ code_factory_repo }}/toolchain.lock.json"
 factory_pruner_source: "{{ code_factory_repo }}/maintenance/chrome-autoprune.py"
 factory_pruner_requirements: "{{ code_factory_repo }}/maintenance/requirements.txt"
 
-# herdr, nvim, yazi and omp track their latest release: tasks/preflight.yml
+# herdr, nvim, yazi, tree-sitter and omp track their latest release: tasks/preflight.yml
 # resolves them once per run into factory_latest, and that is what the run
 # installs and tasks/verify.yml asserts. Every other version comes from the
 # reviewed lock.
@@ -32,6 +32,7 @@ factory_herdr_version: "{{ factory_latest.herdr.version }}"
 factory_omp_version: "{{ factory_latest.omp }}"
 factory_nvim_version: "{{ factory_latest.nvim.version }}"
 factory_yazi_version: "{{ factory_latest.yazi.version }}"
+factory_tree_sitter_version: "{{ factory_latest['tree-sitter'].version }}"
 
 # --- Platform ---------------------------------------------------------------
 factory_platform_map:
@@ -175,9 +176,9 @@ factory_desktop_packages:
   # `ss` is how tasks/verify.yml proves both listeners stayed on loopback.
   - iproute2
 
-# Editor profile: the C compiler builds treesitter parsers; luarocks and lua5.1
-# let lazy.nvim's health check pass without its hererocks fallback; yazi calls
-# `file` for mime detection.
+# Editor profile: the C compiler builds treesitter parsers (with tree-sitter-cli,
+# installed as a tool); luarocks and lua5.1 let lazy.nvim's health check pass
+# without its hererocks fallback; yazi calls `file` for mime detection.
 factory_editor_packages:
   - build-essential
   - file
@@ -186,7 +187,7 @@ factory_editor_packages:
 
 # --- Tool installer ---------------------------------------------------------
 factory_core_tools: [herdr, node, bun, uv]
-factory_editor_tools: [nvim, yazi]
+factory_editor_tools: [nvim, yazi, tree-sitter]
 # What one apply installs, shared by the preflight release lookup and the
 # installer run so the two cannot disagree: only these tools are resolved.
 factory_installer_selection: >-

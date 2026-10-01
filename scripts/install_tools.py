@@ -4,10 +4,10 @@
 Stdlib-only: also bootstraps uv before repository dependencies exist. stdout is
 one JSON result; installer progress goes to stderr. Existing unmanaged commands
 are never replaced. Archives cannot write outside their staging directory.
-Every tool is pinned in the lock except herdr, nvim, yazi and omp, which track
-their latest release: herdr, nvim and yazi are verified against the SHA-256
-their GitHub release publishes, omp against the integrity npm records for the
-resolved version.
+Every tool is pinned in the lock except herdr, nvim, yazi, tree-sitter and omp,
+which track their latest release: herdr, nvim, yazi and tree-sitter are verified
+against the SHA-256 their GitHub release publishes, omp against the integrity npm
+records for the resolved version.
 """
 
 import argparse
@@ -30,7 +30,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 GITHUB_LATEST = "https://api.github.com/repos/{}/releases/latest"
-LATEST_TOOLS = ("herdr", "nvim", "yazi")
+LATEST_TOOLS = ("herdr", "nvim", "yazi", "tree-sitter")
 OMP_PACKAGE = "@oh-my-pi/pi-coding-agent"
 
 
@@ -107,6 +107,14 @@ def resolve_latest(key, wanted):
             f"yazi-{arch}-unknown-linux-gnu.zip",
             "zip",
             {"yazi": "*/yazi", "ya": "*/ya"},
+            key,
+        )
+    if "tree-sitter" in wanted:
+        latest["tree-sitter"] = github_latest(
+            "tree-sitter/tree-sitter",
+            f"tree-sitter-cli-linux-{'arm64' if arch == 'aarch64' else 'x64'}.zip",
+            "zip",
+            {"tree-sitter": "tree-sitter"},
             key,
         )
     if "omp" in wanted:

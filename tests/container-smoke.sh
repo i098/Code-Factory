@@ -31,7 +31,7 @@
 #   CF_SMOKE_CPUS     container CPU cap           (default 2)
 #   CF_SMOKE_PIDS     container PID cap           (default 4096)
 #   CF_SMOKE_TIMEOUT  whole-container deadline, s (default 2700)
-#   GITHUB_TOKEN      optional; authenticates the herdr, nvim and yazi release
+#   GITHUB_TOKEN      optional; authenticates the herdr, nvim, yazi and tree-sitter release
 #                     lookups (build secret and run env, never baked into the image)
 # Environment knobs (container mode):
 #   CF_SMOKE_ONLY           comma-separated check names
@@ -102,7 +102,7 @@ host_mode() {
     }
     trap cleanup_host EXIT
 
-    # GITHUB_TOKEN, when set, authenticates the herdr, nvim and yazi release
+    # GITHUB_TOKEN, when set, authenticates the herdr, nvim, yazi and tree-sitter release
     # lookups as a BuildKit secret; unset, the secret is empty and they are anonymous.
     if [ -z "${IMAGE_REF}" ]; then
         printf '==> docker build --target smoke --tag %s\n' "${SMOKE_TAG}"
@@ -231,9 +231,9 @@ herdr_installed_bin() {
 # has since overtaken; that is an upgrade, not a repeat change.
 image_is_current() {
     local latest versions
-    versions='[.herdr.version, .nvim.version, .yazi.version, .omp]'
+    versions='[.herdr.version, .nvim.version, .yazi.version, ."tree-sitter".version, .omp]'
     latest=$(python3 "${CF_ROOT}/scripts/install_tools.py" --lock "${CF_ROOT}/toolchain.lock.json" \
-        --home "${HOME}" --tools herdr,nvim,yazi --npm --resolve) || fail "could not resolve the latest herdr, nvim, yazi and omp releases"
+        --home "${HOME}" --tools herdr,nvim,yazi,tree-sitter --npm --resolve) || fail "could not resolve the latest herdr, nvim, yazi, tree-sitter and omp releases"
     [ "$(jq -c "${versions}" <<<"${latest}")" = "$(jq -c "${versions}" "${RESOLVED_STAMP}")" ] \
         && return 0
     printf 'image has %s but upstream now has %s; idempotence not measured\n' \
@@ -399,12 +399,12 @@ check_npm_tooling() {
     printf '%s npm-linked commands resolve into %s\n' "${linked}" "${npm_root}"
 }
 
-# Editor profile: nvim, yazi and ya are the releases the build resolved, the
+# Editor profile: nvim, yazi, ya and tree-sitter are the releases the build resolved, the
 # tracked configuration is in place byte for byte, Neovim loads it headless
 # with no error, and checkhealth reports no lazy.nvim or nvim-treesitter error.
 check_editor() {
     local row tool version banner err health
-    for row in nvim:nvim yazi:yazi ya:yazi; do
+    for row in nvim:nvim yazi:yazi ya:yazi 'tree-sitter:"tree-sitter"'; do
         tool=${row%%:*}
         version=$(resolved_version ".${row#*:}.version")
         banner=$("${HOME}/.local/bin/${tool}" --version 2>&1) || fail "${tool} --version exited nonzero: ${banner}"
@@ -424,8 +424,8 @@ check_editor() {
         || fail "nvim checkhealth exited nonzero"
     grep -q 'nvim-treesitter:' <<<"${health}" || fail "checkhealth did not run the nvim-treesitter check"
     ! grep -q ERROR <<<"${health}" || fail "checkhealth reports errors: $(grep ERROR <<<"${health}" | tr '\n' ' ')"
-    printf 'nvim %s and yazi %s; the configuration loads headless and checkhealth lazy, nvim-treesitter is clean\n' \
-        "$(resolved_version .nvim.version)" "$(resolved_version .yazi.version)"
+    printf 'nvim %s, yazi %s and tree-sitter %s; the configuration loads headless and checkhealth lazy, nvim-treesitter is clean\n' \
+        "$(resolved_version .nvim.version)" "$(resolved_version .yazi.version)" "$(resolved_version '."tree-sitter".version')"
 }
 
 check_development_toolchain() {
@@ -700,7 +700,7 @@ check_installer_idempotent() {
     out=$(python3 "${CF_ROOT}/scripts/install_tools.py" \
             --lock "${CF_ROOT}/toolchain.lock.json" \
             --home "${HOME}" \
-            --tools herdr,node,bun,uv,nvim,yazi \
+            --tools herdr,node,bun,uv,nvim,yazi,tree-sitter \
             --resolved "$(cat "${RESOLVED_STAMP}")" \
             --npm --development 2>&1) || {
         printf '%s\n' "${out}" | tail -n 20
