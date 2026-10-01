@@ -85,30 +85,35 @@ def github_latest(repo, name, kind, binaries, key):
     }
 
 
-def resolve_latest(key):
-    """The newest herdr, nvim and yazi releases as lock-shaped specs, and the newest omp version."""
+def resolve_latest(key, wanted):
+    """The newest release of each wanted tool: lock-shaped specs, except omp, a version."""
     arch = key.removeprefix("linux-")
-    latest = {
-        "herdr": github_latest("herdrdev/herdr", f"herdr-{key}", "file", {"herdr": "herdr"}, key),
-        "nvim": github_latest(
+    latest = {}
+    if "herdr" in wanted:
+        latest["herdr"] = github_latest(
+            "herdrdev/herdr", f"herdr-{key}", "file", {"herdr": "herdr"}, key
+        )
+    if "nvim" in wanted:
+        latest["nvim"] = github_latest(
             "neovim/neovim",
             f"nvim-linux-{'arm64' if arch == 'aarch64' else arch}.tar.gz",
             "tar",
             {"nvim": "*/bin/nvim"},
             key,
-        ),
-        "yazi": github_latest(
+        )
+    if "yazi" in wanted:
+        latest["yazi"] = github_latest(
             "sxyazi/yazi",
             f"yazi-{arch}-unknown-linux-gnu.zip",
             "zip",
             {"yazi": "*/yazi", "ya": "*/ya"},
             key,
-        ),
-    }
-    with urllib.request.urlopen(
-        f"https://registry.npmjs.org/{OMP_PACKAGE}/latest", timeout=60
-    ) as response:
-        latest["omp"] = json.load(response)["version"]
+        )
+    if "omp" in wanted:
+        with urllib.request.urlopen(
+            f"https://registry.npmjs.org/{OMP_PACKAGE}/latest", timeout=60
+        ) as response:
+            latest["omp"] = json.load(response)["version"]
     return latest
 
 
@@ -410,15 +415,16 @@ def main():
     parser.add_argument(
         "--resolve",
         action="store_true",
-        help="print the latest herdr, nvim, yazi and omp as JSON and exit",
+        help="print the latest release of each selected --tools entry (and omp with --npm) as JSON and exit",
     )
     parser.add_argument(
         "--resolved", type=json.loads, help="--resolve output to install instead of resolving"
     )
     args = parser.parse_args()
     key = platform_key()
+    wanted = (set(args.tools.split(",")) & set(LATEST_TOOLS)) | ({"omp"} if args.npm else set())
     if args.resolve:
-        print(json.dumps(resolve_latest(key)))
+        print(json.dumps(resolve_latest(key, wanted)))
         return
     home = args.home.resolve(strict=True)
     if home.stat().st_uid != os.geteuid():
@@ -431,9 +437,7 @@ def main():
         names = list(dict.fromkeys([*names, *lock["npm_required_tools"]]))
     if args.development:
         names.append("rustup-init")
-    latest = args.resolved or (
-        resolve_latest(key) if set(LATEST_TOOLS) & set(names) or args.npm else {}
-    )
+    latest = args.resolved or resolve_latest(key, wanted)
     environment = {
         **os.environ,
         "HOME": str(home),

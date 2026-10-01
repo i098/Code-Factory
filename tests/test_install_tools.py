@@ -110,6 +110,9 @@ ASSETS = {
 }
 
 
+ALL = {"herdr", "nvim", "yazi", "omp"}
+
+
 def release(digest, key="linux-x86_64"):
     assets = [
         {
@@ -135,7 +138,7 @@ def registries(monkeypatch, github_release):
 @pytest.mark.parametrize("key", ASSETS)
 def test_latest_releases_are_pinned_to_the_digests_they_publish(monkeypatch, key):
     registries(monkeypatch, release("sha256:" + "a" * 64, key))
-    latest = installer.resolve_latest(key)
+    latest = installer.resolve_latest(key, ALL)
     assert latest["omp"] == "18.9.9"
     for tool, kind in [("herdr", "file"), ("nvim", "tar"), ("yazi", "zip")]:
         asset = latest[tool]["assets"][key]
@@ -149,7 +152,7 @@ def test_latest_releases_are_pinned_to_the_digests_they_publish(monkeypatch, key
 def test_release_without_a_checksum_is_refused(monkeypatch, digest):
     registries(monkeypatch, release(digest))
     with pytest.raises(ValueError, match="refusing an unverified binary"):
-        installer.resolve_latest("linux-x86_64")
+        installer.resolve_latest("linux-x86_64", ALL)
 
 
 @pytest.mark.parametrize(("env", "expected"), [("env-token", "Bearer env-token"), ("", None)])
@@ -164,5 +167,50 @@ def test_github_lookups_authenticate_with_github_token_else_anonymous(monkeypatc
 
     monkeypatch.setenv("GITHUB_TOKEN", env)
     monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
-    installer.resolve_latest("linux-x86_64")
+    installer.resolve_latest("linux-x86_64", ALL)
     assert seen == [expected] * 3
+
+
+@pytest.mark.parametrize(
+    ("argv", "resolved", "lookups"),
+    [
+        (["--tools", "herdr,node,bun,uv"], {"herdr"}, ["herdrdev/herdr"]),
+        (
+            ["--tools", "herdr,nvim,yazi"],
+            {"herdr", "nvim", "yazi"},
+            ["herdrdev/herdr", "neovim/neovim", "sxyazi/yazi"],
+        ),
+        (["--tools", "uv", "--npm"], {"omp"}, ["registry.npmjs.org"]),
+        (["--tools", "node,uv"], set(), []),
+    ],
+)
+def test_resolve_looks_up_only_the_selected_tools(
+    monkeypatch, capsys, tmp_path, argv, resolved, lookups
+):
+    seen = []
+
+    def urlopen(url, **kwargs):
+        url = getattr(url, "full_url", url)
+        seen.append(url)
+        body = release("sha256:" + "a" * 64) if "api.github.com" in url else {"version": "18.9.9"}
+        return io.BytesIO(json.dumps(body).encode())
+
+    monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(installer, "platform_key", lambda: "linux-x86_64")
+    monkeypatch.setattr(
+        installer.sys,
+        "argv",
+        [
+            "install_tools.py",
+            "--lock",
+            str(tmp_path / "lock"),
+            "--home",
+            str(tmp_path),
+            "--resolve",
+            *argv,
+        ],
+    )
+    installer.main()
+    assert set(json.loads(capsys.readouterr().out)) == resolved
+    assert len(seen) == len(lookups)
+    assert all(lookup in url for lookup, url in zip(lookups, seen))

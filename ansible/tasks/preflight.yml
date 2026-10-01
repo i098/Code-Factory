@@ -89,17 +89,22 @@
     quiet: true
 
 # Resolved once per run, in plan too, so a release landing mid-run cannot
-# split what is installed from what the unit runs and verify asserts. The
-# installer refuses a herdr, nvim or yazi release that publishes no SHA-256
-# for the asset.
-- name: Resolve the latest herdr, nvim, yazi and omp releases
+# split what is installed from what the unit runs and verify asserts. Only the
+# tools this run installs are looked up (a host without the editor profile
+# never calls the neovim or yazi API). The installer refuses a herdr, nvim or
+# yazi release that publishes no SHA-256 for the asset.
+- name: Resolve the latest releases of the tools this run installs
   ansible.builtin.command:
-    argv: [python3, "{{ factory_installer }}", --lock, "{{ factory_lock_file }}", --home, "{{ factory_cfg.home }}", --resolve]
+    argv: >-
+      {{ ['python3', factory_installer,
+          '--lock', factory_lock_file,
+          '--home', factory_cfg.home]
+         + factory_installer_selection + ['--resolve'] }}
   register: factory_latest_run
   changed_when: false
   check_mode: false
 
-- name: Record the resolved herdr, nvim, yazi and omp releases
+- name: Record the resolved releases
   ansible.builtin.set_fact:
     factory_latest: "{{ factory_latest_run.stdout | from_json }}"
 

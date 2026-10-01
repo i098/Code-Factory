@@ -185,6 +185,12 @@ factory_editor_packages:
 # --- Tool installer ---------------------------------------------------------
 factory_core_tools: [herdr, node, bun, uv]
 factory_editor_tools: [nvim, yazi]
+# What one apply installs, shared by the preflight release lookup and the
+# installer run so the two cannot disagree: only these tools are resolved.
+factory_installer_selection: >-
+  {{ ['--tools', (factory_core_tools + (factory_editor_tools
+                  if (factory_cfg.profiles.editor | bool) else [])) | join(',')]
+     + (['--npm'] if (factory_cfg.profiles.agents | bool) else []) }}
 
 # --- Editor (profiles.editor) -----------------------------------------------
 # Managed: every apply rewrites these, so the repository stays the source of

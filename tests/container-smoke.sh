@@ -233,7 +233,7 @@ image_is_current() {
     local latest versions
     versions='[.herdr.version, .nvim.version, .yazi.version, .omp]'
     latest=$(python3 "${CF_ROOT}/scripts/install_tools.py" --lock "${CF_ROOT}/toolchain.lock.json" \
-        --home "${HOME}" --resolve) || fail "could not resolve the latest herdr, nvim, yazi and omp releases"
+        --home "${HOME}" --tools herdr,nvim,yazi --npm --resolve) || fail "could not resolve the latest herdr, nvim, yazi and omp releases"
     [ "$(jq -c "${versions}" <<<"${latest}")" = "$(jq -c "${versions}" "${RESOLVED_STAMP}")" ] \
         && return 0
     printf 'image has %s but upstream now has %s; idempotence not measured\n' \

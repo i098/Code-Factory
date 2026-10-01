@@ -1,6 +1,7 @@
 ---
 # Toolchain, installed by the repository installer as the target user: the
-# lock's pins plus the herdr and omp releases tasks/preflight.yml resolved.
+# lock's pins plus the releases tasks/preflight.yml resolved for this
+# selection.
 #
 # Contract: python3 <repo>/scripts/install_tools.py --lock <repo>/toolchain.lock.json
 #           --home <factory.home> --tools herdr,node,bun,uv [--npm] [--development]
@@ -14,11 +15,9 @@
     factory_installer_argv: >-
       {{ ['python3', factory_installer,
           '--lock', factory_lock_file,
-          '--home', factory_cfg.home,
-          '--tools', (factory_core_tools + (factory_editor_tools
-                      if (factory_cfg.profiles.editor | bool) else [])) | join(','),
-          '--resolved', factory_latest | to_json]
-         + (['--npm'] if (factory_cfg.profiles.agents | bool) else [])
+          '--home', factory_cfg.home]
+         + factory_installer_selection
+         + ['--resolved', factory_latest | to_json]
          + (['--development'] if (factory_cfg.profiles.development | bool) else []) }}
 
 - name: Show the installer invocation
