@@ -10,9 +10,9 @@
 # Container mode (inside the image; CMD of the `smoke` target):
 #   tests/container-smoke.sh --in-container [--only NAME,NAME]
 #   Exercises what the image actually contains, through the programs a user
-#   would run: managed tool versions compared with toolchain.lock.json, herdr
-#   and omp compared with the release the build resolved, a Herdr
-#   configuration that Herdr itself accepts and that matches the factory
+#   would run: managed tool versions compared with toolchain.lock.json, herdr,
+#   omp and the editor tools compared with the release the build resolved, a
+#   Herdr configuration that Herdr itself accepts and that matches the factory
 #   document, the user unit's ExecStart resolved and executed, a real headless
 #   `herdr server` brought up and shut down over its API socket, the repository
 #   CLI (validate, invalid-input rejection, init overwrite refusal), a second
@@ -212,9 +212,10 @@ lock_version() {
     jq -er --arg tool "$1" '.tools[$tool].version' "${CF_ROOT}/toolchain.lock.json"
 }
 
-# herdr and omp track their latest release. The installer records the release
-# it installed in RESOLVED_STAMP; checks compare against that record, so an
-# upstream release published after the build cannot turn them red.
+# herdr, nvim, yazi, tree-sitter and omp track their latest release. The
+# installer records the release it installed in RESOLVED_STAMP; checks compare
+# against that record, so an upstream release published after the build cannot
+# turn them red.
 RESOLVED_STAMP="${HOME}/.local/share/code-factory/resolved.json"
 resolved_version() {
     jq -er "$1" "${RESOLVED_STAMP}"

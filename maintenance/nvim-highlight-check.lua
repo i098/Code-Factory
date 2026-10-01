@@ -19,6 +19,10 @@ local ok, err = pcall(function()
       end
     end
   end)
+  -- A decoration provider that throws is reported after the command that
+  -- triggered the redraw, so let the event loop deliver it inside the pcall.
+  vim.cmd("redraw!")
+  vim.wait(100)
   vim.cmd("redraw!")
 end)
 
