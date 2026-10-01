@@ -128,10 +128,12 @@ def verified(tool, version, key, name, url, checksum, binaries):
     return {"version": version, "assets": {key: asset}}
 
 
-def resolve_latest(key):
-    """Specs for the newest native releases, and the newest npm tool versions."""
+def resolve_latest(key, names):
+    """Specs for the newest releases of exactly these tools, and nothing else."""
     latest = {}
     for tool, (repo, prefix, pattern, binaries) in GITHUB_LATEST.items():
+        if tool not in names:
+            continue
         release = json.loads(fetch(GITHUB_API.format(repo), f"{tool} release"))
         version = release["tag_name"].removeprefix(prefix)
         name = pattern.format(v=version, key=key, **ARCH[key])
@@ -139,44 +141,51 @@ def resolve_latest(key):
         checksum = (asset.get("digest") or "").removeprefix("sha256:")
         url = asset.get("browser_download_url", "")
         latest[tool] = verified(tool, version, key, name, url, checksum, binaries)
-    releases = json.loads(fetch("https://nodejs.org/dist/index.json", "node release"))
-    tag = max((r["version"] for r in releases), key=lambda v: tuple(map(int, v[1:].split("."))))
-    name = f"node-{tag}-linux-{ARCH[key]['node']}.tar.xz"
-    sums = fetch(f"https://nodejs.org/dist/{tag}/SHASUMS256.txt", "node checksums").decode()
-    match = re.search(rf"^([0-9a-f]{{64}})  {re.escape(name)}$", sums, re.M)
-    binaries = {command: f"node-v*/bin/{command}" for command in ("node", "npm", "npx")}
-    latest["node"] = verified(
-        "node",
-        tag.removeprefix("v"),
-        key,
-        name,
-        f"https://nodejs.org/dist/{tag}/{name}",
-        match[1] if match else "",
-        binaries,
-    )
-    toml = fetch("https://static.rust-lang.org/rustup/release-stable.toml", "rustup").decode()
-    match = re.search(r"^version = '([0-9.]+)'$", toml, re.M)
-    if not match:
-        raise ValueError("cannot read the latest rustup version")
-    version = match[1]
-    url = f"https://static.rust-lang.org/rustup/archive/{version}/{ARCH[key]['gnu']}-unknown-linux-gnu/rustup-init"
-    checksum = fetch(url + ".sha256", "rustup-init checksum").decode().split(" ")[0]
-    binaries = {"rustup-init": "rustup-init"}
-    latest["rustup-init"] = verified(
-        "rustup-init", version, key, "rustup-init", url, checksum, binaries
-    )
+    if "node" in names:
+        releases = json.loads(fetch("https://nodejs.org/dist/index.json", "node release"))
+        tag = max((r["version"] for r in releases), key=lambda v: tuple(map(int, v[1:].split("."))))
+        name = f"node-{tag}-linux-{ARCH[key]['node']}.tar.xz"
+        sums = fetch(f"https://nodejs.org/dist/{tag}/SHASUMS256.txt", "node checksums").decode()
+        match = re.search(rf"^([0-9a-f]{{64}})  {re.escape(name)}$", sums, re.M)
+        binaries = {command: f"node-v*/bin/{command}" for command in ("node", "npm", "npx")}
+        latest["node"] = verified(
+            "node",
+            tag.removeprefix("v"),
+            key,
+            name,
+            f"https://nodejs.org/dist/{tag}/{name}",
+            match[1] if match else "",
+            binaries,
+        )
+    if "rustup-init" in names:
+        toml = fetch("https://static.rust-lang.org/rustup/release-stable.toml", "rustup").decode()
+        match = re.search(r"^version = '([0-9.]+)'$", toml, re.M)
+        if not match:
+            raise ValueError("cannot read the latest rustup version")
+        version = match[1]
+        url = f"https://static.rust-lang.org/rustup/archive/{version}/{ARCH[key]['gnu']}-unknown-linux-gnu/rustup-init"
+        checksum = fetch(url + ".sha256", "rustup-init checksum").decode().split(" ")[0]
+        binaries = {"rustup-init": "rustup-init"}
+        latest["rustup-init"] = verified(
+            "rustup-init", version, key, "rustup-init", url, checksum, binaries
+        )
     for tool, package in NPM_LATEST.items():
-        registry = fetch(f"https://registry.npmjs.org/{package}/latest", f"{tool} version")
-        latest[tool] = json.loads(registry)["version"]
-    # Resolved for the fleet guards' shared Supabase stack, installed by Ansible.
-    registry = fetch("https://registry.npmjs.org/supabase/latest", "supabase version")
-    latest["supabase"] = json.loads(registry)["version"]
-    # The Chrome pruner's runtime, installed by Ansible with uv --require-hashes.
-    pypi = json.loads(fetch("https://pypi.org/pypi/psutil/json", "psutil release"))
-    hashes = [file["digests"]["sha256"] for file in pypi["urls"]]
-    if not hashes or not all(re.fullmatch(r"[0-9a-f]{64}", h) for h in hashes):
-        raise ValueError("psutil publishes no SHA-256 digests; refusing an unverified binary")
-    latest["psutil"] = {"version": pypi["info"]["version"], "sha256": hashes}
+        if tool in names:
+            registry = fetch(f"https://registry.npmjs.org/{package}/latest", f"{tool} version")
+            latest[tool] = json.loads(registry)["version"]
+    if "supabase" in names:
+        # Resolved for the fleet guards' shared Supabase stack, installed by Ansible.
+        registry = fetch("https://registry.npmjs.org/supabase/latest", "supabase version")
+        latest["supabase"] = json.loads(registry)["version"]
+    if "psutil" in names:
+        # The Chrome pruner's runtime, installed by Ansible with uv --require-hashes.
+        pypi = json.loads(fetch("https://pypi.org/pypi/psutil/json", "psutil release"))
+        hashes = [file["digests"]["sha256"] for file in pypi["urls"]]
+        if not hashes or not all(re.fullmatch(r"[0-9a-f]{64}", h) for h in hashes):
+            raise ValueError("psutil publishes no SHA-256 digests; refusing an unverified binary")
+        latest["psutil"] = {"version": pypi["info"]["version"], "sha256": hashes}
+    if unknown := sorted(set(names) - latest.keys()):
+        raise ValueError(f"no latest release source for: {', '.join(unknown)}")
     return latest
 
 
@@ -466,6 +475,12 @@ def main():
     parser.add_argument("--npm", action="store_true")
     parser.add_argument("--development", action="store_true")
     parser.add_argument(
+        "--also",
+        default="",
+        help="comma-separated extra sources to resolve that Ansible installs itself: "
+        "obscura, supabase, psutil",
+    )
+    parser.add_argument(
         "--resolve", action="store_true", help="print the latest releases as JSON and exit"
     )
     parser.add_argument(
@@ -473,16 +488,17 @@ def main():
     )
     args = parser.parse_args()
     key = platform_key()
+    names = list(dict.fromkeys(args.tools.split(",") + (AGENT_TOOLS if args.npm else [])))
+    if args.development:
+        names.append("rustup-init")
+    sources = {*names, *(NPM_LATEST if args.npm else ()), *filter(None, args.also.split(","))}
     if args.resolve:
-        print(json.dumps(resolve_latest(key)))
+        print(json.dumps(resolve_latest(key, sources)))
         return
     home = args.home.resolve(strict=True)
     if home.stat().st_uid != os.geteuid():
         parser.error("run as the user who owns --home")
-    names = list(dict.fromkeys(args.tools.split(",") + (AGENT_TOOLS if args.npm else [])))
-    if args.development:
-        names.append("rustup-init")
-    latest = args.resolved or resolve_latest(key)
+    latest = args.resolved or resolve_latest(key, sources)
     environment = {
         **os.environ,
         "HOME": str(home),

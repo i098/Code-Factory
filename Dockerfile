@@ -137,8 +137,10 @@ WORKDIR /opt/code-factory
 # smoke script are invoked directly, including from a context that lost them.
 RUN set -eux; chmod +x bootstrap.sh factory tests/container-smoke.sh
 
-# Latest uv bootstrap + locked Python dependencies (no provisioning yet).
-RUN set -eux; ./bootstrap.sh
+# Latest uv bootstrap + locked Python dependencies (no provisioning yet). The
+# one uv lookup takes the same optional `github_token` secret as `apply`.
+RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
+    set -eux; ./bootstrap.sh
 
 # Schema validation through the repository's own validator.
 RUN set -eux; ./factory validate --config "${FACTORY_CONFIG}"
@@ -153,8 +155,8 @@ RUN set -eux; uv run --project . --locked python containers/assert-image-config.
 # the user-scope files; start_services=false keeps it off systemd and linger.
 # The optional `github_token` BuildKit secret authenticates the latest-release
 # lookups (shared CI runner IPs exhaust the unauthenticated API budget). It is
-# exposed to this step only, never as an ARG, ENV, layer file or history entry;
-# without it the lookup runs unauthenticated.
+# exposed to the lookup steps only (bootstrap and this one), never as an ARG,
+# ENV, layer file or history entry; without it the lookup runs unauthenticated.
 RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
     set -eux; ./factory apply --config "${FACTORY_CONFIG}"
 

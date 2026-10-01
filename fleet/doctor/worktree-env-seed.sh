@@ -33,10 +33,11 @@ seed_one() {
 }
 
 # Heap cap for everything bun runs in the worktree (bun run dev, tsc): the
-# managed shell and Herdr environment set BUN_OPTIONS=--env-file=.env.fleet, so
-# every bun started in the worktree root loads this file and hands NODE_OPTIONS
-# to the node processes it spawns. A runaway compile then fails fast with a
-# heap error the agent can see, instead of creeping to 4 GB and swapping the
+# managed shell and Herdr environment set BUN_OPTIONS to load .env, .env.local
+# and .env.fleet, so every bun started in the worktree root loads this file
+# and hands NODE_OPTIONS to the node processes it spawns. A runaway compile
+# then fails fast with a heap error the agent can see, instead of creeping to
+# 4 GB and swapping the
 # host. The file is hidden from git through the shared .git/info/exclude, so no
 # lane ever sees or commits it.
 HEAP_MB=${FLEET_NODE_HEAP_MB:-2048}

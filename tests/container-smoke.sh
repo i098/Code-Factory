@@ -228,7 +228,8 @@ herdr_installed_bin() {
 image_is_current() {
     local latest versions='map_values(.version? // .)'
     latest=$(python3 "${CF_ROOT}/scripts/install_tools.py" \
-        --home "${HOME}" --resolve) || fail "could not resolve the latest releases"
+        --home "${HOME}" --tools herdr,node,bun,uv --npm --development --resolve) \
+        || fail "could not resolve the latest releases"
     [ "$(jq -cS "${versions}" <<<"${latest}")" = "$(jq -cS "${versions}" "${RESOLVED_STAMP}")" ] \
         && return 0
     printf 'image has %s but upstream now has %s; idempotence not measured\n' \

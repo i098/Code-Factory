@@ -57,11 +57,13 @@ factory_chrome_devtools_mcp_path: "{{ factory_share_dir }}/chrome-devtools-mcp/{
 # Environment shared by the interactive shell profile and the Herdr unit.
 # Consumed only when the agents profile is on, because the npm set that
 # provides the MCP entrypoint is installed by `--npm`. With fleet guards, every
-# bun loads the worktree's seeded .env.fleet heap cap (a missing file is a
-# no-op; see fleet/doctor/worktree-env-seed.sh).
+# bun also loads the worktree's seeded .env.fleet heap cap (a missing file is a
+# no-op; see fleet/doctor/worktree-env-seed.sh). --env-file replaces bun's
+# default .env/.env.local autoload, so those two are listed ahead of it; bun's
+# NODE_ENV-specific .env.<mode> files are not loaded under fleet guards.
 factory_managed_shell_env: >-
   {{ {'CHROME_DEVTOOLS_AXI_MCP_PATH': factory_chrome_devtools_mcp_path}
-     | combine({'BUN_OPTIONS': '--env-file=.env.fleet'}
+     | combine({'BUN_OPTIONS': '--env-file=.env --env-file=.env.local --env-file=.env.fleet'}
                if (factory_cfg.profiles.fleet_guards | bool) else {}) }}
 # Contract: compute the unit ExecStart directly, never /usr/local/bin or $PATH.
 factory_herdr_bin: "{{ factory_tools_root }}/herdr/{{ factory_herdr_version }}/{{ factory_platform }}/herdr"
@@ -179,6 +181,18 @@ factory_desktop_packages:
 
 # --- Tool installer ---------------------------------------------------------
 factory_core_tools: [herdr, node, bun, uv]
+# The installer flags that choose which tools a run covers. tasks/preflight.yml
+# resolves exactly this set (plus the sources Ansible installs itself) and
+# tasks/tools.yml installs it, so a host never resolves, and never fails on, a
+# release it does not install.
+factory_installer_selection: >-
+  {{ ['--tools', factory_core_tools | join(',')]
+     + (['--npm'] if (factory_cfg.profiles.agents | bool) else [])
+     + (['--development'] if (factory_cfg.profiles.development | bool) else []) }}
+factory_installer_also: >-
+  {{ (['psutil'] if ((factory_cfg.profiles.agents | bool)
+                     and (factory_cfg.browser_prune.enabled | bool)) else [])
+     + (['obscura', 'supabase'] if (factory_cfg.profiles.fleet_guards | bool) else []) }}
 
 # --- Herdr static config ----------------------------------------------------
 # Only the reviewed, non-secret subset is templated. experimental.pane_history

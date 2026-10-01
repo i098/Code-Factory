@@ -14,10 +14,8 @@
     factory_installer_argv: >-
       {{ ['python3', factory_installer,
           '--home', factory_cfg.home,
-          '--tools', factory_core_tools | join(','),
           '--resolved', factory_latest | to_json]
-         + (['--npm'] if (factory_cfg.profiles.agents | bool) else [])
-         + (['--development'] if (factory_cfg.profiles.development | bool) else []) }}
+         + factory_installer_selection }}
 
 - name: Show the installer invocation
   ansible.builtin.debug:

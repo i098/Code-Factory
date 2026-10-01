@@ -84,12 +84,17 @@
     quiet: true
 
 # Resolved once per run, in plan too, so a release landing mid-run cannot
-# split what is installed from what the unit runs and verify asserts. The
+# split what is installed from what the unit runs and verify asserts. Only the
+# releases this host installs are resolved (factory_installer_selection and
+# factory_installer_also), so a source it never uses cannot fail the run. The
 # installer refuses a native release whose publisher lists no SHA-256 for the
 # asset.
 - name: Resolve the latest tool releases
   ansible.builtin.command:
-    argv: [python3, "{{ factory_installer }}", --home, "{{ factory_cfg.home }}", --resolve]
+    argv: >-
+      {{ ['python3', factory_installer, '--home', factory_cfg.home,
+          '--also', factory_installer_also | join(','), '--resolve']
+         + factory_installer_selection }}
   register: factory_latest_run
   changed_when: false
   check_mode: false

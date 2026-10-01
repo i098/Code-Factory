@@ -147,9 +147,19 @@ def upstream(monkeypatch, unverified=None, seen=None):
     monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
 
 
+EVERYTHING = {
+    *installer.GITHUB_LATEST,
+    *installer.NPM_LATEST,
+    "node",
+    "rustup-init",
+    "supabase",
+    "psutil",
+}
+
+
 def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeypatch):
     upstream(monkeypatch)
-    latest = installer.resolve_latest("linux-x86_64")
+    latest = installer.resolve_latest("linux-x86_64", EVERYTHING)
     for tool in ("herdr", "bun", "gh", "no-mistakes", "treehouse", "uv", "obscura"):
         assert latest[tool]["version"] == "9.9.9"
         assert latest[tool]["assets"]["linux-x86_64"]["sha256"] == "a" * 64
@@ -172,7 +182,7 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
 def test_release_without_a_published_checksum_is_refused(monkeypatch, source):
     upstream(monkeypatch, unverified=source)
     with pytest.raises(ValueError, match="refusing an unverified binary"):
-        installer.resolve_latest("linux-x86_64")
+        installer.resolve_latest("linux-x86_64", EVERYTHING)
 
 
 @pytest.mark.parametrize(("env", "expected"), [("env-token", "Bearer env-token"), ("", None)])
@@ -180,10 +190,52 @@ def test_github_token_goes_only_to_the_github_api(monkeypatch, env, expected):
     seen = []
     monkeypatch.setenv("GITHUB_TOKEN", env)
     upstream(monkeypatch, seen=seen)
-    installer.resolve_latest("linux-x86_64")
+    installer.resolve_latest("linux-x86_64", EVERYTHING)
     github = {auth for url, auth in seen if url.startswith("https://api.github.com/")}
     assert github == {expected}
     assert {auth for url, auth in seen if not url.startswith("https://api.github.com/")} == {None}
+
+
+def run_cli(monkeypatch, capsys, tmp_path, *argv):
+    monkeypatch.setattr(installer, "platform_key", lambda: "linux-x86_64")
+    monkeypatch.setattr(
+        installer.sys, "argv", ["install_tools.py", "--home", str(tmp_path), *argv, "--resolve"]
+    )
+    installer.main()
+    return json.loads(capsys.readouterr().out)
+
+
+def test_resolve_covers_only_the_requested_tools(monkeypatch, capsys, tmp_path):
+    seen = []
+    upstream(monkeypatch, unverified="psutil", seen=seen)
+    latest = run_cli(monkeypatch, capsys, tmp_path, "--tools", "uv")
+    assert set(latest) == {"uv"}
+    assert [url for url, _ in seen] == ["https://api.github.com/repos/astral-sh/uv/releases/latest"]
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (["--tools", "herdr,node"], {"herdr", "node"}),
+        (["--tools", "uv", "--development"], {"uv", "rustup-init"}),
+        (
+            ["--tools", "uv", "--npm"],
+            {"uv", *installer.AGENT_TOOLS, *installer.NPM_LATEST},
+        ),
+        (["--tools", "uv", "--also", "psutil,supabase"], {"uv", "psutil", "supabase"}),
+    ],
+)
+def test_resolve_selection_matches_what_the_flags_install(
+    monkeypatch, capsys, tmp_path, argv, expected
+):
+    upstream(monkeypatch)
+    assert set(run_cli(monkeypatch, capsys, tmp_path, *argv)) == expected
+
+
+def test_resolve_refuses_a_source_that_does_not_exist(monkeypatch, capsys, tmp_path):
+    upstream(monkeypatch)
+    with pytest.raises(ValueError, match="no latest release source for: nonesuch"):
+        run_cli(monkeypatch, capsys, tmp_path, "--tools", "uv", "--also", "nonesuch")
 
 
 def test_commands_of_removed_packages_are_unlinked_but_user_links_kept(tmp_path):
