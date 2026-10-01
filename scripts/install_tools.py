@@ -156,9 +156,7 @@ def resolve_latest(key, names):
                 if release is None:
                     raise ValueError(f"{tool} has no published release")
             else:
-                release = json.loads(
-                    fetch(GITHUB_API.format(repo) + "/latest", f"{tool} release")
-                )
+                release = json.loads(fetch(GITHUB_API.format(repo) + "/latest", f"{tool} release"))
             version = release["tag_name"].removeprefix(prefix)
             name = pattern.format(v=version, key=key, **ARCH[key])
             asset = next((a for a in release["assets"] if a["name"] == name), {})
