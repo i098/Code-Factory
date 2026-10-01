@@ -195,7 +195,8 @@ factory_installer_selection: >-
 # --- Editor (profiles.editor) -----------------------------------------------
 # Managed: every apply rewrites these, so the repository stays the source of
 # truth. Nothing else under ~/.config is touched, and no lazy-lock.json is
-# shipped: plugins and parsers move to their latest revision on every apply.
+# shipped: plugins move to their latest commit on every apply, and parsers
+# install at the revision nvim-treesitter's own lockfile names.
 factory_editor_config_files:
   - src: config/nvim/init.lua
     dest: "{{ factory_cfg.home }}/.config/nvim/init.lua"

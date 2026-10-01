@@ -1,17 +1,16 @@
 -- Headless refresh run by ansible/tasks/editor.yml:
 --   nvim --headless "+luafile maintenance/nvim-sync.lua" +cquit
--- Moves every lazy.nvim plugin and every treesitter parser the config lists to
--- its latest revision. Prints "nvim-sync: changed" when either moved, and
--- exits non-zero (through the trailing +cquit) on any failure.
+-- Moves every lazy.nvim plugin to its latest commit and installs every
+-- treesitter parser the config lists at the revision nvim-treesitter's own
+-- lockfile names. Prints "nvim-sync: changed" when a parser changed; plugin
+-- commits that moved upstream are recorded in lazy-lock.json but are not a
+-- change. Exits non-zero (through the trailing +cquit) on any failure.
 
 local function state()
   local files = vim.fn.glob(vim.fn.stdpath("data") .. "/lazy/nvim-treesitter/parser-info/*", false, true)
-  table.insert(files, vim.fn.stdpath("config") .. "/lazy-lock.json")
   local parts = {}
   for _, file in ipairs(files) do
-    if vim.fn.filereadable(file) == 1 then
-      table.insert(parts, file .. "\n" .. table.concat(vim.fn.readfile(file, "b"), "\n"))
-    end
+    table.insert(parts, file .. "\n" .. table.concat(vim.fn.readfile(file, "b"), "\n"))
   end
   return table.concat(parts, "\n")
 end
