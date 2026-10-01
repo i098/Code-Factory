@@ -93,6 +93,18 @@
     remote_src: true
   become: true
 
+# Run from a viewing machine to copy this host's sidebar layout into its own
+# Herdr config (docs/herdr.md).
+- name: Install the Herdr sidebar client helper
+  ansible.builtin.copy:
+    src: "{{ code_factory_repo }}/maintenance/herdr-sidebar-to-client.py"
+    dest: "{{ factory_local_bin }}/herdr-sidebar-to-client.py"
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0755"
+    remote_src: true
+  become: true
+
 - name: Render the Herdr Spaces reporter unit and timer
   ansible.builtin.template:
     src: "{{ item }}.j2"

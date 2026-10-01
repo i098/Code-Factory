@@ -36,11 +36,13 @@
               factory_user_units ~ '/herdr.service',
               factory_user_units ~ '/default.target.wants/herdr.service',
               factory_herdr_spaces_script,
+              factory_local_bin ~ '/herdr-sidebar-to-client.py',
               factory_user_units ~ '/herdr-spaces.service',
               factory_user_units ~ '/herdr-spaces.timer',
               factory_user_units ~ '/timers.target.wants/herdr-spaces.timer',
               factory_cfg.home ~ '/.profile']
-             + ([factory_chrome_devtools_mcp_path, factory_omp_sidebar_extension]
+             + ([factory_chrome_devtools_mcp_path, factory_omp_sidebar_extension,
+                 factory_omp_status_icons_extension]
                 if (factory_cfg.profiles.agents | bool) else [])
              + ([factory_pruner_script,
                  factory_pruner_python,

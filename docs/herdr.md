@@ -90,7 +90,7 @@ The result carries `tokens.short`, `tokens.decisions`, and so on.
 | --- | --- |
 | 1 | The state dot, then the pane's `who` name: the same short names as Spaces. The primary home is bold blue, other homes bold mauve, and a dead helper (`☾ afk`) mauve, not bold. A spawned worker has no `who` name: its line is `└ ` and its session topic, in teal, because a worker works on one thing and its topic says what. |
 | 2 | A home's current session topic, dimmed on a brighter base (`#cdd6f4`) so it reads lighter than the name, without omp's `π` and spinner. Herdr's two-column indent puts it under the name. A worker has no line 2: its topic is on line 1. |
-| 3 | The pull request line, for any agent whose current branch has an open pull request, workers and homes alike, and for a worker whose task names an issue. Indented to line up under the name: four columns for a worker, two for a home. |
+| 3 | The pull request line, for any agent whose current branch has an open pull request, workers and homes alike, and for every worker: a worker shows its line counts from its first commit, before its pull request opens, and its issue when its task names one. Indented to line up under the name: four columns for a worker, two for a home. |
 
 | Token | Value | Color |
 | --- | --- | --- |
@@ -100,7 +100,7 @@ The result carries `tokens.short`, `tokens.decisions`, and so on.
 | `$del` | `−<deleted>` lines (U+2212) | red |
 | `$files` | `✎ <files>` changed | yellow |
 
-Herdr indents every line after the first by two columns. For a worker, the first part present adds two U+2800 blank characters to that. The line counts come from `git diff --shortstat origin/<default branch>...HEAD` in the session's checkout, so they cover commits since the merge base with the default branch. The pull request comes from the GitHub REST API through `gh api`. It is looked up with the checkout's repository owner as the head owner first, then with the owner of each GitHub remote in `git remote -v`, in order, so a pull request opened from a fork shows as long as the checkout has the fork as a remote.
+Herdr indents every line after the first by two columns. For a worker, the first part present adds two U+2800 blank characters to that. The line counts come from `git diff --shortstat origin/<default branch>...HEAD` in the session's checkout, so they cover commits since the merge base with the default branch. For a worker with no pull request yet, the base is `origin/HEAD`, the remote's default branch; a checkout without an `origin/HEAD` ref shows no counts until its pull request opens (`git remote set-head origin --auto` adds the ref). The pull request comes from the GitHub REST API through `gh api`. It is looked up with the checkout's repository owner as the head owner first, then with the owner of each GitHub remote in `git remote -v`, in order, so a pull request opened from a fork shows as long as the checkout has the fork as a remote.
 
 The issue comes from the worker's task record in its home first: the first `issues/<n>` link or `issue <n>` / `issue #<n>` in the task's backlog entry (`data/backlog.md`), then in its brief (`data/<task>/brief.md`). The home is the ancestor of the pane's launch directory that holds `state/<task>.meta`. So a worker shows its issue before its pull request opens, after it merges, and when the body has no closing keyword. Without a task record, the issue is the first one the pull request body closes (`Closes #N`, `Fixes #N`, `Resolves #N`).
 
@@ -113,7 +113,7 @@ The extension does nothing outside Herdr (`HERDR_ENV` is not `1`) or in an omp s
 - Sets the terminal title to the bare session topic, and sets it again within a second whenever omp resets it (rename, `/new`, `/resume`, a cwd change). A spawned worker (`FM_TASK_ID` set) gets `└ ` in front; the Agents layout shows a title that starts with `└` on line 1 and hides it on line 2.
 - Reports the pane tokens `who`, `pr`, `issue`, `add`, `del` and `files` under the source `code-factory:sidebar`, and clears the ones without a value.
 
-It reports when a session starts and when a turn ends. The pull request and the task's issue are looked up then too, at most every 5 minutes; a turn that ends sooner gets its lookup when the 5 minutes are up. The line counts are recomputed on every turn end while a pull request is open. Lookups run in the background with a timeout. A failed lookup keeps the previous value and never fails or slows a turn. Herdr drops pane tokens when its server restarts; the extension reports them again at the next turn end. All tokens are cleared when omp exits.
+It reports when a session starts and when a turn ends. The pull request and the task's issue are looked up then too, at most every 5 minutes; a turn that ends sooner gets its lookup when the 5 minutes are up. The line counts are recomputed on every turn end for a worker, and for a home while a pull request is open. Lookups run in the background with a timeout. A failed lookup keeps the previous value and never fails or slows a turn. Herdr drops pane tokens when its server restarts; the extension reports them again at the next turn end. All tokens are cleared when omp exits.
 
 Inspect what a pane reports:
 
@@ -145,6 +145,16 @@ To check an override before applying, render it to a file and run Herdr's own va
 ```bash
 HERDR_CONFIG_PATH=/path/to/rendered.toml herdr config check
 ```
+
+## Viewing from another machine
+
+Sidebar layouts are client-side: Herdr draws the sidebar from the config of the machine you view from, even over `herdr --remote`. The host still reports every token, but the viewing machine needs the host's layout to show them. `./factory apply` installs [`maintenance/herdr-sidebar-to-client.py`](../maintenance/herdr-sidebar-to-client.py) as `~/.local/bin/herdr-sidebar-to-client.py`. On the viewing machine, run it against the host with Python 3 and ssh access, where `<host>` is anything `ssh` accepts, such as `user@host`:
+
+```bash
+ssh <host> cat .local/bin/herdr-sidebar-to-client.py | python3 - <host>
+```
+
+It copies the host's `sidebar_width`, `sidebar_max_width`, `[ui.sidebar.agents]`, `[ui.sidebar.spaces]` and `[theme.custom] sidebar_bg` into `~/.config/herdr/config.toml` on the viewing machine, or into the path given as a second argument, and leaves every other setting there as is. It writes a timestamped `.bak-sidebar-` copy of that file first. Run it again after the host's layout changes.
 
 ## Known limits
 

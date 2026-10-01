@@ -7,10 +7,11 @@ omp (`@oh-my-pi/pi-coding-agent`) is the agent harness Code Factory installs. Th
 With the `agents` profile on, `./factory apply`:
 
 1. Installs the latest published omp, resolved from the npm registry on every apply (see [Dependencies](dependencies.md#latest-releases)).
-2. Copies [`config/omp.yml`](../config/omp.yml) to `~/.omp/agent/config.yml` (directory `0700`, file `0600`).
+2. Copies [`config/omp.yml`](../config/omp.yml) to `~/.omp/agent/config.yml` (directory `0700`, file `0600`), and [`config/omp-lsp.json`](../config/omp-lsp.json) to `~/.omp/agent/lsp.json`, which disables the markdown language server (marksman): it costs each session about 90 MB, and markdown diagnostics add nothing to agent work.
 3. Installs the extension `~/.omp/agent/extensions/code-factory-herdr-sidebar.ts`, which feeds the Herdr Agent sidebar the session topic, the pane's short name, and the pull request line (pull request, issue and diff size). Every apply rewrites it. See [Herdr sidebar](herdr.md).
+4. Installs the extension `~/.omp/agent/extensions/aa-mode-icons.ts` from [`config/omp-status-icons.ts`](../config/omp-status-icons.ts). Every apply rewrites it. See [Status line icons](#status-line-icons).
 
-The copy is first-write-only. If `~/.omp/agent/config.yml` already exists, the recipe leaves it alone, so an account's own settings and provider configuration are never overwritten. See [Updating an existing host](#updating-an-existing-host).
+Both copies are first-write-only. If a file already exists, the recipe leaves it alone, so an account's own settings and provider configuration are never overwritten. The one exception is the two status line keys the [status line icons](#status-line-icons) need, which every apply ensures. See [Updating an existing host](#updating-an-existing-host).
 
 No credentials are installed. You sign in on each host.
 
@@ -75,11 +76,28 @@ Firstmate turns it on for omp crewmate and scout launches only, never secondmate
 
 ## Other seeded preferences
 
-`config/omp.yml` also sets the theme (`dark-rose-pine`), a custom status line, `textVerbosity: low`, `readLineNumbers: true`, steering and interrupt modes, and `mnemopi.noEmbeddings: true`. Change a single value with `omp config set <key> <value>`, or use `/settings`.
+`config/omp.yml` also sets the theme (`dark-rose-pine`), a custom status line (see [Status line icons](#status-line-icons)), `textVerbosity: low`, `readLineNumbers: true`, steering and interrupt modes, and `mnemopi.noEmbeddings: true`. Change a single value with `omp config set <key> <value>`, or use `/settings`.
+
+## Status line icons
+
+The status icons extension puts the mode indicators and the configured hooks on the main status line as one row of evenly spaced Nerd Font icons, instead of one extension status line per plugin and a separate hooks line:
+
+- Modes: caveman, ADHD (`i-have-adhd`) and ponytail. An icon shows if and only if its mode is on in that omp session; an off mode has no icon, because omp strips all styling from extension statuses and a dimmed icon would look the same as a lit one. The extension takes over the `ponytail` and `i-have-adhd` status keys those plugins set, so their own text statuses no longer show; each plugin clears its key when its mode turns off. A plugin configured with `hideStatus` never sets its key, so its icon stays hidden even while the mode is on.
+- caveman has no omp extension, and omp does not run the Claude Code hooks the `caveman@caveman` plugin ships, so nothing records caveman's state. The icon works it out from the session itself: caveman is on at the start when the session's system prompt names `skill://caveman` (an always-apply rule that keeps it in force), then every prompt you send is read with caveman's own parser from the installed plugin (`src/hooks/caveman-parse.js`), so "stop caveman", "normal mode" and `/caveman off` hide it, and "talk like caveman" or invoking the caveman skill (`/caveman`) shows it again. A skill invocation is read with its arguments, so `/skill:caveman off` hides it, and the icon updates at the end of that turn. Moving to another point in the session tree re-reads that branch. Without the plugin installed the icon never shows. It reflects what you asked for in the session, not whether the model actually writes that way.
+- Hooks: the hooks in `~/.claude/settings.json` and `<cwd>/.claude/settings.json`. Known hooks get their own icon; the rest show as one icon followed by their count.
+
+The file is installed as `aa-mode-icons.ts` on purpose: omp loads extensions in name order, and the extension must wrap the status API before the ponytail and ADHD plugins set their statuses.
+
+The row needs two keys in `statusLine`: `status` in `leftSegments`, which shows extension statuses on the main line, and `showHookStatus: false`, which drops the separate hooks line. omp reads `leftSegments` only when `preset` is `custom`. `config/omp.yml` seeds all three. On a host whose `~/.omp/agent/config.yml` already exists and uses `preset: custom`, every apply appends `status` to `leftSegments` when it is missing and sets `showHookStatus` to `false`, and leaves every other key alone. A config with any other preset, or none, is left untouched: switch it to `preset: custom` by hand to get the row. Start a new omp session to see the change. Check the result with:
+
+```bash
+omp config get statusLine.leftSegments
+omp config get statusLine.showHookStatus
+```
 
 ## Updating an existing host
 
-Because the seed is first-write-only, an edit to `config/omp.yml` never reaches a host that already has `~/.omp/agent/config.yml`. To update one:
+Because the seed is first-write-only, an edit to `config/omp.yml` never reaches a host that already has `~/.omp/agent/config.yml`, except the two keys [Status line icons](#status-line-icons) needs. To update one:
 
 1. Compare the two files:
 

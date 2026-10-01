@@ -309,3 +309,98 @@ def test_verify_passes_when_firstmate_origin_is_the_configured_url(tmp_path):
     upstream = "https://github.com/kunchenguid/firstmate.git"
     result = _verify_firstmate(tmp_path, upstream, upstream)
     assert result.returncode == 0, result.stdout
+
+
+def _ensure_status_row(tmp_path, config):
+    playbook = tmp_path / "agents.yml"
+    playbook.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "hosts": "localhost",
+                    "connection": "local",
+                    "gather_facts": False,
+                    "tasks": [
+                        {"ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/agents.yml")}
+                    ],
+                }
+            ]
+        )
+    )
+    result = subprocess.run(
+        [
+            Path(sys.executable).parent / "ansible-playbook",
+            "-i",
+            "localhost,",
+            str(playbook),
+            "--start-at-task",
+            "Read the omp config for the status row keys",
+            "--extra-vars",
+            json.dumps({"factory_omp_config": str(config), "ansible_become": False}),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout
+    return int(result.stdout.rsplit("changed=", 1)[1].split()[0])
+
+
+def test_existing_omp_config_gets_the_status_row_keys_once(tmp_path):
+    config = tmp_path / "config.yml"
+    config.write_text(
+        "# the account's own\n"
+        "theme: {dark: titanium}\n"
+        "statusLine:\n"
+        "  preset: custom\n"
+        "  leftSegments: [path, git]\n"
+        "  showHookStatus: true\n"
+        "  separator: plain\n"
+        "providers:\n"
+        "  anthropic: {serverSideFallback: false}\n"
+    )
+    config.chmod(0o600)
+    assert _ensure_status_row(tmp_path, config) == 1
+    assert yaml.safe_load(config.read_text()) == {
+        "theme": {"dark": "titanium"},
+        "statusLine": {
+            "preset": "custom",
+            "leftSegments": ["path", "git", "status"],
+            "showHookStatus": False,
+            "separator": "plain",
+        },
+        "providers": {"anthropic": {"serverSideFallback": False}},
+    }
+    assert config.stat().st_mode & 0o777 == 0o600
+    written = config.read_text()
+    assert _ensure_status_row(tmp_path, config) == 0
+    assert config.read_text() == written
+
+
+def test_omp_config_that_has_the_status_row_keys_is_left_alone(tmp_path):
+    config = tmp_path / "config.yml"
+    seed = (ROOT / "config/omp.yml").read_text()
+    config.write_text(seed)
+    assert _ensure_status_row(tmp_path, config) == 0
+    assert config.read_text() == seed
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "theme: {dark: titanium}\n",
+        "statusLine:\n  preset: default\n  showHookStatus: true\n",
+        "statusLine:\n  leftSegments: [path, git]\n  showHookStatus: true\n",
+    ],
+)
+def test_omp_config_without_the_custom_preset_is_left_alone(tmp_path, text):
+    config = tmp_path / "config.yml"
+    config.write_text(text)
+    assert _ensure_status_row(tmp_path, config) == 0
+    assert config.read_text() == text
+
+
+def test_absent_omp_config_is_not_created_by_the_status_row_step(tmp_path):
+    config = tmp_path / "config.yml"
+    assert _ensure_status_row(tmp_path, config) == 0
+    assert not config.exists()
