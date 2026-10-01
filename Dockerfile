@@ -21,7 +21,8 @@
 # Distribution packages are intentionally not version-frozen: docs/security.md
 # treats operating-system security updates as an OS responsibility rather than
 # pinning a whole vulnerable package index. Every tool the installer adds is
-# its latest release, verified against the checksum its publisher posts.
+# its latest release, verified against the checksum its publisher posts (the
+# three omp marketplace plugins are the one exception: no publisher posts one).
 
 ARG UBUNTU_IMAGE=ubuntu:latest
 
@@ -151,7 +152,8 @@ RUN set -eux; ./factory validate --config "${FACTORY_CONFIG}"
 RUN set -eux; uv run --project . --locked python containers/assert-image-config.py "${FACTORY_CONFIG}"
 
 # The real convergence run. `apply` installs the latest, checksum-verified
-# agent and development toolchain through scripts/install_tools.py and renders
+# agent and development toolchain (the three omp marketplace plugins are the one
+# unverified exception) through scripts/install_tools.py and renders
 # the user-scope files; start_services=false keeps it off systemd and linger.
 # The optional `github_token` BuildKit secret authenticates the latest-release
 # lookups (shared CI runner IPs exhaust the unauthenticated API budget). It is

@@ -35,9 +35,11 @@ import psutil
 HOME = Path.home()
 REGISTRY = HOME / ".chrome-devtools-axi"
 # chrome-devtools-axi tracks its latest release, one prefix per version:
-# <AXI_ROOT>/<version>/<BRIDGE>. Bridges from a superseded version stay prunable.
+# <AXI_ROOT>/<version>/<BRIDGE>. Bridges from a superseded version stay prunable,
+# as do bridges still running from the retired shared npm prefix.
 AXI_ROOT = HOME / ".local/share/code-factory/chrome-devtools-axi"
 BRIDGE = Path("node_modules/chrome-devtools-axi/dist/bin/chrome-devtools-axi-bridge.js")
+LEGACY_BRIDGE = HOME / ".local/share/code-factory/npm" / BRIDGE
 DEFAULT_STATE = HOME / ".local/state/chrome-autoprune/state.json"
 UID = os.getuid()
 
@@ -48,6 +50,8 @@ class Protected(Exception):
 
 def installed_bridge(path):
     script, root = Path(path).resolve(), AXI_ROOT.resolve()
+    if script == LEGACY_BRIDGE.resolve():
+        return True
     return script.is_relative_to(root) and script.relative_to(root).parts[1:] == BRIDGE.parts
 
 

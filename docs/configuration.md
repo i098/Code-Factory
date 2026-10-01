@@ -7,7 +7,7 @@
 | Command | What it does |
 | --- | --- |
 | `./factory init` | Copies `config/default.yml` to `.local/host.yml` with your user, home, and `~/Dev` workspace filled in. Never overwrites an existing file. Options: `--user`, `--home`, `--container`. |
-| `./factory validate` | Checks the config against `schemas/factory.schema.json` and the cross-field rules below, |
+| `./factory validate` | Checks the config against `schemas/factory.schema.json` and the cross-field rules below. |
 | `./factory plan` | Runs the Ansible playbook in check mode. Reports what would change; mutates nothing. |
 | `./factory apply` | Runs the playbook for real. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, the first successful interactive apply with omp signed in then opens the new-host questions (below). |
 | `./factory doctor` | Checks that each expected tool runs and reports `gh` authentication. Changes nothing. |
