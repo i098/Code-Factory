@@ -4,7 +4,7 @@
 
 Use Ansible core for the native Ubuntu host and Docker Compose for isolated workloads. Keep Herdr, SSH, the user service manager, and browser lifecycle management on the host.
 
-The source machine already uses Ubuntu packages, user-level systemd services, home-directory tools, and SSH. Ansible manages those objects directly without moving the machine to a new package store or OS. The playbook consumes a validated host document; native tools have versioned URLs and SHA-256 values, npm has a dependency lock, and the provisioning Python environment has `uv.lock`.
+The source machine already uses Ubuntu packages, user-level systemd services, home-directory tools, and SSH. Ansible manages those objects directly without moving the machine to a new package store or OS. The playbook consumes a validated host document; native tools are verified against publisher checksums, npm tools against registry integrity, and the provisioning Python environment has `uv.lock`.
 
 | Candidate | Fit here | Decision |
 | --- | --- | --- |
@@ -53,7 +53,7 @@ Host sizing and every auto pruner are listed in [Capacity and pruners](capacity.
 
 ## Reproducibility policy
 
-1. Everything latest, verified by published checksums. Each apply resolves the newest release of every tool the host installs, once (`scripts/install_tools.py --resolve`, with the same `--tools`, `--npm` and `--development` selection as the install), installs exactly that, and verifies each download against the checksum its publisher posts for that exact release: the GitHub release-asset digest (herdr, bun, uv, gh, no-mistakes, treehouse, Obscura), Node's `SHASUMS256.txt` (the newest Node, not the LTS line), rustup's `.sha256` (rustup-init), the npm registry's integrity (omp, the AXI tools, acpx, chrome-devtools-mcp, the Supabase CLI), and PyPI's digests (psutil). A release without a published checksum is refused. The one exception is the omp marketplace plugins (ponytail, i-have-adhd, caveman): no publisher checksums them, so each apply upgrades them in place to the latest commit of the author's default branch. The Rust toolchain follows `stable`, and the worker image builds `FROM ubuntu:latest`.
+1. Everything latest, verified by published checksums. Each apply resolves the newest release of every tool the host installs, once (`scripts/install_tools.py --resolve`, with the same `--tools`, `--npm` and `--development` selection as the install), installs exactly that, and verifies each download against the checksum its publisher posts for that exact release. A release without a published checksum is refused; the one exception is the omp marketplace plugins, which no publisher checksums. What each source is verified against is in [Dependencies](dependencies.md) and [Primary sources](#primary-sources).
 2. Do not copy a live global package directory.
 3. Two locks stay, because they are this repository's own development environment rather than installed tools: change Python dependencies with `uv lock` and commit the lock, and keep each GitHub Action pinned to the commit SHA of its latest release, which `.github/dependabot.yml` advances weekly.
 4. Keep machine differences in ignored `.local/host.yml`; schema validation precedes provisioning.

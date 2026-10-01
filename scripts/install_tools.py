@@ -450,7 +450,7 @@ def rust_install(home, environment):
     return changed
 
 
-# omp marketplace plugins, kept at their latest release: name -> GitHub repository.
+# omp marketplace plugins, upgraded on every apply to the default branch: name -> repository.
 OMP_PLUGINS = {
     "ponytail": "DietrichGebert/ponytail",
     "i-have-adhd": "ayghri/i-have-adhd",
@@ -459,7 +459,7 @@ OMP_PLUGINS = {
 
 
 def omp_plugins(home, environment):
-    """Install each plugin from its marketplace, then upgrade all to the latest release."""
+    """Install each plugin from its marketplace, then upgrade all to its default branch."""
 
     def omp(*argv):
         result = subprocess.run(

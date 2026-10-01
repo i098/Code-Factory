@@ -11,7 +11,7 @@ loopback listener, is eligible. Headed/attached/persistent-profile browsers are
 excluded. No SIGKILL, profile deletion, package patching, or dev-server cleanup.
 The bridge drains HTTP requests and closes its own MCP/Chrome children on exit.
 
-Requires Linux pidfds and the pinned private psutil runtime. Timer: chrome-autoprune.timer.
+Requires Linux pidfds and the hash-verified private psutil runtime. Timer: chrome-autoprune.timer.
 Inspect with ~/.local/share/code-factory/pruner-venv/bin/python ~/.local/bin/chrome-autoprune.py
 Logs: journalctl --user -u chrome-autoprune.service
 Disable: systemctl --user disable --now chrome-autoprune.timer
