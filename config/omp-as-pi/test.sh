@@ -74,13 +74,10 @@ expect_refuse "partial session id" --mode json --session 01a0f611
 expect_refuse "two session flags" --mode json --no-session --session "$UUID"
 expect_refuse "flag missing value" --mode json --model
 
-cp "$HERE/gate-overlay.yml" "$T/overlay.bak"
-printf '\n# tampered\n' >>"$HERE/gate-overlay.yml"
-run --no-context-files --mode json --no-session
-cp "$T/overlay.bak" "$HERE/gate-overlay.yml"
+mkdir "$T/tampered" && cp "$W" "$HERE/gate-overlay.yml" "$T/tampered/"
+printf '\n# tampered\n' >>"$T/tampered/gate-overlay.yml"
+W="$T/tampered/omp-as-pi" run --no-context-files --mode json --no-session
 [ $rc = 64 ] && grep -q 'sha256' "$T/err" && pass "refuses: tampered gate overlay" || bad "tampered overlay accepted: rc=$rc"
-run --mode json --no-session
-[ $rc = 0 ] && pass "overlay restored" || bad "overlay restore broke wrapper"
 
 mkstub "${HELP_ALL/--resume=<value>/}"
 run --mode json --no-session

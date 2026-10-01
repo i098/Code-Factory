@@ -19,6 +19,7 @@ declare -A PINNED=(
 	["internal/agent/pi.go"]=cd5340ef362585592fc1fdaf856a62cdfa3303dde5d324d93b23998c4c0f8d75
 	["internal/agentcfg/pi_profile.go"]=be326b6b756e1075d5bf827cec6e80069cd293a79a751ecc7e6dbf0650d490f0
 	["internal/agent/fallback.go"]=7f90d1cab045d805509d470404f4263e3e5c985605e13135e357cbe7773987c4
+	["internal/agent/ompgate.go"]=8a598685618334afcb689ea7b1006957855f4c694fc0dcc6447faf086e49aed9
 )
 
 # Exit 0 when every pinned adapter source at no-mistakes tag $1 matches its pin;
@@ -26,7 +27,7 @@ declare -A PINNED=(
 check_adapter() {
 	local f got
 	for f in "${!PINNED[@]}"; do
-		got=$(curl -fsSL "https://raw.githubusercontent.com/kunchenguid/no-mistakes/$1/$f" | sha256sum) ||
+		got=$(curl -fsSL --connect-timeout 10 --max-time 30 "https://raw.githubusercontent.com/kunchenguid/no-mistakes/$1/$f" | sha256sum) ||
 			{
 				echo "could not fetch $f at $1 to verify it"
 				return 1

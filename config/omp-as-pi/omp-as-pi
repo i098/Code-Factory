@@ -21,7 +21,7 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 OVERLAY="$HERE/gate-overlay.yml"
-OVERLAY_SHA256=e7f2cb4e3904f50002dccaa7f747f362d2ec18a0433ae0d0e31379525ea2bde4
+OVERLAY_SHA256=1aaf4374d218ff78d776201cf6b1abd37c34854285a5bf3d6d5278dcd8e8e605
 REQUIRED_FLAGS=(--mode --resume --no-session --model --thinking --provider --config --no-rules --no-skills --no-extensions)
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/omp-as-pi/preflight-ok"
 

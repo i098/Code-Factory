@@ -1,5 +1,5 @@
-# Byte-for-byte the overlay no-mistakes v1.85.3 writes for an omp gate run under
-# disable_project_settings: true (internal/agent/ompgate.go ompGateOverlayYAML).
+# Same YAML body as the overlay no-mistakes v1.85.3 writes for an omp gate run under
+# disable_project_settings: true (internal/agent/ompgate.go ompGateOverlayYAML; the comments differ).
 # omp-as-pi applies it when no-mistakes asks for --no-context-files. It disables
 # every discovery provider that contributes a context file (AGENTS.md/CLAUDE.md/
 # GEMINI.md, .omp/AGENTS.md, and the other supported conventions) and turns off
