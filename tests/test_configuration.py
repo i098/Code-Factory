@@ -1,6 +1,7 @@
 import argparse
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -302,7 +303,7 @@ def test_verify_passes_when_firstmate_origin_is_the_configured_url(tmp_path):
     assert result.returncode == 0, result.stdout
 
 
-def _ensure_status_row(tmp_path, config):
+def _run_agents(tmp_path, start_at, **variables):
     playbook = tmp_path / "agents.yml"
     playbook.write_text(
         yaml.safe_dump(
@@ -325,9 +326,9 @@ def _ensure_status_row(tmp_path, config):
             "localhost,",
             str(playbook),
             "--start-at-task",
-            "Read the omp config for the status row keys",
+            start_at,
             "--extra-vars",
-            json.dumps({"factory_omp_config": str(config), "ansible_become": False}),
+            json.dumps({"ansible_become": False, **variables}),
         ],
         cwd=tmp_path,
         capture_output=True,
@@ -335,6 +336,21 @@ def _ensure_status_row(tmp_path, config):
     )
     assert result.returncode == 0, result.stdout
     return int(result.stdout.rsplit("changed=", 1)[1].split()[0])
+
+
+def _ensure_status_row(tmp_path, config):
+    return _run_agents(
+        tmp_path,
+        "Read the omp config for the status row keys",
+        factory_omp_config=str(config),
+        factory_acpx_config=str(tmp_path / "absent-acpx.json"),
+    )
+
+
+def _ensure_acpx_default(tmp_path, config):
+    return _run_agents(
+        tmp_path, "Read the acpx config for the default agent", factory_acpx_config=str(config)
+    )
 
 
 def test_existing_omp_config_gets_the_status_row_keys_once(tmp_path):
@@ -395,3 +411,104 @@ def test_absent_omp_config_is_not_created_by_the_status_row_step(tmp_path):
     config = tmp_path / "config.yml"
     assert _ensure_status_row(tmp_path, config) == 0
     assert not config.exists()
+
+
+def test_acpx_config_that_still_defaults_to_codex_gets_omp_once(tmp_path):
+    config = tmp_path / "config.json"
+    seed = json.loads((ROOT / "config/acpx.json").read_text())
+    config.write_text(json.dumps({**seed, "defaultAgent": "codex", "ttl": 900}))
+    config.chmod(0o600)
+    assert _ensure_acpx_default(tmp_path, config) == 1
+    assert json.loads(config.read_text()) == {**seed, "ttl": 900}
+    assert config.stat().st_mode & 0o777 == 0o600
+    written = config.read_text()
+    assert _ensure_acpx_default(tmp_path, config) == 0
+    assert config.read_text() == written
+
+
+@pytest.mark.parametrize("text", ['{"defaultAgent": "claude"}\n', '{"ttl": 300}\n'])
+def test_acpx_config_with_another_default_is_left_alone(tmp_path, text):
+    config = tmp_path / "config.json"
+    config.write_text(text)
+    assert _ensure_acpx_default(tmp_path, config) == 0
+    assert config.read_text() == text
+
+
+def test_seeded_acpx_config_defaults_to_omp_and_absent_one_is_not_created(tmp_path):
+    config = tmp_path / "config.json"
+    assert _ensure_acpx_default(tmp_path, config) == 0
+    assert not config.exists()
+    seed = (ROOT / "config/acpx.json").read_text()
+    config.write_text(seed)
+    assert _ensure_acpx_default(tmp_path, config) == 0
+    assert config.read_text() == seed
+
+
+def _managed_environment(tmp_path, fleet_guards):
+    variables = {
+        "factory_cfg": {"home": str(tmp_path), "profiles": {"fleet_guards": fleet_guards}},
+        "factory_latest": {"chrome-devtools-mcp": "1.0.0"},
+    }
+    result = subprocess.run(
+        [
+            Path(sys.executable).parent / "ansible",
+            "localhost",
+            "-i",
+            "localhost,",
+            "-c",
+            "local",
+            "-m",
+            "ansible.builtin.debug",
+            "-a",
+            "var=factory_managed_shell_env",
+            "-e",
+            f"@{ROOT / 'ansible/group_vars/all.yml'}",
+            "-e",
+            json.dumps(variables),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout
+    return json.loads(result.stdout.split("=>", 1)[1])["factory_managed_shell_env"]
+
+
+def test_the_managed_environment_carries_the_heap_cap_only_with_fleet_guards(tmp_path):
+    assert set(_managed_environment(tmp_path, False)) == {"CHROME_DEVTOOLS_AXI_MCP_PATH"}
+    guarded = _managed_environment(tmp_path, True)
+    assert guarded["NODE_OPTIONS"] == "--max-old-space-size=2048"
+    assert "BUN_OPTIONS" not in guarded
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("node")), reason="needs bun and node")
+def test_fleet_guards_cap_the_node_heap_and_leave_bun_env_loading_alone(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / ".env").write_text("FROM_DOTENV=1\n")
+    (project / ".env.test").write_text("FROM_TEST=1\n")
+    (project / "probe.test.ts").write_text(
+        'import { expect, test } from "bun:test";\n'
+        'test("env", () => {\n'
+        '  expect([process.env.FROM_DOTENV, process.env.FROM_TEST]).toEqual(["1", "1"]);\n'
+        "});\n"
+    )
+    (project / "package.json").write_text(
+        json.dumps(
+            {"scripts": {"heap": "node -p \"require('v8').getHeapStatistics().heap_size_limit\""}}
+        )
+    )
+    inherited = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in ("BUN_OPTIONS", "NODE_OPTIONS")
+    }
+    env = {**inherited, **_managed_environment(tmp_path, True)}
+    tests = subprocess.run(["bun", "test"], cwd=project, env=env, capture_output=True, text=True)
+    assert tests.returncode == 0, tests.stdout + tests.stderr
+    heap = subprocess.run(
+        ["bun", "run", "heap"], cwd=project, env=env, capture_output=True, text=True
+    )
+    assert heap.returncode == 0, heap.stderr
+    limit = int(heap.stdout.strip().splitlines()[-1])
+    assert 2048 * 2**20 <= limit < 2560 * 2**20

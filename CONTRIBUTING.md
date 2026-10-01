@@ -10,7 +10,7 @@ Code Factory is an Ansible playbook with a Python CLI wrapper (`scripts/factory.
 - `ansible/tasks/*.yml` — the tasks themselves (one file per concern)
 - `ansible/templates/*.j2` — systemd unit templates
 - `scripts/factory.py` — CLI (`init`, `validate`, `plan`, `apply`, `doctor`)
-- `scripts/install_tools.py` — checksum-verified tool installer (idempotent)
+- `scripts/install_tools.py` — latest-release tool installer (idempotent)
 - `fleet/` — runtime scripts deployed to `~/oss-fleet/` on the target host
 - `config/` — per-tool config templates deployed to Firstmate homes
 
@@ -20,7 +20,7 @@ Every task is idempotent; a second unchanged `apply` reports `changed=0`.
 
 Every task is check-mode safe: `plan` (Ansible `--check`) previews without mutating.
 
-Nothing is pinned: every tool tracks its latest release, resolved once per apply and verified by the checksum its publisher posts. Native assets are refused without a published SHA-256, npm tools install the exact resolved version, and the Rust toolchain follows `stable`. The installer records what it resolved in `~/.local/share/code-factory/resolved.json`. Only the repository's own Python environment (`uv.lock`) stays locked, and CI pins each GitHub Action to the commit SHA of its latest release, kept current by Dependabot.
+Nothing is pinned: every tool tracks its latest release, resolved once per apply and verified by the checksum its publisher posts, except the three omp marketplace plugins, which no publisher checksums and which track each author's default branch. Native assets are refused without a published SHA-256, npm tools install the exact resolved version, and the Rust toolchain follows `stable`. The installer records what it resolved in `~/.local/share/code-factory/resolved.json`. Only the repository's own Python environment (`uv.lock`) stays locked, and CI pins each GitHub Action to the commit SHA of its latest release, kept current by Dependabot.
 
 No unconditional restarts, daemon-reloads, or bare commands.
 

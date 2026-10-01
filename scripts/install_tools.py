@@ -8,7 +8,9 @@ Nothing is pinned: every tool tracks its latest release. Native assets are
 verified against the SHA-256 their publisher lists for that exact release (the
 GitHub release-asset digest, Node's SHASUMS256.txt, rustup's .sha256), npm tools
 against the integrity npm records for the resolved version, psutil against the
-digests PyPI publishes. The Rust toolchain follows the stable channel.
+digests PyPI publishes. The Rust toolchain follows the stable channel. The omp
+marketplace plugins are the one exception: no publisher checksums them, so they
+track each author's default branch.
 """
 
 import argparse
@@ -361,14 +363,18 @@ def npm_latest_install(home, tool, version, environment):
     return link_package_bins(home, final, [package_name]) or changed
 
 
-def prune_dangling_links(home):
-    """Remove managed commands whose package is no longer installed."""
+def retire_legacy_npm(home):
+    """Remove the codex, pnpm and pnpx links into the dropped npm prefix, then that prefix."""
+    legacy = home / ".local/share/code-factory/npm"
     changed = False
-    for link in (home / ".local/bin").iterdir():
-        if link.is_symlink() and not link.exists():
-            if Path(os.readlink(link)).is_relative_to(home / ".local/share/code-factory"):
-                link.unlink()
-                changed = True
+    for name in ("codex", "pnpm", "pnpx"):
+        link = home / ".local/bin" / name
+        if link.is_symlink() and Path(os.readlink(link)).is_relative_to(legacy):
+            link.unlink()
+            changed = True
+    if legacy.is_dir():
+        shutil.rmtree(legacy)
+        changed = True
     return changed
 
 
@@ -481,7 +487,9 @@ def main():
         "obscura, supabase, psutil",
     )
     parser.add_argument(
-        "--resolve", action="store_true", help="print the latest releases as JSON and exit"
+        "--resolve",
+        action="store_true",
+        help="print the latest release of every selected source as JSON and exit",
     )
     parser.add_argument(
         "--resolved", type=json.loads, help="--resolve output to install instead of resolving"
@@ -514,14 +522,16 @@ def main():
         if args.npm:
             for tool in NPM_LATEST:
                 changed = npm_latest_install(home, tool, latest[tool], environment) or changed
-            changed = prune_dangling_links(home) or changed
+            changed = retire_legacy_npm(home) or changed
             changed = omp_plugins(home, environment) or changed
         if args.development:
             changed = rust_install(home, environment) or changed
         if args.resolved:
             # The record checks compare against, so a later upstream release cannot
             # make an unchanged install look wrong.
-            (prefix / "resolved.json").write_text(json.dumps(latest, sort_keys=True) + "\n")
+            record = prefix / "resolved.json"
+            known = json.loads(record.read_text()) if record.is_file() else {}
+            record.write_text(json.dumps({**known, **latest}, sort_keys=True) + "\n")
     print(
         json.dumps(
             {

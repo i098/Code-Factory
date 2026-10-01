@@ -239,26 +239,43 @@ def test_resolve_refuses_a_source_that_does_not_exist(monkeypatch, capsys, tmp_p
         run_cli(monkeypatch, capsys, tmp_path, "--tools", "uv", "--also", "nonesuch")
 
 
-def test_commands_of_removed_packages_are_unlinked_but_user_links_kept(tmp_path):
+def test_the_dropped_npm_set_is_retired_but_commands_installed_elsewhere_are_kept(tmp_path):
     bin_dir = tmp_path / ".local/bin"
     bin_dir.mkdir(parents=True)
-    managed = bin_dir / "codex"
-    managed.symlink_to(tmp_path / ".local/share/code-factory/npm/node_modules/gone/bin.js")
-    user = bin_dir / "mine"
-    user.symlink_to(tmp_path / "elsewhere/gone")
-    assert installer.prune_dangling_links(tmp_path)
-    assert not managed.is_symlink()
-    assert user.is_symlink()
+    legacy = tmp_path / ".local/share/code-factory/npm/node_modules"
+    for name in ("codex", "pnpm"):
+        script = legacy / name / "bin.js"
+        script.parent.mkdir(parents=True)
+        script.write_text("#!/bin/sh\n")
+        (bin_dir / name).symlink_to(script)
+    elsewhere = tmp_path / ".bun/bin/pnpx"
+    elsewhere.parent.mkdir(parents=True)
+    elsewhere.write_text("#!/bin/sh\n")
+    (bin_dir / "pnpx").symlink_to(elsewhere)
+    assert installer.retire_legacy_npm(tmp_path)
+    assert not (bin_dir / "codex").is_symlink()
+    assert not (bin_dir / "pnpm").is_symlink()
+    assert not (tmp_path / ".local/share/code-factory/npm").exists()
+    assert (bin_dir / "pnpx").resolve() == elsewhere
+    assert not installer.retire_legacy_npm(tmp_path)
 
 
 @pytest.mark.parametrize(
     ("argv", "expected"),
-    [([], {"herdr": {}}), (["--resolved", json.dumps({"uv": {}})], {"uv": {}})],
+    [
+        ([], {"herdr": {"version": "1"}, "uv": {"version": "1"}}),
+        (
+            ["--resolved", json.dumps({"uv": {"version": "2"}})],
+            {"herdr": {"version": "1"}, "uv": {"version": "2"}},
+        ),
+    ],
 )
-def test_only_an_apply_with_a_resolved_record_rewrites_it(monkeypatch, tmp_path, argv, expected):
+def test_an_apply_merges_its_resolved_record_into_the_existing_one(
+    monkeypatch, tmp_path, argv, expected
+):
     record = tmp_path / ".local/share/code-factory/resolved.json"
     record.parent.mkdir(parents=True)
-    record.write_text(json.dumps({"herdr": {}}) + "\n")
+    record.write_text(json.dumps({"herdr": {"version": "1"}, "uv": {"version": "1"}}) + "\n")
     upstream(monkeypatch)
     monkeypatch.setattr(installer, "platform_key", lambda: "linux-x86_64")
     monkeypatch.setattr(installer, "install_asset", lambda *args: False)

@@ -129,3 +129,25 @@
     - factory_omp_config_raw.content is defined
     - (current.statusLine | default({})).preset | default('default') == 'custom'
     - wanted != current
+
+# The acpx config is first-write-only, but codex is no longer installed, so a
+# host written before that still names a missing agent as its default. Only
+# that one value is rewritten, and only while it is still codex.
+- name: Read the acpx config for the default agent
+  ansible.builtin.slurp:
+    path: "{{ factory_acpx_config }}"
+  become: true
+  register: factory_acpx_config_raw
+  failed_when: false
+  check_mode: false
+
+- name: Point the acpx default agent at omp when it is still codex
+  vars:
+    current: "{{ factory_acpx_config_raw.content | b64decode | from_json }}"
+  ansible.builtin.copy:
+    content: "{{ current | combine({'defaultAgent': 'omp'}) | to_nice_json(indent=2, sort_keys=false) }}\n"
+    dest: "{{ factory_acpx_config }}"
+  become: true
+  when:
+    - factory_acpx_config_raw.content is defined
+    - current.defaultAgent | default('') == 'codex'
