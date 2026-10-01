@@ -110,6 +110,10 @@
       when: factory_cfg.profiles.tailscale | bool
       tags: [tailscale]
 
+    - name: Koncreet host hardening toolkit, installed but never run
+      ansible.builtin.import_tasks: tasks/koncreet.yml
+      tags: [koncreet]
+
     - name: Google Chrome from the official distribution repository
       ansible.builtin.import_tasks: tasks/browser.yml
       when: >-

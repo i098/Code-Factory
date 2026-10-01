@@ -35,6 +35,36 @@ Tailscale installation, authentication, and SSH authorization are separate steps
 
 This export does not rewrite the current host's firewall, SSH policy, account membership, or credentials. Review those changes separately before applying a new-host profile.
 
+## Host hardening
+
+Every apply installs [Koncreet](https://github.com/jimididit/koncreet) as `/usr/local/bin/koncreet` and renders `/etc/koncreet.conf` once, but nothing runs it. It is a first-hour hardening toolkit: a sudo user with SSH keys, sysctl, swap, a journald cap, time sync, a ufw default-deny firewall, fail2ban on SSH, unattended security updates, and finally SSH with password and root login turned off.
+
+Upstream supports Debian 12/13 and Ubuntu 22.04/24.04 only. `patches/koncreet/ubuntu-26.04.patch` adds Ubuntu 26.04: it opens the OS gate and doctor, and restores the last fallback Koncreet uses to find your SSH client address for the fail2ban whitelist: 26.04 keeps no utmp, so `who -m` prints nothing, and the patch asks logind instead. The same change is the `ubuntu-26.04` branch of the [undeemed/koncreet](https://github.com/undeemed/koncreet/tree/ubuntu-26.04) fork; regenerate the patch from there with `git diff main...ubuntu-26.04`. Apply layers the patch on each new release and prints which case it hit: applied; skipped because the release already supports 26.04; or skipped because it no longer applies, in which case Koncreet installs as released and refuses to run on 26.04 until the patch is refreshed. The patch never fails the apply.
+
+`/etc/koncreet.conf` makes the account that ran `./factory apply` the sudo user, installs the SSH keys it logs in with, keeps SSH open (Koncreet always allows the ports sshd listens on) and opens 41641/udp for Tailscale's direct connections. Apply never overwrites it; edit it there.
+
+Run it once, by hand, from an SSH session you keep open until the last step works:
+
+1. `sudo ufw allow in on tailscale0`, so the tailnet stays reachable once ufw denies incoming traffic. Koncreet keeps existing ufw rules.
+2. `sudo koncreet doctor`
+3. `sudo koncreet --dry-run apply -c /etc/koncreet.conf`, and read the plan.
+4. `sudo koncreet apply -c /etc/koncreet.conf`
+5. Open a new SSH session as that user and run `sudo true`. Only when it works: `sudo koncreet ssh apply`. Test one more new session before you close the first. Not `sudo -v`: once the account is in the `sudo` group, `sudo -v` asks for a password even when sudoers grants it NOPASSWD, and a cloud account has none.
+
+If something goes wrong (from upstream's README):
+
+| Problem | Fix |
+|---------|-----|
+| Can't SSH after harden | `sudo koncreet ssh undo` |
+| Locked out by ufw | Console: `sudo ufw disable` |
+| Banned by fail2ban | `sudo koncreet fail2ban unban YOUR.IP` |
+| Undo baseline drop-ins | `sudo koncreet baseline undo` (keeps users/swap/timezone) |
+| Need the new user password | `cat /root/USER.koncreet-password` (as root - save it before `ssh apply`) |
+| Forced password change fails | `chage -d $(date -I) USER` then reconnect with your key |
+| Too many authentication failures | `ssh -o IdentitiesOnly=yes -i ~/.ssh/your_key user@host` |
+
+Logs: `/var/log/koncreet.log`. Backups: `*.koncreet.bak`. The provider's console, and `tailscale ssh` where Tailscale SSH is enabled, reach the host when sshd does not.
+
 ## Updates
 
 Tools track their latest release, and every download is verified against the checksum its publisher posts for that release (what each source checks is in [Dependencies](dependencies.md)); a release without one is refused. The one exception is the three omp marketplace plugins (ponytail, i-have-adhd, caveman): no publisher checksums them, they track each author's default branch, and they load as agent instructions and hooks. The operator accepted that to keep them at the latest commit. Checksums prove a download is the published artifact; they do not establish that a publisher is trustworthy. Review added tools and installer behavior before adding them. Ubuntu security updates remain an operating-system responsibility rather than freezing an entire vulnerable package index forever.

@@ -187,8 +187,9 @@ factory_installer_selection: >-
      + (['--npm'] if (factory_cfg.profiles.agents | bool) else [])
      + (['--development'] if (factory_cfg.profiles.development | bool) else []) }}
 factory_installer_also: >-
-  {{ (['psutil'] if ((factory_cfg.profiles.agents | bool)
-                     and (factory_cfg.browser_prune.enabled | bool)) else [])
+  {{ ['koncreet']
+     + (['psutil'] if ((factory_cfg.profiles.agents | bool)
+                       and (factory_cfg.browser_prune.enabled | bool)) else [])
      + (['obscura', 'supabase'] if (factory_cfg.profiles.fleet_guards | bool) else []) }}
 
 # --- Herdr static config ----------------------------------------------------
@@ -360,6 +361,16 @@ factory_tailscale_keyring: /usr/share/keyrings/tailscale-archive-keyring.gpg
 # Optional exact apt version pin, e.g. "1.102.3". Empty installs the current
 # package from the stable track.
 factory_tailscale_version: ""
+
+# --- Koncreet (install only; the operator runs it by hand) ------------------
+# The latest jimididit/koncreet release, verified against the SHA-256 GitHub
+# publishes for the asset, with Code Factory's Ubuntu 26.04 patch layered on.
+# Root runs it, so the release and its configuration are root-owned, never in
+# the account's home. docs/security.md has the manual run.
+factory_koncreet: "{{ factory_latest.koncreet.assets[factory_platform] }}"
+factory_koncreet_patch: "{{ code_factory_repo }}/patches/koncreet/ubuntu-26.04.patch"
+factory_koncreet_prefix: /usr/local/lib/code-factory/koncreet
+factory_koncreet_config: /etc/koncreet.conf
 
 # --- Chrome -----------------------------------------------------------------
 # auto  -> install only when the desktop profile is enabled

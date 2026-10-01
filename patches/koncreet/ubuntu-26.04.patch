@@ -1,0 +1,68 @@
+diff --git a/lib/doctor.sh b/lib/doctor.sh
+index 139246c..5771fe4 100644
+--- a/lib/doctor.sh
++++ b/lib/doctor.sh
+@@ -25,7 +25,7 @@ koncreet_os_is_supported() {
+       ;;
+     ubuntu)
+       case "$KONCREET_OS_VERSION" in
+-        22.04|24.04) return 0 ;;
++        22.04|24.04|26.04) return 0 ;;
+       esac
+       ;;
+   esac
+@@ -43,7 +43,7 @@ cmd_doctor() {
+   if koncreet_os_is_supported; then
+     doctor_ok "OS ${KONCREET_OS_ID} ${KONCREET_OS_VERSION} supported"
+   else
+-    doctor_fail "OS ${KONCREET_OS_ID:-unknown} ${KONCREET_OS_VERSION:-} not supported (need Debian 12/13 or Ubuntu 22.04/24.04)"
++    doctor_fail "OS ${KONCREET_OS_ID:-unknown} ${KONCREET_OS_VERSION:-} not supported (need Debian 12/13 or Ubuntu 22.04/24.04/26.04)"
+   fi
+ 
+   # --- root (apply readiness) ---
+diff --git a/lib/os.sh b/lib/os.sh
+index 38254c1..10295f6 100644
+--- a/lib/os.sh
++++ b/lib/os.sh
+@@ -56,13 +56,13 @@ koncreet_require_supported_os() {
+       ;;
+     ubuntu)
+       case "$KONCREET_OS_VERSION" in
+-        22.04|24.04) ok=1 ;;
++        22.04|24.04|26.04) ok=1 ;;
+       esac
+       ;;
+   esac
+   if [[ "$ok" -ne 1 ]]; then
+     log_error "Unsupported OS: ${KONCREET_OS_ID:-unknown} ${KONCREET_OS_VERSION:-}"
+-    log_error "Koncreet supports Debian 12/13 and Ubuntu 22.04/24.04 only."
++    log_error "Koncreet supports Debian 12/13 and Ubuntu 22.04/24.04/26.04 only."
+     log_error "Refuse rather than half-apply on ${KONCREET_OS_ID:-unknown}."
+     exit 2
+   fi
+diff --git a/lib/sshd.sh b/lib/sshd.sh
+index 6686f4a..3a32bbb 100644
+--- a/lib/sshd.sh
++++ b/lib/sshd.sh
+@@ -95,7 +95,8 @@ koncreet_valid_ip() {
+ 
+ # Print the IP of the SSH client that started this session; returns 1 if unknown.
+ # sudo strips SSH_CONNECTION, so fall back to the environment of our ancestor
+-# processes (the login shell still has it), then to who -m.
++# processes (the login shell still has it), then to logind's record of the login
++# session, then to who -m.
+ koncreet_ssh_client_ip() {
+   local ip pid="$$" var
+   ip="${SSH_CONNECTION:-${SSH_CLIENT:-}}"
+@@ -109,6 +110,11 @@ koncreet_ssh_client_ip() {
+     pid="$(awk '/^PPid:/{print $2}' "/proc/$pid/status" 2>/dev/null || true)"
+     pid="${pid:-0}"
+   done
++  # Ubuntu 26.04 keeps no utmp, so who -m prints nothing there, but logind still
++  # records the remote host of the login session we run in.
++  if [[ -z "$ip" ]] && command -v loginctl &>/dev/null; then
++    ip="$(loginctl show-session self -p RemoteHost --value 2>/dev/null || true)"
++  fi
+   if [[ -z "$ip" ]]; then
+     ip="$(who -m 2>/dev/null | sed -n 's/.*(\(.*\)).*/\1/p' || true)"
+   fi

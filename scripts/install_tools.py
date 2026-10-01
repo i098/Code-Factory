@@ -70,6 +70,8 @@ GITHUB_LATEST = {
         "obscura-{gnu}-linux.tar.gz",
         {"obscura": "obscura", "obscura-worker": "obscura-worker"},
     ),
+    # Resolved for host hardening (ansible/tasks/koncreet.yml), installed there as root.
+    "koncreet": ("jimididit/koncreet", "v", "koncreet.tar.gz", {"koncreet": "koncreet/koncreet"}),
 }
 # npm tools on the registry's latest version, each installed into its own prefix.
 NPM_LATEST = {
@@ -509,7 +511,7 @@ def main():
         "--also",
         default="",
         help="comma-separated extra sources to resolve that Ansible installs itself: "
-        "obscura, supabase, psutil",
+        "obscura, supabase, psutil, koncreet",
     )
     parser.add_argument(
         "--resolve",

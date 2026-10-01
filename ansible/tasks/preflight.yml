@@ -47,7 +47,7 @@
 - name: Build the list of Main-owned inputs this run requires
   ansible.builtin.set_fact:
     factory_required_inputs: >-
-      {{ [factory_installer, factory_herdr_spaces_source]
+      {{ [factory_installer, factory_herdr_spaces_source, factory_koncreet_patch]
          + (factory_agent_config_files
             | map(attribute='src')
             | map('regex_replace', '^', code_factory_repo ~ '/')
