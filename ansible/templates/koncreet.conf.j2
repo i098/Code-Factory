@@ -6,15 +6,22 @@
 #   sudo koncreet doctor
 #   sudo koncreet --dry-run apply -c {{ factory_koncreet_config }}
 #   sudo koncreet apply -c {{ factory_koncreet_config }}
-#   sudo koncreet ssh apply    only once {{ ansible_user_id }} can open a new SSH session and run sudo true
+#   sudo koncreet ssh apply    only once that user can open a new SSH session and run sudo true
 
 # SSH hardening is the separate last step above, so it is not listed here.
 modules=baseline,firewall,fail2ban,updates
 
-# The account that ran ./factory apply keeps the SSH keys it logs in with and
-# is made a sudo user.
+# The account that ran ./factory apply is the operator: it keeps the SSH keys
+# it logs in with and is made a sudo user. Not factory.user, which runs the
+# agents and must not gain sudo through this file.
+{% if ansible_user_id != 'root' %}
 user={{ ansible_user_id }}
 pubkey_file={{ ansible_user_dir }}/.ssh/authorized_keys
+{% else %}
+# Apply ran as root, so the operator account is unknown. Set both before use:
+# user=<operator login>
+# pubkey_file=/home/<operator login>/.ssh/authorized_keys
+{% endif %}
 
 # SSH stays open: koncreet always allows the ports sshd listens on. 41641/udp
 # is Tailscale's direct WireGuard port. Tailnet traffic arrives on tailscale0,
