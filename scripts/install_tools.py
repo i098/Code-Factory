@@ -518,9 +518,10 @@ def main():
             changed = omp_plugins(home, environment) or changed
         if args.development:
             changed = rust_install(home, environment) or changed
-        # The record checks compare against, so a later upstream release cannot
-        # make an unchanged install look wrong.
-        (prefix / "resolved.json").write_text(json.dumps(latest, sort_keys=True) + "\n")
+        if args.resolved:
+            # The record checks compare against, so a later upstream release cannot
+            # make an unchanged install look wrong.
+            (prefix / "resolved.json").write_text(json.dumps(latest, sort_keys=True) + "\n")
     print(
         json.dumps(
             {
@@ -538,4 +539,5 @@ if __name__ == "__main__":
         main()
     except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
         print(f"install_tools: {error}", file=sys.stderr)
+        print(getattr(error, "stderr", None) or "", end="", file=sys.stderr)
         sys.exit(1)

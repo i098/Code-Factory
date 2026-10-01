@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import runpy
 import subprocess
 import tarfile
 import zipfile
@@ -248,3 +249,46 @@ def test_commands_of_removed_packages_are_unlinked_but_user_links_kept(tmp_path)
     assert installer.prune_dangling_links(tmp_path)
     assert not managed.is_symlink()
     assert user.is_symlink()
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [([], {"herdr": {}}), (["--resolved", json.dumps({"uv": {}})], {"uv": {}})],
+)
+def test_only_an_apply_with_a_resolved_record_rewrites_it(monkeypatch, tmp_path, argv, expected):
+    record = tmp_path / ".local/share/code-factory/resolved.json"
+    record.parent.mkdir(parents=True)
+    record.write_text(json.dumps({"herdr": {}}) + "\n")
+    upstream(monkeypatch)
+    monkeypatch.setattr(installer, "platform_key", lambda: "linux-x86_64")
+    monkeypatch.setattr(installer, "install_asset", lambda *args: False)
+    monkeypatch.setattr(
+        installer.sys, "argv", ["install_tools.py", "--home", str(tmp_path), "--tools", "uv", *argv]
+    )
+    installer.main()
+    assert json.loads(record.read_text()) == expected
+
+
+def test_a_failed_command_reports_why_it_failed(monkeypatch, capsys, tmp_path):
+    rustup = tmp_path / ".cargo/bin/rustup"
+    rustup.parent.mkdir(parents=True)
+    rustup.write_text("#!/bin/sh\necho 'error: network down' >&2\nexit 1\n")
+    rustup.chmod(0o755)
+    payload = b"#!/bin/sh\n"
+    resolved = {}
+    for name in ("uv", "rustup-init"):
+        resolved[name] = asset(payload)
+        resolved[name]["assets"]["linux-x86_64"]["binaries"] = {name: name}
+    monkeypatch.setattr(installer.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(installer.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(installer.urllib.request, "urlopen", lambda *a, **k: Download(payload))
+    monkeypatch.setattr(
+        installer.sys,
+        "argv",
+        ["install_tools.py", "--home", str(tmp_path), "--tools", "uv", "--development"]
+        + ["--resolved", json.dumps(resolved)],
+    )
+    with pytest.raises(SystemExit) as exit_status:
+        runpy.run_path(str(SPEC.origin), run_name="__main__")
+    assert exit_status.value.code == 1
+    assert "error: network down" in capsys.readouterr().err
