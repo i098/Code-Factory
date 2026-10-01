@@ -7,23 +7,25 @@
 //   - pane token `who`: the short name of the pane's own workspace (shortName
 //     below); none for a worker, whose title names it.
 //   - pane tokens `pr`, `issue`, `add`, `del`, `files`: the open pull request
-//     for the current branch, the issue it works on, and its size against the
-//     default branch, as "⎇ <pr>", "○ <issue>", "+<added>", "−<deleted>",
-//     "✎ <files>". A worker shows its size from its first commit, before any
-//     pull request opens.
+//     for the current branch, the issue it works on, and the size of the work
+//     in the checkout against the default branch, as "⎇ <pr>", "○ <issue>",
+//     "+<added>", "−<deleted>", "✎ <files>". A worker shows its size as soon
+//     as its diff is non-empty, before any commit or pull request.
 //     The first part present carries the indent.
-// Lookups run in the background on session start and turn end and never fail
-// or slow a turn.
+// Lookups run in the background on session start and turn end, the size also
+// every 10 seconds, and never fail or slow a turn.
 // @ts-nocheck
 
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
 const BLANK = "\u2800";
 const SOURCE = "code-factory:sidebar";
 const PR_REFRESH_MS = 5 * 60 * 1000;
+const SIZE_REFRESH_MS = 10 * 1000;
 const PARTS = ["pr", "issue", "add", "del", "files"];
 const taskId = process.env.FM_TASK_ID || "";
 const paneId = process.env.HERDR_PANE_ID;
@@ -65,6 +67,32 @@ export function recordIssue(texts: string[]): string {
 export function shortstat(out: string) {
   const n = (re: RegExp) => Number(out.match(re)?.[1] || 0);
   return { files: n(/(\d+) files? changed/), add: n(/(\d+) insertions?/), del: n(/(\d+) deletions?/) };
+}
+
+// Size of the work in the checkout: committed, staged and unstaged tracked
+// changes since the merge base of `base` and HEAD, plus untracked files that
+// are not ignored. `base` falls back to origin/main, then origin/master; with
+// none of them there is no size ({}), and an empty diff is no size either.
+async function diffStat(cwd: string, base: string) {
+  const git = (...args: string[]) => run("git", ["-C", cwd, ...args]);
+  let ref;
+  for (const r of [base, "origin/main", "origin/master"]) {
+    if (await git("rev-parse", "--verify", "--quiet", `${r}^{commit}`).then(() => true, () => false)) {
+      ref = r;
+      break;
+    }
+  }
+  if (!ref) return {};
+  const stat = shortstat(await git("diff", "--shortstat", "--merge-base", ref));
+  // Counted the way git counts a new file: lines, or none for a binary one.
+  // ponytail: reads every untracked file each refresh; cap the size read if huge untracked files show up.
+  for (const f of (await git("ls-files", "-z", "--others", "--exclude-standard", ":/")).split("\0")) {
+    if (!f || f.endsWith("/")) continue; // "" ends the list; "dir/" is a nested repository
+    const b = await readFile(path.resolve(cwd, f)).catch(() => Buffer.alloc(0));
+    stat.files++;
+    if (b.length && !b.subarray(0, 8000).includes(0)) stat.add += b.toString("latin1").split("\n").length - (b.at(-1) === 10 ? 1 : 0);
+  }
+  return stat.files ? stat : {};
 }
 
 // Token values for the pull request line; "" clears a part.
@@ -133,6 +161,7 @@ export default function (pi) {
   let stat = {};
   let lookedUpAt = 0;
   let refreshing = false;
+  let sizeTimer;
 
   // Runs from a raw timer too, where a throw would take the session down.
   function applyTitle() {
@@ -175,10 +204,11 @@ export default function (pi) {
   // Display-only: a failed lookup keeps the previous value. Re-reporting on
   // every call also restores tokens a Herdr restart dropped. A lookup asked
   // for while one runs or inside the throttle window is put off to the
-  // window's end, not dropped.
-  async function refresh(cwd?: string) {
+  // window's end, not dropped. `lookup` false (the size timer) skips the pull
+  // request lookup and reports only a changed size.
+  async function refresh(cwd?: string, lookup = true) {
     const wait = lookedUpAt + PR_REFRESH_MS - Date.now();
-    if (cwd && (refreshing || wait > 0) && !trailing) {
+    if (lookup && cwd && (refreshing || wait > 0) && !trailing) {
       trailing = setTimeout(() => {
         trailing = undefined;
         void refresh(current.cwd);
@@ -188,20 +218,20 @@ export default function (pi) {
     if (refreshing) return;
     refreshing = true;
     try {
-      if (cwd && wait <= 0) {
+      if (lookup && cwd && wait <= 0) {
         if (!lookedUpAt) await report().catch(() => {});
         lookedUpAt = Date.now();
         pr = await lookupPr(cwd).catch(() => pr);
         if (taskId) taskIssue = await lookupTaskIssue().catch(() => taskIssue);
       }
-      // A worker's size shows from its first commit, before any PR: diff against
-      // the PR base, else the remote's default branch.
+      // A worker's size shows as soon as its diff is non-empty, before any
+      // commit or PR: against the PR base, else the remote's default branch.
+      const before = JSON.stringify(stat);
       if (cwd && (pr || taskId)) {
         const base = pr ? `origin/${pr.base?.repo?.default_branch || pr.base?.ref}` : "origin/HEAD";
-        stat = await run("git", ["-C", cwd, "diff", "--shortstat", `${base}...HEAD`]).then(shortstat, () => stat);
-        if (!pr && !stat.files) stat = {};
+        stat = await diffStat(cwd, base).catch(() => stat);
       }
-      await report();
+      if (lookup || JSON.stringify(stat) !== before) await report();
     } catch {
     } finally {
       refreshing = false;
@@ -210,7 +240,14 @@ export default function (pi) {
 
   pi.on("session_start", (_event, ctx) => {
     track(ctx);
-    if (current) void refresh(current.cwd);
+    if (!current) return;
+    void refresh(current.cwd);
+    // A worker stays in one turn for most of its task: keep the size live.
+    // refresh() skips a tick while the previous refresh still runs.
+    if (!sizeTimer) {
+      sizeTimer = setInterval(() => void refresh(current.cwd, false), SIZE_REFRESH_MS);
+      sizeTimer.unref?.();
+    }
   });
   pi.on("session_switch", (_event, ctx) => track(ctx));
   pi.on("agent_start", (_event, ctx) => track(ctx));
@@ -224,6 +261,8 @@ export default function (pi) {
   pi.on("session_shutdown", () => {
     clearInterval(titleTimer);
     titleTimer = undefined;
+    clearInterval(sizeTimer);
+    sizeTimer = undefined;
     clearTimeout(trailing);
     const clear = ["who", ...PARTS].flatMap((k) => ["--clear-token", k]);
     if (current) void run(herdr, ["pane", "report-metadata", paneId, "--source", SOURCE, ...clear]).catch(() => {});

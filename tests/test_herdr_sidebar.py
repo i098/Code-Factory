@@ -395,7 +395,7 @@ def test_reporter_waits_out_a_failed_disk_measurement(fixture, tmp_path):
     assert len(calls.read_text().splitlines()) == 1
 
 
-def worker_report(tmp_path, origin_head=True, commit=True):
+def worker_report(tmp_path, origin_head=True, commit=True, setup=None):
     """The last report of a worker's pane with no pull request."""
     git_env = {
         **os.environ,
@@ -411,7 +411,9 @@ def worker_report(tmp_path, origin_head=True, commit=True):
 
     origin.mkdir()
     git("init", "-q", "-b", "main", cwd=origin)
-    git("commit", "-q", "--allow-empty", "-m", "base", cwd=origin)
+    (origin / "base").write_text("a\nb\n")
+    git("add", "base", cwd=origin)
+    git("commit", "-q", "-m", "base", cwd=origin)
     git("clone", "-q", str(origin), str(work), cwd=tmp_path)
     if not origin_head:
         git("remote", "set-head", "origin", "-d")
@@ -420,6 +422,8 @@ def worker_report(tmp_path, origin_head=True, commit=True):
         (work / "f").write_text("x\n")
         git("add", "f")
         git("commit", "-q", "-m", "work")
+    if setup:
+        setup(work, git)
     log = tmp_path / "herdr.log"
     write(tmp_path / "stub/herdr", f'#!/bin/sh\necho "$@" >> {log}\necho "{{}}"\n', 0o755)
     write(tmp_path / "stub/gh", "#!/bin/sh\necho '[]'\n", 0o755)
@@ -449,17 +453,43 @@ def test_worker_shows_its_size_before_a_pull_request(tmp_path):
 
 
 @needs_bun
-def test_worker_without_origin_head_shows_no_size(tmp_path):
+def test_worker_without_origin_head_falls_back_to_origin_main(tmp_path):
     report = worker_report(tmp_path, origin_head=False)
+    assert "files=✎ 1" in report
+
+
+@needs_bun
+def test_worker_without_any_base_ref_shows_no_size(tmp_path):
+    def drop_main(work, git):
+        git("update-ref", "-d", "refs/remotes/origin/main")
+
+    report = worker_report(tmp_path, origin_head=False, setup=drop_main)
     for part in ("add", "del", "files"):
         assert f"--clear-token {part}" in report
 
 
 @needs_bun
-def test_worker_without_a_commit_shows_no_size(tmp_path):
+def test_worker_with_an_empty_diff_shows_no_size(tmp_path):
     report = worker_report(tmp_path, commit=False)
     for part in ("add", "del", "files"):
         assert f"--clear-token {part}" in report
+
+
+@needs_bun
+def test_worker_size_counts_uncommitted_staged_and_untracked_work(tmp_path):
+    def edit(work, git):
+        (work / "base").write_text("a\nc\nd\n")  # unstaged: +2 −1
+        (work / "staged").write_text("s\n")
+        git("add", "staged")  # staged: +1
+        (work / "new").write_text("n1\nn2")  # untracked, no final newline: +2
+        (work / ".gitignore").write_text("ignored\n")  # untracked: +1
+        (work / "ignored").write_text("skip\n")
+
+    report = worker_report(tmp_path, setup=edit)
+    # f (committed), base, staged, new, .gitignore
+    assert f"add={BLANK * 2}+7" in report
+    assert "del=−1" in report
+    assert "files=✎ 5" in report
 
 
 client_spec = importlib.util.spec_from_file_location(
