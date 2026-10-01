@@ -192,6 +192,14 @@ What the mobile layout forces, compared with the desktop sidebar:
 - A home's counts and shares are on its own agent's entry, so a home with no agent pane carrying a `who` token shows none. Without a `machine` workspace, the machine's shares do not show either.
 - The issue (`○`) is left out for width.
 
+### btop
+
+btop draws nothing in a pane smaller than its shown boxes need; it shows `Terminal size too small` instead. All four boxes need 80x24 in btop 1.4 (the cpu box is 60 columns wide, the proc box 44 beside the 36 of mem and net), so a 50-column phone pane is too small.
+
+`./factory apply` installs the latest btop release as `~/.local/bin/btop-bin`, [`config/btop.conf`](../config/btop.conf) as `~/.config/btop/btop.conf`, and [`maintenance/btop.sh`](../maintenance/btop.sh) as `~/.local/bin/btop`. The launcher starts btop with preset 0 (all four boxes) in a pane of at least 80x24, and otherwise with preset 4 (processes only, which needs 44x16). When a phone attaches to the same session and the pane crosses 80x24, the launcher restarts btop with the other preset. Quitting btop ends the launcher.
+
+btop saves its config on exit, including the last preset's boxes; the launcher always passes a preset, so that never changes what it shows. Every apply rewrites the config, so make lasting changes in `config/btop.conf`, and keep preset 4 there.
+
 ## Viewing from another machine
 
 Sidebar layouts are client-side: Herdr draws the sidebar from the config of the machine you view from, even over `herdr --remote`. The host still reports every token, but the viewing machine needs the host's layout to show them. `./factory apply` installs [`maintenance/herdr-sidebar-to-client.py`](../maintenance/herdr-sidebar-to-client.py) as `~/.local/bin/herdr-sidebar-to-client.py`. On the viewing machine, run it against the host with Python 3 and ssh access, where `<host>` is anything `ssh` accepts, such as `user@host`:

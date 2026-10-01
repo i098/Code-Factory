@@ -105,6 +105,38 @@
     remote_src: true
   become: true
 
+# btop fitted to its pane (docs/herdr.md#btop): the launcher takes the place of
+# the btop command and runs the installer's btop-bin with a preset of this
+# config. btop rewrites its config on exit; every apply puts the saved one back.
+- name: Install the btop launcher
+  ansible.builtin.copy:
+    src: "{{ factory_btop_launcher_source }}"
+    dest: "{{ factory_local_bin }}/btop"
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0755"
+    remote_src: true
+  become: true
+
+- name: Ensure the btop configuration directory
+  ansible.builtin.file:
+    path: "{{ factory_btop_config | dirname }}"
+    state: directory
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0755"
+  become: true
+
+- name: Install the btop configuration
+  ansible.builtin.copy:
+    src: "{{ code_factory_repo }}/config/btop.conf"
+    dest: "{{ factory_btop_config }}"
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0644"
+    remote_src: true
+  become: true
+
 - name: Render the Herdr Spaces reporter unit and timer
   ansible.builtin.template:
     src: "{{ item }}.j2"

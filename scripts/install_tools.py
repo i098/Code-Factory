@@ -63,6 +63,14 @@ GITHUB_LATEST = {
         "uv-{gnu}-unknown-linux-gnu.tar.gz",
         {"uv": "uv-*/uv", "uvx": "uv-*/uvx"},
     ),
+    # Linked as btop-bin: ~/.local/bin/btop is the launcher that fits it to the
+    # pane (maintenance/btop.sh, installed by ansible/tasks/herdr.yml).
+    "btop": (
+        "aristocratos/btop",
+        "v",
+        "btop-{gnu}-unknown-linux-musl.tar.gz",
+        {"btop-bin": "btop/bin/btop"},
+    ),
     # Resolved for the fleet browser ladder (ansible/tasks/fleet-browsers.yml), not installed here.
     "obscura": (
         "h4ckf0r0day/obscura",
@@ -515,7 +523,7 @@ def omp_plugins(home, environment):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--home", type=Path, required=True)
-    parser.add_argument("--tools", default="herdr,node,bun,uv")
+    parser.add_argument("--tools", default="herdr,node,bun,uv,btop")
     parser.add_argument("--npm", action="store_true")
     parser.add_argument("--development", action="store_true")
     parser.add_argument(

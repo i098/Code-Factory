@@ -105,6 +105,7 @@ RELEASES = {
     "kunchenguid/no-mistakes": ("v9.9.10-beta.1", "no-mistakes-v9.9.10-beta.1-linux-amd64.tar.gz"),
     "kunchenguid/treehouse": ("v9.9.9", "treehouse-v9.9.9-linux-amd64.tar.gz"),
     "astral-sh/uv": ("9.9.9", "uv-x86_64-unknown-linux-gnu.tar.gz"),
+    "aristocratos/btop": ("v9.9.9", "btop-x86_64-unknown-linux-musl.tar.gz"),
     "h4ckf0r0day/obscura": ("v9.9.9", "obscura-x86_64-linux.tar.gz"),
     "jimididit/koncreet": ("v9.9.9", "koncreet.tar.gz"),
 }
@@ -180,9 +181,19 @@ EVERYTHING = {
 def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeypatch):
     upstream(monkeypatch)
     latest = installer.resolve_latest("linux-x86_64", EVERYTHING)
-    for tool in ("herdr", "bun", "gh", "no-mistakes", "treehouse", "uv", "obscura", "koncreet"):
+    for tool in (
+        "herdr",
+        "bun",
+        "gh",
+        "no-mistakes",
+        "treehouse",
+        "uv",
+        "btop",
+        "obscura",
+        "koncreet",
+    ):
         assert latest[tool]["assets"]["linux-x86_64"]["sha256"] == "a" * 64
-    for tool in ("herdr", "bun", "gh", "treehouse", "uv", "obscura", "koncreet"):
+    for tool in ("herdr", "bun", "gh", "treehouse", "uv", "btop", "obscura", "koncreet"):
         assert latest[tool]["version"] == "9.9.9"
     assert latest["gh"]["assets"]["linux-x86_64"]["format"] == "tar"
     assert latest["bun"]["assets"]["linux-x86_64"]["format"] == "zip"
