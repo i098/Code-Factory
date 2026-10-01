@@ -1,6 +1,6 @@
 # Dependencies
 
-Everything the recipe installs, grouped by where it comes from. Nothing is pinned: every `./factory apply` resolves each tool's newest release once and installs exactly that, so re-running apply upgrades an existing host. Every download is verified against the checksum its publisher posts for that exact release, and a release without one fails the apply instead of installing an unverified artifact. The one exception is the three omp marketplace plugins (ponytail, i-have-adhd, caveman): no publisher checksums them. The installer records the releases it resolved in `~/.local/share/code-factory/resolved.json`, which the container smoke compares against; `ansible/tasks/verify.yml` also asserts that the herdr service and omp run the resolved releases. `./factory plan` installs none of this.
+Everything the recipe installs, grouped by where it comes from. Nothing is pinned: every `./factory apply` resolves each tool's newest release once and installs exactly that, so re-running apply upgrades an existing host. Every download is verified against the checksum its publisher posts for that exact release, and a release without one fails the apply instead of installing an unverified artifact (the optional Koncreet is skipped with a warning instead). The one exception is the three omp marketplace plugins (ponytail, i-have-adhd, caveman): no publisher checksums them. The installer records the releases it resolved in `~/.local/share/code-factory/resolved.json`, which the container smoke compares against; `ansible/tasks/verify.yml` also asserts that the herdr service and omp run the resolved releases. `./factory plan` installs none of this.
 
 ## Repository tooling
 
@@ -23,7 +23,7 @@ Everything the recipe installs, grouped by where it comes from. Nothing is pinne
 - `agents` profile, omp plugins: ponytail ([DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)), i-have-adhd ([ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd)) and caveman ([JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman)) from their GitHub marketplaces, installed once and upgraded with `omp plugin upgrade` on every apply. These are the only installs that are not checksum-verified: no publisher posts a checksum for them, so they track each author's default branch and load as agent instructions and hooks. The operator accepted this to keep them at the latest commit.
 - `development` profile: rustup-init, the version in rustup's [stable release](https://static.rust-lang.org/rustup/release-stable.toml), verified against the `.sha256` published beside it, installing the Rust `stable` toolchain (minimal profile + rustfmt + clippy). Every apply moves the toolchain to the newest stable.
 
-The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests an hour per IP (shared IPs such as CI runners exhaust it); a resolution makes one request per GitHub-hosted tool the host installs, at most seven. Only the tools a run installs are resolved, so a source the host does not use cannot fail it. The lookups authenticate with `GITHUB_TOKEN` from the environment that runs `./factory apply` or `./bootstrap.sh`, else run unauthenticated; the token is sent to the GitHub API only. Container builds take the token as the optional BuildKit secret `github_token` (`docker build --secret id=github_token,env=GITHUB_TOKEN ...`), so it never lands in the image.
+The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests an hour per IP (shared IPs such as CI runners exhaust it); a resolution makes one request per GitHub-hosted tool the host installs, at most eight. Only the tools a run installs are resolved, so a source the host does not use cannot fail it. The lookups authenticate with `GITHUB_TOKEN` from the environment that runs `./factory apply` or `./bootstrap.sh`, else run unauthenticated; the token is sent to the GitHub API only. Container builds take the token as the optional BuildKit secret `github_token` (`docker build --secret id=github_token,env=GITHUB_TOKEN ...`), so it never lands in the image.
 
 ## Ubuntu packages
 
@@ -42,6 +42,12 @@ The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests 
 
 - Obscura, the latest [h4ckf0r0day/obscura release](https://github.com/h4ckf0r0day/obscura/releases/latest) for the host's platform, verified against the GitHub release-asset digest (`ansible/tasks/fleet-browsers.yml`). Each release extracts into its own `~/oss-fleet/browsers/obscura-<version>/`.
 - Supabase CLI, the npm registry's latest `supabase`, installed with `npm install` into `~/oss-fleet/shared-supabase` (`ansible/tasks/fleet_guards.yml`).
+
+## Koncreet
+
+Every host that starts services (`start_services: true`); the container worker image skips it.
+
+- [Koncreet](https://github.com/jimididit/koncreet), the latest release's `koncreet.tar.gz`, verified against the GitHub release-asset digest (`ansible/tasks/koncreet.yml`). It installs as root into `/usr/local/lib/code-factory/koncreet/<version>-<patch hash>/` with `/usr/local/bin/koncreet` linked to it, and `patches/koncreet/ubuntu-26.04.patch` is layered on top. It is optional: when its lookup, checksum, or download fails, apply warns and skips it. Apply never runs it; [Host hardening](security.md#host-hardening) has the manual run.
 
 ## Chrome autopruner
 

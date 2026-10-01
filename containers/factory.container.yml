@@ -6,7 +6,8 @@
 # container genuinely cannot host a native capability:
 #
 #   start_services: false  no systemd/D-Bus inside an ordinary container, so unit
-#                          start/enable operations must be suppressed.
+#                          start/enable operations must be suppressed. Koncreet,
+#                          the host hardening toolkit, is not installed either.
 #   enable_linger: false   `loginctl enable-linger` requires a host user manager.
 #   profiles.docker        the worker never receives the host Docker socket and
 #                          does not run a nested daemon.

@@ -106,6 +106,7 @@ RELEASES = {
     "kunchenguid/treehouse": ("v9.9.9", "treehouse-v9.9.9-linux-amd64.tar.gz"),
     "astral-sh/uv": ("9.9.9", "uv-x86_64-unknown-linux-gnu.tar.gz"),
     "h4ckf0r0day/obscura": ("v9.9.9", "obscura-x86_64-linux.tar.gz"),
+    "jimididit/koncreet": ("v9.9.9", "koncreet.tar.gz"),
 }
 
 
@@ -179,9 +180,9 @@ EVERYTHING = {
 def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeypatch):
     upstream(monkeypatch)
     latest = installer.resolve_latest("linux-x86_64", EVERYTHING)
-    for tool in ("herdr", "bun", "gh", "no-mistakes", "treehouse", "uv", "obscura"):
+    for tool in ("herdr", "bun", "gh", "no-mistakes", "treehouse", "uv", "obscura", "koncreet"):
         assert latest[tool]["assets"]["linux-x86_64"]["sha256"] == "a" * 64
-    for tool in ("herdr", "bun", "gh", "treehouse", "uv", "obscura"):
+    for tool in ("herdr", "bun", "gh", "treehouse", "uv", "obscura", "koncreet"):
         assert latest[tool]["version"] == "9.9.9"
     assert latest["gh"]["assets"]["linux-x86_64"]["format"] == "tar"
     assert latest["bun"]["assets"]["linux-x86_64"]["format"] == "zip"
@@ -225,11 +226,78 @@ def test_a_release_list_with_only_drafts_is_refused(monkeypatch):
         installer.resolve_latest("linux-x86_64", {"no-mistakes"})
 
 
-@pytest.mark.parametrize("source", [*RELEASES, "node", "rustup-init", "psutil"])
+@pytest.mark.parametrize(
+    "source",
+    [*(repo for repo in RELEASES if repo != "jimididit/koncreet"), "node", "rustup-init", "psutil"],
+)
 def test_release_without_a_published_checksum_is_refused(monkeypatch, source):
     upstream(monkeypatch, unverified=source)
     with pytest.raises(ValueError, match="refusing an unverified binary"):
         installer.resolve_latest("linux-x86_64", EVERYTHING)
+
+
+UNSAFE_TAGS = ["v1.0$(id)", "v1;id", 'v1"x', "v1`id`", "v1|id", "v1 2", "v/1"]
+
+
+@pytest.mark.parametrize("tag", UNSAFE_TAGS)
+def test_release_tag_that_is_not_a_plain_version_is_refused(monkeypatch, tag):
+    monkeypatch.setitem(RELEASES, "herdrdev/herdr", (tag, "herdr-linux-x86_64"))
+    upstream(monkeypatch)
+    with pytest.raises(ValueError, match="not a safe version"):
+        installer.resolve_latest("linux-x86_64", EVERYTHING)
+
+
+def resolve_without_koncreet(capsys):
+    latest = installer.resolve_latest("linux-x86_64", EVERYTHING)
+    assert "koncreet" not in latest
+    assert {"herdr", "uv", "obscura", "node", "psutil"} <= latest.keys()
+    return capsys.readouterr().err
+
+
+@pytest.mark.parametrize("tag", UNSAFE_TAGS)
+def test_koncreet_release_with_an_unsafe_tag_is_skipped_with_a_warning(monkeypatch, capsys, tag):
+    monkeypatch.setitem(RELEASES, "jimididit/koncreet", (tag, "koncreet.tar.gz"))
+    upstream(monkeypatch)
+    assert "not a safe version" in resolve_without_koncreet(capsys)
+
+
+def test_koncreet_release_without_a_published_checksum_is_skipped_with_a_warning(
+    monkeypatch, capsys
+):
+    upstream(monkeypatch, unverified="jimididit/koncreet")
+    assert "refusing an unverified binary" in resolve_without_koncreet(capsys)
+
+
+def test_koncreet_release_without_its_asset_is_skipped_with_a_warning(monkeypatch, capsys):
+    monkeypatch.setitem(RELEASES, "jimididit/koncreet", ("v9.9.9", "renamed.tar.gz"))
+    upstream(monkeypatch)
+    assert "refusing an unverified binary" in resolve_without_koncreet(capsys)
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        installer.urllib.error.HTTPError("https://api.github.com/", 403, "rate limited", {}, None),
+        installer.urllib.error.URLError("offline"),
+    ],
+)
+def test_koncreet_lookup_failure_is_skipped_with_a_warning(monkeypatch, capsys, failure):
+    upstream(monkeypatch)
+    fake = installer.urllib.request.urlopen
+
+    def urlopen(request, **kwargs):
+        if "jimididit/koncreet" in request.full_url:
+            raise failure
+        return fake(request, **kwargs)
+
+    monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
+    assert "skipping optional koncreet" in resolve_without_koncreet(capsys)
+
+
+def test_resolve_cli_still_succeeds_when_koncreet_cannot_be_resolved(monkeypatch, capsys, tmp_path):
+    upstream(monkeypatch, unverified="jimididit/koncreet")
+    latest = run_cli(monkeypatch, capsys, tmp_path, "--tools", "uv", "--also", "koncreet")
+    assert set(latest) == {"uv"}
 
 
 @pytest.mark.parametrize(("env", "expected"), [("env-token", "Bearer env-token"), ("", None)])

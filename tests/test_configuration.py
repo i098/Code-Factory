@@ -1,9 +1,11 @@
 import argparse
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -594,3 +596,172 @@ def test_a_new_chrome_devtools_mcp_release_leaves_the_managed_environment_unchan
     assert before["CHROME_DEVTOOLS_AXI_MCP_PATH"].endswith(
         "/chrome-devtools-mcp/current/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
     )
+
+
+def _ansible(tmp_path, *argv, wrapper=()):
+    return subprocess.run(
+        [*wrapper, Path(sys.executable).parent / argv[0], *argv[1:]],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+
+@pytest.mark.parametrize("start_services", [True, False])
+def test_koncreet_is_resolved_only_on_hosts_that_start_services(tmp_path, start_services):
+    variables = {
+        "factory_cfg": {
+            "start_services": start_services,
+            "profiles": {"agents": False, "fleet_guards": False},
+            "browser_prune": {"enabled": False},
+        }
+    }
+    result = _ansible(
+        tmp_path,
+        "ansible",
+        "localhost",
+        "-i",
+        "localhost,",
+        "-c",
+        "local",
+        "-m",
+        "ansible.builtin.debug",
+        "-a",
+        "var=factory_installer_also",
+        "-e",
+        f"@{ROOT / 'ansible/group_vars/all.yml'}",
+        "-e",
+        json.dumps(variables),
+    )
+    assert result.returncode == 0, result.stdout
+    also = json.loads(result.stdout.split("=>", 1)[1])["factory_installer_also"]
+    assert ("koncreet" in also) is start_services
+
+
+def _koncreet_settings(tmp_path, tailscale, apply_user):
+    destination = tmp_path / "koncreet.conf"
+    variables = {
+        "ansible_user_id": apply_user,
+        "ansible_user_dir": "/root" if apply_user == "root" else f"/home/{apply_user}",
+        "factory_cfg": {"user": "coder", "profiles": {"tailscale": tailscale}},
+        "factory_koncreet_config": "/etc/koncreet.conf",
+    }
+    result = _ansible(
+        tmp_path,
+        "ansible",
+        "localhost",
+        "-i",
+        "localhost,",
+        "-c",
+        "local",
+        "-m",
+        "ansible.builtin.template",
+        "-a",
+        f"src={ROOT / 'ansible/templates/koncreet.conf.j2'} dest={destination}",
+        "-e",
+        json.dumps(variables),
+    )
+    assert result.returncode == 0, result.stdout
+    return dict(
+        line.split("=", 1)
+        for line in destination.read_text().splitlines()
+        if line and not line.startswith("#")
+    )
+
+
+@pytest.mark.parametrize(
+    ("tailscale", "apply_user", "ports", "sudo_user"),
+    [
+        (True, "operator", "41641/udp", "operator"),
+        (False, "operator", None, "operator"),
+        (True, "coder", "41641/udp", None),
+        (False, "root", None, None),
+    ],
+)
+def test_koncreet_config_follows_the_tailscale_profile_and_never_makes_the_factory_user_sudo(
+    tmp_path, tailscale, apply_user, ports, sudo_user
+):
+    settings = _koncreet_settings(tmp_path, tailscale, apply_user)
+    assert settings["modules"] == "baseline,firewall,fail2ban,updates"
+    assert settings.get("firewall_ports") == ports
+    assert settings.get("user") == sudo_user
+    assert settings.get("pubkey_file") == (
+        f"/home/{sudo_user}/.ssh/authorized_keys" if sudo_user else None
+    )
+
+
+def _run_koncreet_tasks(tmp_path, digest, *flags):
+    payload = tmp_path / "payload"
+    payload.write_text("#!/bin/sh\n")
+    source = tmp_path / "koncreet.tar.gz"
+    with tarfile.open(source, "w:gz") as archive:
+        archive.add(payload, arcname="koncreet/koncreet")
+    (tmp_path / "templates").symlink_to(ROOT / "ansible/templates")
+    playbook = tmp_path / "playbook.yml"
+    playbook.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "hosts": "localhost",
+                    "connection": "local",
+                    "gather_facts": False,
+                    "tasks": [
+                        {"ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/koncreet.yml")},
+                        {
+                            "name": "A later task",
+                            "ansible.builtin.file": {
+                                "path": str(tmp_path / "later"),
+                                "state": "touch",
+                            },
+                        },
+                    ],
+                }
+            ]
+        )
+    )
+    variables = {
+        "ansible_become": False,
+        "ansible_user_id": "operator",
+        "ansible_user_dir": "/home/operator",
+        "factory_cfg": {"user": "coder", "profiles": {"tailscale": False}},
+        "factory_latest": {"koncreet": {"version": "9.9.9"}},
+        "factory_koncreet": {"url": source.as_uri(), "sha256": digest},
+        "factory_koncreet_patch": str(ROOT / "patches/koncreet/ubuntu-26.04.patch"),
+        "factory_koncreet_prefix": str(tmp_path / "prefix"),
+        "factory_koncreet_config": str(tmp_path / "koncreet.conf"),
+    }
+    # koncreet.yml hands its files to root. Unprivileged, the chown fails before the
+    # download is ever checked, so a digest test would pass for the wrong reason.
+    # Plan mode (--check) creates nothing and needs no root.
+    wrapper = () if os.geteuid() == 0 or "--check" in flags else ("fakeroot",)
+    if wrapper and not shutil.which("fakeroot"):
+        pytest.skip("koncreet.yml chowns to root: run as root or install fakeroot")
+    return _ansible(
+        tmp_path,
+        "ansible-playbook",
+        "-i",
+        "localhost,",
+        str(playbook),
+        "--extra-vars",
+        json.dumps(variables),
+        *flags,
+        wrapper=wrapper,
+    )
+
+
+def test_a_koncreet_tarball_that_fails_its_digest_is_skipped_and_apply_continues(tmp_path):
+    result = _run_koncreet_tasks(tmp_path, "0" * 64)
+    assert result.returncode == 0, result.stdout
+    assert "WARNING: koncreet skipped" in result.stdout
+    assert "Fetch the koncreet tarball: The checksum for" in result.stdout
+    assert (tmp_path / "later").exists()
+    assert not list((tmp_path / "prefix").rglob("patch-outcome"))
+    assert not list((tmp_path / "prefix").rglob("*.tar.gz"))
+    assert not (tmp_path / "koncreet.conf").exists()
+
+
+def test_planning_koncreet_installs_nothing_and_warns_of_nothing(tmp_path):
+    result = _run_koncreet_tasks(tmp_path, "0" * 64, "--check")
+    assert result.returncode == 0, result.stdout
+    assert "WARNING" not in result.stdout
+    assert not (tmp_path / "prefix").exists()
