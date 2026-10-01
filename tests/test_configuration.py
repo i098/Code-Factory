@@ -337,6 +337,12 @@ def _run_agents(tmp_path, start_at, **variables):
                     "tasks": [
                         {"ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/agents.yml")}
                     ],
+                    "handlers": [
+                        {
+                            "name": "no-mistakes daemon restart required",
+                            "ansible.builtin.debug": {"msg": "restart reported"},
+                        }
+                    ],
                 }
             ]
         )
@@ -464,6 +470,87 @@ def test_seeded_acpx_config_defaults_to_omp_and_absent_one_is_not_created(tmp_pa
     config.write_text(seed)
     assert _ensure_acpx_default(tmp_path, config) == 0
     assert config.read_text() == seed
+
+
+PI_AGENT = {
+    "agent": ["pi", "acp:omp"],
+    "agent_config": {"pi": {"model": "anthropic/claude-sonnet-5-5", "effort": "high"}},
+}
+
+
+def _set_pipeline_agent(tmp_path, rc):
+    """Runs the agent step with the adapter check's exit code; returns the changed count."""
+    return _run_agents(
+        tmp_path,
+        "Read the no-mistakes config for the pipeline agent",
+        factory_cfg={"home": str(tmp_path)},
+        factory_omp_as_pi_dir="/w",
+        factory_pi_adapter={"rc": rc, "stdout": "pi.go changed"},
+        factory_omp_config=str(tmp_path / "absent-omp.yml"),
+        factory_acpx_config=str(tmp_path / "absent-acpx.json"),
+    )
+
+
+def test_verified_pi_adapter_moves_the_seeded_agent_to_pi_once(tmp_path):
+    config = tmp_path / ".no-mistakes/config.yaml"
+    config.parent.mkdir()
+    config.write_text((ROOT / "config/no-mistakes.yaml").read_text() + "log_level: info\n")
+    assert _set_pipeline_agent(tmp_path, rc=0) == 1
+    assert yaml.safe_load(config.read_text()) == {
+        **PI_AGENT,
+        "agent_path_override": {"pi": "/w/omp-as-pi"},
+        "log_level": "info",
+    }
+    written = config.read_text()
+    assert _set_pipeline_agent(tmp_path, rc=0) == 0
+    assert config.read_text() == written
+
+
+def test_a_host_already_on_pi_moves_from_xhigh_to_high_once(tmp_path):
+    config = tmp_path / ".no-mistakes/config.yaml"
+    config.parent.mkdir()
+    previous = {
+        **PI_AGENT,
+        "agent_config": {"pi": {"model": "anthropic/claude-sonnet-5-5", "effort": "xhigh"}},
+        "agent_path_override": {"pi": "/w/omp-as-pi"},
+    }
+    config.write_text(yaml.safe_dump(previous))
+    assert _set_pipeline_agent(tmp_path, rc=0) == 1
+    assert yaml.safe_load(config.read_text())["agent_config"] == PI_AGENT["agent_config"]
+    assert _set_pipeline_agent(tmp_path, rc=0) == 0
+
+
+def test_a_pin_mismatch_moves_the_agent_to_acp_omp_alone(tmp_path):
+    config = tmp_path / ".no-mistakes/config.yaml"
+    config.parent.mkdir()
+    config.write_text(yaml.safe_dump({**PI_AGENT, "agent_path_override": {"pi": "/w/omp-as-pi"}}))
+    assert _set_pipeline_agent(tmp_path, rc=1) == 1
+    assert yaml.safe_load(config.read_text())["agent"] == ["acp:omp"]
+    seed = (ROOT / "config/no-mistakes.yaml").read_text()
+    config.write_text(seed)
+    assert _set_pipeline_agent(tmp_path, rc=1) == 0
+    assert config.read_text() == seed
+
+
+@pytest.mark.parametrize("rc", [2, 127])
+def test_an_inconclusive_adapter_check_leaves_the_agent_setting_alone(tmp_path, rc):
+    config = tmp_path / ".no-mistakes/config.yaml"
+    config.parent.mkdir()
+    for text in (
+        yaml.safe_dump({**PI_AGENT, "agent_path_override": {"pi": "/w/omp-as-pi"}}),
+        (ROOT / "config/no-mistakes.yaml").read_text(),
+    ):
+        config.write_text(text)
+        assert _set_pipeline_agent(tmp_path, rc=rc) == 0
+        assert config.read_text() == text
+
+
+def test_operator_chosen_agent_is_left_alone(tmp_path):
+    config = tmp_path / ".no-mistakes/config.yaml"
+    config.parent.mkdir()
+    config.write_text("agent: [claude]\n")
+    assert _set_pipeline_agent(tmp_path, rc=0) == 0
+    assert config.read_text() == "agent: [claude]\n"
 
 
 def _managed_environment(tmp_path, fleet_guards, release="1.0.0"):

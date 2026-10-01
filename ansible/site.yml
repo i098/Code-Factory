@@ -260,3 +260,13 @@
           (this terminates everything running inside display
           :{{ factory_cfg.desktop.display }}).
       listen: vnc restart required
+
+    # The no-mistakes daemon serves every pipeline run on the host, and a
+    # restart kills the runs in flight, so it is reported instead of performed.
+    - name: Report that the no-mistakes daemon must be restarted manually
+      ansible.builtin.debug:
+        msg: >-
+          no-mistakes pipeline agent settings changed. Restart the daemon when
+          no pipeline run is active, so new runs load them:
+          no-mistakes daemon restart
+      listen: no-mistakes daemon restart required

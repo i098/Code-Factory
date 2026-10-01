@@ -10,6 +10,8 @@ With the `agents` profile on, `./factory apply`:
 2. Copies [`config/omp.yml`](../config/omp.yml) to `~/.omp/agent/config.yml` (directory `0700`, file `0600`), and [`config/omp-lsp.json`](../config/omp-lsp.json) to `~/.omp/agent/lsp.json`, which disables the markdown language server (marksman): it costs each session about 90 MB, and markdown diagnostics add nothing to agent work.
 3. Installs the extension `~/.omp/agent/extensions/code-factory-herdr-sidebar.ts`, which feeds the Herdr Agent sidebar the session topic, the pane's short name, and the pull request line (pull request, issue and diff size). Every apply rewrites it. See [Herdr sidebar](herdr.md).
 4. Installs the extension `~/.omp/agent/extensions/aa-mode-icons.ts` from [`config/omp-status-icons.ts`](../config/omp-status-icons.ts). Every apply rewrites it. See [Status line icons](#status-line-icons).
+5. Installs the extension `~/.omp/agent/extensions/fm-no-pattern-kill.ts` from [`config/omp-no-pattern-kill.ts`](../config/omp-no-pattern-kill.ts). It blocks `pkill`, `killall` and kill-by-`pgrep` commands in every omp session: all agents on the host run as one user and each worker's brief sits in its command line, so a name or pattern can match other workers. Kill a process by the PID you started instead. Every apply rewrites it. It is a best-effort seatbelt, not a barrier: it matches the command text, so it lets through an absolute path (`/usr/bin/pkill`), a kill whose targets come from `pidof`, `ps | grep` or a `pgrep` loop, and the list form in an eval cell (`subprocess.run(["pkill", ...])`), and it blocks read-only mentions such as `grep -rn pkill docs/`. Removing worker briefs from the command line is the real fix and is out of scope for this recipe.
+6. Sets up omp as the no-mistakes pipeline agent. See [no-mistakes pipeline agent](#no-mistakes-pipeline-agent).
 
 Both copies are first-write-only. If a file already exists, the recipe leaves it alone, so an account's own settings and provider configuration are never overwritten. The one exception is the two status line keys the [status line icons](#status-line-icons) need, which every apply ensures. See [Updating an existing host](#updating-an-existing-host).
 
@@ -74,6 +76,8 @@ The advisor is a second model that reviews each completed turn and can add notes
 
 Firstmate turns it on for omp crewmate and scout launches only, never secondmates, by layering the seeded `config/omp-crew-overlay.yml` over `~/.omp/agent/config.yml` (see [Seeded Firstmate and OMP configuration](architecture.md#seeded-firstmate-and-omp-configuration)). Crews get fable 5.1 at low thinking, with `providers.anthropic.serverSideFallback: false`, because Anthropic rejects the global server-side fallback on every advisor call with a 400. They never wait on it, because the overlay's `syncBacklog: "off"` overrides the global `"1"`. Turns that land during a review batch into the next call, and the advisor interrupts at most once per 10 turns. omp has no every-N-turns setting.
 
+The omp that the no-mistakes daemon spawns gets its own advisor from a separate overlay, not from Firstmate. See [no-mistakes pipeline agent](#no-mistakes-pipeline-agent).
+
 ## Other seeded preferences
 
 `config/omp.yml` also sets the theme (`dark-rose-pine`), a custom status line (see [Status line icons](#status-line-icons)), `textVerbosity: low`, `readLineNumbers: true`, steering and interrupt modes, and `mnemopi.noEmbeddings: true`. Change a single value with `omp config set <key> <value>`, or use `/settings`.
@@ -94,6 +98,21 @@ The row needs two keys in `statusLine`: `status` in `leftSegments`, which shows 
 omp config get statusLine.leftSegments
 omp config get statusLine.showHookStatus
 ```
+
+## no-mistakes pipeline agent
+
+no-mistakes has no native omp agent. omp is a Pi fork with the same `--mode json` stream, so the recipe runs omp through no-mistakes' native `pi` adapter, the only adapter that reuses one fixer session across review-fix rounds. `acp:omp` (acpx running `omp acp`) stays as the fallback, and it always starts cold. Every apply:
+
+1. Installs [`config/omp-as-pi/`](../config/omp-as-pi/) to `~/.no-mistakes/omp-as-pi/`. The `omp-as-pi` wrapper maps `--session` to `--resume`, and `--no-context-files` to the exact neutralization no-mistakes applies to an omp gate (`--config gate-overlay.yml --no-rules --no-skills --no-extensions`, with the overlay pinned by sha256). It refuses every other argument with exit 64 and logs the refusal to `~/.no-mistakes/omp-as-pi/refusals.log`; no-mistakes then re-runs that call on `acp:omp`.
+2. Checks the pi adapter of the no-mistakes release it installs. no-mistakes installs at its newest non-draft release, prereleases included, but the wrapper only translates the arguments the adapter it was proven against builds. `check-adapter.sh v<version>` fetches that release's four adapter sources (`pi.go`, `pi_profile.go`, `fallback.go`, `ompgate.go`) and compares them with the sha256 pins in `check-adapter.sh`, the only place the pins live. It exits 0 when every pin matches, 1 when a source differs from its pin or is gone from the tag (HTTP 404), and 2 when it proves nothing: a network error, a timeout, or any other HTTP status.
+3. Sets the agent in `~/.no-mistakes/config.yaml`. When the check passes, it sets `agent: [pi, acp:omp]`, `agent_path_override.pi` to the installed wrapper, and `agent_config.pi` to model `anthropic/claude-sonnet-5-5` with effort `high`. When a pin differs (exit 1), it sets `agent: [acp:omp]` and prints why. When the check is inconclusive (exit 2 or any other failure), it leaves the agent setting as it is and prints a warning; the next apply checks again. Only those two agent lists are managed; any other agent choice is left alone. The rewrite drops the seed's comments, so note its rule here: never add `acp_registry_overrides` for omp, because no-mistakes refuses an overridden omp as a gate agent in repos with `disable_project_settings: true`.
+4. Installs [`config/no-mistakes-omp.yml`](../config/no-mistakes-omp.yml) as `~/.no-mistakes/omp-config.yml`, an omp overlay for daemon-spawned omp only. It turns on an Opus 5.5 advisor at medium thinking and sets `modelRoles.default` to Sonnet 5.5 at `high`: no-mistakes cannot pin model or effort for `acp:omp`, so the fallback takes both from this file, while the pi path passes its own `--model` and `--thinking` from `agent_config.pi`. The systemd drop-in `~/.config/systemd/user/no-mistakes-daemon-.service.d/code-factory.conf` points `PI_CONFIG_FILES` at it; the `no-mistakes-daemon-` prefix makes systemd apply it to the daemon unit, whose name ends in a hash.
+
+Restarting the daemon kills the pipeline runs in flight, so the recipe never does it. When the daemon's omp overlay, its systemd drop-in, or the agent setting in `~/.no-mistakes/config.yaml` changes, the apply prints a reminder: run `no-mistakes daemon restart` once no pipeline run is active.
+
+Verification runs `~/.no-mistakes/omp-as-pi/omp-as-pi --omp-as-pi-check`, which confirms the installed omp still lists every flag the wrapper uses and the gate overlay matches its pin. CI runs the wrapper's offline tests with `bash config/omp-as-pi/test.sh`; `test.sh --live` also drives the real omp with a cheap model.
+
+When a new no-mistakes release changes the adapter, re-prove the wrapper against it (`test.sh --live` and a pipeline run), then update the pins in `check-adapter.sh`.
 
 ## Updating an existing host
 

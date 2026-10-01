@@ -10,7 +10,7 @@ Figures are estimates from a measured fleet host.
 | Component | Memory | Source |
 | --- | --- | --- |
 | omp crewmate (one agent process) | 300-750 MB RSS | measured |
-| no-mistakes pipeline agent (`omp acp`) while a lane ships | about 450 MB | measured |
+| no-mistakes pipeline agent (omp) while a lane ships | about 450 MB | measured |
 | `next dev` / `next-server` for a UI lane | 3-4 GB | [fleet guards](fleet-guards.md) |
 | `tsc --noEmit` | about 0.6 GB; lane node scripts capped at a 2048 MB heap | measured; the seeded worktree `node` wrapper ([fleet guards](fleet-guards.md)) |
 | chrome-devtools-axi bridge + `chrome-devtools-mcp` | about 0.3 GB for the MCP child; an idle bridge holds about 2 GB | measured |

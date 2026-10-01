@@ -75,7 +75,7 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 
 | Profile | Default | What it installs |
 | --- | --- | --- |
-| `agents` | on | omp, AXI tools, gh, no-mistakes, treehouse, acpx; safe omp presentation and model-role settings (see [omp configuration](omp.md)); first-write no-mistakes and acpx configs that make `acp:omp` the gate agent; `~/.local/bin/ponytail-review`; browser env defaults; Chrome autoprune timer. |
+| `agents` | on | omp, AXI tools, gh, no-mistakes, treehouse, acpx; safe omp presentation and model-role settings (see [omp configuration](omp.md)); omp as the no-mistakes gate agent through the pi adapter with `acp:omp` as the fallback, or `acp:omp` alone when the adapter does not match the pins (see [no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)); first-write acpx config; the pattern-kill guard omp extension; `~/.local/bin/ponytail-review`; browser env defaults; Chrome autoprune timer. |
 | `development` | on | Rust toolchain (stable), build essentials. |
 | `firstmate` | on | Firstmate clone tracking upstream `main`, plus seeded Firstmate config: crew dispatch, crew and secondmate harness, the crew omp overlay (crew advisor, see [omp configuration](omp.md#advisor)), Herdr backend selection, startup memory budget, and the spawn memory floor. |
 | `docker` | on | Docker engine and Compose v2, with daemon defaults `init` (reaps orphaned children) and `live-restore`. Group membership is opt-in through the Ansible variable `factory_docker_group_users`. |

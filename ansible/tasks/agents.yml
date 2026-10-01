@@ -101,6 +101,134 @@
     remote_src: true
   become: true
 
+# The omp extension that refuses pkill, killall and kill-by-pgrep: every agent
+# shares one uid and a worker's brief sits in its argv, so a pattern can match
+# other workers (docs/omp.md). Managed: every apply rewrites it.
+- name: Install the pattern-kill guard omp extension
+  ansible.builtin.copy:
+    src: "{{ code_factory_repo }}/config/omp-no-pattern-kill.ts"
+    dest: "{{ factory_omp_no_pattern_kill_extension }}"
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0644"
+    remote_src: true
+  become: true
+
+# --- no-mistakes pipeline agent (docs/omp.md#no-mistakes-pipeline-agent) ----
+# omp runs through the no-mistakes pi adapter via the omp-as-pi wrapper, with
+# acp:omp as the fallback. Managed: every apply rewrites these files.
+- name: Install omp-as-pi, the wrapper that runs omp as the no-mistakes pi agent
+  ansible.builtin.copy:
+    src: "{{ code_factory_repo }}/config/omp-as-pi/"
+    dest: "{{ factory_omp_as_pi_dir }}/"
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "u=rwX,go=rX"
+    directory_mode: "0755"
+    remote_src: true
+  become: true
+
+- name: Install the omp overlay that only daemon-spawned omp loads
+  ansible.builtin.copy:
+    src: "{{ code_factory_repo }}/config/no-mistakes-omp.yml"
+    dest: "{{ factory_no_mistakes_omp_overlay }}"
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0600"
+    remote_src: true
+  become: true
+  notify: no-mistakes daemon restart required
+
+# no-mistakes names its unit no-mistakes-daemon-<hash>.service and rewrites it
+# on `no-mistakes daemon start`; systemd applies a drop-in under the
+# "no-mistakes-daemon-" prefix to every such unit, and no-mistakes leaves it be.
+- name: Ensure the no-mistakes daemon drop-in directory
+  ansible.builtin.file:
+    path: "{{ factory_user_units }}/no-mistakes-daemon-.service.d"
+    state: directory
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0755"
+  become: true
+
+- name: Point daemon-spawned omp at the overlay
+  ansible.builtin.copy:
+    content: |
+      # Managed by Code Factory (docs/omp.md#no-mistakes-pipeline-agent).
+      [Service]
+      Environment="PI_CONFIG_FILES={{ factory_no_mistakes_omp_overlay }}"
+    dest: "{{ factory_user_units }}/no-mistakes-daemon-.service.d/code-factory.conf"
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0644"
+  become: true
+  notify:
+    - reload user systemd
+    - no-mistakes daemon restart required
+
+# no-mistakes installs at its latest release, but omp-as-pi translates only the
+# argv the pinned pi adapter builds. The adapter sources of the release this run
+# installs must match the pins in check-adapter.sh: exit 0 selects pi, exit 1
+# (a pin differs or its file is gone) selects acp:omp alone, and any other outcome
+# (exit 2, a fetch that could not prove anything) leaves the agent setting as it is.
+- name: Check the pi adapter of the no-mistakes release this run installs
+  ansible.builtin.command:
+    argv:
+      - bash
+      - "{{ code_factory_repo }}/config/omp-as-pi/check-adapter.sh"
+      - "v{{ factory_latest['no-mistakes'].version }}"
+  become: true
+  register: factory_pi_adapter
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Read the no-mistakes config for the pipeline agent
+  ansible.builtin.slurp:
+    path: "{{ factory_cfg.home }}/.no-mistakes/config.yaml"
+  become: true
+  register: factory_no_mistakes_config_raw
+  failed_when: false
+  check_mode: false
+
+# Only the two agent lists Code Factory writes are managed; any other agent
+# choice is the operator's and stays.
+- name: Set the no-mistakes pipeline agent from the pi adapter check
+  vars:
+    current: "{{ factory_no_mistakes_config_raw.content | b64decode | from_yaml }}"
+    wanted: >-
+      {{ current | combine({
+           'agent': ['pi', 'acp:omp'],
+           'agent_path_override': {'pi': factory_omp_as_pi_dir ~ '/omp-as-pi'},
+           'agent_config': {'pi': {'model': 'anthropic/claude-sonnet-5-5', 'effort': 'high'}}}, recursive=true)
+         if factory_pi_adapter.rc == 0
+         else (current | combine({'agent': ['acp:omp']}) if factory_pi_adapter.rc == 1 else current) }}
+  ansible.builtin.copy:
+    content: "{{ wanted | to_nice_yaml(indent=2, sort_keys=false) }}"
+    dest: "{{ factory_cfg.home }}/.no-mistakes/config.yaml"
+  become: true
+  when:
+    - factory_no_mistakes_config_raw.content is defined
+    - current.agent | default([]) in [['acp:omp'], ['pi', 'acp:omp']]
+    - wanted != current
+  notify: no-mistakes daemon restart required
+
+- name: Report why the no-mistakes pipeline agent stays acp:omp
+  ansible.builtin.debug:
+    msg: >-
+      Not switching the no-mistakes pipeline agent to pi: {{
+      factory_pi_adapter.stdout | default('', true) or factory_pi_adapter.stderr | default('') }}.
+      It stays acp:omp until omp-as-pi is re-proven against this release.
+  when: factory_pi_adapter.rc == 1
+
+- name: Warn that the no-mistakes pi adapter could not be verified
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: could not verify the pi adapter of this no-mistakes release: {{
+      factory_pi_adapter.stdout | default('', true) or factory_pi_adapter.stderr | default('') }}.
+      The pipeline agent setting is left as it is; the next apply checks again.
+  when: factory_pi_adapter.rc not in [0, 1]
+
 # The omp config is first-write-only, but the status icons row needs two of its
 # keys on every host: `status` in statusLine.leftSegments and no separate hooks
 # line (docs/omp.md). omp reads leftSegments only under the custom preset, so

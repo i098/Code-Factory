@@ -62,7 +62,7 @@ CI runs the `agent-gate` check in `tests/container-smoke.sh` for the gate agent,
 | The VNC browser tier finds a Chrome binary | `test -x /usr/bin/google-chrome` | Exit `0`. |
 | Crew advisor calls skip the server-side fallback | `grep -A2 '^providers:' ~/Dev/firstmate/config/omp-crew-overlay.yml` | `serverSideFallback: false` under `anthropic:`. |
 | ponytail-review runs | `git -C <Code Factory checkout> diff HEAD~1 \| ponytail-review --stdin; echo $?` | Exit `0` or `2`, never `1`. |
-| no-mistakes gate agent | `no-mistakes --version`, `no-mistakes doctor`, `jq -r .agents.omp.command ~/.acpx/config.json`, `grep -c '^acp_registry_overrides' ~/.no-mistakes/config.yaml` | The version in `~/.local/share/code-factory/resolved.json`, doctor reports `acp:omp` runnable, `omp acp`, `0`. |
+| no-mistakes gate agent | `no-mistakes --version`, `no-mistakes doctor`, `~/.no-mistakes/omp-as-pi/omp-as-pi --omp-as-pi-check`, `jq -r .agents.omp.command ~/.acpx/config.json`, `grep -c '^acp_registry_overrides' ~/.no-mistakes/config.yaml` | The version in `~/.local/share/code-factory/resolved.json`, doctor reports `pi` runnable (or `acp:omp` when the apply kept it), `omp-as-pi: ok`, `omp acp`, `0`. |
 | AXI tool floors | `quota-axi --version; tasks-axi --version` | At least the floors in [Dependencies](dependencies.md#latest-releases). |
 
 ## Cutover

@@ -47,7 +47,7 @@ The `firstmate` profile copies each name in `factory_firstmate_config_names` (`a
 | `spawn-memory-floor-mb` | `8000`; see [fleet guards](fleet-guards.md). |
 | `crew-harness`, `backend`, `startup-memory-budget` | Harness, Herdr backend, and startup memory budget. |
 
-`config/omp.yml` seeds `~/.omp/agent/config.yml` on first write only. It holds the host's `modelRoles` (`default` is `anthropic/claude-opus-5-5:xhigh`, `task` and `subagent` are `anthropic/claude-opus-5-5:auto`, `memory` is `anthropic/claude-opus-5-5:off`, and `smol`, `commit` and `tiny` are `anthropic/claude-sonnet-5:off`) and `retry.fallbackChains` with no `default` chain. Its `advisor` block keeps the global advisor off (`enabled: false`) with `syncBacklog: '1'`; only crews turn it on, through the overlay above, which also sets `syncBacklog` to `"off"`. No router or gateway sits between omp and the provider.
+`config/omp.yml` seeds `~/.omp/agent/config.yml` on first write only. It holds the host's `modelRoles` (`default` is `anthropic/claude-opus-5-5:xhigh`, `task` and `subagent` are `anthropic/claude-opus-5-5:auto`, `memory` is `anthropic/claude-opus-5-5:off`, and `smol`, `commit` and `tiny` are `anthropic/claude-sonnet-5:off`) and `retry.fallbackChains` with no `default` chain. Its `advisor` block keeps the global advisor off (`enabled: false`) with `syncBacklog: '1'`; only crews and the omp the no-mistakes daemon spawns turn it on. Crews do it through the overlay above, which also sets `syncBacklog` to `"off"`; the daemon's omp does it through its own overlay ([no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)). No router or gateway sits between omp and the provider.
 
 Host sizing and every auto pruner are listed in [Capacity and pruners](capacity.md).
 
@@ -65,6 +65,7 @@ Host sizing and every auto pruner are listed in [Capacity and pruners](capacity.
 GitHub Actions (`.github/workflows/ci.yml`) runs on pushes to `main`, on every pull request, and on manual dispatch:
 
 - `uv sync --locked --group dev`, then `ruff check` and `pytest`.
+- `bash config/omp-as-pi/test.sh`, the offline tests of the omp-as-pi wrapper ([no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)).
 - `./factory validate` for `config/default.yml` and `containers/factory.container.yml`.
 - Audits of the Dockerfile, devcontainer, and Compose definitions (the image builds from `ubuntu:latest`, Compose services are digest-pinned, no host namespaces or socket, resource caps).
 - A full worker image build and the behavior smoke in `tests/container-smoke.sh`.
