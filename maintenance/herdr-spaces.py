@@ -390,7 +390,7 @@ def main() -> None:
             # Firstmate names its task panes through the display agent; home
             # panes are left free, so the topic can go there.
             space = last.get(pane["workspace_id"], {})
-            title = pane.get("terminal_title")
+            title = (pane.get("terminal_title") or "").strip()[:80]
             if title and pane.get("display_agent") != title:
                 args += ["--display-agent", title]
         text = tight(

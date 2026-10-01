@@ -190,6 +190,22 @@ def fixture(tmp_path):
         },
         {"workspace_id": "w3", "pane_id": "w3:p1", "agent": "claude"},
         {"workspace_id": "w3", "pane_id": "w3:p2", "agent": "omp", "state_labels": {"idle": "old"}},
+        # Herdr stores a display agent trimmed and capped at 80 characters.
+        {
+            "workspace_id": "w3",
+            "pane_id": "w3:p3",
+            "agent": "omp",
+            "terminal_title": f"  {'t' * 100}  ",
+            "display_agent": "t" * 80,
+            "tokens": {"who": "firstmate"},
+        },
+        {
+            "workspace_id": "w3",
+            "pane_id": "w3:p4",
+            "agent": "omp",
+            "terminal_title": f"  {'u' * 100}  ",
+            "tokens": {"who": "firstmate"},
+        },
         {
             "workspace_id": "w4",
             "pane_id": "w4:p2",
@@ -351,6 +367,7 @@ def test_mobile_layout_carries_the_same_data(fixture, tmp_path):
     assert reports == {
         "w1:p3": source + labels("⎇1537 +5"),
         "w3:p2": source + ["--clear-state-labels"],
+        "w3:p4": source + ["--display-agent", "u" * 80],
     }
 
 
