@@ -177,7 +177,7 @@ factory_desktop_packages:
   - iproute2
 
 # --- Tool installer ---------------------------------------------------------
-factory_core_tools: [herdr, node, bun, uv]
+factory_core_tools: [herdr, node, bun, uv, btop]
 # The installer flags that choose which tools a run covers. tasks/preflight.yml
 # resolves exactly this set (plus the sources Ansible installs itself) and
 # tasks/tools.yml installs it, so a host never resolves, and never fails on, a
@@ -210,6 +210,10 @@ factory_no_mistakes_omp_overlay: "{{ factory_cfg.home }}/.no-mistakes/omp-config
 # Stdlib-only reporter that feeds the Spaces sidebar layout, run by herdr-spaces.timer.
 factory_herdr_spaces_source: "{{ code_factory_repo }}/maintenance/herdr-spaces.py"
 factory_herdr_spaces_script: "{{ factory_local_bin }}/herdr-spaces.py"
+# btop: ~/.local/bin/btop is a launcher that picks a preset of the saved config
+# by pane size, so it also loads in a phone's 50-column pane (docs/herdr.md#btop).
+factory_btop_launcher_source: "{{ code_factory_repo }}/maintenance/btop.sh"
+factory_btop_config: "{{ factory_cfg.home }}/.config/btop/btop.conf"
 
 # --- Browser pruning --------------------------------------------------------
 # Flags confirmed by Main (owner of maintenance/chrome-autoprune.py): without
