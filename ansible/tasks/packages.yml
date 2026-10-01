@@ -1,5 +1,5 @@
 ---
-# Ubuntu prerequisites. Only distribution packages here; every pinned tool
+# Ubuntu prerequisites. Only distribution packages here; every other tool
 # comes from the repository installer (tasks/tools.yml).
 #
 # The cache refresh is marked unchanged on purpose: refreshing package metadata
@@ -42,6 +42,6 @@
     - not ansible_check_mode or factory_apt_indexes.matched > 0
 
 # The browser pruner needs psutil >= 6 for Process.net_connections(); Ubuntu
-# 24.04 ships 5.9. It therefore gets a hash-pinned private virtualenv in
+# 24.04 ships 5.9. It therefore gets a hash-verified private virtualenv in
 # tasks/browser_prune.yml instead of a distribution package, and nothing here
 # installs into /usr/bin/python3's site-packages.

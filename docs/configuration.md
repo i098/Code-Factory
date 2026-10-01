@@ -7,7 +7,7 @@
 | Command | What it does |
 | --- | --- |
 | `./factory init` | Copies `config/default.yml` to `.local/host.yml` with your user, home, and `~/Dev` workspace filled in. Never overwrites an existing file. Options: `--user`, `--home`, `--container`. |
-| `./factory validate` | Checks the config against `schemas/factory.schema.json` and the cross-field rules below, plus `toolchain.lock.json` against its schema. |
+| `./factory validate` | Checks the config against `schemas/factory.schema.json` and the cross-field rules below, |
 | `./factory plan` | Runs the Ansible playbook in check mode. Reports what would change; mutates nothing. |
 | `./factory apply` | Runs the playbook for real. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, the first successful interactive apply with omp signed in then opens the new-host questions (below). |
 | `./factory doctor` | Checks that each expected tool runs and reports `gh` authentication. Changes nothing. |
@@ -42,9 +42,6 @@ factory:
     sidebar_agent_rows: |
       [ ... ]
     sidebar_bg: "reset"   # the terminal's own background
-  browsers:               # Obscura tier of the browser ladder
-    obscura_version: '0.2.2'
-    obscura_sha256: c1b4548e36549a0228c39c1cc842df425bc7253af2b0a56bd2a538d8ff7e3406
   fleet:
     supabase_project_id: <project-id>   # The shared Supabase project id; the default is set in config/default.yml
     fixture_archive: ""   # Path to DB volume tarball for fresh hosts
@@ -59,7 +56,7 @@ factory:
 
 - `user` is not `root`, and `workspace` is inside `home`.
 - `firstmate` and `browser_prune.enabled` need `agents`.
-- `fleet_guards` needs `docker` and `firstmate`, plus `browsers.obscura_version` and a 64-character hex `browsers.obscura_sha256`.
+- `fleet_guards` needs `docker` and `firstmate`. Obscura is always its latest release; remove any `browsers.obscura_version` or `browsers.obscura_sha256` left in an older `.local/host.yml`, which validation now rejects.
 
 The Firstmate checkout tracks the default branch of upstream Firstmate, not a sha. Every apply fetches `origin/main` and fast-forwards `main`, so tracking it is how a host stays current. Do not re-pin it to a sha. Each run resolves `origin/main` once and reports the sha it installed. To track a fork, set `firstmate.url` in `.local/host.yml`. The URL applies to a fresh clone; verification fails when an existing checkout's `origin` is a different URL, and provisioning never changes it for you. To switch an existing checkout, run `git -C <workspace>/firstmate remote set-url origin <url>` and `git -C <workspace>/firstmate fetch origin`, reconcile any local commits on `main` with `origin/main` by hand, then run `./factory apply`.
 

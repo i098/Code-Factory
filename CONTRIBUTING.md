@@ -11,7 +11,6 @@ Code Factory is an Ansible playbook with a Python CLI wrapper (`scripts/factory.
 - `ansible/templates/*.j2` — systemd unit templates
 - `scripts/factory.py` — CLI (`init`, `validate`, `plan`, `apply`, `doctor`)
 - `scripts/install_tools.py` — checksum-verified tool installer (idempotent)
-- `toolchain.lock.json` — the pinned tools (uv, rustup-init, Rust): version, URL, sha256
 - `fleet/` — runtime scripts deployed to `~/oss-fleet/` on the target host
 - `config/` — per-tool config templates deployed to Firstmate homes
 
@@ -21,7 +20,7 @@ Every task is idempotent; a second unchanged `apply` reports `changed=0`.
 
 Every task is check-mode safe: `plan` (Ansible `--check`) previews without mutating.
 
-Only uv, rustup-init and the Rust toolchain are pinned in `toolchain.lock.json`. Every other tool tracks its latest release, resolved once per apply: native assets are verified against the SHA-256 their publisher lists for that release and refused without one, npm tools install the exact resolved version. The installer records what it resolved in `~/.local/share/code-factory/resolved.json`.
+Nothing is pinned: every tool tracks its latest release, resolved once per apply and verified by the checksum its publisher posts. Native assets are refused without a published SHA-256, npm tools install the exact resolved version, and the Rust toolchain follows `stable`. The installer records what it resolved in `~/.local/share/code-factory/resolved.json`. Only the repository's own Python environment (`uv.lock`) and the GitHub Actions in CI stay locked.
 
 No unconditional restarts, daemon-reloads, or bare commands.
 
@@ -48,7 +47,7 @@ uv run ansible-playbook -i ansible/inventory.yml ansible/site.yml --syntax-check
 
 ## Adding a new tool
 
-1. Pin it in `toolchain.lock.json` with the correct `format` (`file`, `tar` or `zip`), sha256, URL, and `binaries` map, and allow its name in `schemas/toolchain.schema.json`. A tool that tracks its latest release goes in `GITHUB_LATEST` or `NPM_LATEST` in `scripts/install_tools.py` instead.
+1. Add it to `GITHUB_LATEST` (a GitHub release whose assets carry a SHA-256 digest) or `NPM_LATEST` in `scripts/install_tools.py`. A tool from elsewhere needs its own resolver in `resolve_latest` that reads the checksum its publisher posts for the release.
 2. Add the tool name to `factory_core_tools` in `group_vars/all.yml` (or a profile-gated list).
 3. If it needs a systemd unit, add a `.j2` template in `ansible/templates/` and wire it in the relevant task file.
 4. If it needs environment variables, add them to `group_vars/all.yml` (not to shell rc files).

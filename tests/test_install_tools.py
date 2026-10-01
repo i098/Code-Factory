@@ -103,11 +103,13 @@ RELEASES = {
     "cli/cli": ("v9.9.9", "gh_9.9.9_linux_amd64.tar.gz"),
     "kunchenguid/no-mistakes": ("v9.9.9", "no-mistakes-v9.9.9-linux-amd64.tar.gz"),
     "kunchenguid/treehouse": ("v9.9.9", "treehouse-v9.9.9-linux-amd64.tar.gz"),
+    "astral-sh/uv": ("9.9.9", "uv-x86_64-unknown-linux-gnu.tar.gz"),
+    "h4ckf0r0day/obscura": ("v9.9.9", "obscura-x86_64-linux.tar.gz"),
 }
 
 
 def upstream(monkeypatch, unverified=None, seen=None):
-    """Fake GitHub, nodejs.org and npm; `unverified` publishes no SHA-256 for that source."""
+    """Fake GitHub, nodejs.org, rustup, npm and PyPI; `unverified` publishes no SHA-256 for that source."""
 
     def urlopen(request, **kwargs):
         url = request.full_url
@@ -130,6 +132,14 @@ def upstream(monkeypatch, unverified=None, seen=None):
         elif url == "https://nodejs.org/dist/v30.1.0/SHASUMS256.txt":
             sums = "" if unverified == "node" else "b" * 64 + "  node-v30.1.0-linux-x64.tar.xz\n"
             return io.BytesIO(("c" * 64 + "  node-v30.1.0-linux-arm64.tar.xz\n" + sums).encode())
+        elif url == "https://static.rust-lang.org/rustup/release-stable.toml":
+            return io.BytesIO(b"schema-version = '1'\nversion = '9.9.9'\n")
+        elif url.endswith("/rustup-init.sha256"):
+            checksum = "" if unverified == "rustup-init" else "d" * 64
+            return io.BytesIO(f"{checksum} *./rustup-init\n".encode())
+        elif url == "https://pypi.org/pypi/psutil/json":
+            files = [] if unverified == "psutil" else [{"digests": {"sha256": "e" * 64}}]
+            body = {"info": {"version": "9.9.9"}, "urls": files}
         else:
             body = {"version": "18.9.9"}
         return io.BytesIO(json.dumps(body).encode())
@@ -140,7 +150,7 @@ def upstream(monkeypatch, unverified=None, seen=None):
 def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeypatch):
     upstream(monkeypatch)
     latest = installer.resolve_latest("linux-x86_64")
-    for tool in ("herdr", "bun", "gh", "no-mistakes", "treehouse"):
+    for tool in ("herdr", "bun", "gh", "no-mistakes", "treehouse", "uv", "obscura"):
         assert latest[tool]["version"] == "9.9.9"
         assert latest[tool]["assets"]["linux-x86_64"]["sha256"] == "a" * 64
     assert latest["gh"]["assets"]["linux-x86_64"]["format"] == "tar"
@@ -150,11 +160,15 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
     assert latest["node"]["version"] == "30.1.0"
     assert node["url"] == "https://nodejs.org/dist/v30.1.0/node-v30.1.0-linux-x64.tar.xz"
     assert node["sha256"] == "b" * 64
-    for tool in ("omp", "chrome-devtools-axi", "gh-axi", "lavish-axi", "quota-axi", "tasks-axi"):
+    rustup = latest["rustup-init"]["assets"]["linux-x86_64"]
+    assert rustup["url"].endswith("/9.9.9/x86_64-unknown-linux-gnu/rustup-init")
+    assert (rustup["sha256"], rustup["format"]) == ("d" * 64, "file")
+    assert latest["psutil"] == {"version": "9.9.9", "sha256": ["e" * 64]}
+    for tool in (*installer.NPM_LATEST, "supabase"):
         assert latest[tool] == "18.9.9"
 
 
-@pytest.mark.parametrize("source", [*RELEASES, "node"])
+@pytest.mark.parametrize("source", [*RELEASES, "node", "rustup-init", "psutil"])
 def test_release_without_a_published_checksum_is_refused(monkeypatch, source):
     upstream(monkeypatch, unverified=source)
     with pytest.raises(ValueError, match="refusing an unverified binary"):

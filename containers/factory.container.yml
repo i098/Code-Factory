@@ -21,7 +21,7 @@
 #                          process groups; it is native-only.
 #
 # profiles.agents and profiles.development stay true: the image installs the real
-# checksum-pinned agent and development toolchain through scripts/install_tools.py.
+# latest, checksum-verified agent and development toolchain through scripts/install_tools.py.
 schema_version: 1
 factory:
   user: coder

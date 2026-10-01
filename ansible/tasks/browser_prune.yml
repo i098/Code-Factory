@@ -8,8 +8,9 @@
 #
 # Runtime: the pruner calls psutil.Process.net_connections(), which needs
 # psutil >= 6, while Ubuntu 24.04 ships python3-psutil 5.9. It therefore runs
-# on an account-owned virtualenv created by the managed uv and filled from
-# maintenance/requirements.txt with --require-hashes. The distribution
+# on an account-owned virtualenv created by the managed uv and filled with the
+# latest psutil, --require-hashes against the digests PyPI publishes for that
+# release (factory_latest.psutil, resolved in tasks/preflight.yml). The distribution
 # interpreter is never pip-installed into, and the unit only references paths
 # under the account's home, so the timer survives deletion of this checkout.
 
@@ -17,8 +18,8 @@
   ansible.builtin.debug:
     msg: >-
       check mode: would provide psutil {{ factory_pruner_psutil_version }} in
-      {{ factory_pruner_venv }} via {{ factory_uv_bin }} and
-      {{ factory_pruner_requirements | relpath(code_factory_repo) }}.
+      {{ factory_pruner_venv }} via {{ factory_uv_bin }}, verified against the
+      digests PyPI publishes.
   when: ansible_check_mode
 
 - name: Build the private pruner runtime
@@ -38,7 +39,7 @@
         that:
           - factory_prune_uv.stat.exists | default(false)
         fail_msg: >-
-          {{ factory_uv_bin }} is missing, so the hash-pinned pruner runtime
+          {{ factory_uv_bin }} is missing, so the hash-verified pruner runtime
           cannot be built. uv is a core tool of the installer
           (factory_core_tools); fix tasks/tools.yml output before re-running.
           Provisioning refuses to fall back to the distribution psutil, which
@@ -66,7 +67,7 @@
       failed_when: false
       changed_when: false
 
-    - name: Decide whether the runtime already matches the pinned requirements
+    - name: Decide whether the runtime already matches the resolved psutil
       ansible.builtin.set_fact:
         factory_prune_runtime_current: >-
           {{ (factory_prune_installed.rc | default(1)) == 0
@@ -84,7 +85,17 @@
       environment: "{{ factory_user_env | combine(factory_pruner_uv_env) }}"
       notify: restart chrome autoprune timer
 
-    - name: Install the hash-pinned pruner requirements
+    - name: Write the resolved pruner requirements
+      ansible.builtin.copy:
+        dest: "{{ factory_pruner_requirements }}"
+        content: "{{ factory_pruner_requirements_text }}\n"
+        owner: "{{ factory_cfg.user }}"
+        group: "{{ factory_group }}"
+        mode: "0644"
+      become: true
+      when: not (factory_prune_runtime_current | bool)
+
+    - name: Install the hash-verified pruner requirements
       ansible.builtin.command:
         argv:
           - "{{ factory_uv_bin }}"
@@ -103,7 +114,7 @@
       when: not (factory_prune_runtime_current | bool)
       notify: restart chrome autoprune timer
 
-    - name: Confirm the runtime provides the pinned psutil
+    - name: Confirm the runtime provides the resolved psutil
       ansible.builtin.command:
         argv: ["{{ factory_pruner_python }}", -c, "import psutil; print(psutil.__version__)"]
       become: "{{ factory_become_target | bool }}"
@@ -112,14 +123,13 @@
       register: factory_prune_verified
       changed_when: false
 
-    - name: Assert the runtime psutil matches the pin
+    - name: Assert the runtime psutil is the resolved release
       ansible.builtin.assert:
         that:
           - (factory_prune_verified.stdout | trim) == factory_pruner_psutil_version
         fail_msg: >-
           {{ factory_pruner_python }} reports psutil
-          "{{ factory_prune_verified.stdout | trim }}" but
-          {{ factory_pruner_requirements | relpath(code_factory_repo) }} pins
+          "{{ factory_prune_verified.stdout | trim }}" but this run resolved
           {{ factory_pruner_psutil_version }}. The pruner needs
           Process.net_connections() (psutil >= 6); it is not run against an
           unexpected build.

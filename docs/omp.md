@@ -6,7 +6,7 @@ omp (`@oh-my-pi/pi-coding-agent`) is the agent harness Code Factory installs. Th
 
 With the `agents` profile on, `./factory apply`:
 
-1. Installs the latest published omp, resolved from the npm registry on every apply (see [Dependencies](dependencies.md#latest-releases)).
+1. Installs the latest published omp, resolved from the npm registry on every apply (see [Dependencies](dependencies.md#latest-releases)), plus the omp plugins ponytail, i-have-adhd and caveman, upgraded to their latest release on every apply.
 2. Copies [`config/omp.yml`](../config/omp.yml) to `~/.omp/agent/config.yml` (directory `0700`, file `0600`), and [`config/omp-lsp.json`](../config/omp-lsp.json) to `~/.omp/agent/lsp.json`, which disables the markdown language server (marksman): it costs each session about 90 MB, and markdown diagnostics add nothing to agent work.
 3. Installs the extension `~/.omp/agent/extensions/code-factory-herdr-sidebar.ts`, which feeds the Herdr Agent sidebar the session topic, the pane's short name, and the pull request line (pull request, issue and diff size). Every apply rewrites it. See [Herdr sidebar](herdr.md).
 4. Installs the extension `~/.omp/agent/extensions/aa-mode-icons.ts` from [`config/omp-status-icons.ts`](../config/omp-status-icons.ts). Every apply rewrites it. See [Status line icons](#status-line-icons).

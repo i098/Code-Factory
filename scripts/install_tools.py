@@ -4,11 +4,11 @@
 Stdlib-only: also bootstraps uv before repository dependencies exist. stdout is
 one JSON result; installer progress goes to stderr. Existing unmanaged commands
 are never replaced. Archives cannot write outside their staging directory.
-uv, rustup-init and the Rust toolchain are pinned in the lock. Every other tool
-tracks its latest release: native assets are verified against the SHA-256 their
-publisher lists for that release (the GitHub release-asset digest, or Node's
-SHASUMS256.txt), npm tools against the integrity npm records for the resolved
-version.
+Nothing is pinned: every tool tracks its latest release. Native assets are
+verified against the SHA-256 their publisher lists for that exact release (the
+GitHub release-asset digest, Node's SHASUMS256.txt, rustup's .sha256), npm tools
+against the integrity npm records for the resolved version, psutil against the
+digests PyPI publishes. The Rust toolchain follows the stable channel.
 """
 
 import argparse
@@ -33,8 +33,8 @@ from pathlib import Path, PurePosixPath
 GITHUB_API = "https://api.github.com/repos/{}/releases/latest"
 # How release asset names spell each platform.
 ARCH = {
-    "linux-x86_64": {"node": "x64", "go": "amd64", "bun": "x64-baseline"},
-    "linux-aarch64": {"node": "arm64", "go": "arm64", "bun": "aarch64"},
+    "linux-x86_64": {"node": "x64", "go": "amd64", "bun": "x64-baseline", "gnu": "x86_64"},
+    "linux-aarch64": {"node": "arm64", "go": "arm64", "bun": "aarch64", "gnu": "aarch64"},
 }
 # Native tools on their latest GitHub release: repository, tag prefix, asset
 # name, and where each command sits inside the asset.
@@ -54,6 +54,19 @@ GITHUB_LATEST = {
         "treehouse-v{v}-linux-{go}.tar.gz",
         {"treehouse": "treehouse"},
     ),
+    "uv": (
+        "astral-sh/uv",
+        "",
+        "uv-{gnu}-unknown-linux-gnu.tar.gz",
+        {"uv": "uv-*/uv", "uvx": "uv-*/uvx"},
+    ),
+    # Resolved for the fleet browser ladder (ansible/tasks/fleet-browsers.yml), not installed here.
+    "obscura": (
+        "h4ckf0r0day/obscura",
+        "v",
+        "obscura-{gnu}-linux.tar.gz",
+        {"obscura": "obscura", "obscura-worker": "obscura-worker"},
+    ),
 }
 # npm tools on the registry's latest version, each installed into its own prefix.
 NPM_LATEST = {
@@ -63,6 +76,8 @@ NPM_LATEST = {
     "lavish-axi": "lavish-axi",
     "quota-axi": "quota-axi",
     "tasks-axi": "tasks-axi",
+    "acpx": "acpx",
+    "chrome-devtools-mcp": "chrome-devtools-mcp",
 }
 # Native tools the agents profile adds.
 AGENT_TOOLS = ["gh", "no-mistakes", "treehouse"]
@@ -139,9 +154,29 @@ def resolve_latest(key):
         match[1] if match else "",
         binaries,
     )
+    toml = fetch("https://static.rust-lang.org/rustup/release-stable.toml", "rustup").decode()
+    match = re.search(r"^version = '([0-9.]+)'$", toml, re.M)
+    if not match:
+        raise ValueError("cannot read the latest rustup version")
+    version = match[1]
+    url = f"https://static.rust-lang.org/rustup/archive/{version}/{ARCH[key]['gnu']}-unknown-linux-gnu/rustup-init"
+    checksum = fetch(url + ".sha256", "rustup-init checksum").decode().split(" ")[0]
+    binaries = {"rustup-init": "rustup-init"}
+    latest["rustup-init"] = verified(
+        "rustup-init", version, key, "rustup-init", url, checksum, binaries
+    )
     for tool, package in NPM_LATEST.items():
         registry = fetch(f"https://registry.npmjs.org/{package}/latest", f"{tool} version")
         latest[tool] = json.loads(registry)["version"]
+    # Resolved for the fleet guards' shared Supabase stack, installed by Ansible.
+    registry = fetch("https://registry.npmjs.org/supabase/latest", "supabase version")
+    latest["supabase"] = json.loads(registry)["version"]
+    # The Chrome pruner's runtime, installed by Ansible with uv --require-hashes.
+    pypi = json.loads(fetch("https://pypi.org/pypi/psutil/json", "psutil release"))
+    hashes = [file["digests"]["sha256"] for file in pypi["urls"]]
+    if not hashes or not all(re.fullmatch(r"[0-9a-f]{64}", h) for h in hashes):
+        raise ValueError("psutil publishes no SHA-256 digests; refusing an unverified binary")
+    latest["psutil"] = {"version": pypi["info"]["version"], "sha256": hashes}
     return latest
 
 
@@ -266,39 +301,6 @@ def command(argv, environment):
     subprocess.run([str(arg) for arg in argv], env=environment, check=True, stdout=sys.stderr)
 
 
-def npm_install(repo, home, environment):
-    source = repo / "tools/npm"
-    manifest = json.loads((source / "package.json").read_text())
-    lock_hash = digest(source / "package-lock.json")
-    destination = home / ".local/share/code-factory/npm"
-    stamp = destination / ".code-factory-lock"
-    expected = lock_hash + ":" + digest(source / "package.json")
-    installed = stamp.is_file() and stamp.read_text().strip() == expected
-    for name, version in manifest["dependencies"].items():
-        package = destination / "node_modules" / name / "package.json"
-        if not package.is_file() or json.loads(package.read_text()).get("version") != version:
-            installed = False
-    changed = False
-    if not installed:
-        if (
-            destination.exists()
-            and any(destination.iterdir())
-            and not stamp.exists()
-            and not (destination / "package-lock.json").exists()
-        ):
-            raise ValueError(f"refusing unmanaged npm prefix: {destination}")
-        destination.mkdir(parents=True, exist_ok=True)
-        for name in ("package.json", "package-lock.json"):
-            shutil.copyfile(source / name, destination / name)
-        command(
-            [home / ".local/bin/npm", "ci", "--prefix", destination, "--no-audit", "--no-fund"],
-            environment,
-        )
-        stamp.write_text(expected + "\n")
-        changed = True
-    return link_package_bins(home, destination, manifest["dependencies"]) or changed
-
-
 def link_package_bins(home, destination, package_names):
     # Only expose explicitly requested packages, not incidental dependency bins.
     changed = False
@@ -361,56 +363,32 @@ def prune_dangling_links(home):
     return changed
 
 
-def rust_install(home, version, environment):
+def rust_install(home, environment):
+    """The stable toolchain with rustfmt and clippy; an apply moves it to the newest stable."""
+    version = "stable"
     rustup = home / ".cargo/bin/rustup"
     environment = {
         **environment,
         "CARGO_HOME": str(home / ".cargo"),
         "RUSTUP_HOME": str(home / ".rustup"),
     }
+    profile = ["--profile", "minimal", "--component", "rustfmt", "--component", "clippy"]
     changed = False
     if not rustup.exists():
-        command(
-            [
-                home / ".local/bin/rustup-init",
-                "-y",
-                "--no-modify-path",
-                "--profile",
-                "minimal",
-                "--default-toolchain",
-                version,
-                "--component",
-                "rustfmt",
-                "--component",
-                "clippy",
-            ],
-            environment,
-        )
+        init = [home / ".local/bin/rustup-init", "-y", "--no-modify-path", "--default-toolchain"]
+        command([*init, version, *profile], environment)
         changed = True
     else:
+        # ponytail: the rustup binary itself only changes on a fresh account;
+        # add `rustup self update` here if an old rustup ever matters.
         result = subprocess.run(
-            [rustup, "run", version, "rustc", "--version"],
+            [rustup, "toolchain", "install", version, *profile, "--no-self-update"],
             env=environment,
             capture_output=True,
             text=True,
+            check=True,
         )
-        if result.returncode or not result.stdout.startswith(f"rustc {version} "):
-            command(
-                [
-                    rustup,
-                    "toolchain",
-                    "install",
-                    version,
-                    "--profile",
-                    "minimal",
-                    "--component",
-                    "rustfmt",
-                    "--component",
-                    "clippy",
-                ],
-                environment,
-            )
-            changed = True
+        changed = " unchanged - " not in result.stdout
         components = subprocess.run(
             [rustup, "component", "list", "--installed", "--toolchain", version],
             env=environment,
@@ -445,9 +423,44 @@ def rust_install(home, version, environment):
     return changed
 
 
+# omp marketplace plugins, kept at their latest release: name -> GitHub repository.
+OMP_PLUGINS = {
+    "ponytail": "DietrichGebert/ponytail",
+    "i-have-adhd": "ayghri/i-have-adhd",
+    "caveman": "JuliusBrussee/caveman",
+}
+
+
+def omp_plugins(home, environment):
+    """Install each plugin from its marketplace, then upgrade all to the latest release."""
+
+    def omp(*argv):
+        result = subprocess.run(
+            [home / ".local/bin/omp", "plugin", *argv],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout
+
+    changed = False
+    marketplaces = home / ".omp/marketplaces.json"
+    known = marketplaces.read_text() if marketplaces.is_file() else ""
+    installed = {plugin["id"] for plugin in json.loads(omp("list", "--json"))["marketplace"]}
+    for name, repository in OMP_PLUGINS.items():
+        if repository not in known:
+            omp("marketplace", "add", repository)
+            changed = True
+        if f"{name}@{name}" not in installed:
+            omp("install", f"{name}@{name}")
+            changed = True
+    omp("marketplace", "update")
+    return "up to date" not in omp("upgrade") or changed
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--lock", type=Path, required=True)
     parser.add_argument("--home", type=Path, required=True)
     parser.add_argument("--tools", default="herdr,node,bun,uv")
     parser.add_argument("--npm", action="store_true")
@@ -466,14 +479,10 @@ def main():
     home = args.home.resolve(strict=True)
     if home.stat().st_uid != os.geteuid():
         parser.error("run as the user who owns --home")
-    lock = json.loads(args.lock.read_text())
-    if lock.get("schema_version") != 1:
-        parser.error("unsupported toolchain lock schema")
     names = list(dict.fromkeys(args.tools.split(",") + (AGENT_TOOLS if args.npm else [])))
     if args.development:
         names.append("rustup-init")
-    wanted = args.npm or any(name == "node" or name in GITHUB_LATEST for name in names)
-    latest = args.resolved or (resolve_latest(key) if wanted else {})
+    latest = args.resolved or resolve_latest(key)
     environment = {
         **os.environ,
         "HOME": str(home),
@@ -485,19 +494,17 @@ def main():
         fcntl.flock(guard, fcntl.LOCK_EX)
         changed = False
         for name in names:
-            spec = latest[name] if name in latest else lock["tools"][name]
-            changed = install_asset(home, name, spec, key) or changed
+            changed = install_asset(home, name, latest[name], key) or changed
         if args.npm:
-            changed = npm_install(args.lock.resolve().parent, home, environment) or changed
             for tool in NPM_LATEST:
                 changed = npm_latest_install(home, tool, latest[tool], environment) or changed
             changed = prune_dangling_links(home) or changed
+            changed = omp_plugins(home, environment) or changed
         if args.development:
-            changed = rust_install(home, lock["rust_toolchain"], environment) or changed
+            changed = rust_install(home, environment) or changed
         # The record checks compare against, so a later upstream release cannot
         # make an unchanged install look wrong.
-        if latest:
-            (prefix / "resolved.json").write_text(json.dumps(latest, sort_keys=True) + "\n")
+        (prefix / "resolved.json").write_text(json.dumps(latest, sort_keys=True) + "\n")
     print(
         json.dumps(
             {

@@ -67,13 +67,6 @@ def test_fleet_guards_accept_the_default_document_when_enabled(configuration):
     assert factory.validate_config(configuration) is configuration
 
 
-def test_fleet_guards_require_browsers_block(configuration):
-    configuration["factory"]["profiles"]["fleet_guards"] = True
-    configuration["factory"].pop("browsers", None)
-    with pytest.raises(ValueError, match="obscura"):
-        factory.validate_config(configuration)
-
-
 def test_browsers_valid_block_accepted(configuration):
     assert factory.validate_config(configuration) is configuration
 
@@ -100,7 +93,6 @@ def test_bad_polling_window_cannot_disable_idle_accrual(configuration):
 def test_init_preserves_existing_local_configuration(tmp_path, monkeypatch):
     for path in ("config", "schemas"):
         shutil.copytree(ROOT / path, tmp_path / path)
-    shutil.copyfile(ROOT / "toolchain.lock.json", tmp_path / "toolchain.lock.json")
     monkeypatch.setattr(factory, "ROOT", tmp_path)
     args = argparse.Namespace(user="coder", home="/home/coder", container=True)
     factory.initialize(args)
@@ -117,7 +109,6 @@ def test_init_preserves_existing_local_configuration(tmp_path, monkeypatch):
 def test_root_operator_is_rejected_before_config_is_written(tmp_path, monkeypatch):
     for path in ("config", "schemas"):
         shutil.copytree(ROOT / path, tmp_path / path)
-    shutil.copyfile(ROOT / "toolchain.lock.json", tmp_path / "toolchain.lock.json")
     monkeypatch.setattr(factory, "ROOT", tmp_path)
     with pytest.raises(ValueError, match="non-root"):
         factory.initialize(argparse.Namespace(user="root", home="/home/root", container=False))

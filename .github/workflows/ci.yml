@@ -10,9 +10,8 @@
 # api.github.com):
 #   actions/checkout    v7.0.1  -> 3d3c42e5aac5ba805825da76410c181273ba90b1
 #   astral-sh/setup-uv  v10.1.0 -> bec219d24cd3e171d82865faccec33120bb574f4 (immutable release)
-# uv itself is not pinned here: the version is read from toolchain.lock.json
-# (tools.uv.version), the same pin ./bootstrap.sh installs, so the CI runner and
-# the image can never drift apart.
+# uv and Bun are not pinned: like every ./factory apply, CI installs their
+# latest releases.
 name: ci
 
 on:
@@ -46,17 +45,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Resolve the uv version pinned by the toolchain lock
-        id: uv
-        run: |
-          set -euo pipefail
-          version=$(jq -er '.tools.uv.version' toolchain.lock.json)
-          printf 'version=%s\n' "${version}" >> "$GITHUB_OUTPUT"
-
-      - name: Install pinned uv
+      - name: Install latest uv
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
-          version: ${{ steps.uv.outputs.version }}
+          version: latest
           enable-cache: true
 
       - name: Sync locked dependencies
@@ -98,7 +90,7 @@ jobs:
       - name: Smoke script syntax
         run: bash -n tests/container-smoke.sh
 
-      - name: Audit image pins in the Dockerfile
+      - name: Audit image bases in the Dockerfile
         run: |
           set -euo pipefail
           python3 - Dockerfile <<'PY'
@@ -117,8 +109,9 @@ jobs:
               if not match:
                   continue
               ref, alias = expand(match.group(1)), match.group(2)
-              if ref not in stages and "@sha256:" not in ref:
-                  problems.append(f"FROM {ref} is neither a previous stage nor digest-pinned")
+              # The base tracks the newest Ubuntu LTS; nothing else is pulled.
+              if ref not in stages and ref != "ubuntu:latest":
+                  problems.append(f"FROM {ref} is neither a previous stage nor ubuntu:latest")
               if alias:
                   stages.add(alias)
 

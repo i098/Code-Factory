@@ -2,8 +2,8 @@
 # Fleet guards: ONE shared local Supabase stack for every swarms-platform lane,
 # enforced at every layer that a crewmate can reach (docs/fleet-guards.md).
 #
-#   * ~/oss-fleet/shared-supabase - the stack's project dir: pinned Supabase
-#     CLI (npm ci from fleet/shared-supabase/package-lock.json), config.toml,
+#   * ~/oss-fleet/shared-supabase - the stack's project dir: the latest
+#     Supabase CLI from the npm registry, config.toml,
 #     check.sh keeper (idempotent start + DDL guard + env template), guard.sql.
 #   * ~/oss-fleet/doctor/docker-guard.sh - `docker events` watcher that removes
 #     any Supabase CLI project other than the shared one on creation and alerts
@@ -73,8 +73,6 @@
     - { src: shared-supabase/check.sh, dest: "{{ factory_shared_supabase_dir }}/check.sh", mode: "0755" }
     - { src: shared-supabase/guard.sql, dest: "{{ factory_shared_supabase_dir }}/guard.sql", mode: "0644" }
     - { src: shared-supabase/README.md, dest: "{{ factory_shared_supabase_dir }}/README.md", mode: "0644" }
-    - { src: shared-supabase/package.json, dest: "{{ factory_shared_supabase_dir }}/package.json", mode: "0644" }
-    - { src: shared-supabase/package-lock.json, dest: "{{ factory_shared_supabase_dir }}/package-lock.json", mode: "0644" }
     - { src: bin/supabase, dest: "{{ factory_local_bin }}/supabase", mode: "0755" }
   loop_control:
     label: "{{ item.dest }}"
@@ -131,7 +129,7 @@
     quiet: true
   when: not ansible_check_mode
 
-# --- pinned Supabase CLI ------------------------------------------------------
+# --- latest Supabase CLI ------------------------------------------------------
 
 - name: Read the installed Supabase CLI version
   ansible.builtin.command:
@@ -147,15 +145,24 @@
 - name: Report the CLI install that check mode cannot perform
   ansible.builtin.debug:
     msg: >-
-      check mode: would run `npm ci` in {{ factory_shared_supabase_dir }} for
-      supabase {{ factory_shared_supabase_cli_version }}.
+      check mode: would run `npm install` in {{ factory_shared_supabase_dir }}
+      for supabase {{ factory_shared_supabase_cli_version }}.
   when:
     - ansible_check_mode
     - (factory_fleet_cli_version.stdout | default('') | trim) != factory_shared_supabase_cli_version
 
-- name: Install the pinned Supabase CLI from the lock
+# npm checks the integrity the registry records for the resolved version.
+- name: Install the latest Supabase CLI
   ansible.builtin.command:
-    argv: [npm, ci, --no-fund, --no-audit, --loglevel=error]
+    argv:
+      - npm
+      - install
+      - --prefix
+      - "{{ factory_shared_supabase_dir }}"
+      - --no-fund
+      - --no-audit
+      - --loglevel=error
+      - "supabase@{{ factory_shared_supabase_cli_version }}"
     chdir: "{{ factory_shared_supabase_dir }}"
   become: "{{ factory_become_target | bool }}"
   become_user: "{{ factory_cfg.user }}"
@@ -165,7 +172,7 @@
     - not ansible_check_mode
     - (factory_fleet_cli_version.stdout | default('') | trim) != factory_shared_supabase_cli_version
 
-- name: Confirm the Supabase CLI matches the lock
+- name: Confirm the Supabase CLI is the resolved release
   ansible.builtin.command:
     argv: ["{{ factory_shared_supabase_cli }}", --version]
   become: "{{ factory_become_target | bool }}"
@@ -182,7 +189,7 @@
     fail_msg: >-
       {{ factory_shared_supabase_cli }} reports
       "{{ factory_fleet_cli_verified.stdout | default('') | trim }}" but
-      fleet/shared-supabase/package.json pins {{ factory_shared_supabase_cli_version }}.
+      this run resolved {{ factory_shared_supabase_cli_version }}.
     quiet: true
   when: not ansible_check_mode
 

@@ -48,20 +48,6 @@ def validate_config(document):
     if config["profiles"].get("fleet_guards"):
         if not (config["profiles"]["docker"] and config["profiles"]["firstmate"]):
             raise ValueError("fleet guards require the docker and firstmate profiles")
-        browsers = config.get("browsers")
-        if (
-            not browsers
-            or not browsers.get("obscura_version")
-            or not browsers.get("obscura_sha256")
-        ):
-            raise ValueError(
-                "fleet_guards requires factory.browsers.obscura_version and obscura_sha256"
-            )
-        sha = browsers["obscura_sha256"]
-        if len(sha) != 64 or not all(c in "0123456789abcdef" for c in sha.lower()):
-            raise ValueError(
-                "factory.browsers.obscura_sha256 must be a 64-char lowercase hex string"
-            )
         fixture = config.get("fleet", {}).get("fixture_archive", "")
         if fixture and ".." in Path(fixture).parts:
             raise ValueError("fleet.fixture_archive must not traverse; give a plain path")
@@ -73,8 +59,6 @@ def validate_config(document):
         or prune["idle_seconds"] < 2 * prune["poll_seconds"]
     ):
         raise ValueError("pruning idle/gap windows must allow at least two observation intervals")
-    lock = json.loads((ROOT / "toolchain.lock.json").read_text())
-    validate_document(lock, "toolchain.schema.json")
     return document
 
 
@@ -321,7 +305,7 @@ def main():
     )
     document = load_config(path.resolve())
     if args.command == "validate":
-        print(f"Valid host configuration and artifact lock: {path}")
+        print(f"Valid host configuration: {path}")
         return 0
     if args.command == "doctor":
         return doctor(document)

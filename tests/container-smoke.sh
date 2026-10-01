@@ -10,8 +10,8 @@
 # Container mode (inside the image; CMD of the `smoke` target):
 #   tests/container-smoke.sh --in-container [--only NAME,NAME]
 #   Exercises what the image actually contains, through the programs a user
-#   would run: managed tool versions compared with toolchain.lock.json, herdr
-#   and omp compared with the release the build resolved, a Herdr
+#   would run: managed tool versions compared with the releases the build
+#   resolved, a Herdr
 #   configuration that Herdr itself accepts and that matches the factory
 #   document, the user unit's ExecStart resolved and executed, a real headless
 #   `herdr server` brought up and shut down over its API socket, the repository
@@ -208,12 +208,7 @@ cf_python() {
     fi
 }
 
-lock_version() {
-    jq -er --arg tool "$1" '.tools[$tool].version' "${CF_ROOT}/toolchain.lock.json"
-}
-
-# Every tool except uv and the Rust toolchain tracks its latest release. The
-# installer records the releases it installed in RESOLVED_STAMP; checks compare
+# Every tool tracks its latest release. The installer records the releases it installed in RESOLVED_STAMP; checks compare
 # against that record, so an upstream release published after the build cannot
 # turn them red.
 RESOLVED_STAMP="${HOME}/.local/share/code-factory/resolved.json"
@@ -232,7 +227,7 @@ herdr_installed_bin() {
 # has since overtaken; that is an upgrade, not a repeat change.
 image_is_current() {
     local latest versions='map_values(.version? // .)'
-    latest=$(python3 "${CF_ROOT}/scripts/install_tools.py" --lock "${CF_ROOT}/toolchain.lock.json" \
+    latest=$(python3 "${CF_ROOT}/scripts/install_tools.py" \
         --home "${HOME}" --resolve) || fail "could not resolve the latest releases"
     [ "$(jq -cS "${versions}" <<<"${latest}")" = "$(jq -cS "${versions}" "${RESOLVED_STAMP}")" ] \
         && return 0
@@ -328,13 +323,8 @@ check_core_tools() {
         version=$("${bin}" --version 2>&1) || fail "${tool} --version exited nonzero: ${version}"
         version=${version%%$'\n'*}
         [ -n "${version}" ] || fail "${tool} --version produced no output"
-        # An existing command is not enough: it must be the build the lock pins
-        # (uv) or the release the build resolved (node, bun).
-        if [ "${tool}" = uv ]; then
-            expected=$(lock_version uv) || fail "toolchain.lock.json pins no version for uv"
-        else
-            expected=$(resolved_version ".${tool}.version") || fail "${RESOLVED_STAMP} records no ${tool}"
-        fi
+        # An existing command is not enough: it must be the release the build resolved.
+        expected=$(resolved_version ".${tool}.version") || fail "${RESOLVED_STAMP} records no ${tool}"
         case "${version}" in
             *"${expected}"*) ;;
             *) fail "${tool} reports '${version}' but expected ${expected}" ;;
@@ -343,7 +333,8 @@ check_core_tools() {
     done
 }
 
-# The installed herdr, gh, no-mistakes, treehouse, omp and AXI tools are exactly
+# The installed herdr, gh, no-mistakes, treehouse, omp, AXI tools, acpx and
+# chrome-devtools-mcp are exactly
 # the releases the build resolved and recorded in RESOLVED_STAMP.
 check_resolved_releases() {
     local tool version banner package prefix
@@ -357,7 +348,8 @@ check_resolved_releases() {
         esac
         printf '%s %s\n' "${tool}" "${version}"
     done
-    for tool in omp:@oh-my-pi/pi-coding-agent chrome-devtools-axi gh-axi lavish-axi quota-axi tasks-axi; do
+    for tool in omp:@oh-my-pi/pi-coding-agent chrome-devtools-axi gh-axi lavish-axi quota-axi tasks-axi acpx \
+        chrome-devtools-mcp; do
         package=${tool#*:}; tool=${tool%%:*}
         version=$(resolved_version ".\"${tool}\"")
         prefix="${HOME}/.local/share/code-factory/${tool}/${version}"
@@ -389,26 +381,6 @@ check_herdr_install_layout() {
         *) fail "versioned herdr executable did not identify itself" ;;
     esac
     printf 'herdr symlink -> %s\n' "${target}"
-}
-
-check_npm_tooling() {
-    local npm_root link target linked=0
-    npm_root="${HOME}/.local/share/code-factory/npm"
-    [ -d "${npm_root}" ] || fail "agents profile selected but ${npm_root} is missing"
-    for link in "${HOME}"/.local/bin/*; do
-        [ -L "${link}" ] || continue
-        target=$(readlink -f "${link}" 2>/dev/null || true)
-        case "${target}" in
-            "${npm_root}"/*)
-                [ -x "${target}" ] || fail "npm-linked command ${link} resolves to non-executable ${target}"
-                linked=$((linked + 1))
-                ;;
-        esac
-    done
-    [ "${linked}" -ge 1 ] || fail "no .local/bin command links point into ${npm_root}"
-    # Support binaries are only probed for presence: no agent CLI is executed
-    # here, so nothing can trigger first-run authentication or profile creation.
-    printf '%s npm-linked commands resolve into %s\n' "${linked}" "${npm_root}"
 }
 
 check_development_toolchain() {
@@ -681,7 +653,6 @@ check_factory_init_refuses_overwrite() {
 check_installer_idempotent() {
     local out
     out=$(python3 "${CF_ROOT}/scripts/install_tools.py" \
-            --lock "${CF_ROOT}/toolchain.lock.json" \
             --home "${HOME}" \
             --tools herdr,node,bun,uv \
             --resolved "$(cat "${RESOLVED_STAMP}")" \
@@ -790,7 +761,10 @@ check_agent_gate() {
         printf '%s\n%s\n' "${floor}" "${version}" | sort -C -V || fail "${name} ${version} is below the fleet floor ${floor}"
         printf '%s %s (floor %s)\n' "${name}" "${version}" "${floor}"
     done
-    printf 'gate agent acp:omp via acpx, ponytail-review on omp\n'
+    for name in ponytail i-have-adhd caveman; do
+        [ -d "${HOME}/.omp/plugins/cache/marketplaces/${name}" ] || fail "omp plugin ${name} is not installed"
+    done
+    printf 'gate agent acp:omp via acpx, ponytail-review on omp, omp plugins installed\n'
 }
 
 container_mode() {
@@ -810,7 +784,6 @@ container_mode() {
     run_check resolved-releases            check_resolved_releases
     run_check herdr-install-layout         check_herdr_install_layout
     run_check herdr-unit                   check_herdr_unit
-    run_check npm-tooling                  check_npm_tooling
     run_check development-toolchain        check_development_toolchain
     run_check login-shell-environment      check_login_shell_environment
     run_check agent-gate                   check_agent_gate

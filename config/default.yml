@@ -79,8 +79,6 @@ factory:
     worktree_pools:
       - .treehouse/swarms-platform-bcc5ea
   browsers:
-    obscura_version: "0.2.2"
-    obscura_sha256: c1b4548e36549a0228c39c1cc842df425bc7253af2b0a56bd2a538d8ff7e3406
     idle_timeout_min: 30
   firstmate:
     # Upstream Firstmate's main, fetched and fast-forwarded on every apply so a

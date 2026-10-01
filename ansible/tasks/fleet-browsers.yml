@@ -1,7 +1,7 @@
 ---
 # Fleet browsers: obscura -> chrome -> vnc tier ladder, shared session jar.
 # docs/fleet-guards.md owns the design; fleet/browsers/fleet-browser owns the
-# runtime. Only the obscura tier needs provisioning (pinned binary + unit);
+# runtime. Only the obscura tier needs provisioning (latest binary + unit);
 # chrome and vnc are started on demand by the operator or the fleet-browser
 # CLI and gc'd after idle_timeout_min.
 
@@ -31,33 +31,41 @@
     - { src: browsers/cookie-sync.ts, dest: "{{ factory_fleet_browsers_dir }}/cookie-sync.ts", mode: "0644" }
     - { src: browsers/env.sh, dest: "{{ factory_fleet_browsers_dir }}/env.sh", mode: "0644" }
 
-- name: Stat the obscura binary
+- name: Stat the resolved Obscura release
   ansible.builtin.stat:
-    path: "{{ factory_fleet_browsers_dir }}/obscura"
-    get_checksum: true
-    checksum_algorithm: sha256
+    path: "{{ factory_browser_obscura_dir }}/obscura"
+    get_checksum: false
   register: factory_obscura_stat
   changed_when: false
   check_mode: false
 
-- name: Download and extract the pinned Obscura binary
-  when: >-
-    not factory_obscura_stat.stat.exists
-    or factory_obscura_stat.stat.checksum != factory_cfg.browsers.obscura_sha256
+# Each release extracts into its own directory, so an unchanged release is a
+# no-op and a new one never overwrites binaries a running tier holds open.
+- name: Download and extract the latest Obscura release
+  when: not factory_obscura_stat.stat.exists
   block:
+    - name: Create the Obscura release directory
+      ansible.builtin.file:
+        path: "{{ factory_browser_obscura_dir }}"
+        state: directory
+        owner: "{{ factory_cfg.user }}"
+        group: "{{ factory_group }}"
+        mode: "0755"
+      become: true
+
     - name: Fetch the obscura tarball
       ansible.builtin.get_url:
-        url: "{{ factory_browser_obscura_url }}"
-        dest: "{{ factory_fleet_browsers_dir }}/obscura.tar.gz"
-        checksum: "{{ factory_browser_obscura_checksum }}"
+        url: "{{ factory_browser_obscura.url }}"
+        dest: "{{ factory_browser_obscura_dir }}.tar.gz"
+        checksum: "sha256:{{ factory_browser_obscura.sha256 }}"
         mode: "0600"
         owner: "{{ factory_cfg.user }}"
       become: true
 
     - name: Extract obscura binaries
       ansible.builtin.unarchive:
-        src: "{{ factory_fleet_browsers_dir }}/obscura.tar.gz"
-        dest: "{{ factory_fleet_browsers_dir }}"
+        src: "{{ factory_browser_obscura_dir }}.tar.gz"
+        dest: "{{ factory_browser_obscura_dir }}"
         remote_src: true
         owner: "{{ factory_cfg.user }}"
         group: "{{ factory_group }}"
@@ -66,18 +74,21 @@
 
     - name: Clean up the obscura tarball
       ansible.builtin.file:
-        path: "{{ factory_fleet_browsers_dir }}/obscura.tar.gz"
+        path: "{{ factory_browser_obscura_dir }}.tar.gz"
         state: absent
       become: true
 
-- name: Assert the obscura binary matches the lock
-  ansible.builtin.assert:
-    that:
-      - factory_obscura_stat.stat.exists | default(false)
-    fail_msg: >-
-      {{ factory_fleet_browsers_dir }}/obscura absent after extract; check
-      {{ factory_browser_obscura_url }}.
-    quiet: true
+- name: Point the fleet browser at the resolved Obscura release
+  ansible.builtin.file:
+    src: "{{ factory_browser_obscura_dir }}/{{ item }}"
+    dest: "{{ factory_fleet_browsers_dir }}/{{ item }}"
+    state: link
+    force: true
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+  become: true
+  loop: [obscura, obscura-worker]
+  notify: restart fleet browser obscura
   when: not ansible_check_mode
 
 - name: Inject the shared-browser env into shell profiles

@@ -47,13 +47,13 @@
 - name: Build the list of Main-owned inputs this run requires
   ansible.builtin.set_fact:
     factory_required_inputs: >-
-      {{ [factory_installer, factory_lock_file, factory_herdr_spaces_source]
+      {{ [factory_installer, factory_herdr_spaces_source]
          + (factory_agent_config_files
             | map(attribute='src')
             | map('regex_replace', '^', code_factory_repo ~ '/')
             | list
             if (factory_cfg.profiles.agents | bool) else [])
-         + ([factory_pruner_source, factory_pruner_requirements]
+         + ([factory_pruner_source]
             if ((factory_cfg.profiles.agents | bool)
                 and (factory_cfg.browser_prune.enabled | bool)) else [])
          + (factory_firstmate_config_names
@@ -89,7 +89,7 @@
 # asset.
 - name: Resolve the latest tool releases
   ansible.builtin.command:
-    argv: [python3, "{{ factory_installer }}", --lock, "{{ factory_lock_file }}", --home, "{{ factory_cfg.home }}", --resolve]
+    argv: [python3, "{{ factory_installer }}", --home, "{{ factory_cfg.home }}", --resolve]
   register: factory_latest_run
   changed_when: false
   check_mode: false
@@ -97,21 +97,6 @@
 - name: Record the resolved releases
   ansible.builtin.set_fact:
     factory_latest: "{{ factory_latest_run.stdout | from_json }}"
-
-- name: Assert the pruner requirements pin an exact psutil release
-  ansible.builtin.assert:
-    that:
-      - factory_pruner_psutil_version | length > 0
-      - factory_pruner_requirements_text is search('--hash=sha256:')
-    fail_msg: >-
-      {{ factory_pruner_requirements }} must pin psutil with `psutil==<version>`
-      and carry --hash=sha256: entries. The pruner runtime is installed with
-      `uv pip install --require-hashes`; an unpinned or unhashed requirement is
-      refused instead of being installed loosely.
-    quiet: true
-  when:
-    - factory_cfg.profiles.agents | bool
-    - factory_cfg.browser_prune.enabled | bool
 
 - name: Show the resolved provisioning plan
   ansible.builtin.debug:

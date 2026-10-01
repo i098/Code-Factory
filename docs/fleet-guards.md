@@ -23,7 +23,7 @@ Sizing per lane count and the full list of pruners are in
 
 | Path (under the account home) | Purpose |
 | --- | --- |
-| `oss-fleet/shared-supabase/` | The ONE stack: pinned CLI (`npm ci` from `fleet/shared-supabase/package-lock.json`), `supabase/config.toml` with `factory.fleet.supabase_project_id`, `check.sh` keeper, `guard.sql`, `README.md`. `check.sh` also generates the project's `<project>.env.local` from the running stack. |
+| `oss-fleet/shared-supabase/` | The ONE stack: the latest Supabase CLI (`npm install` of the registry's latest `supabase`), `supabase/config.toml` with `factory.fleet.supabase_project_id`, `check.sh` keeper, `guard.sql`, `README.md`. `check.sh` also generates the project's `<project>.env.local` from the running stack. |
 | `oss-fleet/doctor/docker-guard.sh` | `docker events` watcher. A container carrying `com.supabase.cli.project` other than an allowlisted project is removed on creation; bare Postgres-family images are logged and alerted, not killed (other projects may own them). `docker-guard-allow.txt` is written once and then operator-owned. |
 | `oss-fleet/doctor/worktree-env-seed.sh` | Installs the env file as `.env.local` in the project worktrees matched by the pool glob and Firstmate checkout path fixed in `fleet/doctor/worktree-env-seed.sh`; `factory.fleet.worktree_pools` only sets which pool directories the systemd path unit watches to trigger it. Files without the `# fleet-shared-supabase` marker are replaced with a backup left beside them. |
 | `oss-fleet/doctor/dev-server-reaper.sh` | Every 2 minutes: kills `next dev`/`next-server`/`tsc --noEmit` trees in treehouse worktrees whose lane last reported `done:`/`paused:`/`blocked:`/`failed:`, has no agent process, or whose agent transcript is idle >= 30 min (`REAPER_IDLE_MIN`). A dev server is 3-4 GB and restarts in 10 s; idle ones from finished lanes are what filled swap. One `next dev` per branch is inherent - Next compiles the whole app per process - so the fix is lifetime, not sharing. |
@@ -120,11 +120,8 @@ connected). Tier 3 needs the `desktop` profile's TigerVNC/noVNC packages
 Chrome/Chromium binary (`FLEET_CHROME_BIN`, Google Chrome, Chromium, or a
 Playwright Chromium).
 
-Obscura ships for x86_64 only (see [Dependencies](dependencies.md#fleet-browsers-and-supabase)).
-The defaults do not change on aarch64: `fleet/browsers/env.sh` and
-`herdr.service` still point at obscura on `:9222`, so tier 1 never answers
-there. An agent has to escalate by hand with `fleet-browser up chrome` and
-`eval "$(fleet-browser env chrome)"`.
+Obscura ships for x86_64 and aarch64; apply installs the latest release for the
+host's platform (see [Dependencies](dependencies.md#fleet-browsers-and-supabase)).
 
 All three tiers share one session. `cookie-sync.ts` keeps a canonical jar at
 `~/.fleet-browser/cookies.json` and converges every live tier to it over CDP.
