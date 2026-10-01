@@ -56,7 +56,7 @@ Without a `machine` workspace, the machine line is the primary home's `$host` li
 
 [`maintenance/herdr-spaces.py`](../maintenance/herdr-spaces.py) is installed as `~/.local/bin/herdr-spaces.py` and run by the user timer `herdr-spaces.timer` every second. It uses only the Python standard library.
 
-For every Herdr workspace it finds the home from its panes' directories: the nearest git top-level that holds both `state/` and `data/`. It then reports the tokens above as workspace metadata under the source `code-factory:spaces`, with `herdr workspace report-metadata`, and clears every token that has no value. Helper spaces and per-task spaces (`└ …`) get `short` only. A space with no home gets `short` and CPU and RAM only. The `machine` workspace gets `machine` only; without one, the primary home gets `host`.
+For every Herdr workspace it finds the home from its panes' directories: the nearest git top-level that holds both `state/` and `data/`. It then reports the tokens above as workspace metadata under the source `code-factory:spaces`, with `herdr workspace report-metadata`, and clears every token that has no value. Helper spaces and per-task spaces (`└ …`) get `short` only. A space with no home gets `short` and CPU and RAM only. The `machine` workspace gets `machine` only; without one, the primary home gets `host`. It also writes the same data where the phone layout shows it (see [On a phone](#on-a-phone)).
 
 | Source | Refresh | Cost |
 | --- | --- | --- |
@@ -146,6 +146,43 @@ To check an override before applying, render it to a file and run Herdr's own va
 HERDR_CONFIG_PATH=/path/to/rendered.toml herdr config check
 ```
 
+## On a phone
+
+At or below Herdr's `mobile_width_threshold` (64 columns by default; a phone in portrait over SSH or mosh is about 50), Herdr switches to its single-column mobile layout: the full-width pane plus a switch menu (tap `switch`, or `prefix+w`). That layout ignores the sidebar rows above, so the reporter also writes a compact form of the same data into the fields the switch menu does show. Every entry starts with `Local · <workspace label>`; the second line is Herdr's own, built from these fields:
+
+```text
+  agents
+   ● Local · firstmate
+   1 · ⚑3 ▶1 ◷4 · Planning the release checklist
+   ● Local · firstmate
+   fix-token-race · ⎇1537 +12847 −3902 ✎214 · └ f…
+   ● Local · 2ndmate-webapp-mate-s4
+   ⚑2 ◷3 ⚠watcher ⎇1561 +84 −12 ✎3 · Fix ratings …
+  spaces
+   + new workspace
+   · Local · machine
+   shell · tab ⚙11% ▤36% ⛁71%
+   ● Local · firstmate
+   shell · tab 1 · 1/2
+```
+
+| Entry | Second line | Field the reporter writes |
+| --- | --- | --- |
+| Agent: a home's own agent (its pane has a `who` token) | The tab (only in a workspace with more than one), then the home's `⚑ ▶ ◷` counts, `⚠watcher` when its watcher is silent, and its pull request line, then its session topic. | The pane's `idle`, `working`, `done` and `unknown` state labels, and its display agent (the terminal title). `blocked` keeps Herdr's own word. |
+| Agent: any other agent, such as a worker | The tab, its pull request line, then the name Firstmate gave it (`└ <task>`). | The same state labels. The display agent is Firstmate's and is never written. |
+| Space: `machine` | The machine's CPU, RAM and disk shares. | The `machine` workspace's active tab, renamed. Firstmate never names that tab. |
+| Space: any other | Herdr's own (`shell · tab 1`). | None: workspace labels and Firstmate's tab names route work, so they stay as they are. |
+
+Glyphs carry no space after them, and the parts are single-spaced, to fit more before Herdr cuts the line with `…`. The state label replaces Herdr's state word; the state dot still shows the state. None of these fields shows in the desktop sidebar, so it stays as above; on the desktop, the renamed tab shows in the tab bar while the `machine` workspace is focused. The values follow the sidebar's: the same run reports both, every second, and renames the tab only when its text changes.
+
+What the mobile layout forces, compared with the desktop sidebar:
+
+- The switch menu lists agents before spaces, and the `machine` entry is not its first line.
+- Entries show the workspace label, not the short name, and no colors.
+- Each entry has one line of its own, so a home's counts and pull request line come before its topic on the same line, and a long line loses its end, often the topic or worker name.
+- A home's `⚙ ▤ ⛁` shares are left out: on the same line they would push its topic off a 50-column screen. Without a `machine` workspace, the machine's shares do not show either.
+- The issue (`○`) is left out for width.
+
 ## Viewing from another machine
 
 Sidebar layouts are client-side: Herdr draws the sidebar from the config of the machine you view from, even over `herdr --remote`. The host still reports every token, but the viewing machine needs the host's layout to show them. `./factory apply` installs [`maintenance/herdr-sidebar-to-client.py`](../maintenance/herdr-sidebar-to-client.py) as `~/.local/bin/herdr-sidebar-to-client.py`. On the viewing machine, run it against the host with Python 3 and ssh access, where `<host>` is anything `ssh` accepts, such as `user@host`:
@@ -164,3 +201,4 @@ It copies the host's `sidebar_width`, `sidebar_max_width`, `[ui.sidebar.agents]`
 - CPU and RAM count only processes the reporter's account can read, and RAM is resident memory, so shared pages count once per process. CPU counts a process only while two runs a second apart both see it: a process that starts and ends between two runs is not counted, and the time before the first run that sees it or after the last is lost, so a space running many short builds reads low.
 - The machine line's parts are single-spaced so it fits even with CPU at 100% and memory and disk at 99%: after the `machine` entry's state dot, or two columns in under the primary home's name, where Herdr shows 40 columns at width 46. At 100%, or on a narrower sidebar, Herdr cuts its end.
 - Herdr sidebar styles offer color, bold and dim only: no italic and no thinner weight.
+- The phone layout's fields are plain text: no colors, and one line per entry.

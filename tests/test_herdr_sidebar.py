@@ -165,6 +165,38 @@ def fixture(tmp_path):
         {"workspace_id": "w1", "cwd": str(home / "projects/app")},
         {"workspace_id": "w2", "cwd": str(home)},
         {"workspace_id": "w4", "cwd": str(home / "projects/api")},
+        # Agent panes, for the mobile layout: the primary home's own omp, one
+        # of its workers (Firstmate set its display agent), a pane with
+        # nothing to show, one whose labels went stale and one up to date.
+        {
+            "workspace_id": "w1",
+            "pane_id": "w1:p2",
+            "agent": "omp",
+            "terminal_title": "Planning the release",
+            "tokens": {
+                "who": "firstmate",
+                "pr": "⎇ 1561",
+                "add": "+84",
+                "del": "−12",
+                "files": "✎ 3",
+            },
+        },
+        {
+            "workspace_id": "w1",
+            "pane_id": "w1:p3",
+            "agent": "omp",
+            "display_agent": "└ fix-login",
+            "tokens": {"pr": BLANK * 4 + "⎇ 1537", "add": "+5"},
+        },
+        {"workspace_id": "w3", "pane_id": "w3:p1", "agent": "claude"},
+        {"workspace_id": "w3", "pane_id": "w3:p2", "agent": "omp", "state_labels": {"idle": "old"}},
+        {
+            "workspace_id": "w4",
+            "pane_id": "w4:p2",
+            "agent": "omp",
+            "tokens": {"add": "+1"},
+            "state_labels": dict.fromkeys(spaces.STATES, "+1"),
+        },
     ]
     write(
         stub / "herdr",
@@ -178,6 +210,9 @@ elif a[:2] == ["pane", "list"]:
 elif a[:2] == ["workspace", "report-metadata"]:
     with open({str(log)!r}, "a") as f:
         f.write(json.dumps(a[2:]) + "\\n")
+else:
+    with open({str(tmp_path / "mobile.jsonl")!r}, "a") as f:
+        f.write(json.dumps(a) + "\\n")
 """,
         0o755,
     )
@@ -275,7 +310,8 @@ def test_a_machine_workspace_carries_the_machine_line_alone(fixture, tmp_path):
     _, run = fixture
     workspaces = tmp_path / "workspaces.json"
     listed = json.loads(workspaces.read_text())
-    workspaces.write_text(json.dumps([{"workspace_id": "w0", "label": "machine"}, *listed]))
+    machine_ws = {"workspace_id": "w0", "label": "machine", "active_tab_id": "w0:t1"}
+    workspaces.write_text(json.dumps([machine_ws, *listed]))
     reported = run()
     machine = reported["w0"]
     assert machine.pop("machine").startswith("⌂ ")
@@ -284,6 +320,49 @@ def test_a_machine_workspace_carries_the_machine_line_alone(fixture, tmp_path):
     # Never both: no Space carries the host row under its resource line.
     assert all(tokens["host"] is None for tokens in reported.values())
     assert all(tokens["machine"] is None for wid, tokens in reported.items() if wid != "w0")
+    # The mobile layout shows no sidebar rows; the machine's tab carries the
+    # shares instead.
+    calls = (tmp_path / "mobile.jsonl").read_text().splitlines()
+    renames = [json.loads(c) for c in calls if c.startswith('["tab"')]
+    assert len(renames) == 1 and renames[0][:3] == ["tab", "rename", "w0:t1"]
+    assert re.fullmatch(r"▤\d+% ⛁\d+%", renames[0][3])
+
+
+def test_mobile_layout_carries_the_same_data(fixture, tmp_path):
+    _, run = fixture
+    run()
+    calls = [json.loads(c) for c in (tmp_path / "mobile.jsonl").read_text().splitlines()]
+    reports = {c[2]: c[3:] for c in calls if c[:2] == ["pane", "report-metadata"]}
+
+    def labels(text):
+        return [a for s in spaces.STATES for a in ("--state-label", f"{s}={text}")]
+
+    home = reports.pop("w1:p2")
+    assert home[:4] == [
+        "--source",
+        "code-factory:spaces",
+        "--display-agent",
+        "Planning the release",
+    ]
+    text = "⚑1 ▶3 ◷4 ⚠watcher ⎇1561 +84 −12 ✎3"
+    assert home[4:] == labels(text)
+    # A worker keeps Firstmate's display agent and shows its size only.
+    source = ["--source", "code-factory:spaces"]
+    assert reports == {
+        "w1:p3": source + labels("⎇1537 +5"),
+        "w3:p2": source + ["--clear-state-labels"],
+    }
+
+
+@pytest.mark.parametrize(
+    "line, short",
+    [
+        ("⌂ ⚙ 41% ▤ 18.2/31.0G 59% ⛁ 402/937G 43%", "⚙41% ▤59% ⛁43%"),
+        ("⌂ ▤ 1.4/1.9T 100% ⛁ 12/20T 60%", "▤100% ⛁60%"),
+    ],
+)
+def test_machine_tab_shares(line, short):
+    assert spaces.shares(line) == short
 
 
 def test_queue_count_is_cached_until_the_backlog_changes_or_a_minute_passes(tmp_path):
@@ -430,7 +509,11 @@ def worker_log(tmp_path, origin_head=True, commit=True, setup=None, live=""):
         setup(work, git)
     log, fail = tmp_path / "herdr.log", tmp_path / "fail"
     log.write_text("")
-    write(tmp_path / "stub/herdr", f'#!/bin/sh\necho "$@" >> {log}\n[ -e {fail} ] && exit 1\necho "{{}}"\n', 0o755)
+    write(
+        tmp_path / "stub/herdr",
+        f'#!/bin/sh\necho "$@" >> {log}\n[ -e {fail} ] && exit 1\necho "{{}}"\n',
+        0o755,
+    )
     write(tmp_path / "stub/gh", "#!/bin/sh\necho '[]'\n", 0o755)
     ctx = "{hasUI: true, cwd: work, ui: {setTitle() {}}}"
     code = f"""
@@ -461,7 +544,11 @@ on.session_start({{}}, {ctx});
         PATH=f"{tmp_path / 'stub'}:{os.environ['PATH']}",
     )
     subprocess.run(["bun", "-e", code], env=env, check=True, timeout=60)
-    return [line for line in log.read_text().splitlines() if "report-metadata" in line or line.startswith("---")]
+    return [
+        line
+        for line in log.read_text().splitlines()
+        if "report-metadata" in line or line.startswith("---")
+    ]
 
 
 def worker_report(tmp_path, **kwargs):
@@ -525,7 +612,9 @@ def test_worker_size_never_rewrites_the_index(tmp_path):
     before = []
 
     def touch(work, git):
-        os.utime(work / "base", (1, 1))  # stale stat info: a plain `git diff` would refresh the index
+        os.utime(
+            work / "base", (1, 1)
+        )  # stale stat info: a plain `git diff` would refresh the index
         before.append((work / ".git/index").read_bytes())
 
     worker_report(tmp_path, setup=touch)
