@@ -26,9 +26,10 @@ its previous value, and the script always exits 0.
 Herdr's mobile layout ignores sidebar rows, so the same data also goes where
 it shows. A home's agent pane (one with a `who` token) gets its session topic
 as its display agent, and every agent pane's state label (all but blocked)
-carries a compact form of its home's counts and alert (home panes only) and
-its pull request line. The machine workspace's active tab is renamed to the
-machine's CPU, RAM and disk shares.
+carries a compact form of its home's counts, CPU/RAM/disk shares and alert
+(home panes only) and its pull request line. The machine workspace's first
+tab is renamed to the machine's shares, at most every TAB_TTL seconds, and
+only while its label is Herdr's own number or the reporter's last text.
 """
 
 import json
@@ -46,6 +47,7 @@ CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "code
 TOKENS = ("short", "decisions", "crew", "queue", "res", "alert", "host", "machine")
 DISK_TTL = 15 * 60
 QUEUE_TTL = 60  # "ready" also moves with date gates, so recount at least once a minute
+TAB_TTL = 30  # seconds between looks at the machine tab: its shares move every second
 TICK = os.sysconf("SC_CLK_TCK")
 PAGE = os.sysconf("SC_PAGE_SIZE")
 STATES = ("idle", "working", "done", "unknown")  # "blocked" keeps Herdr's own word
@@ -252,6 +254,19 @@ def presentation(text: str) -> str:
     return text[:80].strip()
 
 
+def name_machine_tab(wid: str, text: str, pin: dict) -> dict:
+    """Name the machine workspace's pinned (first) tab, unless someone else named it."""
+    tabs = json.loads(run(HERDR, "tab", "list", "--workspace", wid))["result"]["tabs"]
+    if not tabs:
+        return pin
+    tab = next((t for t in tabs if t["tab_id"] == pin.get("id")), tabs[0])
+    label, written = tab["label"], pin.get("text")
+    if label != text and (label.isdigit() or label == written):
+        run(HERDR, "tab", "rename", tab["tab_id"], text)
+        written = text
+    return {"id": tab["tab_id"], "text": written}
+
+
 def main() -> None:
     cache_file = CACHE / "herdr-spaces.json"
     try:
@@ -366,13 +381,11 @@ def main() -> None:
             fill(["res"], lambda: [res(wid, home)])
         if wid == machine:
             fill(["machine"], host)
-            tab, short = ws.get("active_tab_id"), shares(values["machine"] or "")
-            # The timer runs every second: rename only on a change.
-            if tab and short and cache.get("machine_tab") != [tab, short]:
+            short, pin = shares(values["machine"] or ""), cache.get("machine_tab") or {}
+            if short and now - pin.get("at", 0) >= TAB_TTL:
                 try:
-                    run(HERDR, "tab", "rename", tab, short)
-                    cache["machine_tab"] = [tab, short]
-                except (OSError, subprocess.SubprocessError) as err:
+                    cache["machine_tab"] = {**name_machine_tab(wid, short, pin), "at": now}
+                except Exception as err:  # noqa: BLE001 - display-only, never fatal
                     print(f"{label}: tab: {err}", file=sys.stderr)
         elif wid == primary and not machine:
             fill(["host"], host)
@@ -398,11 +411,13 @@ def main() -> None:
             # panes are left free, so the topic can go there.
             space = last.get(pane["workspace_id"], {})
             title = presentation(pane.get("terminal_title") or "")
-        text = tight(
-            # No shares: at 50 columns they would push the topic off the line.
-            *(space.get(k) for k in ("decisions", "crew", "queue")),
-            "⚠watcher" if space.get("alert") else "",
-            *(tokens.get(k) for k in ("pr", "add", "del", "files")),
+        text = presentation(
+            tight(
+                *(space.get(k) for k in ("decisions", "crew", "queue")),
+                shares(space.get("res") or ""),
+                "⚠watcher" if space.get("alert") else "",
+                *(tokens.get(k) for k in ("pr", "add", "del", "files")),
+            )
         )
         stored = pane.get("state_labels")
         wanted = dict.fromkeys(STATES, text) if text else None

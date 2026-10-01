@@ -191,47 +191,48 @@ def fixture(tmp_path):
         {"workspace_id": "w3", "pane_id": "w3:p1", "agent": "claude"},
         {"workspace_id": "w3", "pane_id": "w3:p2", "agent": "omp", "state_labels": {"idle": "old"}},
         # Herdr stores a display agent trimmed and capped at 80 characters.
+        # These sit in the helper space, which has no counts or shares.
         {
-            "workspace_id": "w3",
-            "pane_id": "w3:p3",
+            "workspace_id": "w2",
+            "pane_id": "w2:p3",
             "agent": "omp",
             "terminal_title": f"  {'t' * 100}  ",
             "display_agent": "t" * 80,
             "tokens": {"who": "firstmate"},
         },
         {
-            "workspace_id": "w3",
-            "pane_id": "w3:p4",
+            "workspace_id": "w2",
+            "pane_id": "w2:p4",
             "agent": "omp",
             "terminal_title": f"  {'u' * 100}  ",
             "tokens": {"who": "firstmate"},
         },
         {
-            "workspace_id": "w3",
-            "pane_id": "w3:p5",
+            "workspace_id": "w2",
+            "pane_id": "w2:p5",
             "agent": "omp",
             "terminal_title": "word " * 20 + "tail",
             "display_agent": "word " * 15 + "word",
             "tokens": {"who": "firstmate"},
         },
         {
-            "workspace_id": "w3",
-            "pane_id": "w3:p6",
+            "workspace_id": "w2",
+            "pane_id": "w2:p6",
             "agent": "omp",
             "terminal_title": "fix\x1b login",
             "display_agent": "fix login",
             "tokens": {"who": "firstmate"},
         },
         {
-            "workspace_id": "w3",
-            "pane_id": "w3:p7",
+            "workspace_id": "w2",
+            "pane_id": "w2:p7",
             "agent": "omp",
             "terminal_title": " \x00\x07 ",
             "tokens": {"who": "firstmate"},
         },
         {
-            "workspace_id": "w3",
-            "pane_id": "w3:p8",
+            "workspace_id": "w2",
+            "pane_id": "w2:p8",
             "agent": "omp",
             "terminal_title": "plan\x07 it",
             "tokens": {"who": "firstmate"},
@@ -245,20 +246,47 @@ def fixture(tmp_path):
         },
     ]
     state = tmp_path / "panes.json"
+    tabs_file = tmp_path / "tabs.json"
+    machine_tabs = [
+        {
+            "agent_status": "unknown",
+            "focused": False,
+            "label": "1",
+            "number": 1,
+            "pane_count": 1,
+            "tab_id": "w0:t1",
+            "workspace_id": "w0",
+        },
+        {
+            "agent_status": "unknown",
+            "focused": True,
+            "label": "2",
+            "number": 2,
+            "pane_count": 1,
+            "tab_id": "w0:t2",
+            "workspace_id": "w0",
+        },
+    ]
     write(
         stub / "herdr",
         f"""#!/usr/bin/env python3
 import json, os, sys
 a = sys.argv[1:]
 state = {str(state)!r}
+tabs_file = {str(tabs_file)!r}
 
 def panes():
     return json.load(open(state)) if os.path.exists(state) else {json.dumps(panes)}
+
+def tabs():
+    return json.load(open(tabs_file)) if os.path.exists(tabs_file) else {machine_tabs!r}
 
 if a[:2] == ["workspace", "list"]:
     print(json.dumps({{"result": {{"workspaces": json.load(open({str(workspaces)!r}))}}}}))
 elif a[:2] == ["pane", "list"]:
     print(json.dumps({{"result": {{"panes": panes()}}}}))
+elif a[:2] == ["tab", "list"]:
+    print(json.dumps({{"result": {{"tabs": [t for t in tabs() if t["workspace_id"] == a[3]]}}}}))
 elif a[:2] == ["workspace", "report-metadata"]:
     with open({str(log)!r}, "a") as f:
         f.write(json.dumps(a[2:]) + "\\n")
@@ -266,15 +294,16 @@ else:
     with open({str(tmp_path / "mobile.jsonl")!r}, "a") as f:
         f.write(json.dumps(a) + "\\n")
     if a[:2] == ["pane", "report-metadata"]:
-        # Herdr replaces a source's pane record unless the report has a --clear-* flag.
+        # Herdr replaces the reporter's pane record unless the report has a --clear-*
+        # flag. A worker's display agent is Firstmate's own record, so it stays.
         every = panes()
         pane = next(p for p in every if p.get("pane_id") == a[2])
         flags = a[5:]
-        pairs = list(zip(flags, flags[1:]))
         if not any(f.startswith("--clear-") for f in flags):
-            pane.pop("display_agent", None)
             pane.pop("state_labels", None)
-        for flag, value in pairs:
+            if (pane.get("tokens") or {{}}).get("who"):
+                pane.pop("display_agent", None)
+        for flag, value in zip(flags, flags[1:]):
             if flag == "--display-agent":
                 pane["display_agent"] = value
             if flag == "--state-label":
@@ -282,7 +311,13 @@ else:
                 pane.setdefault("state_labels", {{}})[key] = text
         if "--clear-state-labels" in flags:
             pane.pop("state_labels", None)
-        json.dump(every, open(state, "w"))
+        with open(state, "w") as f:
+            json.dump(every, f)
+    if a[:2] == ["tab", "rename"]:
+        every = tabs()
+        next(t for t in every if t["tab_id"] == a[2])["label"] = a[3]
+        with open(tabs_file, "w") as f:
+            json.dump(every, f)
 """,
         0o755,
     )
@@ -380,7 +415,7 @@ def test_a_machine_workspace_carries_the_machine_line_alone(fixture, tmp_path):
     _, run = fixture
     workspaces = tmp_path / "workspaces.json"
     listed = json.loads(workspaces.read_text())
-    machine_ws = {"workspace_id": "w0", "label": "machine", "active_tab_id": "w0:t1"}
+    machine_ws = {"workspace_id": "w0", "label": "machine", "active_tab_id": "w0:t2"}
     workspaces.write_text(json.dumps([machine_ws, *listed]))
     reported = run()
     machine = reported["w0"]
@@ -390,12 +425,73 @@ def test_a_machine_workspace_carries_the_machine_line_alone(fixture, tmp_path):
     # Never both: no Space carries the host row under its resource line.
     assert all(tokens["host"] is None for tokens in reported.values())
     assert all(tokens["machine"] is None for wid, tokens in reported.items() if wid != "w0")
-    # The mobile layout shows no sidebar rows; the machine's tab carries the
-    # shares instead.
+    # The mobile layout shows no sidebar rows; the machine's first tab carries
+    # the shares instead, though the second is the focused one.
     calls = (tmp_path / "mobile.jsonl").read_text().splitlines()
     renames = [json.loads(c) for c in calls if c.startswith('["tab"')]
     assert len(renames) == 1 and renames[0][:3] == ["tab", "rename", "w0:t1"]
     assert re.fullmatch(r"▤\d+% ⛁\d+%", renames[0][3])
+
+
+def test_the_machine_tab_is_pinned_throttled_and_never_takes_over_a_name(fixture, tmp_path):
+    _, run = fixture
+    workspaces = tmp_path / "workspaces.json"
+    listed = json.loads(workspaces.read_text())
+    machine_ws = {"workspace_id": "w0", "label": "machine", "active_tab_id": "w0:t2"}
+    workspaces.write_text(json.dumps([machine_ws, *listed]))
+    tabs_file = tmp_path / "tabs.json"
+    cache_file = tmp_path / "cache/code-factory/herdr-spaces.json"
+    calls = tmp_path / "mobile.jsonl"
+
+    def renames():
+        lines = calls.read_text().splitlines() if calls.exists() else []
+        calls.unlink(missing_ok=True)
+        return [c for c in map(json.loads, lines) if c[:2] == ["tab", "rename"]]
+
+    def labels():
+        return {t["tab_id"]: t["label"] for t in json.loads(tabs_file.read_text())}
+
+    def set_label(tab_id, label):
+        tabs = json.loads(tabs_file.read_text())
+        next(t for t in tabs if t["tab_id"] == tab_id)["label"] = label
+        tabs_file.write_text(json.dumps(tabs))
+
+    def elapse():
+        cache = json.loads(cache_file.read_text())
+        cache["machine_tab"]["at"] -= spaces.TAB_TTL
+        cache_file.write_text(json.dumps(cache))
+
+    # The first tab, though the second is the focused one; Herdr's own number
+    # on it is the reporter's to replace.
+    run()
+    [rename] = renames()
+    assert rename[:3] == ["tab", "rename", "w0:t1"]
+    assert re.fullmatch(r"▤\d+% ⛁\d+%", rename[3])
+    assert labels() == {"w0:t1": rename[3], "w0:t2": "2"}
+
+    # The shares move every second; the tab waits out the throttle.
+    run()
+    assert renames() == []
+
+    # Then it follows them, on the same tab whatever the tab order.
+    tabs_file.write_text(json.dumps(json.loads(tabs_file.read_text())[::-1]))
+    elapse()
+    run()
+    [rename] = renames()
+    assert rename[2] == "w0:t1" and re.fullmatch(r"⚙\d+% ▤\d+% ⛁\d+%", rename[3])
+
+    # A name an operator chose is left alone, however long it has been.
+    set_label("w0:t1", "htop")
+    elapse()
+    run()
+    assert renames() == [] and labels()["w0:t1"] == "htop"
+
+    # Back to Herdr's own number, the tab is the reporter's again.
+    set_label("w0:t1", "1")
+    elapse()
+    run()
+    assert [r[2] for r in renames()] == ["w0:t1"]
+    assert labels()["w0:t2"] == "2"
 
 
 def test_mobile_layout_carries_the_same_data(fixture, tmp_path):
@@ -414,15 +510,20 @@ def test_mobile_layout_carries_the_same_data(fixture, tmp_path):
         "--display-agent",
         "Planning the release",
     ]
-    text = "⚑1 ▶3 ◷4 ⚠watcher ⎇1561 +84 −12 ✎3"
-    assert home[4:] == labels(text)
+    # The home's shares sit between its counts and its alert; CPU waits for
+    # the second run's baseline.
+    sent = home[4:]
+    assert sent[::2] == ["--state-label"] * len(spaces.STATES)
+    states, texts = zip(*(s.split("=", 1) for s in sent[1::2]))
+    assert list(states) == list(spaces.STATES) and len(set(texts)) == 1
+    assert re.fullmatch(r"⚑1 ▶3 ◷4 ▤\d+% ⛁\d+% ⚠watcher ⎇1561 \+84 −12 ✎3", texts[0])
     # A worker keeps Firstmate's display agent and shows its size only.
     source = ["--source", "code-factory:spaces"]
     assert reports == {
         "w1:p3": source + labels("⎇1537 +5"),
         "w3:p2": source + ["--clear-state-labels"],
-        "w3:p4": source + ["--display-agent", "u" * 80],
-        "w3:p8": source + ["--display-agent", "plan it"],
+        "w2:p4": source + ["--display-agent", "u" * 80],
+        "w2:p8": source + ["--display-agent", "plan it"],
     }
 
 
@@ -438,6 +539,9 @@ def test_mobile_reports_settle_and_follow_a_changed_pane(fixture, tmp_path):
 
     run()
     assert reports()
+    # CPU joins the shares on the second run; after that nothing moves.
+    run()
+    assert set(reports()) == {"w1:p2"}
     run()
     assert reports() == {}
 
@@ -446,11 +550,17 @@ def test_mobile_reports_settle_and_follow_a_changed_pane(fixture, tmp_path):
     next(p for p in panes if p.get("pane_id") == "w1:p2")["tokens"]["add"] = "+90"
     state.write_text(json.dumps(panes))
     run()
-    text = "⚑1 ▶3 ◷4 ⚠watcher ⎇1561 +90 −12 ✎3"
-    assert reports() == {
-        "w1:p2": ["--source", "code-factory:spaces", "--display-agent", "Planning the release"]
-        + [a for s in spaces.STATES for a in ("--state-label", f"{s}={text}")]
-    }
+    sent = reports()
+    assert list(sent) == ["w1:p2"]
+    assert sent["w1:p2"][:4] == [
+        "--source",
+        "code-factory:spaces",
+        "--display-agent",
+        "Planning the release",
+    ]
+    texts = {s.partition("=")[2] for s in sent["w1:p2"][5::2]}
+    assert len(texts) == 1
+    assert re.fullmatch(r"⚑1 ▶3 ◷4 ⚙\d+% ▤\d+% ⛁\d+% ⚠watcher ⎇1561 \+90 −12 ✎3", texts.pop())
     run()
     assert reports() == {}
 
