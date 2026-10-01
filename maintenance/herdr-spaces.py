@@ -392,24 +392,26 @@ def main() -> None:
         if not pane.get("agent"):
             continue
         tokens = pane.get("tokens") or {}
-        args, space = [], {}
+        space, title = {}, ""
         if tokens.get("who"):
             # Firstmate names its task panes through the display agent; home
             # panes are left free, so the topic can go there.
             space = last.get(pane["workspace_id"], {})
             title = presentation(pane.get("terminal_title") or "")
-            if title and pane.get("display_agent") != title:
-                args += ["--display-agent", title]
         text = tight(
             # No shares: at 50 columns they would push the topic off the line.
             *(space.get(k) for k in ("decisions", "crew", "queue")),
             "⚠watcher" if space.get("alert") else "",
             *(tokens.get(k) for k in ("pr", "add", "del", "files")),
         )
-        if pane.get("state_labels") != (dict.fromkeys(STATES, text) if text else None):
-            labels = [a for s in STATES for a in ("--state-label", f"{s}={text}")]
-            args += labels if text else ["--clear-state-labels"]
-        if args:
+        stored = pane.get("state_labels")
+        wanted = dict.fromkeys(STATES, text) if text else None
+        if stored != wanted or (title and pane.get("display_agent") != title):
+            args = ["--display-agent", title] if title else []
+            if text:
+                args += [a for s in STATES for a in ("--state-label", f"{s}={text}")]
+            elif stored is not None:
+                args.append("--clear-state-labels")
             pid = pane["pane_id"]
             try:
                 run(HERDR, "pane", "report-metadata", pid, "--source", SOURCE, *args)

@@ -244,21 +244,45 @@ def fixture(tmp_path):
             "state_labels": dict.fromkeys(spaces.STATES, "+1"),
         },
     ]
+    state = tmp_path / "panes.json"
     write(
         stub / "herdr",
         f"""#!/usr/bin/env python3
-import json, sys
+import json, os, sys
 a = sys.argv[1:]
+state = {str(state)!r}
+
+def panes():
+    return json.load(open(state)) if os.path.exists(state) else {json.dumps(panes)}
+
 if a[:2] == ["workspace", "list"]:
     print(json.dumps({{"result": {{"workspaces": json.load(open({str(workspaces)!r}))}}}}))
 elif a[:2] == ["pane", "list"]:
-    print(json.dumps({{"result": {{"panes": {json.dumps(panes)}}}}}))
+    print(json.dumps({{"result": {{"panes": panes()}}}}))
 elif a[:2] == ["workspace", "report-metadata"]:
     with open({str(log)!r}, "a") as f:
         f.write(json.dumps(a[2:]) + "\\n")
 else:
     with open({str(tmp_path / "mobile.jsonl")!r}, "a") as f:
         f.write(json.dumps(a) + "\\n")
+    if a[:2] == ["pane", "report-metadata"]:
+        # Herdr replaces a source's pane record unless the report has a --clear-* flag.
+        every = panes()
+        pane = next(p for p in every if p.get("pane_id") == a[2])
+        flags = a[5:]
+        pairs = list(zip(flags, flags[1:]))
+        if not any(f.startswith("--clear-") for f in flags):
+            pane.pop("display_agent", None)
+            pane.pop("state_labels", None)
+        for flag, value in pairs:
+            if flag == "--display-agent":
+                pane["display_agent"] = value
+            if flag == "--state-label":
+                key, _, text = value.partition("=")
+                pane.setdefault("state_labels", {{}})[key] = text
+        if "--clear-state-labels" in flags:
+            pane.pop("state_labels", None)
+        json.dump(every, open(state, "w"))
 """,
         0o755,
     )
@@ -400,6 +424,35 @@ def test_mobile_layout_carries_the_same_data(fixture, tmp_path):
         "w3:p4": source + ["--display-agent", "u" * 80],
         "w3:p8": source + ["--display-agent", "plan it"],
     }
+
+
+def test_mobile_reports_settle_and_follow_a_changed_pane(fixture, tmp_path):
+    _, run = fixture
+    calls = tmp_path / "mobile.jsonl"
+    state = tmp_path / "panes.json"
+
+    def reports():
+        lines = calls.read_text().splitlines() if calls.exists() else []
+        calls.unlink(missing_ok=True)
+        return {c[2]: c[3:] for c in map(json.loads, lines) if c[:2] == ["pane", "report-metadata"]}
+
+    run()
+    assert reports()
+    run()
+    assert reports() == {}
+
+    # The pane's pull request size changes; its topic stays.
+    panes = json.loads(state.read_text())
+    next(p for p in panes if p.get("pane_id") == "w1:p2")["tokens"]["add"] = "+90"
+    state.write_text(json.dumps(panes))
+    run()
+    text = "⚑1 ▶3 ◷4 ⚠watcher ⎇1561 +90 −12 ✎3"
+    assert reports() == {
+        "w1:p2": ["--source", "code-factory:spaces", "--display-agent", "Planning the release"]
+        + [a for s in spaces.STATES for a in ("--state-label", f"{s}={text}")]
+    }
+    run()
+    assert reports() == {}
 
 
 @pytest.mark.parametrize(
