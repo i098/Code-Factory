@@ -1,6 +1,6 @@
 # Dependencies
 
-Everything the recipe installs, grouped by where it comes from. Nothing is pinned: every `./factory apply` resolves each tool's newest release once and installs exactly that, so re-running apply upgrades an existing host. Every download is verified against the checksum its publisher posts for that exact release, and a release without one fails the apply instead of installing an unverified artifact. The one exception is the three omp marketplace plugins (ponytail, i-have-adhd, caveman): no publisher checksums them. The installer records the releases it resolved in `~/.local/share/code-factory/resolved.json`, which the container smoke compares against; `ansible/tasks/verify.yml` also asserts that the herdr service and omp run the resolved releases. `./factory plan` installs none of this.
+Everything the recipe installs, grouped by where it comes from. Nothing is pinned: every `./factory apply` resolves each tool's newest release once and installs exactly that, so re-running apply upgrades an existing host. Every download is verified against the checksum its publisher posts for that exact release, and a release without one fails the apply instead of installing an unverified artifact (the optional Koncreet is skipped with a warning instead). The one exception is the three omp marketplace plugins (ponytail, i-have-adhd, caveman): no publisher checksums them. The installer records the releases it resolved in `~/.local/share/code-factory/resolved.json`, which the container smoke compares against; `ansible/tasks/verify.yml` also asserts that the herdr service and omp run the resolved releases. `./factory plan` installs none of this.
 
 ## Repository tooling
 
@@ -45,9 +45,9 @@ The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests 
 
 ## Koncreet
 
-Every host.
+Every host that starts services (`start_services: true`); the container worker image skips it.
 
-- [Koncreet](https://github.com/jimididit/koncreet), the latest release's `koncreet.tar.gz`, verified against the GitHub release-asset digest (`ansible/tasks/koncreet.yml`). It installs as root into `/usr/local/lib/code-factory/koncreet/<version>-<patch hash>/` with `/usr/local/bin/koncreet` linked to it, and `patches/koncreet/ubuntu-26.04.patch` is layered on top. Apply never runs it; [Host hardening](security.md#host-hardening) has the manual run.
+- [Koncreet](https://github.com/jimididit/koncreet), the latest release's `koncreet.tar.gz`, verified against the GitHub release-asset digest (`ansible/tasks/koncreet.yml`). It installs as root into `/usr/local/lib/code-factory/koncreet/<version>-<patch hash>/` with `/usr/local/bin/koncreet` linked to it, and `patches/koncreet/ubuntu-26.04.patch` is layered on top. It is optional: when its lookup, checksum, or download fails, apply warns and skips it. Apply never runs it; [Host hardening](security.md#host-hardening) has the manual run.
 
 ## Chrome autopruner
 

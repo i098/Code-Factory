@@ -37,15 +37,15 @@ This export does not rewrite the current host's firewall, SSH policy, account me
 
 ## Host hardening
 
-Every apply installs [Koncreet](https://github.com/jimididit/koncreet) as `/usr/local/bin/koncreet` and renders `/etc/koncreet.conf` once, but nothing runs it. It is a first-hour hardening toolkit: a sudo user with SSH keys, sysctl, swap, a journald cap, time sync, a ufw default-deny firewall, fail2ban on SSH, unattended security updates, and finally SSH with password and root login turned off.
+Every apply on a host that starts services (not the container worker image) installs [Koncreet](https://github.com/jimididit/koncreet) as `/usr/local/bin/koncreet` and renders `/etc/koncreet.conf` once, but nothing runs it. Koncreet is optional: when its release lookup, checksum, or download fails, apply prints a warning, skips it, and finishes the rest; a release installed earlier stays in place. It is a first-hour hardening toolkit: a sudo user with SSH keys, sysctl, swap, a journald cap, time sync, a ufw default-deny firewall, fail2ban on SSH, unattended security updates, and finally SSH with password and root login turned off.
 
 Upstream supports Debian 12/13 and Ubuntu 22.04/24.04 only. `patches/koncreet/ubuntu-26.04.patch` adds Ubuntu 26.04: it opens the OS gate and doctor, and restores the last fallback Koncreet uses to find your SSH client address for the fail2ban whitelist: 26.04 keeps no utmp, so `who -m` prints nothing, and the patch asks logind instead. The same change is the `ubuntu-26.04` branch of the [undeemed/koncreet](https://github.com/undeemed/koncreet/tree/ubuntu-26.04) fork; regenerate the patch from there with `git diff main...ubuntu-26.04`. Apply layers the patch on each new release and prints which case it hit: applied; skipped because the release already supports 26.04; or skipped because it no longer applies, in which case Koncreet installs as released and refuses to run on 26.04 until the patch is refreshed. The patch never fails the apply.
 
-`/etc/koncreet.conf` makes the account that ran `./factory apply` the sudo user, installs the SSH keys it logs in with, keeps SSH open (Koncreet always allows the ports sshd listens on) and opens 41641/udp for Tailscale's direct connections. Apply never overwrites it; edit it there.
+`/etc/koncreet.conf` makes the account that ran `./factory apply` the sudo user, installs the SSH keys it logs in with, and keeps SSH open (Koncreet always allows the ports sshd listens on). With the `tailscale` profile it also opens 41641/udp for Tailscale's direct connections. When apply ran as root, or as the factory account (which runs the agents and must not gain sudo), no sudo user is set: `user=` and `pubkey_file=` stay commented out until you fill in the operator's login. Apply never overwrites it; edit it there.
 
 Run it once, by hand, from an SSH session you keep open until the last step works:
 
-1. `sudo ufw allow in on tailscale0`, so the tailnet stays reachable once ufw denies incoming traffic. Koncreet keeps existing ufw rules.
+1. With the `tailscale` profile: `sudo ufw allow in on tailscale0`, so the tailnet stays reachable once ufw denies incoming traffic. Koncreet keeps existing ufw rules.
 2. `sudo koncreet doctor`
 3. `sudo koncreet --dry-run apply -c /etc/koncreet.conf`, and read the plan.
 4. `sudo koncreet apply -c /etc/koncreet.conf`
@@ -67,6 +67,6 @@ Logs: `/var/log/koncreet.log`. Backups: `*.koncreet.bak`. The provider's console
 
 ## Updates
 
-Tools track their latest release, and every download is verified against the checksum its publisher posts for that release (what each source checks is in [Dependencies](dependencies.md)); a release without one is refused. The one exception is the three omp marketplace plugins (ponytail, i-have-adhd, caveman): no publisher checksums them, they track each author's default branch, and they load as agent instructions and hooks. The operator accepted that to keep them at the latest commit. Checksums prove a download is the published artifact; they do not establish that a publisher is trustworthy. Review added tools and installer behavior before adding them. Ubuntu security updates remain an operating-system responsibility rather than freezing an entire vulnerable package index forever.
+Tools track their latest release, and every download is verified against the checksum its publisher posts for that release (what each source checks is in [Dependencies](dependencies.md)); a release without one is refused (Koncreet, being optional, is skipped with a warning instead). The one exception is the three omp marketplace plugins (ponytail, i-have-adhd, caveman): no publisher checksums them, they track each author's default branch, and they load as agent instructions and hooks. The operator accepted that to keep them at the latest commit. Checksums prove a download is the published artifact; they do not establish that a publisher is trustworthy. Review added tools and installer behavior before adding them. Ubuntu security updates remain an operating-system responsibility rather than freezing an entire vulnerable package index forever.
 
 Back up project repositories and application data separately, using encrypted storage and an application-aware restore procedure. A successful environment bootstrap is not evidence that a database backup is recoverable.

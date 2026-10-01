@@ -1,104 +1,118 @@
 ---
-# Koncreet host hardening: installed on every apply, never run. The operator
-# runs it once, by hand (docs/security.md, Host hardening). Root runs it, so
-# the release and its configuration are root-owned and outside the account's
-# home, where an agent could rewrite what root later executes.
+# Koncreet host hardening: installed on every apply that starts services
+# (never in the container image), never run. The operator runs it once, by
+# hand (docs/security.md, Host hardening). Root runs it, so the release and
+# its configuration are root-owned and outside the account's home, where an
+# agent could rewrite what root later executes.
+#
+# It is optional: any failure here, a digest mismatch included, skips koncreet
+# with a warning and leaves the rest of the apply running. A tree that failed
+# its digest check is never installed or linked.
 
-- name: Hash the Ubuntu 26.04 koncreet patch
-  ansible.builtin.stat:
-    path: "{{ factory_koncreet_patch }}"
-    checksum_algorithm: sha256
-  register: factory_koncreet_patch_stat
-  check_mode: false
-
-# A new release or a changed patch lands in its own directory, so an unchanged
-# pair is a no-op and /usr/local/bin/koncreet only moves once the new tree is
-# complete. patch-outcome is written last and marks the tree complete.
-- name: Name the koncreet release directory
-  ansible.builtin.set_fact:
-    factory_koncreet_dir: >-
-      {{ factory_koncreet_prefix }}/{{ factory_latest.koncreet.version
-      }}-{{ factory_koncreet_patch_stat.stat.checksum[:12] }}
-
-- name: Stat the installed koncreet release
-  ansible.builtin.stat:
-    path: "{{ factory_koncreet_dir }}/patch-outcome"
-  register: factory_koncreet_stat
-  check_mode: false
-
-- name: Install the latest koncreet release with the Ubuntu 26.04 patch
-  when:
-    - not factory_koncreet_stat.stat.exists
-    - not ansible_check_mode
-  become: true
+- name: Install koncreet, or skip it with a warning
   block:
-    - name: Create the koncreet release directory
+    - name: Hash the Ubuntu 26.04 koncreet patch
+      ansible.builtin.stat:
+        path: "{{ factory_koncreet_patch }}"
+        checksum_algorithm: sha256
+      register: factory_koncreet_patch_stat
+      check_mode: false
+
+    # A new release or a changed patch lands in its own directory, so an unchanged
+    # pair is a no-op and /usr/local/bin/koncreet only moves once the new tree is
+    # complete. patch-outcome is written last and marks the tree complete.
+    - name: Name the koncreet release directory
+      ansible.builtin.set_fact:
+        factory_koncreet_dir: >-
+          {{ factory_koncreet_prefix }}/{{ factory_latest.koncreet.version
+          }}-{{ factory_koncreet_patch_stat.stat.checksum[:12] }}
+
+    - name: Stat the installed koncreet release
+      ansible.builtin.stat:
+        path: "{{ factory_koncreet_dir }}/patch-outcome"
+      register: factory_koncreet_stat
+      check_mode: false
+
+    - name: Install the latest koncreet release with the Ubuntu 26.04 patch
+      when:
+        - not factory_koncreet_stat.stat.exists
+        - not ansible_check_mode
+      become: true
+      block:
+        - name: Create the koncreet release directory
+          ansible.builtin.file:
+            path: "{{ factory_koncreet_dir }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Fetch the koncreet tarball
+          ansible.builtin.get_url:
+            url: "{{ factory_koncreet.url }}"
+            dest: "{{ factory_koncreet_dir }}.tar.gz"
+            checksum: "sha256:{{ factory_koncreet.sha256 }}"
+            mode: "0600"
+
+        - name: Extract koncreet
+          ansible.builtin.unarchive:
+            src: "{{ factory_koncreet_dir }}.tar.gz"
+            dest: "{{ factory_koncreet_dir }}"
+            remote_src: true
+            owner: root
+            group: root
+
+        - name: Remove the koncreet tarball
+          ansible.builtin.file:
+            path: "{{ factory_koncreet_dir }}.tar.gz"
+            state: absent
+
+        # The patch never fails the apply: when upstream already supports 26.04 or
+        # the patch no longer applies, koncreet installs as released and the
+        # outcome says which case this release hit.
+        - name: Layer the Ubuntu 26.04 patch on the release
+          ansible.builtin.shell: |
+            cd koncreet || exit 1
+            if grep -q '26\.04' lib/os.sh; then
+              echo "patch skipped: this release already supports Ubuntu 26.04"
+            elif git apply {{ factory_koncreet_patch | quote }} 2>/dev/null; then
+              echo "patch applied: Ubuntu 26.04 support layered on this release"
+            else
+              echo "patch skipped: it no longer applies, installed as released"
+            fi | tee ../patch-outcome.new && mv ../patch-outcome.new ../patch-outcome
+          args:
+            chdir: "{{ factory_koncreet_dir }}"
+          environment:
+            # Outside any repository, so git apply patches files like patch(1).
+            GIT_CEILING_DIRECTORIES: "{{ factory_koncreet_dir }}"
+          register: factory_koncreet_outcome
+          changed_when: true
+
+        - name: Report the koncreet release and patch outcome
+          ansible.builtin.debug:
+            msg: "koncreet {{ factory_latest.koncreet.version }}: {{ factory_koncreet_outcome.stdout }}"
+
+    - name: Link koncreet into /usr/local/bin
       ansible.builtin.file:
-        path: "{{ factory_koncreet_dir }}"
-        state: directory
+        src: "{{ factory_koncreet_dir }}/koncreet/koncreet"
+        dest: /usr/local/bin/koncreet
+        state: link
+      become: true
+      when: not ansible_check_mode
+
+    - name: Render the fleet koncreet configuration once
+      ansible.builtin.template:
+        src: koncreet.conf.j2
+        dest: "{{ factory_koncreet_config }}"
         owner: root
         group: root
-        mode: "0755"
+        mode: "0644"
+        force: false
+      become: true
 
-    - name: Fetch the koncreet tarball
-      ansible.builtin.get_url:
-        url: "{{ factory_koncreet.url }}"
-        dest: "{{ factory_koncreet_dir }}.tar.gz"
-        checksum: "sha256:{{ factory_koncreet.sha256 }}"
-        mode: "0600"
-
-    - name: Extract koncreet
-      ansible.builtin.unarchive:
-        src: "{{ factory_koncreet_dir }}.tar.gz"
-        dest: "{{ factory_koncreet_dir }}"
-        remote_src: true
-        owner: root
-        group: root
-
-    - name: Remove the koncreet tarball
-      ansible.builtin.file:
-        path: "{{ factory_koncreet_dir }}.tar.gz"
-        state: absent
-
-    # The patch never fails the apply: when upstream already supports 26.04 or
-    # the patch no longer applies, koncreet installs as released and the
-    # outcome says which case this release hit.
-    - name: Layer the Ubuntu 26.04 patch on the release
-      ansible.builtin.shell: |
-        cd koncreet || exit 1
-        if grep -q '26\.04' lib/os.sh; then
-          echo "patch skipped: this release already supports Ubuntu 26.04"
-        elif git apply {{ factory_koncreet_patch | quote }} 2>/dev/null; then
-          echo "patch applied: Ubuntu 26.04 support layered on this release"
-        else
-          echo "patch skipped: it no longer applies, installed as released"
-        fi | tee ../patch-outcome.new && mv ../patch-outcome.new ../patch-outcome
-      args:
-        chdir: "{{ factory_koncreet_dir }}"
-      environment:
-        # Outside any repository, so git apply patches files like patch(1).
-        GIT_CEILING_DIRECTORIES: "{{ factory_koncreet_dir }}"
-      register: factory_koncreet_outcome
-      changed_when: true
-
-    - name: Report the koncreet release and patch outcome
+  rescue:
+    - name: Skip koncreet
       ansible.builtin.debug:
-        msg: "koncreet {{ factory_latest.koncreet.version }}: {{ factory_koncreet_outcome.stdout }}"
-
-- name: Link koncreet into /usr/local/bin
-  ansible.builtin.file:
-    src: "{{ factory_koncreet_dir }}/koncreet/koncreet"
-    dest: /usr/local/bin/koncreet
-    state: link
-  become: true
-  when: not ansible_check_mode
-
-- name: Render the fleet koncreet configuration once
-  ansible.builtin.template:
-    src: koncreet.conf.j2
-    dest: "{{ factory_koncreet_config }}"
-    owner: root
-    group: root
-    mode: "0644"
-    force: false
-  become: true
+        msg: >-
+          WARNING: koncreet skipped, apply continues. {{ ansible_failed_task.name }}:
+          {{ ansible_failed_result.msg | default('failed') }}

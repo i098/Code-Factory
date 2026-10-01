@@ -73,6 +73,8 @@ GITHUB_LATEST = {
     # Resolved for host hardening (ansible/tasks/koncreet.yml), installed there as root.
     "koncreet": ("jimididit/koncreet", "v", "koncreet.tar.gz", {"koncreet": "koncreet/koncreet"}),
 }
+# Resolved when they can be, skipped with a warning when they cannot: they never stop a run.
+OPTIONAL = {"koncreet"}
 # npm tools on the registry's latest version, each installed into its own prefix.
 NPM_LATEST = {
     "omp": "@oh-my-pi/pi-coding-agent",
@@ -141,24 +143,33 @@ def verified(tool, version, key, name, url, checksum, binaries):
 def resolve_latest(key, names):
     """Specs for the newest releases of exactly these tools, and nothing else."""
     latest = {}
+    skipped = set()
     for tool, (repo, prefix, pattern, binaries) in GITHUB_LATEST.items():
         if tool not in names:
             continue
-        if tool in PRERELEASE_CHANNEL:
-            releases = json.loads(
-                fetch(GITHUB_API.format(repo) + "?per_page=10", f"{tool} release")
-            )
-            release = next((r for r in releases if not r["draft"]), None)
-            if release is None:
-                raise ValueError(f"{tool} has no published release")
-        else:
-            release = json.loads(fetch(GITHUB_API.format(repo) + "/latest", f"{tool} release"))
-        version = release["tag_name"].removeprefix(prefix)
-        name = pattern.format(v=version, key=key, **ARCH[key])
-        asset = next((a for a in release["assets"] if a["name"] == name), {})
-        checksum = (asset.get("digest") or "").removeprefix("sha256:")
-        url = asset.get("browser_download_url", "")
-        latest[tool] = verified(tool, version, key, name, url, checksum, binaries)
+        try:
+            if tool in PRERELEASE_CHANNEL:
+                releases = json.loads(
+                    fetch(GITHUB_API.format(repo) + "?per_page=10", f"{tool} release")
+                )
+                release = next((r for r in releases if not r["draft"]), None)
+                if release is None:
+                    raise ValueError(f"{tool} has no published release")
+            else:
+                release = json.loads(
+                    fetch(GITHUB_API.format(repo) + "/latest", f"{tool} release")
+                )
+            version = release["tag_name"].removeprefix(prefix)
+            name = pattern.format(v=version, key=key, **ARCH[key])
+            asset = next((a for a in release["assets"] if a["name"] == name), {})
+            checksum = (asset.get("digest") or "").removeprefix("sha256:")
+            url = asset.get("browser_download_url", "")
+            latest[tool] = verified(tool, version, key, name, url, checksum, binaries)
+        except (OSError, ValueError, KeyError) as error:
+            if tool not in OPTIONAL:
+                raise
+            skipped.add(tool)
+            print(f"install_tools: skipping optional {tool}: {error}", file=sys.stderr)
     if "node" in names:
         releases = json.loads(fetch("https://nodejs.org/dist/index.json", "node release"))
         tag = max((r["version"] for r in releases), key=lambda v: tuple(map(int, v[1:].split("."))))
@@ -202,7 +213,7 @@ def resolve_latest(key, names):
         if not hashes or not all(re.fullmatch(r"[0-9a-f]{64}", h) for h in hashes):
             raise ValueError("psutil publishes no SHA-256 digests; refusing an unverified binary")
         latest["psutil"] = {"version": pypi["info"]["version"], "sha256": hashes}
-    if unknown := sorted(set(names) - latest.keys()):
+    if unknown := sorted(set(names) - latest.keys() - skipped):
         raise ValueError(f"no latest release source for: {', '.join(unknown)}")
     return latest
 

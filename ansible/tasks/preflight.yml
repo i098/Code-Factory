@@ -103,6 +103,11 @@
   ansible.builtin.set_fact:
     factory_latest: "{{ factory_latest_run.stdout | from_json }}"
 
+- name: Warn about optional tools skipped by the lookup
+  ansible.builtin.debug:
+    msg: "{{ factory_latest_run.stderr_lines }}"
+  when: factory_latest_run.stderr | length > 0
+
 - name: Show the resolved provisioning plan
   ansible.builtin.debug:
     msg:

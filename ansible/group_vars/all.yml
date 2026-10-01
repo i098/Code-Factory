@@ -187,7 +187,7 @@ factory_installer_selection: >-
      + (['--npm'] if (factory_cfg.profiles.agents | bool) else [])
      + (['--development'] if (factory_cfg.profiles.development | bool) else []) }}
 factory_installer_also: >-
-  {{ ['koncreet']
+  {{ (['koncreet'] if (factory_cfg.start_services | bool) else [])
      + (['psutil'] if ((factory_cfg.profiles.agents | bool)
                        and (factory_cfg.browser_prune.enabled | bool)) else [])
      + (['obscura', 'supabase'] if (factory_cfg.profiles.fleet_guards | bool) else []) }}
@@ -366,7 +366,9 @@ factory_tailscale_version: ""
 # The latest jimididit/koncreet release, verified against the SHA-256 GitHub
 # publishes for the asset, with Code Factory's Ubuntu 26.04 patch layered on.
 # Root runs it, so the release and its configuration are root-owned, never in
-# the account's home. docs/security.md has the manual run.
+# the account's home. docs/security.md has the manual run. Optional: it is
+# resolved only when start_services is true (never in the container image), and
+# a failed lookup, digest, or download skips it with a warning.
 factory_koncreet: "{{ factory_latest.koncreet.assets[factory_platform] }}"
 factory_koncreet_patch: "{{ code_factory_repo }}/patches/koncreet/ubuntu-26.04.patch"
 factory_koncreet_prefix: /usr/local/lib/code-factory/koncreet
