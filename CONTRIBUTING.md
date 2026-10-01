@@ -35,7 +35,7 @@ uv sync --group dev
 # Lint
 uv run ruff check scripts tests
 
-# Test
+# Test (the Koncreet apply tests need root or fakeroot; unprivileged without it they skip)
 uv run pytest
 
 # Ansible syntax check
