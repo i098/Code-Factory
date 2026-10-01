@@ -203,6 +203,8 @@ factory_omp_sidebar_extension: "{{ factory_cfg.home }}/.omp/agent/extensions/cod
 factory_omp_status_icons_extension: "{{ factory_cfg.home }}/.omp/agent/extensions/aa-mode-icons.ts"
 # Blocks pkill/killall/kill-by-pgrep in every omp session (docs/omp.md).
 factory_omp_no_pattern_kill_extension: "{{ factory_cfg.home }}/.omp/agent/extensions/fm-no-pattern-kill.ts"
+# Herdr's own omp state extension; `herdr integration install omp` writes it (docs/herdr.md).
+factory_herdr_omp_integration: "{{ factory_cfg.home }}/.omp/agent/extensions/herdr-omp-agent-state.ts"
 # omp as the no-mistakes pi agent, and the omp overlay only daemon-spawned omp
 # loads (docs/omp.md#no-mistakes-pipeline-agent).
 factory_omp_as_pi_dir: "{{ factory_cfg.home }}/.no-mistakes/omp-as-pi"

@@ -123,6 +123,10 @@ herdr agent get <pane_id>
 
 The result carries `terminal_title` and `tokens.who`, `tokens.pr`, and so on.
 
+### Pane state
+
+Herdr learns whether an omp agent is working, blocked or idle from its own omp extension, `~/.omp/agent/extensions/herdr-omp-agent-state.ts`. With the `agents` profile on, every `./factory apply` runs `herdr integration install omp` with the herdr it installed, so a herdr upgrade refreshes the extension; apply reports a change only when herdr rewrote the file, and verification fails unless `herdr integration status` reports `omp: current`. Without the extension Herdr shows every omp agent as idle. Apply installs no integration for other agents.
+
 ## Override the layouts or turn parts off
 
 Set these keys under `factory.herdr` in `.local/host.yml`, then run `./factory apply`:

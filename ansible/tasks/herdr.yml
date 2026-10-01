@@ -180,3 +180,42 @@
   become_user: "{{ factory_cfg.user }}"
   environment: "{{ factory_user_systemd_env }}"
   when: factory_manage_services | bool
+
+# Herdr's own omp extension reports each omp pane's state (working, blocked,
+# idle) to the sidebar; without it every omp agent shows as idle. herdr refuses
+# to install it until the omp extensions directory exists. Every apply runs the
+# install so a herdr upgrade refreshes it; the checksum comparison reports a
+# change only when herdr rewrote the file.
+- name: Install Herdr's omp state integration
+  when:
+    - factory_cfg.profiles.agents | bool
+    - not ansible_check_mode
+  block:
+    - name: Ensure the omp extensions directory
+      ansible.builtin.file:
+        path: "{{ factory_herdr_omp_integration | dirname }}"
+        state: directory
+        owner: "{{ factory_cfg.user }}"
+        group: "{{ factory_group }}"
+        mode: "0755"
+      become: true
+
+    - name: Checksum the Herdr omp integration before install
+      ansible.builtin.stat:
+        path: "{{ factory_herdr_omp_integration }}"
+      become: true
+      register: factory_herdr_omp_before
+
+    - name: Run herdr integration install omp
+      ansible.builtin.command:
+        argv: ["{{ factory_herdr_bin }}", integration, install, omp]
+      changed_when: false
+
+    - name: Checksum the Herdr omp integration after install
+      ansible.builtin.stat:
+        path: "{{ factory_herdr_omp_integration }}"
+      become: true
+      register: factory_herdr_omp_after
+      changed_when: >-
+        factory_herdr_omp_after.stat.checksum | default('')
+        != factory_herdr_omp_before.stat.checksum | default('')
