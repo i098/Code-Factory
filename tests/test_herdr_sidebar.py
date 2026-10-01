@@ -207,6 +207,36 @@ def fixture(tmp_path):
             "tokens": {"who": "firstmate"},
         },
         {
+            "workspace_id": "w3",
+            "pane_id": "w3:p5",
+            "agent": "omp",
+            "terminal_title": "word " * 20 + "tail",
+            "display_agent": "word " * 15 + "word",
+            "tokens": {"who": "firstmate"},
+        },
+        {
+            "workspace_id": "w3",
+            "pane_id": "w3:p6",
+            "agent": "omp",
+            "terminal_title": "fix\x1b login",
+            "display_agent": "fix login",
+            "tokens": {"who": "firstmate"},
+        },
+        {
+            "workspace_id": "w3",
+            "pane_id": "w3:p7",
+            "agent": "omp",
+            "terminal_title": " \x00\x07 ",
+            "tokens": {"who": "firstmate"},
+        },
+        {
+            "workspace_id": "w3",
+            "pane_id": "w3:p8",
+            "agent": "omp",
+            "terminal_title": "plan\x07 it",
+            "tokens": {"who": "firstmate"},
+        },
+        {
             "workspace_id": "w4",
             "pane_id": "w4:p2",
             "agent": "omp",
@@ -368,6 +398,7 @@ def test_mobile_layout_carries_the_same_data(fixture, tmp_path):
         "w1:p3": source + labels("⎇1537 +5"),
         "w3:p2": source + ["--clear-state-labels"],
         "w3:p4": source + ["--display-agent", "u" * 80],
+        "w3:p8": source + ["--display-agent", "plan it"],
     }
 
 

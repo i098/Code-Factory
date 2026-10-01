@@ -37,6 +37,7 @@ import re
 import subprocess
 import sys
 import time
+import unicodedata
 from pathlib import Path
 
 SOURCE = "code-factory:spaces"
@@ -245,6 +246,12 @@ def shares(line: str) -> str:
     return " ".join(g + p for g, p in re.findall(r"([⚙▤⛁]) (?:\S+ )?(\d+%)", line))
 
 
+def presentation(text: str) -> str:
+    """Herdr's metadata text form: trim, drop control characters, cap at 80, trim."""
+    text = "".join(c for c in text.strip() if unicodedata.category(c) != "Cc")
+    return text[:80].strip()
+
+
 def main() -> None:
     cache_file = CACHE / "herdr-spaces.json"
     try:
@@ -390,7 +397,7 @@ def main() -> None:
             # Firstmate names its task panes through the display agent; home
             # panes are left free, so the topic can go there.
             space = last.get(pane["workspace_id"], {})
-            title = (pane.get("terminal_title") or "").strip()[:80]
+            title = presentation(pane.get("terminal_title") or "")
             if title and pane.get("display_agent") != title:
                 args += ["--display-agent", title]
         text = tight(
