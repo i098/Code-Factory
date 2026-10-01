@@ -53,6 +53,9 @@
             },
             "fleet_guards": {
               "type": "boolean"
+            },
+            "editor": {
+              "type": "boolean"
             }
           },
           "required": [

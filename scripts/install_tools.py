@@ -4,9 +4,10 @@
 Stdlib-only: also bootstraps uv before repository dependencies exist. stdout is
 one JSON result; installer progress goes to stderr. Existing unmanaged commands
 are never replaced. Archives cannot write outside their staging directory.
-Every tool is pinned in the lock except herdr and omp, which track their latest
-release: herdr is verified against the SHA-256 its GitHub release publishes,
-omp against the integrity npm records for the resolved version.
+Every tool is pinned in the lock except herdr, nvim, yazi and omp, which track
+their latest release: herdr, nvim and yazi are verified against the SHA-256
+their GitHub release publishes, omp against the integrity npm records for the
+resolved version.
 """
 
 import argparse
@@ -28,7 +29,9 @@ import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
 
-HERDR_LATEST = "https://api.github.com/repos/herdrdev/herdr/releases/latest"
+GITHUB_LATEST = "https://api.github.com/repos/{}/releases/latest"
+HERDR_LATEST = GITHUB_LATEST.format("herdrdev/herdr")
+LATEST_TOOLS = ("herdr", "nvim", "yazi")
 OMP_PACKAGE = "@oh-my-pi/pi-coding-agent"
 
 
@@ -48,45 +51,66 @@ def platform_key():
     return "linux-" + machine
 
 
-def resolve_latest(key):
-    """The newest herdr release as a lock-shaped spec, and the newest omp version."""
+def github_latest(repo, name, kind, binaries, key):
+    """The newest release of repo as a lock-shaped spec for its asset name."""
     # Unauthenticated GitHub API calls share a 60/hour budget per IP.
     token = os.environ.get("GITHUB_TOKEN")
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
         with urllib.request.urlopen(
-            urllib.request.Request(HERDR_LATEST, headers=headers), timeout=60
+            urllib.request.Request(GITHUB_LATEST.format(repo), headers=headers), timeout=60
         ) as response:
             release = json.load(response)
     except urllib.error.HTTPError as error:
         raise ValueError(
-            f"cannot resolve the latest herdr release (HTTP {error.code}); "
+            f"cannot resolve the latest {repo} release (HTTP {error.code}); "
             "if rate limited, set GITHUB_TOKEN and re-run"
         ) from None
     version = release["tag_name"].removeprefix("v")
-    name = f"herdr-{key}"
     asset = next((a for a in release["assets"] if a["name"] == name), {})
     checksum = (asset.get("digest") or "").removeprefix("sha256:")
     if not re.fullmatch(r"[0-9a-f]{64}", checksum):
         raise ValueError(
-            f"herdr {version} publishes no SHA-256 for {name}; refusing an unverified binary"
+            f"{repo} {version} publishes no SHA-256 for {name}; refusing an unverified binary"
         )
-    herdr = {
+    return {
         "version": version,
         "assets": {
             key: {
                 "url": asset["browser_download_url"],
                 "sha256": checksum,
-                "format": "file",
-                "binaries": {"herdr": "herdr"},
+                "format": kind,
+                "binaries": binaries,
             }
         },
+    }
+
+
+def resolve_latest(key):
+    """The newest herdr, nvim and yazi releases as lock-shaped specs, and the newest omp version."""
+    arch = key.removeprefix("linux-")
+    latest = {
+        "herdr": github_latest("herdrdev/herdr", f"herdr-{key}", "file", {"herdr": "herdr"}, key),
+        "nvim": github_latest(
+            "neovim/neovim",
+            f"nvim-linux-{'arm64' if arch == 'aarch64' else arch}.tar.gz",
+            "tar",
+            {"nvim": "*/bin/nvim"},
+            key,
+        ),
+        "yazi": github_latest(
+            "sxyazi/yazi",
+            f"yazi-{arch}-unknown-linux-gnu.zip",
+            "zip",
+            {"yazi": "*/yazi", "ya": "*/ya"},
+            key,
+        ),
     }
     with urllib.request.urlopen(
         f"https://registry.npmjs.org/{OMP_PACKAGE}/latest", timeout=60
     ) as response:
-        omp = json.load(response)["version"]
-    return {"herdr": herdr, "omp": omp}
+        latest["omp"] = json.load(response)["version"]
+    return latest
 
 
 def download(url, checksum, destination):
@@ -385,7 +409,9 @@ def main():
     parser.add_argument("--npm", action="store_true")
     parser.add_argument("--development", action="store_true")
     parser.add_argument(
-        "--resolve", action="store_true", help="print the latest herdr and omp as JSON and exit"
+        "--resolve",
+        action="store_true",
+        help="print the latest herdr, nvim, yazi and omp as JSON and exit",
     )
     parser.add_argument(
         "--resolved", type=json.loads, help="--resolve output to install instead of resolving"
@@ -406,7 +432,9 @@ def main():
         names = list(dict.fromkeys([*names, *lock["npm_required_tools"]]))
     if args.development:
         names.append("rustup-init")
-    latest = args.resolved or (resolve_latest(key) if "herdr" in names or args.npm else {})
+    latest = args.resolved or (
+        resolve_latest(key) if set(LATEST_TOOLS) & set(names) or args.npm else {}
+    )
     environment = {
         **os.environ,
         "HOME": str(home),
@@ -418,7 +446,7 @@ def main():
         fcntl.flock(guard, fcntl.LOCK_EX)
         changed = False
         for name in names:
-            spec = latest["herdr"] if name == "herdr" else lock["tools"][name]
+            spec = latest[name] if name in LATEST_TOOLS else lock["tools"][name]
             changed = install_asset(home, name, spec, key) or changed
         if args.npm:
             changed = npm_install(args.lock.resolve().parent, home, environment) or changed

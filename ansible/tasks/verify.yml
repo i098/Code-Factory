@@ -5,8 +5,9 @@
 # changed_when: false, so verification can never make a second apply report a
 # change. Individual task files already assert their own outputs; this file
 # checks the wiring that crosses them - the Herdr and omp releases this run
-# resolved, the static enablement symlinks, the managed shell environment, the pruner runtime, the
-# Firstmate revision this run resolved and the loopback-only desktop listeners.
+# resolved, the editor releases and configuration, the static enablement
+# symlinks, the managed shell environment, the pruner runtime, the Firstmate
+# revision this run resolved and the loopback-only desktop listeners.
 #
 # A check-mode run cannot observe files it did not create, so verification
 # reports what it would check instead of failing a plan.
@@ -44,6 +45,11 @@
              + ([factory_chrome_devtools_mcp_path, factory_omp_sidebar_extension,
                  factory_omp_status_icons_extension]
                 if (factory_cfg.profiles.agents | bool) else [])
+             + ([factory_local_bin ~ '/nvim',
+                 factory_local_bin ~ '/yazi',
+                 factory_local_bin ~ '/ya']
+                + (factory_editor_config_files | map(attribute='dest') | list)
+                if (factory_cfg.profiles.editor | bool) else [])
              + ([factory_pruner_script,
                  factory_pruner_python,
                  factory_pruner_stamp,
@@ -209,6 +215,75 @@
           "{{ factory_verify_omp_link.stat.lnk_source | default('(missing)') }}".
         quiet: true
       when: factory_cfg.profiles.agents | bool
+
+    # --- the editor runs the resolved releases and loads cleanly -----------
+
+    - name: Stat the managed nvim, yazi and ya symlinks
+      ansible.builtin.stat:
+        path: "{{ factory_local_bin }}/{{ item.name }}"
+        follow: false
+        get_checksum: false
+      become: true
+      loop:
+        - { name: nvim, tool: nvim, version: "{{ factory_nvim_version }}" }
+        - { name: yazi, tool: yazi, version: "{{ factory_yazi_version }}" }
+        - { name: ya, tool: yazi, version: "{{ factory_yazi_version }}" }
+      register: factory_verify_editor_links
+      changed_when: false
+      check_mode: false
+      when: factory_cfg.profiles.editor | bool
+
+    - name: Assert nvim, yazi and ya are the releases this run resolved
+      ansible.builtin.assert:
+        that:
+          - (item.stat.lnk_source | default('')).startswith(factory_tools_root ~ '/' ~ item.item.tool ~ '/' ~ item.item.version ~ '/')
+        fail_msg: >-
+          `{{ item.item.name }}` must run {{ item.item.tool }} {{ item.item.version }},
+          the latest release this run resolved, from {{ factory_tools_root }}.
+          The symlink points at "{{ item.stat.lnk_source | default('(missing)') }}".
+        quiet: true
+      loop: "{{ factory_verify_editor_links.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when: factory_cfg.profiles.editor | bool
+
+    # Opening a file also loads the buffer-event plugins (treesitter,
+    # gitsigns, colorizer, matchup), not just the startup ones.
+    - name: Load the Neovim configuration headless
+      ansible.builtin.command:
+        argv:
+          - "{{ factory_local_bin }}/nvim"
+          - --headless
+          - -i
+          - NONE
+          - "{{ factory_cfg.home }}/.config/nvim/init.lua"
+          - "+lua if vim.v.errmsg ~= '' then vim.cmd.cquit() end"
+          - +qa
+      register: factory_verify_nvim_load
+      changed_when: false
+      failed_when: >-
+        factory_verify_nvim_load.rc != 0
+        or factory_verify_nvim_load.stderr is search('E[0-9]+:|[Ee]rror')
+      when: factory_cfg.profiles.editor | bool
+
+    - name: Assert checkhealth reports no lazy.nvim or nvim-treesitter errors
+      ansible.builtin.command:
+        argv:
+          - "{{ factory_local_bin }}/nvim"
+          - --headless
+          - -i
+          - NONE
+          - "+Lazy! load nvim-treesitter"
+          - "+checkhealth lazy nvim-treesitter"
+          - '+lua io.stdout:write(table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"))'
+          - +qa
+      register: factory_verify_nvim_health
+      changed_when: false
+      failed_when: >-
+        factory_verify_nvim_health.rc != 0
+        or 'nvim-treesitter:' not in factory_verify_nvim_health.stdout
+        or 'ERROR' in factory_verify_nvim_health.stdout
+      when: factory_cfg.profiles.editor | bool
 
     # --- managed shell environment -----------------------------------------
 

@@ -15,7 +15,8 @@
       {{ ['python3', factory_installer,
           '--lock', factory_lock_file,
           '--home', factory_cfg.home,
-          '--tools', factory_core_tools | join(','),
+          '--tools', (factory_core_tools + (factory_editor_tools
+                      if (factory_cfg.profiles.editor | bool) else [])) | join(','),
           '--resolved', factory_latest | to_json]
          + (['--npm'] if (factory_cfg.profiles.agents | bool) else [])
          + (['--development'] if (factory_cfg.profiles.development | bool) else []) }}

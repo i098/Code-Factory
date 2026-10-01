@@ -1,0 +1,55 @@
+---
+# Neovim and yazi with the operator's configuration.
+#
+# The binaries come from the installer at their latest release
+# (tasks/tools.yml). Here the tracked configuration is rewritten on every
+# apply, then every lazy.nvim plugin and every treesitter parser the
+# configuration lists moves to its latest revision. No lazy-lock.json is
+# shipped or restored: lazy.nvim writes its own after each sync as a record,
+# never as a pin.
+
+- name: Ensure the editor configuration directories
+  ansible.builtin.file:
+    path: "{{ item.dest | dirname }}"
+    state: directory
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0755"
+  become: true
+  loop: "{{ factory_editor_config_files }}"
+  loop_control:
+    label: "{{ item.dest | dirname }}"
+
+- name: Install the editor configuration
+  ansible.builtin.copy:
+    src: "{{ code_factory_repo }}/{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0644"
+    remote_src: true
+  become: true
+  loop: "{{ factory_editor_config_files }}"
+  loop_control:
+    label: "{{ item.dest }}"
+
+# The sync clones, fetches and compiles, so a plan reports it instead.
+- name: Report the plugin and parser sync in check mode
+  ansible.builtin.debug:
+    msg: >-
+      check mode: would sync every lazy.nvim plugin and treesitter parser to
+      its latest revision with {{ factory_local_bin }}/nvim --headless.
+  when: ansible_check_mode
+
+# maintenance/nvim-sync.lua prints "nvim-sync: changed" only when a plugin or
+# parser moved, so an apply with nothing new upstream reports no change.
+- name: Sync lazy.nvim plugins and treesitter parsers to their latest revisions
+  ansible.builtin.command:
+    argv:
+      - "{{ factory_local_bin }}/nvim"
+      - --headless
+      - "+luafile {{ factory_nvim_sync_script }}"
+      - +cquit
+  register: factory_nvim_sync
+  changed_when: "'nvim-sync: changed' in factory_nvim_sync.stdout"
+  when: not ansible_check_mode

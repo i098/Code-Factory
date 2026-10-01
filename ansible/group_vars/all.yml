@@ -24,11 +24,14 @@ factory_lock_file: "{{ code_factory_repo }}/toolchain.lock.json"
 factory_pruner_source: "{{ code_factory_repo }}/maintenance/chrome-autoprune.py"
 factory_pruner_requirements: "{{ code_factory_repo }}/maintenance/requirements.txt"
 
-# herdr and omp track their latest release: tasks/preflight.yml resolves them
-# once per run into factory_latest, and that is what the run installs and
-# tasks/verify.yml asserts. Every other version comes from the reviewed lock.
+# herdr, nvim, yazi and omp track their latest release: tasks/preflight.yml
+# resolves them once per run into factory_latest, and that is what the run
+# installs and tasks/verify.yml asserts. Every other version comes from the
+# reviewed lock.
 factory_herdr_version: "{{ factory_latest.herdr.version }}"
 factory_omp_version: "{{ factory_latest.omp }}"
+factory_nvim_version: "{{ factory_latest.nvim.version }}"
+factory_yazi_version: "{{ factory_latest.yazi.version }}"
 
 # --- Platform ---------------------------------------------------------------
 factory_platform_map:
@@ -172,8 +175,27 @@ factory_desktop_packages:
   # `ss` is how tasks/verify.yml proves both listeners stayed on loopback.
   - iproute2
 
+# Editor profile: the C compiler builds treesitter parsers; luarocks and lua5.1
+# let lazy.nvim's health check pass without its hererocks fallback.
+factory_editor_packages:
+  - build-essential
+  - luarocks
+  - lua5.1
+
 # --- Tool installer ---------------------------------------------------------
 factory_core_tools: [herdr, node, bun, uv]
+factory_editor_tools: [nvim, yazi]
+
+# --- Editor (profiles.editor) -----------------------------------------------
+# Managed: every apply rewrites these, so the repository stays the source of
+# truth. Nothing else under ~/.config is touched, and no lazy-lock.json is
+# shipped: plugins and parsers move to their latest revision on every apply.
+factory_editor_config_files:
+  - src: config/nvim/init.lua
+    dest: "{{ factory_cfg.home }}/.config/nvim/init.lua"
+  - src: config/yazi/yazi.toml
+    dest: "{{ factory_cfg.home }}/.config/yazi/yazi.toml"
+factory_nvim_sync_script: "{{ code_factory_repo }}/maintenance/nvim-sync.lua"
 
 # --- Herdr static config ----------------------------------------------------
 # Only the reviewed, non-secret subset is templated. experimental.pane_history

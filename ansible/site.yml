@@ -65,6 +65,16 @@
         - factory_cfg.profiles.agents | bool
       tags: [agents]
 
+    - name: Neovim and yazi configuration, plugins and treesitter parsers
+      ansible.builtin.import_tasks: tasks/editor.yml
+      become: "{{ factory_become_target | bool }}"
+      become_user: "{{ factory_cfg.user }}"
+      environment: "{{ factory_user_env }}"
+      when:
+        - factory_account_ready | bool
+        - factory_cfg.profiles.editor | bool
+      tags: [editor]
+
     - name: Chrome AXI bridge pruning unit and timer
       ansible.builtin.import_tasks: tasks/browser_prune.yml
       become: "{{ factory_become_target | bool }}"

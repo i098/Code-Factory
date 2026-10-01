@@ -13,6 +13,7 @@ factory:
     tailscale: false
     desktop: false
     fleet_guards: false
+    editor: true
   herdr:
     theme: catppuccin
     toast_delivery: herdr

@@ -230,13 +230,14 @@ herdr_installed_bin() {
 # A second apply resolves upstream again and upgrades an image that upstream
 # has since overtaken; that is an upgrade, not a repeat change.
 image_is_current() {
-    local latest
+    local latest versions
+    versions='[.herdr.version, .nvim.version, .yazi.version, .omp]'
     latest=$(python3 "${CF_ROOT}/scripts/install_tools.py" --lock "${CF_ROOT}/toolchain.lock.json" \
-        --home "${HOME}" --resolve) || fail "could not resolve the latest herdr and omp releases"
-    [ "$(jq -c '[.herdr.version, .omp]' <<<"${latest}")" = "$(jq -c '[.herdr.version, .omp]' "${RESOLVED_STAMP}")" ] \
+        --home "${HOME}" --resolve) || fail "could not resolve the latest herdr, nvim, yazi and omp releases"
+    [ "$(jq -c "${versions}" <<<"${latest}")" = "$(jq -c "${versions}" "${RESOLVED_STAMP}")" ] \
         && return 0
     printf 'image has %s but upstream now has %s; idempotence not measured\n' \
-        "$(jq -c '[.herdr.version, .omp]' "${RESOLVED_STAMP}")" "$(jq -c '[.herdr.version, .omp]' <<<"${latest}")"
+        "$(jq -c "${versions}" "${RESOLVED_STAMP}")" "$(jq -c "${versions}" <<<"${latest}")"
     return 1
 }
 
@@ -396,6 +397,35 @@ check_npm_tooling() {
     # Support binaries are only probed for presence: no agent CLI is executed
     # here, so nothing can trigger first-run authentication or profile creation.
     printf '%s npm-linked commands resolve into %s\n' "${linked}" "${npm_root}"
+}
+
+# Editor profile: nvim, yazi and ya are the releases the build resolved, the
+# tracked configuration is in place byte for byte, Neovim loads it headless
+# with no error, and checkhealth reports no lazy.nvim or nvim-treesitter error.
+check_editor() {
+    local row tool version banner err health
+    for row in nvim:nvim yazi:yazi ya:yazi; do
+        tool=${row%%:*}
+        version=$(resolved_version ".${row#*:}.version")
+        banner=$("${HOME}/.local/bin/${tool}" --version 2>&1) || fail "${tool} --version exited nonzero: ${banner}"
+        case "${banner}" in
+            *"${version}"*) ;;
+            *) fail "${tool} reports '${banner%%$'\n'*}' but the build resolved ${version}" ;;
+        esac
+    done
+    cmp -s "${CF_ROOT}/config/nvim/init.lua" "${HOME}/.config/nvim/init.lua" || fail "~/.config/nvim/init.lua differs from config/nvim/init.lua"
+    cmp -s "${CF_ROOT}/config/yazi/yazi.toml" "${HOME}/.config/yazi/yazi.toml" || fail "~/.config/yazi/yazi.toml differs from config/yazi/yazi.toml"
+    err=$("${HOME}/.local/bin/nvim" --headless -i NONE "${HOME}/.config/nvim/init.lua" \
+        "+lua if vim.v.errmsg ~= '' then vim.cmd.cquit() end" +qa 2>&1 >/dev/null) \
+        || fail "nvim exited nonzero loading the configuration: ${err}"
+    ! grep -Eq 'E[0-9]+:|[Ee]rror' <<<"${err}" || fail "nvim reported an error loading the configuration: ${err}"
+    health=$("${HOME}/.local/bin/nvim" --headless -i NONE "+Lazy! load nvim-treesitter" "+checkhealth lazy nvim-treesitter" \
+        '+lua io.stdout:write(table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"))' +qa 2>/dev/null) \
+        || fail "nvim checkhealth exited nonzero"
+    grep -q 'nvim-treesitter:' <<<"${health}" || fail "checkhealth did not run the nvim-treesitter check"
+    ! grep -q ERROR <<<"${health}" || fail "checkhealth reports errors: $(grep ERROR <<<"${health}" | tr '\n' ' ')"
+    printf 'nvim %s and yazi %s; the configuration loads headless and checkhealth lazy, nvim-treesitter is clean\n' \
+        "$(resolved_version .nvim.version)" "$(resolved_version .yazi.version)"
 }
 
 check_development_toolchain() {
@@ -670,7 +700,7 @@ check_installer_idempotent() {
     out=$(python3 "${CF_ROOT}/scripts/install_tools.py" \
             --lock "${CF_ROOT}/toolchain.lock.json" \
             --home "${HOME}" \
-            --tools herdr,node,bun,uv \
+            --tools herdr,node,bun,uv,nvim,yazi \
             --resolved "$(cat "${RESOLVED_STAMP}")" \
             --npm --development 2>&1) || {
         printf '%s\n' "${out}" | tail -n 20
@@ -799,6 +829,7 @@ container_mode() {
     run_check herdr-unit                   check_herdr_unit
     run_check npm-tooling                  check_npm_tooling
     run_check development-toolchain        check_development_toolchain
+    run_check editor                       check_editor
     run_check login-shell-environment      check_login_shell_environment
     run_check agent-gate                   check_agent_gate
     run_check no-baked-credentials         check_no_baked_credentials

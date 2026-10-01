@@ -96,45 +96,68 @@ def test_download_rejects_plain_http(tmp_path):
         installer.download("http://example.test/tool", "0" * 64, tmp_path / "download")
 
 
-def release(digest):
-    asset = {
-        "name": "herdr-linux-x86_64",
-        "browser_download_url": "https://github.com/herdrdev/herdr/releases/download/v9.9.9/herdr-linux-x86_64",
-        "digest": digest,
-    }
-    return {"tag_name": "v9.9.9", "assets": [asset]}
+ASSETS = {
+    "linux-x86_64": [
+        "herdr-linux-x86_64",
+        "nvim-linux-x86_64.tar.gz",
+        "yazi-x86_64-unknown-linux-gnu.zip",
+    ],
+    "linux-aarch64": [
+        "herdr-linux-aarch64",
+        "nvim-linux-arm64.tar.gz",
+        "yazi-aarch64-unknown-linux-gnu.zip",
+    ],
+}
 
 
-def registries(monkeypatch, herdr_release):
+def release(digest, key="linux-x86_64"):
+    assets = [
+        {
+            "name": name,
+            "browser_download_url": f"https://github.com/example/releases/download/v9.9.9/{name}",
+            "digest": digest,
+        }
+        for name in ASSETS[key]
+    ]
+    return {"tag_name": "v9.9.9", "assets": assets}
+
+
+def registries(monkeypatch, github_release):
     def urlopen(url, **kwargs):
         url = getattr(url, "full_url", url)
-        body = herdr_release if url == installer.HERDR_LATEST else {"version": "18.9.9"}
+        github = url.startswith("https://api.github.com/")
+        body = github_release if github else {"version": "18.9.9"}
         return io.BytesIO(json.dumps(body).encode())
 
     monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
 
 
-def test_latest_herdr_is_pinned_to_the_digest_its_release_publishes(monkeypatch):
-    registries(monkeypatch, release("sha256:" + "a" * 64))
-    latest = installer.resolve_latest("linux-x86_64")
+@pytest.mark.parametrize("key", ASSETS)
+def test_latest_releases_are_pinned_to_the_digests_they_publish(monkeypatch, key):
+    registries(monkeypatch, release("sha256:" + "a" * 64, key))
+    latest = installer.resolve_latest(key)
     assert latest["omp"] == "18.9.9"
-    assert latest["herdr"]["version"] == "9.9.9"
-    assert latest["herdr"]["assets"]["linux-x86_64"]["sha256"] == "a" * 64
+    for tool, kind in [("herdr", "file"), ("nvim", "tar"), ("yazi", "zip")]:
+        asset = latest[tool]["assets"][key]
+        assert latest[tool]["version"] == "9.9.9"
+        assert asset["sha256"] == "a" * 64
+        assert asset["format"] == kind
+    assert latest["yazi"]["assets"][key]["binaries"] == {"yazi": "*/yazi", "ya": "*/ya"}
 
 
 @pytest.mark.parametrize("digest", [None, "", "md5:abc"])
-def test_herdr_release_without_a_checksum_is_refused(monkeypatch, digest):
+def test_release_without_a_checksum_is_refused(monkeypatch, digest):
     registries(monkeypatch, release(digest))
     with pytest.raises(ValueError, match="refusing an unverified binary"):
         installer.resolve_latest("linux-x86_64")
 
 
 @pytest.mark.parametrize(("env", "expected"), [("env-token", "Bearer env-token"), ("", None)])
-def test_herdr_lookup_authenticates_with_github_token_else_anonymous(monkeypatch, env, expected):
+def test_github_lookups_authenticate_with_github_token_else_anonymous(monkeypatch, env, expected):
     seen = []
 
     def urlopen(url, **kwargs):
-        if getattr(url, "full_url", url) == installer.HERDR_LATEST:
+        if getattr(url, "full_url", url).startswith("https://api.github.com/"):
             seen.append(url.get_header("Authorization"))
             return io.BytesIO(json.dumps(release("sha256:" + "a" * 64)).encode())
         return io.BytesIO(json.dumps({"version": "18.9.9"}).encode())
@@ -142,4 +165,4 @@ def test_herdr_lookup_authenticates_with_github_token_else_anonymous(monkeypatch
     monkeypatch.setenv("GITHUB_TOKEN", env)
     monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
     installer.resolve_latest("linux-x86_64")
-    assert seen == [expected]
+    assert seen == [expected] * 3

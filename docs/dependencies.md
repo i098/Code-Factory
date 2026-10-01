@@ -23,6 +23,7 @@ Not pinned: every `./factory apply` resolves the newest release, installs exactl
 
 - Always: herdr, the latest [herdrdev/herdr release](https://github.com/herdrdev/herdr/releases/latest), verified against the SHA-256 the release publishes for the platform asset. A release that publishes no checksum fails the apply instead of installing an unverified binary. The lookup uses the GitHub API, which allows 60 unauthenticated requests an hour per IP (shared IPs such as CI runners exhaust it). The lookup authenticates with `GITHUB_TOKEN` from the environment that runs `./factory apply`, else runs unauthenticated. Container builds take the token as the optional BuildKit secret `github_token` (`docker build --secret id=github_token,env=GITHUB_TOKEN ...`), so it never lands in the image. An upgrade rewrites and restarts `herdr.service`.
 - `agents` profile: omp (`@oh-my-pi/pi-coding-agent`), the npm registry's `latest` version, installed with `npm install` into `~/.local/share/code-factory/omp/<version>` (npm checks the registry integrity). Superseded versions stay on disk.
+- `editor` profile: Neovim, the latest stable [neovim/neovim release](https://github.com/neovim/neovim/releases/latest) (`nvim-linux-<arch>.tar.gz`), and yazi with `ya`, the latest [sxyazi/yazi release](https://github.com/sxyazi/yazi/releases/latest) (`yazi-<arch>-unknown-linux-gnu.zip`). Both are verified against the SHA-256 the release publishes, the same way as herdr; a release without one fails the apply. Every apply also moves the lazy.nvim plugins and the configured treesitter parsers to their latest upstream revisions.
 
 ## Agent CLIs
 
@@ -39,6 +40,7 @@ Not pinned: every `./factory apply` resolves the newest release, installs exactl
 - `development`: build-essential, pkg-config, libssl-dev, python3-dev, cmake, ripgrep.
 - `docker`: docker.io, docker-compose-v2 (Ubuntu's packages, never Docker CE).
 - `desktop`: xfce4, xfce4-terminal, dbus-x11, xauth, x11-xserver-utils, fonts-dejavu-core, tigervnc-standalone-server, tigervnc-common, tigervnc-tools, novnc, websockify, iproute2.
+- `editor`: build-essential (compiles treesitter parsers), luarocks, lua5.1 (lazy.nvim's health check).
 - `tailscale`: `tailscale` from pkgs.tailscale.com, stable track. `factory_tailscale_version` pins it; empty by default.
 - Google Chrome: `google-chrome-stable` from dl.google.com (`ansible/tasks/browser.yml`). Installed when `factory_chrome_install` is `true`, or `auto` (the default) with the `desktop` profile. `factory_chrome_version` pins it; empty by default.
 
