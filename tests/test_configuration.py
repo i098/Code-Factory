@@ -1,6 +1,7 @@
 import argparse
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -597,9 +598,9 @@ def test_a_new_chrome_devtools_mcp_release_leaves_the_managed_environment_unchan
     )
 
 
-def _ansible(tmp_path, *argv):
+def _ansible(tmp_path, *argv, wrapper=()):
     return subprocess.run(
-        [Path(sys.executable).parent / argv[0], *argv[1:]],
+        [*wrapper, Path(sys.executable).parent / argv[0], *argv[1:]],
         cwd=tmp_path,
         capture_output=True,
         text=True,
@@ -729,6 +730,12 @@ def _run_koncreet_tasks(tmp_path, digest, *flags):
         "factory_koncreet_prefix": str(tmp_path / "prefix"),
         "factory_koncreet_config": str(tmp_path / "koncreet.conf"),
     }
+    # koncreet.yml hands its files to root. Unprivileged, the chown fails before the
+    # download is ever checked, so a digest test would pass for the wrong reason.
+    # Plan mode (--check) creates nothing and needs no root.
+    wrapper = () if os.geteuid() == 0 or "--check" in flags else ("fakeroot",)
+    if wrapper and not shutil.which("fakeroot"):
+        pytest.skip("koncreet.yml chowns to root: run as root or install fakeroot")
     return _ansible(
         tmp_path,
         "ansible-playbook",
@@ -738,6 +745,7 @@ def _run_koncreet_tasks(tmp_path, digest, *flags):
         "--extra-vars",
         json.dumps(variables),
         *flags,
+        wrapper=wrapper,
     )
 
 
@@ -745,6 +753,7 @@ def test_a_koncreet_tarball_that_fails_its_digest_is_skipped_and_apply_continues
     result = _run_koncreet_tasks(tmp_path, "0" * 64)
     assert result.returncode == 0, result.stdout
     assert "WARNING: koncreet skipped" in result.stdout
+    assert "Fetch the koncreet tarball: The checksum for" in result.stdout
     assert (tmp_path / "later").exists()
     assert not list((tmp_path / "prefix").rglob("patch-outcome"))
     assert not list((tmp_path / "prefix").rglob("*.tar.gz"))
