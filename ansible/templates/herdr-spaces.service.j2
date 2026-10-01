@@ -1,7 +1,8 @@
 {{ ansible_managed | comment }}
 # Triggered by herdr-spaces.timer; not enabled on its own. Reports per-home
-# rollups to the Herdr Spaces sidebar (docs/herdr.md). Display-only: it never
-# changes Herdr state beyond workspace metadata tokens.
+# rollups to the Herdr Spaces sidebar and the phone layout (docs/herdr.md).
+# Display-only: it writes workspace and pane metadata and renames the machine
+# workspace's first tab, nothing else.
 
 [Unit]
 Description=Report per-home rollups to the Herdr Spaces sidebar (Code Factory managed)

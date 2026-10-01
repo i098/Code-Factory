@@ -210,4 +210,3 @@ It copies the host's `sidebar_width`, `sidebar_max_width`, `[ui.sidebar.agents]`
 - CPU and RAM count only processes the reporter's account can read, and RAM is resident memory, so shared pages count once per process. CPU counts a process only while two runs a second apart both see it: a process that starts and ends between two runs is not counted, and the time before the first run that sees it or after the last is lost, so a space running many short builds reads low.
 - The machine line's parts are single-spaced so it fits even with CPU at 100% and memory and disk at 99%: after the `machine` entry's state dot, or two columns in under the primary home's name, where Herdr shows 40 columns at width 46. At 100%, or on a narrower sidebar, Herdr cuts its end.
 - Herdr sidebar styles offer color, bold and dim only: no italic and no thinner weight.
-- The phone layout's fields are plain text: no colors, and one line per entry.
