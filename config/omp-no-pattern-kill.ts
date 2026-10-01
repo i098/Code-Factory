@@ -17,21 +17,19 @@ interface GuardExtensionApi {
 	on(event: "tool_call", handler: (event: ToolCallEvent) => Promise<ToolCallResult>): void;
 }
 
-const WRAPPERS = String.raw`(?:(?:sudo|doas|xargs|env|exec|nohup|time|command|setsid)\s+(?:-\S+\s+)*|\w+=\S*\s+)*`;
-const NAME_KILL = String.raw`${WRAPPERS}(?:[\w.~-]*/)*(?:pkill|killall)(?=[\s;&|)"'\x60,\]]|$)`;
-const SHELL_LEAD = String.raw`(?:^|[;&|(){\x60]|\$\(|\b(?:then|do|else)\s)\s*`;
-const CALL_LEAD = String.raw`[(\[]\s*["']`;
+const SEP = String.raw`[\s"',]+`;
+const OPTS = String.raw`(?:-[\w=.{}-]+${SEP}(?:\w+${SEP})?)*`;
+const LEAD = String.raw`(?:^|[;&|({\[\x60]|\$\(|\b(?:if|elif|then|else|do|while|until)\s)\s*(?:!\s*)?["']?`;
+const WRAPPERS = String.raw`(?:(?:sudo|doas|env|exec|nohup|time|setsid|xargs|nice|ionice|stdbuf|(?:ba|z|da|k)?sh)${SEP}${OPTS}|timeout${SEP}${OPTS}\d\w*${SEP}|(?:ssh|(?:docker|podman|kubectl)${SEP}exec)${SEP}${OPTS}\S+?${SEP}|\w+=\S*${SEP})*`;
+const NAME = String.raw`(?:[\w.~-]*/)*(?:pkill|killall)(?!["']\s*\))(?=[\s;&|)"'\x60,\]]|$)`;
+const SELECTOR = String.raw`\b(?:pgrep|pidof|ps|grep|awk)\b`;
 
-const SELECTED_KILLS: RegExp[] = [
-	/\b(?:pgrep|pidof|ps|grep|awk)\b[^\n;]*\|\s*xargs\b[^\n;]*\bkill\b/, // pgrep ... | xargs kill
-	/\b(?:pgrep|pidof|ps|grep|awk)\b[^\n]*\|\s*while\b[^\n]*\bkill\b/, // pgrep ... | while read p; do kill $p
-	/\bkill\b[^\n;]*(?:\$\(|\x60)\s*(?:pgrep|pidof)\b/, // kill $(pgrep ...)
+const PATTERN_KILLS: RegExp[] = [
+	new RegExp(LEAD + WRAPPERS + NAME, "m"), // pkill / killall by name or pattern
+	new RegExp(String.raw`${SELECTOR}[^\n;]*\|\s*xargs\s+${OPTS}kill\b`), // pgrep ... | xargs kill
+	new RegExp(String.raw`${SELECTOR}[^\n]*\|\s*while\b[^\n]*\bdo\s+kill\b`), // pgrep ... | while read p; do kill $p
+	new RegExp(String.raw`\bkill\b[^\n;&|]*(?:\$\(|\x60)[^)\x60\n]*\b(?:pgrep|pidof|grep|awk)\b`), // kill $(ps ... | grep ...)
 ];
-
-const KILLS = {
-	bash: [new RegExp(SHELL_LEAD + NAME_KILL, "m"), ...SELECTED_KILLS],
-	eval: [new RegExp(`(?:${SHELL_LEAD}|${CALL_LEAD}\\s*)${NAME_KILL}`, "m"), ...SELECTED_KILLS],
-};
 
 const REASON =
 	"Blocked: pkill/killall and kill-by-pgrep select processes by name or command line, " +
@@ -44,6 +42,6 @@ export default function (pi: GuardExtensionApi) {
 		const tool = event.toolName;
 		if (tool !== "bash" && tool !== "eval") return {};
 		const text = event.input?.[tool === "bash" ? "command" : "code"];
-		return typeof text === "string" && KILLS[tool].some((re) => re.test(text)) ? { block: true, reason: REASON } : {};
+		return typeof text === "string" && PATTERN_KILLS.some((re) => re.test(text)) ? { block: true, reason: REASON } : {};
 	});
 }

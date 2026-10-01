@@ -26,6 +26,19 @@ BLOCKED = [
     "ps aux | grep omp | awk '{print $2}' | xargs kill",
     "kill $(pidof omp)",
     "pgrep omp | while read p; do kill $p; done",
+    "bash -c 'pkill -f omp'",
+    'sh -c "killall node"',
+    "timeout 5 pkill -f omp",
+    "nice pkill -f omp",
+    "ssh host pkill -f omp",
+    "docker exec c pkill node",
+    "if pkill -f omp; then echo gone; fi",
+    "! pkill -f omp",
+    "sudo -u root pkill node",
+    "echo omp | xargs -r pkill",
+    "python3 -c \"import os; os.system('pkill -f x')\"",
+    "kill -9 $(ps aux | grep omp | awk '{print $2}')",
+    "kill `ps aux | grep omp | awk '{print $2}'`",
 ]
 ALLOWED = [
     'cmd & pid=$!; kill "$pid"',
@@ -36,15 +49,26 @@ ALLOWED = [
     "rg killall",
     'git commit -m "drop pkill use"',
     "man pkill",
+    "docker ps -q | xargs docker kill",
+    "command -v pkill",
+    "git ls-files | xargs grep -n pkill",
+    "ssh host grep pkill /etc/notes",
+    "grep -c pkill docs/omp.md",
+    'kill "$pid" && echo $(grep -c x f)',
 ]
 EVAL_BLOCKED = [
     'import subprocess\nsubprocess.run(["pkill", "-f", "omp"])',
     'import os\nos.system("killall node")',
     "await Bun.$`pkill -f omp`",
+    "import subprocess\nsubprocess.run(['sh', '-c', 'pkill -f omp'])",
+    'import subprocess\nsubprocess.run(\n    ["pkill", "-f", "omp"],\n    check=False,\n)',
+    'import subprocess\nsubprocess.run(\n    "killall node",\n    shell=True,\n)',
+    "const out = 1;\nawait Bun.$`\npkill -f omp\n`",
 ]
 EVAL_ALLOWED = [
     'import subprocess\nsubprocess.run(["grep", "-rn", "pkill", "docs"])',
     'print("docs about pkill")',
+    'import shutil\nprint(shutil.which("pkill"))',
 ]
 
 
