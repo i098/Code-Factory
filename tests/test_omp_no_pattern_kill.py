@@ -39,6 +39,8 @@ BLOCKED = [
     "python3 -c \"import os; os.system('pkill -f x')\"",
     "kill -9 $(ps aux | grep omp | awk '{print $2}')",
     "kill `ps aux | grep omp | awk '{print $2}'`",
+    "A='x' B=2 pkill -f omp",
+    "ssh -p 22 host pkill -f omp",
 ]
 ALLOWED = [
     'cmd & pid=$!; kill "$pid"',
@@ -55,6 +57,8 @@ ALLOWED = [
     "ssh host grep pkill /etc/notes",
     "grep -c pkill docs/omp.md",
     'kill "$pid" && echo $(grep -c x f)',
+    'git commit -m "pkill -f x"',
+    "echo 'killall node'",
 ]
 EVAL_BLOCKED = [
     'import subprocess\nsubprocess.run(["pkill", "-f", "omp"])',
@@ -64,11 +68,21 @@ EVAL_BLOCKED = [
     'import subprocess\nsubprocess.run(\n    ["pkill", "-f", "omp"],\n    check=False,\n)',
     'import subprocess\nsubprocess.run(\n    "killall node",\n    shell=True,\n)',
     "const out = 1;\nawait Bun.$`\npkill -f omp\n`",
+    'import subprocess\nsubprocess.run(["env", "A=1", "pkill", "-f", "omp"])',
 ]
 EVAL_ALLOWED = [
     'import subprocess\nsubprocess.run(["grep", "-rn", "pkill", "docs"])',
     'print("docs about pkill")',
     'import shutil\nprint(shutil.which("pkill"))',
+]
+SLOW_INPUTS = [
+    ("eval", "f(\n" + "".join(f"    field_{i}='value',\n" for i in range(40)) + ")"),
+    ("eval", "f(" + ", ".join(f"a{i}=1" for i in range(40)) + ")"),
+    ("eval", '["env", ' + ", ".join(f'"A{i}=1"' for i in range(40)) + "]"),
+    ("eval", "[" + ", ".join(['"sh", "-c"'] * 40) + "]"),
+    ("bash", " ".join(f'A{i}="x"' for i in range(40)) + " cmd"),
+    ("bash", " ".join(["sudo -u"] * 40) + " cmd"),
+    ("bash", " ".join(["grep"] * 20000) + " x"),
 ]
 
 
@@ -82,7 +96,13 @@ ext({{ on: (_event, h) => (handler = h) }});
 const result = await handler({{ toolName: {json.dumps(tool)}, input: {{ {field}: {json.dumps(text)} }} }});
 console.log(JSON.stringify(result.block === true));
 """
-    out = subprocess.run(["bun", "-e", code], capture_output=True, text=True, check=True)
+    out = subprocess.run(
+        ["bun", "-e", code],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=4,
+    )
     return json.loads(out.stdout)
 
 
@@ -108,3 +128,8 @@ def test_allows_mentions_in_eval_code(code):
 
 def test_ignores_other_tools():
     assert not blocked("read", "pkill -f anything")
+
+
+@pytest.mark.parametrize(("tool", "text"), SLOW_INPUTS)
+def test_matching_stays_fast_on_inputs_that_match_nothing(tool, text):
+    assert not blocked(tool, text)
