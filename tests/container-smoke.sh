@@ -401,9 +401,10 @@ check_npm_tooling() {
 
 # Editor profile: nvim, yazi, ya and tree-sitter are the releases the build resolved, the
 # tracked configuration is in place byte for byte, Neovim loads it headless
-# with no error, and checkhealth reports no lazy.nvim or nvim-treesitter error.
+# with no error, checkhealth reports no lazy.nvim or nvim-treesitter error, and
+# the treesitter highlighter runs on real markdown, shell, Lua and Python files.
 check_editor() {
-    local row tool version banner err health
+    local row tool version banner err health file
     for row in nvim:nvim yazi:yazi ya:yazi 'tree-sitter:"tree-sitter"'; do
         tool=${row%%:*}
         version=$(resolved_version ".${row#*:}.version")
@@ -424,7 +425,12 @@ check_editor() {
         || fail "nvim checkhealth exited nonzero"
     grep -q 'nvim-treesitter:' <<<"${health}" || fail "checkhealth did not run the nvim-treesitter check"
     ! grep -q ERROR <<<"${health}" || fail "checkhealth reports errors: $(grep ERROR <<<"${health}" | tr '\n' ' ')"
-    printf 'nvim %s, yazi %s and tree-sitter %s; the configuration loads headless and checkhealth lazy, nvim-treesitter is clean\n' \
+    for file in README.md tests/container-smoke.sh config/nvim/init.lua scripts/install_tools.py; do
+        err=$("${HOME}/.local/bin/nvim" --headless -i NONE "${CF_ROOT}/${file}" \
+            "+luafile ${CF_ROOT}/maintenance/nvim-highlight-check.lua" +qa 2>&1 >/dev/null) \
+            || fail "treesitter highlighting failed on ${file}: ${err}"
+    done
+    printf 'nvim %s, yazi %s and tree-sitter %s; the configuration loads headless, checkhealth lazy, nvim-treesitter is clean and treesitter highlights markdown, shell, Lua and Python\n' \
         "$(resolved_version .nvim.version)" "$(resolved_version .yazi.version)" "$(resolved_version '."tree-sitter".version')"
 }
 

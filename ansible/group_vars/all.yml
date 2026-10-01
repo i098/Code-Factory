@@ -206,6 +206,14 @@ factory_editor_config_files:
   - src: config/yazi/yazi.toml
     dest: "{{ factory_cfg.home }}/.config/yazi/yazi.toml"
 factory_nvim_sync_script: "{{ code_factory_repo }}/maintenance/nvim-sync.lua"
+# Verify opens one real file per filetype with a treesitter highlighter and
+# runs this script on it (a headless load alone never attaches one).
+factory_nvim_highlight_check: "{{ code_factory_repo }}/maintenance/nvim-highlight-check.lua"
+factory_editor_highlight_files:
+  - README.md
+  - tests/container-smoke.sh
+  - config/nvim/init.lua
+  - scripts/install_tools.py
 
 # --- Herdr static config ----------------------------------------------------
 # Only the reviewed, non-secret subset is templated. experimental.pane_history

@@ -288,6 +288,24 @@
         or 'ERROR' in factory_verify_nvim_health.stdout
       when: factory_cfg.profiles.editor | bool
 
+    # Markdown and shell broke on Neovim 0.12 under a master-branch
+    # nvim-treesitter while the load and checkhealth above stayed clean, so
+    # open real markdown, shell, Lua and Python files and run the highlighter.
+    - name: Assert treesitter highlights markdown, shell, Lua and Python buffers
+      ansible.builtin.command:
+        argv:
+          - "{{ factory_local_bin }}/nvim"
+          - --headless
+          - -i
+          - NONE
+          - "{{ code_factory_repo }}/{{ item }}"
+          - "+luafile {{ factory_nvim_highlight_check }}"
+          - +qa
+      environment: "{{ factory_user_env }}"
+      changed_when: false
+      loop: "{{ factory_editor_highlight_files }}"
+      when: factory_cfg.profiles.editor | bool
+
     # --- managed shell environment -----------------------------------------
 
     - name: Read the account profile

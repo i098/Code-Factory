@@ -63,7 +63,7 @@
          + ((factory_editor_config_files
              | map(attribute='src')
              | map('regex_replace', '^', code_factory_repo ~ '/')
-             | list) + [factory_nvim_sync_script]
+             | list) + [factory_nvim_sync_script, factory_nvim_highlight_check]
             if (factory_cfg.profiles.editor | bool) else []) }}
 
 - name: Stat every required input
