@@ -53,6 +53,9 @@
             },
             "fleet_guards": {
               "type": "boolean"
+            },
+            "fleet_browsers": {
+              "type": "boolean"
             }
           },
           "required": [

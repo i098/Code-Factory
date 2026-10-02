@@ -102,8 +102,8 @@
       ansible.builtin.import_tasks: tasks/fleet-browsers.yml
       when:
         - factory_account_ready | bool
-        - factory_cfg.profiles.fleet_guards | bool
-      tags: [fleet]
+        - factory_fleet_browsers_enabled | bool
+      tags: [fleet, fleet_browsers]
 
     - name: Tailscale package installation only
       ansible.builtin.import_tasks: tasks/tailscale.yml
