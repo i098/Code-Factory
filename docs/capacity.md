@@ -54,7 +54,7 @@ Idle chrome-devtools-axi bridges come on top: each holds about 2 GB until
 | Pruner | Profile | Runs | Removes |
 | --- | --- | --- | --- |
 | `chrome-autoprune.timer` → `chrome-autoprune.py --apply` | `agents` (`browser_prune.enabled`) | every `poll_seconds` (300 s) | AXI bridge browser processes idle past `idle_seconds` (7200 s). It never touches headed, attached or persistent-profile browsers. |
-| `fleet-browser-gc.timer` | `fleet_browsers` | every 5 min | Stops browser ladder tiers 2 and 3 (`chrome`, `vnc`) after 30 idle minutes with no CDP client (`FLEET_BROWSER_IDLE_MIN`). |
+| `fleet-browser-gc.timer` | `fleet_browsers` or `fleet_guards` | every 5 min | Stops browser ladder tiers 2 and 3 (`chrome`, `vnc`) after 30 idle minutes with no CDP client (`FLEET_BROWSER_IDLE_MIN`). |
 | `flotilla-dev-server-reaper.timer` → `dev-server-reaper.sh` | `fleet_guards` | every 2 min | `next dev` / `next-server` / `tsc --noEmit` trees whose lane is done, paused, blocked or failed, has no agent, or has been idle 30 min or more (`REAPER_IDLE_MIN`). |
 | `flotilla-storage-guard.timer` → `storage-guard.sh` | `fleet_guards` | every 5 min | At CRIT (92%): build cache, dangling images, unused images older than `factory_storage_guard_image_age_hours`. Never volumes, containers, repositories, logs or home content. |
 | `flotilla-devtools-bridge-reaper.timer` → `devtools-bridge-reaper.sh` | `fleet_guards` | every 10 min | Attached chrome-devtools-axi bridges (`CHROME_DEVTOOLS_AXI_BROWSER_URL` set) whose process tree used no CPU and whose session state files did not change for 60 min (`REAPER_IDLE_MIN`); never any other bridge. |

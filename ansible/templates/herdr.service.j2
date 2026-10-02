@@ -12,8 +12,8 @@ Documentation=https://herdr.dev/docs/
 Type=simple
 ExecStart={{ factory_herdr_bin }} server
 WorkingDirectory={{ factory_cfg.workspace }}
-Environment=PATH={{ (factory_fleet_browsers_dir ~ ':') if (factory_cfg.profiles.fleet_browsers | bool) else '' }}%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-{% if factory_cfg.profiles.fleet_browsers | bool %}
+Environment=PATH={{ (factory_fleet_browsers_dir ~ ':') if (factory_fleet_browsers_enabled | bool) else '' }}%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+{% if factory_fleet_browsers_enabled | bool %}
 # The fleet browser ladder's default tier (docs/fleet-guards.md#browser-ladder).
 Environment=CHROME_DEVTOOLS_AXI_BROWSER_URL=http://127.0.0.1:9222
 Environment=FLEET_BROWSER_TIER=obscura

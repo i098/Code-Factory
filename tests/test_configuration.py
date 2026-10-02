@@ -648,10 +648,10 @@ def test_koncreet_is_resolved_only_on_hosts_that_start_services(tmp_path, start_
 @pytest.mark.parametrize("fleet_guards", [False, True])
 @pytest.mark.parametrize("fleet_browsers", [False, True])
 def test_each_fleet_profile_resolves_only_its_own_release(tmp_path, fleet_guards, fleet_browsers):
-    # The browser ladder must not depend on the Supabase CLI resolving, nor the
-    # shared stack on Obscura.
+    # The browser ladder must not depend on the Supabase CLI resolving, and
+    # fleet_guards keeps provisioning the ladder it always has.
     also = _installer_also(tmp_path, fleet_guards=fleet_guards, fleet_browsers=fleet_browsers)
-    assert ("obscura" in also) is fleet_browsers
+    assert ("obscura" in also) is (fleet_guards or fleet_browsers)
     assert ("supabase" in also) is fleet_guards
 
 

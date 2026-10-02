@@ -102,7 +102,7 @@
                    | map('join', '/')
                    | map('regex_replace', '^', factory_user_units ~ '/')
                    | list)
-                if (factory_cfg.profiles.fleet_browsers | bool) else []) }}
+                if (factory_fleet_browsers_enabled | bool) else []) }}
 
     - name: Stat every expected output
       ansible.builtin.stat:

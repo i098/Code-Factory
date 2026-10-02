@@ -99,8 +99,9 @@ stubbed `df`, `du` and `docker`.
 
 ## Browser ladder
 
-Three browser tiers share one cookie jar. The `fleet_browsers` profile installs
-them under `~/oss-fleet/browsers/`, with or without `fleet_guards`, and puts
+Three browser tiers share one cookie jar. The `fleet_browsers` profile, or
+`fleet_guards`, installs
+them under `~/oss-fleet/browsers/`, and puts
 their environment in shell profiles and the Herdr unit; Herdr picks it up at
 its next restart. Sources of truth:
 `fleet/browsers/fleet-browser` (runtime, `alive` probe),

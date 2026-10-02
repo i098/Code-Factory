@@ -209,7 +209,7 @@ factory_installer_also: >-
   {{ (['koncreet'] if (factory_cfg.start_services | bool) else [])
      + (['psutil'] if ((factory_cfg.profiles.agents | bool)
                        and (factory_cfg.browser_prune.enabled | bool)) else [])
-     + (['obscura'] if (factory_cfg.profiles.fleet_browsers | bool) else [])
+     + (['obscura'] if (factory_fleet_browsers_enabled | bool) else [])
      + (['supabase'] if (factory_cfg.profiles.fleet_guards | bool) else []) }}
 
 # --- Herdr static config ----------------------------------------------------
@@ -330,7 +330,8 @@ factory_shared_supabase_storage_volume: "supabase_storage_{{ factory_shared_supa
 # The npm registry's latest supabase, resolved once per run (factory_latest).
 factory_shared_supabase_cli_version: "{{ factory_latest.supabase }}"
 
-# --- Fleet browsers (profiles.fleet_browsers) -------------------------------
+# --- Fleet browsers (profiles.fleet_browsers, or fleet_guards) ---------------
+factory_fleet_browsers_enabled: "{{ (factory_cfg.profiles.fleet_guards | bool) or (factory_cfg.profiles.fleet_browsers | bool) }}"
 factory_fleet_browsers_dir: "{{ factory_fleet_dir }}/browsers"
 # The latest Obscura release for this platform, with the SHA-256 GitHub
 # publishes for the asset; each release extracts into its own directory.

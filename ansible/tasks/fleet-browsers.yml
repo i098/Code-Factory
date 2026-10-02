@@ -1,6 +1,6 @@
 ---
 # Fleet browsers: obscura -> chrome -> vnc tier ladder, shared session jar.
-# profiles.fleet_browsers turns it on, independent of fleet_guards.
+# profiles.fleet_browsers or profiles.fleet_guards turns it on.
 # docs/fleet-guards.md owns the design; fleet/browsers/fleet-browser owns the
 # runtime. Only the obscura tier needs provisioning (latest binary + unit);
 # chrome and vnc are started on demand by the operator or the fleet-browser
