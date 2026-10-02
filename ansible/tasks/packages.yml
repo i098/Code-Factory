@@ -32,6 +32,14 @@
   become: true
   when: not ansible_check_mode or factory_apt_indexes.matched > 0
 
+- name: Install headless browser runtime libraries
+  ansible.builtin.apt:
+    name: "{{ factory_headless_browser_packages }}"
+    state: present
+    install_recommends: false
+  become: true
+  when: not ansible_check_mode or factory_apt_indexes.matched > 0
+
 - name: Install development prerequisites
   ansible.builtin.apt:
     name: "{{ factory_development_packages }}"
