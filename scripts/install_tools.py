@@ -71,6 +71,10 @@ GITHUB_LATEST = {
         "btop-{gnu}-unknown-linux-musl.tar.gz",
         {"btop-bin": "btop/bin/btop"},
     ),
+    "sentrux": ("sentrux/sentrux", "v", "sentrux-{key}", {"sentrux": "sentrux"}),
+    # The grammars of the same sentrux release. sentrux downloads them itself,
+    # unverified, when ~/.sentrux/plugins lacks them; link_grammars puts them there.
+    "sentrux-grammars": ("sentrux/sentrux", "v", "grammars-{key}.tar.gz", {}),
     # Resolved for the fleet browser ladder (ansible/tasks/fleet-browsers.yml), not installed here.
     "obscura": (
         "h4ckf0r0day/obscura",
@@ -151,6 +155,7 @@ def verified(tool, version, key, name, url, checksum, binaries):
 def resolve_latest(key, names):
     """Specs for the newest releases of exactly these tools, and nothing else."""
     latest = {}
+    stable = {}  # repository -> its latest release, so tools from one release share it
     skipped = set()
     for tool, (repo, prefix, pattern, binaries) in GITHUB_LATEST.items():
         if tool not in names:
@@ -164,7 +169,10 @@ def resolve_latest(key, names):
                 if release is None:
                     raise ValueError(f"{tool} has no published release")
             else:
-                release = json.loads(fetch(GITHUB_API.format(repo) + "/latest", f"{tool} release"))
+                if repo not in stable:
+                    url = GITHUB_API.format(repo) + "/latest"
+                    stable[repo] = json.loads(fetch(url, f"{tool} release"))
+                release = stable[repo]
             version = release["tag_name"].removeprefix(prefix)
             name = pattern.format(v=version, key=key, **ARCH[key])
             asset = next((a for a in release["assets"] if a["name"] == name), {})
@@ -338,6 +346,22 @@ def install_asset(home, name, spec, key):
         changed = True
     for binary, path in binaries_in(final, asset["binaries"]).items():
         changed = link_binary(home, binary, path) or changed
+    return changed
+
+
+def link_grammars(home, store):
+    """Link sentrux's grammar paths to a verified release, so sentrux never fetches them."""
+    changed = False
+    for grammar in store.glob("*/grammars/*.so"):
+        link = home / ".sentrux/plugins" / grammar.relative_to(store)
+        if link.is_symlink() and link.resolve() == grammar.resolve():
+            continue
+        link.parent.mkdir(parents=True, exist_ok=True)
+        staged = link.with_name(".new-" + link.name)
+        staged.unlink(missing_ok=True)
+        staged.symlink_to(grammar)
+        os.replace(staged, link)
+        changed = True
     return changed
 
 
@@ -523,7 +547,7 @@ def omp_plugins(home, environment):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--home", type=Path, required=True)
-    parser.add_argument("--tools", default="herdr,node,bun,uv,btop")
+    parser.add_argument("--tools", default="herdr,node,bun,uv,btop,sentrux")
     parser.add_argument("--npm", action="store_true")
     parser.add_argument("--development", action="store_true")
     parser.add_argument(
@@ -543,6 +567,8 @@ def main():
     args = parser.parse_args()
     key = platform_key()
     names = list(dict.fromkeys(args.tools.split(",") + (AGENT_TOOLS if args.npm else [])))
+    if "sentrux" in names:
+        names.append("sentrux-grammars")
     if args.development:
         names.append("rustup-init")
     sources = {*names, *(NPM_LATEST if args.npm else ()), *filter(None, args.also.split(","))}
@@ -565,6 +591,10 @@ def main():
         changed = False
         for name in names:
             changed = install_asset(home, name, latest[name], key) or changed
+        if "sentrux" in names:
+            version = latest["sentrux-grammars"]["version"]
+            store = prefix / "tools/sentrux-grammars" / version / key
+            changed = link_grammars(home, store) or changed
         if args.npm:
             for tool in NPM_LATEST:
                 changed = npm_latest_install(home, tool, latest[tool], environment) or changed
