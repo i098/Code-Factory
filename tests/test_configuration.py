@@ -607,12 +607,15 @@ def _ansible(tmp_path, *argv, wrapper=()):
     )
 
 
-@pytest.mark.parametrize("start_services", [True, False])
-def test_koncreet_is_resolved_only_on_hosts_that_start_services(tmp_path, start_services):
+def _installer_also(tmp_path, start_services=True, fleet_guards=False, fleet_browsers=False):
     variables = {
         "factory_cfg": {
             "start_services": start_services,
-            "profiles": {"agents": False, "fleet_guards": False},
+            "profiles": {
+                "agents": False,
+                "fleet_guards": fleet_guards,
+                "fleet_browsers": fleet_browsers,
+            },
             "browser_prune": {"enabled": False},
         }
     }
@@ -634,8 +637,22 @@ def test_koncreet_is_resolved_only_on_hosts_that_start_services(tmp_path, start_
         json.dumps(variables),
     )
     assert result.returncode == 0, result.stdout
-    also = json.loads(result.stdout.split("=>", 1)[1])["factory_installer_also"]
-    assert ("koncreet" in also) is start_services
+    return json.loads(result.stdout.split("=>", 1)[1])["factory_installer_also"]
+
+
+@pytest.mark.parametrize("start_services", [True, False])
+def test_koncreet_is_resolved_only_on_hosts_that_start_services(tmp_path, start_services):
+    assert ("koncreet" in _installer_also(tmp_path, start_services)) is start_services
+
+
+@pytest.mark.parametrize("fleet_guards", [False, True])
+@pytest.mark.parametrize("fleet_browsers", [False, True])
+def test_each_fleet_profile_resolves_only_its_own_release(tmp_path, fleet_guards, fleet_browsers):
+    # The browser ladder must not depend on the Supabase CLI resolving, nor the
+    # shared stack on Obscura.
+    also = _installer_also(tmp_path, fleet_guards=fleet_guards, fleet_browsers=fleet_browsers)
+    assert ("obscura" in also) is fleet_browsers
+    assert ("supabase" in also) is fleet_guards
 
 
 def _koncreet_settings(tmp_path, tailscale, apply_user):

@@ -209,7 +209,8 @@ factory_installer_also: >-
   {{ (['koncreet'] if (factory_cfg.start_services | bool) else [])
      + (['psutil'] if ((factory_cfg.profiles.agents | bool)
                        and (factory_cfg.browser_prune.enabled | bool)) else [])
-     + (['obscura', 'supabase'] if (factory_cfg.profiles.fleet_guards | bool) else []) }}
+     + (['obscura'] if (factory_cfg.profiles.fleet_browsers | bool) else [])
+     + (['supabase'] if (factory_cfg.profiles.fleet_guards | bool) else []) }}
 
 # --- Herdr static config ----------------------------------------------------
 # Only the reviewed, non-secret subset is templated. experimental.pane_history
@@ -328,11 +329,25 @@ factory_shared_supabase_db_volume: "supabase_db_{{ factory_shared_supabase_proje
 factory_shared_supabase_storage_volume: "supabase_storage_{{ factory_shared_supabase_project }}"
 # The npm registry's latest supabase, resolved once per run (factory_latest).
 factory_shared_supabase_cli_version: "{{ factory_latest.supabase }}"
+
+# --- Fleet browsers (profiles.fleet_browsers) -------------------------------
 factory_fleet_browsers_dir: "{{ factory_fleet_dir }}/browsers"
 # The latest Obscura release for this platform, with the SHA-256 GitHub
 # publishes for the asset; each release extracts into its own directory.
 factory_browser_obscura: "{{ factory_latest.obscura.assets[factory_platform] }}"
 factory_browser_obscura_dir: "{{ factory_fleet_browsers_dir }}/obscura-{{ factory_latest.obscura.version }}"
+factory_fleet_browser_units:
+  - fleet-browser-obscura.service
+  - fleet-browser-chrome.service
+  - fleet-browser-vnc.service
+  - fleet-browser-sync.service
+  - fleet-browser-sync.timer
+  - fleet-browser-gc.service
+  - fleet-browser-gc.timer
+factory_fleet_browser_enabled_units:
+  - { unit: fleet-browser-obscura.service, wants: default.target.wants }
+  - { unit: fleet-browser-sync.timer, wants: timers.target.wants }
+  - { unit: fleet-browser-gc.timer, wants: timers.target.wants }
 
 # Storage guard (fleet/doctor/storage-guard.sh, every 5 min). Use% of the
 # filesystems holding /, /var/log, the home and Docker's data root: WARN alerts
@@ -361,11 +376,6 @@ factory_fleet_units:
   - flotilla-storage-guard.timer
   - flotilla-devtools-bridge-reaper.service
   - flotilla-devtools-bridge-reaper.timer
-  - fleet-browser-obscura.service
-  - fleet-browser-sync.service
-  - fleet-browser-sync.timer
-  - fleet-browser-gc.service
-  - fleet-browser-gc.timer
 factory_fleet_enabled_units:
   - { unit: flotilla-shared-supabase.service, wants: default.target.wants }
   - { unit: flotilla-docker-guard.service, wants: default.target.wants }
@@ -375,9 +385,6 @@ factory_fleet_enabled_units:
   - { unit: flotilla-dev-server-reaper.timer, wants: timers.target.wants }
   - { unit: flotilla-storage-guard.timer, wants: timers.target.wants }
   - { unit: flotilla-devtools-bridge-reaper.timer, wants: timers.target.wants }
-  - { unit: fleet-browser-obscura.service, wants: default.target.wants }
-  - { unit: fleet-browser-sync.timer, wants: timers.target.wants }
-  - { unit: fleet-browser-gc.timer, wants: timers.target.wants }
 
 # --- Tailscale (install only; login, ACLs, SSH and UFW stay manual) ---------
 factory_tailscale_track: stable

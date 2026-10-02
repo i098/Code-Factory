@@ -1,11 +1,14 @@
 ---
 # Fleet browsers: obscura -> chrome -> vnc tier ladder, shared session jar.
+# profiles.fleet_browsers turns it on, independent of fleet_guards.
 # docs/fleet-guards.md owns the design; fleet/browsers/fleet-browser owns the
 # runtime. Only the obscura tier needs provisioning (latest binary + unit);
 # chrome and vnc are started on demand by the operator or the fleet-browser
-# CLI and gc'd after idle_timeout_min.
+# CLI and gc'd after idle_timeout_min. The Herdr unit carries the ladder's
+# environment (templates/herdr.service.j2), so this file never edits it.
 
 - name: Ensure the journald drop-in directory
+  tags: [journald]
   ansible.builtin.file:
     path: /etc/systemd/journald.conf.d
     state: directory
@@ -20,6 +23,7 @@
 # lines per 30s (scaled up by journald with free disk). A page stuck in a loop
 # once logged ~17 MB/s and filled the disk via syslog.
 - name: Cap journald intake host-wide
+  tags: [journald]
   ansible.builtin.copy:
     dest: /etc/systemd/journald.conf.d/50-fleet-ratelimit.conf
     content: |
@@ -42,8 +46,11 @@
     mode: "0755"
   become: true
   loop:
+    - "{{ factory_fleet_dir }}"
     - "{{ factory_fleet_browsers_dir }}"
     - "{{ factory_cfg.home }}/.fleet-browser"
+    - "{{ factory_user_units }}/default.target.wants"
+    - "{{ factory_user_units }}/timers.target.wants"
 
 - name: Install the fleet browser scripts
   ansible.builtin.copy:
@@ -132,21 +139,6 @@
     - .profile
     - .bashrc
 
-- name: Inject the shared-browser env into herdr.service
-  ansible.builtin.lineinfile:
-    path: "{{ factory_cfg.home }}/.config/systemd/user/herdr.service"
-    insertafter: "^\\[Service\\]"
-    line: "{{ item }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
-    mode: "0644"
-  become: true
-  loop:
-    - "Environment=CHROME_DEVTOOLS_AXI_BROWSER_URL=http://127.0.0.1:9222"
-    - "Environment=FLEET_BROWSER_TIER=obscura"
-    - "Environment=PATH={{ factory_fleet_browsers_dir }}:{{ factory_user_env.PATH }}"
-  notify: reload user systemd
-
 - name: Render fleet browser units
   ansible.builtin.template:
     src: "{{ item }}.j2"
@@ -155,14 +147,7 @@
     group: "{{ factory_group }}"
     mode: "0644"
   become: true
-  loop:
-    - fleet-browser-obscura.service
-    - fleet-browser-chrome.service
-    - fleet-browser-vnc.service
-    - fleet-browser-sync.service
-    - fleet-browser-sync.timer
-    - fleet-browser-gc.service
-    - fleet-browser-gc.timer
+  loop: "{{ factory_fleet_browser_units }}"
   notify:
     - reload user systemd
     - restart fleet browser obscura
@@ -178,10 +163,9 @@
     force: true
     follow: false
   become: true
-  loop:
-    - { unit: fleet-browser-obscura.service, wants: default.target.wants }
-    - { unit: fleet-browser-sync.timer, wants: timers.target.wants }
-    - { unit: fleet-browser-gc.timer, wants: timers.target.wants }
+  loop: "{{ factory_fleet_browser_enabled_units }}"
+  loop_control:
+    label: "{{ item.unit }}"
 
 - name: Enable and start fleet browser units
   ansible.builtin.systemd_service:
@@ -192,10 +176,7 @@
   become: "{{ factory_become_target | bool }}"
   become_user: "{{ factory_cfg.user }}"
   environment: "{{ factory_user_systemd_env }}"
-  loop:
-    - fleet-browser-obscura.service
-    - fleet-browser-sync.timer
-    - fleet-browser-gc.timer
+  loop: "{{ factory_fleet_browser_enabled_units | map(attribute='unit') | list }}"
   when: factory_manage_services | bool
 
 - name: Report the deferred fleet browser start
