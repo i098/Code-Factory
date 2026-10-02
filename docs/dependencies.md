@@ -30,6 +30,7 @@ The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests 
 `ansible/group_vars/all.yml`, `ansible/tasks/packages.yml`. Distribution versions, not pinned.
 
 - Base: ca-certificates, curl, git, gnupg, jq, tar, unzip, xz-utils, zstd, procps, acl, python3, python3-venv, openssl, rsync, libgtk-3-0t64 (the sentrux binary links GTK 3 even for its CLI).
+- Headless browser libraries, every apply, without recommends: libxcomposite1, libxdamage1, libxfixes3, libxrandr2, libasound2t64, libatk1.0-0t64, libatk-bridge2.0-0t64, libatspi2.0-0t64, libgbm1, libnss3, libnspr4, libxkbcommon0. The chrome-headless-shell that omp's browser tool and puppeteer download needs them to start.
 - `development`: build-essential, pkg-config, libssl-dev, python3-dev, cmake, ripgrep.
 - `docker`: docker.io, docker-compose-v2 (Ubuntu's packages, never Docker CE).
 - `desktop`: xfce4, xfce4-terminal, dbus-x11, xauth, x11-xserver-utils, fonts-dejavu-core, tigervnc-standalone-server, tigervnc-common, tigervnc-tools, novnc, websockify, iproute2.
