@@ -100,16 +100,17 @@ stubbed `df`, `du` and `docker`.
 ## Browser ladder
 
 Three browser tiers share one cookie jar. The `fleet_browsers` profile, or
-`fleet_guards`, installs
-them under `~/oss-fleet/browsers/`, and puts
-their environment in shell profiles and the Herdr unit; Herdr picks it up at
-its next restart. Sources of truth:
+`fleet_guards`, installs them under `~/oss-fleet/browsers/`, and puts their
+environment in shell profiles and the Herdr unit. Sources of truth:
 `fleet/browsers/fleet-browser` (runtime, `alive` probe),
 `fleet/browsers/env.sh` (defaults every shell inherits),
 `fleet/browsers/cookie-sync.ts` (jar), `ansible/tasks/fleet-browsers.yml` and
 `ansible/templates/fleet-browser-*.{service,timer}.j2` (units, cadences).
-The playbook tag `fleet_browsers` narrows a run to the ladder;
+The playbook tag `fleet_browsers` (or `fleet`) narrows a run to the ladder;
 `--skip-tags journald` also leaves out its host-wide journald cap.
+Those runs leave the Herdr unit alone. The unit gets the ladder environment
+only on a run that includes the `herdr` tag, for example
+`--tags herdr,fleet_browsers`, and that run restarts Herdr.
 
 | Tier | CDP port | Always on? | Use it when |
 | --- | --- | --- | --- |
