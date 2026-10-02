@@ -40,6 +40,7 @@
               factory_local_bin ~ '/btop',
               factory_local_bin ~ '/btop-bin',
               factory_btop_config,
+              factory_local_bin ~ '/sentrux',
               factory_user_units ~ '/herdr-spaces.service',
               factory_user_units ~ '/herdr-spaces.timer',
               factory_user_units ~ '/timers.target.wants/herdr-spaces.timer',

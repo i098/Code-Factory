@@ -106,6 +106,7 @@ RELEASES = {
     "kunchenguid/treehouse": ("v9.9.9", "treehouse-v9.9.9-linux-amd64.tar.gz"),
     "astral-sh/uv": ("9.9.9", "uv-x86_64-unknown-linux-gnu.tar.gz"),
     "aristocratos/btop": ("v9.9.9", "btop-x86_64-unknown-linux-musl.tar.gz"),
+    "sentrux/sentrux": ("v9.9.9", "sentrux-linux-x86_64", "grammars-linux-x86_64.tar.gz"),
     "h4ckf0r0day/obscura": ("v9.9.9", "obscura-x86_64-linux.tar.gz"),
     "jimididit/koncreet": ("v9.9.9", "koncreet.tar.gz"),
 }
@@ -128,13 +129,16 @@ def upstream(monkeypatch, unverified=None, seen=None):
             )
             digest = None if repo == unverified else "sha256:" + "a" * 64
 
-            def release(tag, name, draft=False):
-                asset = {
-                    "name": name,
-                    "browser_download_url": f"https://github.com/{name}",
-                    "digest": digest,
-                }
-                return {"tag_name": tag, "draft": draft, "assets": [asset]}
+            def release(tag, *names, draft=False):
+                assets = [
+                    {
+                        "name": name,
+                        "browser_download_url": f"https://github.com/{name}",
+                        "digest": digest,
+                    }
+                    for name in names
+                ]
+                return {"tag_name": tag, "draft": draft, "assets": assets}
 
             if listing == "?per_page=10":
                 assert repo == "kunchenguid/no-mistakes", f"{repo} is on the stable channel"
@@ -189,14 +193,18 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
         "treehouse",
         "uv",
         "btop",
+        "sentrux",
+        "sentrux-grammars",
         "obscura",
         "koncreet",
     ):
         assert latest[tool]["assets"]["linux-x86_64"]["sha256"] == "a" * 64
-    for tool in ("herdr", "bun", "gh", "treehouse", "uv", "btop", "obscura", "koncreet"):
+    for tool in ("herdr", "bun", "gh", "treehouse", "uv", "btop", "sentrux", "obscura", "koncreet"):
         assert latest[tool]["version"] == "9.9.9"
     assert latest["gh"]["assets"]["linux-x86_64"]["format"] == "tar"
     assert latest["bun"]["assets"]["linux-x86_64"]["format"] == "zip"
+    assert latest["sentrux"]["assets"]["linux-x86_64"]["format"] == "file"
+    assert latest["sentrux-grammars"]["assets"]["linux-x86_64"]["format"] == "tar"
     # The newest Node release, not the first index entry, verified by SHASUMS256.
     node = latest["node"]["assets"]["linux-x86_64"]
     assert latest["node"]["version"] == "30.1.0"
@@ -349,6 +357,7 @@ def test_resolve_covers_only_the_requested_tools(monkeypatch, capsys, tmp_path):
             {"uv", *installer.AGENT_TOOLS, *installer.NPM_LATEST},
         ),
         (["--tools", "uv", "--also", "psutil,supabase"], {"uv", "psutil", "supabase"}),
+        (["--tools", "sentrux"], {"sentrux", "sentrux-grammars"}),
     ],
 )
 def test_resolve_selection_matches_what_the_flags_install(
@@ -415,6 +424,19 @@ def test_current_follows_the_newest_release_and_a_repeat_changes_nothing(tmp_pat
     assert installer.point_current(tool / "1.1.0")
     assert (tool / "current").resolve() == tool / "1.1.0"
     assert (tool / "1.0.0").is_dir()
+
+
+def test_sentrux_grammars_replace_its_own_download_with_the_verified_release(tmp_path):
+    store = tmp_path / "store"
+    (store / "c/grammars").mkdir(parents=True)
+    (store / "c/grammars/linux-x86_64.so").write_bytes(b"verified")
+    # What sentrux fetched itself, unverified, before the installer managed it.
+    grammar = tmp_path / ".sentrux/plugins/c/grammars/linux-x86_64.so"
+    grammar.parent.mkdir(parents=True)
+    grammar.write_bytes(b"unverified")
+    assert installer.link_grammars(tmp_path, store)
+    assert grammar.read_bytes() == b"verified"
+    assert not installer.link_grammars(tmp_path, store)
 
 
 @pytest.mark.parametrize(

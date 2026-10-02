@@ -3,7 +3,7 @@
 # latest releases tasks/preflight.yml resolved.
 #
 # Contract: python3 <repo>/scripts/install_tools.py
-#           --home <factory.home> --tools herdr,node,bun,uv,btop [--npm] [--development]
+#           --home <factory.home> --tools herdr,node,bun,uv,btop,sentrux [--npm] [--development]
 #           --resolved <factory_latest as JSON>
 # The installer is idempotent and prints a final JSON object
 # {"changed": bool, "installed": [...]}, which is the only changed signal this

@@ -149,6 +149,8 @@ factory_base_packages:
   - python3-venv
   - openssl
   - rsync
+  # The only sentrux release binary links GTK 3 (its GUI), even for `sentrux gate`.
+  - libgtk-3-0t64
 factory_development_packages:
   - build-essential
   - pkg-config
@@ -177,7 +179,7 @@ factory_desktop_packages:
   - iproute2
 
 # --- Tool installer ---------------------------------------------------------
-factory_core_tools: [herdr, node, bun, uv, btop]
+factory_core_tools: [herdr, node, bun, uv, btop, sentrux]
 # The installer flags that choose which tools a run covers. tasks/preflight.yml
 # resolves exactly this set (plus the sources Ansible installs itself) and
 # tasks/tools.yml installs it, so a host never resolves, and never fails on, a
