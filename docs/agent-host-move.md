@@ -43,6 +43,7 @@ Services that hold state other hosts share, such as a model relay, a monitoring 
 | Hand-installed tools in `~/.local/bin` | After apply, list what the new host lacks: `comm -23 <(ssh <old host> 'ls ~/.local/bin' \| sort) <(ls ~/.local/bin \| sort)`. Reinstall each agent-side tool from its source and skip backups. |
 | omp rules, extensions and custom models (`~/.omp/agent/rules/`, `extensions/`, `models.yml`) | `rsync -a --exclude herdr-omp-agent-state.ts` them from the old host when they hold no credentials. Apply already installed Herdr's own omp extension for the new host's herdr ([Pane state](herdr.md#pane-state)). |
 | omp keys and MCP credentials (`~/.omp/agent/*.key`, `mcp.json`) and each home's `state/secrets/` | Never copy them ([Never export](security.md#never-export)). Recreate each on the new host by hand, mode `600`, entering the keys yourself. |
+| `ssh mac` access to the operator Mac | Never copy `~/.ssh/id_ed25519_mac`. Apply on the new host generates a new key. Add the new host's line on the Mac, and remove the old host's line at [Cutover](#cutover) step 8 ([Host move](security.md#host-move)). |
 
 ```bash
 for g in ~/Dev/*/.git ~/Dev/*/projects/*/.git ~/.treehouse/*/*/*/.git ~/.treehouse/*/*/*/projects/*/.git; do

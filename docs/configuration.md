@@ -51,6 +51,9 @@ factory:
     # checklist:          # Optional; set only in .local/host.yml
     #   repo: owner/private-repo
     #   path: checklist.md
+  # mac_ssh:              # Optional; set only in .local/host.yml. See security.md#ssh-to-a-mac
+  #   host: <Mac tailnet name or IP>
+  #   user: <Mac login>
 ```
 
 `validate` also enforces these rules:

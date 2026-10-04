@@ -35,6 +35,79 @@ Tailscale installation, authentication, and SSH authorization are separate steps
 
 This export does not rewrite the current host's firewall, SSH policy, account membership, or credentials. Review those changes separately before applying a new-host profile.
 
+### SSH to a Mac
+
+Agents can reach an operator Mac with `ssh mac`. They use it to open links in the operator's browser and to control Mac apps. Code Factory configures the host side. You configure the Mac side by hand, one time. Keep the Mac's name, address, and login out of this repository.
+
+#### Host side: what apply does
+
+Set the Mac's address and login in `.local/host.yml` only, never in `config/default.yml`:
+
+```yaml
+factory:
+  mac_ssh:
+    host: <Mac tailnet name or IP>
+    user: <Mac login>
+```
+
+When `mac_ssh` is not set, apply skips this step. When it is set, apply does three things as the factory account:
+
+- It generates `~/.ssh/id_ed25519_mac` with `ssh-keygen` (from `openssh-client`) if the file does not exist. It never replaces an existing key. Do not copy this key to another host; each host gets its own.
+- It writes a `Host mac` entry between `code-factory Host mac` markers at the top of `~/.ssh/config`, with `IdentitiesOnly yes` and `ConnectTimeout 5`. It does not change other entries.
+- It writes a line for the Mac's `~/.ssh/authorized_keys` to `~/.ssh/id_ed25519_mac.authorized_keys` and prints it. The line is restricted with `from="<this host's tailnet IP>"`, so the key works only from this host. If the host is not on the tailnet yet, the line has a placeholder. Join the tailnet and run apply again to get the address.
+
+Apply does not change the Mac.
+
+#### Mac side: one-time setup
+
+1. Install Tailscale on the Mac and on the host, and sign in to the same tailnet on both. Use the Mac's tailnet name or tailnet IP as `mac_ssh.host`.
+2. On the Mac, open System Settings > General > Sharing, and turn on Remote Login.
+3. Append the line from the host to the Mac's `~/.ssh/authorized_keys`. Copy the output of `cat ~/.ssh/id_ed25519_mac.authorized_keys` on the host. On the Mac, run:
+
+   ```bash
+   mkdir -p ~/.ssh && chmod 700 ~/.ssh
+   printf '%s\n' '<the line from the host>' >> ~/.ssh/authorized_keys
+   chmod 600 ~/.ssh/authorized_keys
+   ```
+
+The line holds only a public key. Do not put the private key `~/.ssh/id_ed25519_mac` on the Mac.
+
+#### Optional: app control
+
+Skip this part if agents only open links. To let an SSH session focus apps and type with `osascript` and System Events, give two permissions to `/usr/libexec/sshd-keygen-wrapper`. Every SSH session on the Mac runs under this program.
+
+1. Open System Settings > Privacy & Security > Accessibility. Click `+`, press Command-Shift-G, type `/usr/libexec/sshd-keygen-wrapper`, and add it. Turn it on.
+2. Do the same in Privacy & Security > Full Disk Access.
+
+Screen Recording is a separate permission. Without it, `screencapture` over SSH fails. Add the same program in Privacy & Security > Screen Recording only if agents must take screenshots.
+
+#### Verify
+
+On the host, as the factory account:
+
+```bash
+ssh mac true && echo ok
+```
+
+The first connection asks you to accept the Mac's host key. Compare the fingerprint with the output of `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the Mac. To test app control, run `ssh mac "osascript -e 'tell application \"System Events\" to get name of first application process whose frontmost is true'"`. It prints the name of the app in front.
+
+#### Safe use
+
+The person at the Mac uses the same screen and keyboard. Keystrokes go to the app that is in front at that moment.
+
+- Focus an app by its bundle identifier: `ssh mac open -b com.apple.Safari`. Do not rely on `tell application "…" to activate`; it can fail and leave another app in front. To find a bundle identifier, run `osascript -e 'id of app "Safari"'` on the Mac.
+- Before each keystroke, read the bundle identifier of the app in front, and stop if it is not the expected app: `ssh mac "osascript -e 'tell application \"System Events\" to get bundle identifier of first application process whose frontmost is true'"`. Typing takes focus away from the person at the Mac, and text can go into the wrong window.
+- To open a link, use `ssh mac open '<url>'`. It does not need app control.
+
+#### Host move
+
+A new host gets its own key; never copy `~/.ssh/id_ed25519_mac` from the old host.
+
+1. Run apply on the new host with the same `mac_ssh` values. It generates a new key and writes the new line.
+2. Add the new line to the Mac's `~/.ssh/authorized_keys`: at the Mac, as in step 3 of the setup, or from a host that already has access: `ssh mac 'cat >> ~/.ssh/authorized_keys' < new-host.authorized_keys`, where `new-host.authorized_keys` is a copy of the new host's line file. The line is public, so you can copy it with `scp`.
+3. Run `ssh mac true` on the new host.
+4. At cutover, remove the old host's line from the Mac's `~/.ssh/authorized_keys`. Each line ends with the comment `<user>@<hostname> code-factory mac`, which names the host. Keep the old line until the new host works.
+
 ## Host hardening
 
 Every apply on a host that starts services (not the container worker image) installs [Koncreet](https://github.com/jimididit/koncreet) as `/usr/local/bin/koncreet` and renders `/etc/koncreet.conf` once, but nothing runs it. Koncreet is optional: when its release lookup, checksum, or download fails, apply prints a warning, skips it, and finishes the rest; a release installed earlier stays in place. It is a first-hour hardening toolkit: a sudo user with SSH keys, sysctl, swap, a journald cap, time sync, a ufw default-deny firewall, fail2ban on SSH, unattended security updates, and finally SSH with password and root login turned off.

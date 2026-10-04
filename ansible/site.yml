@@ -110,6 +110,16 @@
       when: factory_cfg.profiles.tailscale | bool
       tags: [tailscale]
 
+    - name: Optional `ssh mac` key and Host entry for an operator Mac
+      ansible.builtin.import_tasks: tasks/mac_ssh.yml
+      become: "{{ factory_become_target | bool }}"
+      become_user: "{{ factory_cfg.user }}"
+      environment: "{{ factory_user_env }}"
+      when:
+        - factory_account_ready | bool
+        - factory_cfg.mac_ssh is defined
+      tags: [mac_ssh]
+
     - name: Koncreet host hardening toolkit, installed but never run
       ansible.builtin.import_tasks: tasks/koncreet.yml
       when: "'koncreet' in factory_latest"
