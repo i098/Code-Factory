@@ -1,0 +1,92 @@
+---
+# Optional `ssh mac` from the factory account to an operator Mac
+# (docs/security.md#ssh-to-a-mac). Runs only when factory.mac_ssh is set,
+# which belongs in .local/host.yml only.
+#
+#   * the key is generated on this host once; an existing key file is never
+#     overwritten, regenerated or replaced, and the private key never leaves
+#     the host or appears in output
+#   * only the marker-delimited `Host mac` block of ~/.ssh/config is written
+#   * the Mac is never changed: the operator adds the printed line there
+
+- name: Ensure the account's SSH directory
+  ansible.builtin.file:
+    path: "{{ factory_cfg.home }}/.ssh"
+    state: directory
+    mode: "0700"
+
+- name: Generate the Mac SSH key only when it is absent
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -q
+      - -t
+      - ed25519
+      - -N
+      - ""
+      - -C
+      - "{{ factory_cfg.user }}@{{ ansible_facts.hostname }} code-factory mac"
+      - -f
+      - "{{ factory_mac_ssh_key }}"
+    creates: "{{ factory_mac_ssh_key }}"
+
+# At the top, so a broader Host or Match block below cannot override it.
+- name: Write the managed Host mac entry
+  ansible.builtin.blockinfile:
+    path: "{{ factory_cfg.home }}/.ssh/config"
+    create: true
+    mode: "0600"
+    insertbefore: BOF
+    marker: "# {mark} code-factory Host mac"
+    block: |
+      Host mac
+        HostName {{ factory_cfg.mac_ssh.host }}
+        User {{ factory_cfg.mac_ssh.user }}
+        IdentityFile {{ factory_mac_ssh_key }}
+        IdentitiesOnly yes
+        ConnectTimeout 5
+
+- name: Read this host's tailnet address
+  ansible.builtin.command:
+    argv: [tailscale, ip, "-4"]
+  register: factory_mac_ssh_tailnet
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# Only check mode on a host without the key may find no public key.
+- name: Read the Mac SSH public key
+  ansible.builtin.slurp:
+    src: "{{ factory_mac_ssh_key }}.pub"
+  register: factory_mac_ssh_pub
+  failed_when: factory_mac_ssh_pub.content is not defined and not ansible_check_mode
+
+# `tailscale ip -4` prints nothing on stdout when tailscale is absent or the
+# host is not on a tailnet yet; the placeholder then stands in for the address.
+- name: Build the line to add on the Mac
+  ansible.builtin.set_fact:
+    factory_mac_ssh_line: >-
+      from="{{ factory_mac_ssh_tailnet.stdout_lines | default([]) | first | default('<this host tailnet IP>') }}"
+      {{ factory_mac_ssh_pub.content | b64decode | trim }}
+  when: factory_mac_ssh_pub.content is defined
+
+# Ansible's output escapes the quotes of from="...", so the exact line also
+# goes to a file the operator can cat. It holds only public data.
+- name: Write the line to add on the Mac
+  ansible.builtin.copy:
+    content: "{{ factory_mac_ssh_line }}\n"
+    dest: "{{ factory_mac_ssh_key }}.authorized_keys"
+    mode: "0644"
+  when: factory_mac_ssh_line is defined
+
+- name: Report the line to add on the Mac
+  ansible.builtin.debug:
+    msg:
+      - "Append the output of `cat {{ factory_mac_ssh_key }}.authorized_keys` to ~/.ssh/authorized_keys on the Mac, then test with: ssh mac true"
+      - "{{ factory_mac_ssh_line }}"
+  when: factory_mac_ssh_line is defined
+
+- name: Report the Mac SSH key that check mode cannot preview
+  ansible.builtin.debug:
+    msg: "check mode: would generate {{ factory_mac_ssh_key }} and print the line to add on the Mac."
+  when: factory_mac_ssh_pub.content is not defined

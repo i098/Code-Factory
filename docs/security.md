@@ -35,6 +35,25 @@ Tailscale installation, authentication, and SSH authorization are separate steps
 
 This export does not rewrite the current host's firewall, SSH policy, account membership, or credentials. Review those changes separately before applying a new-host profile.
 
+### SSH to a Mac
+
+Agents can reach an operator Mac with `ssh mac`. Set the Mac's address and login in `.local/host.yml` only, never in `config/default.yml`:
+
+```yaml
+factory:
+  mac_ssh:
+    host: <Mac tailnet name or IP>
+    user: <Mac login>
+```
+
+When `mac_ssh` is not set, apply skips this step. When it is set, apply does three things as the factory account:
+
+- It generates `~/.ssh/id_ed25519_mac` with `ssh-keygen` (from `openssh-client`) if the file does not exist. It never replaces an existing key. Do not copy this key to another host; each host gets its own.
+- It writes a `Host mac` entry between `code-factory Host mac` markers at the top of `~/.ssh/config`, with `IdentitiesOnly yes` and `ConnectTimeout 5`. It does not change other entries.
+- It writes a line for the Mac's `~/.ssh/authorized_keys` to `~/.ssh/id_ed25519_mac.authorized_keys` and prints it. The line is restricted with `from="<this host's tailnet IP>"`. If the host is not on the tailnet yet, the line has a placeholder. Join the tailnet and run apply again to get the address.
+
+Apply does not change the Mac. Add the line there yourself, and turn on Remote Login in the Mac's settings.
+
 ## Host hardening
 
 Every apply on a host that starts services (not the container worker image) installs [Koncreet](https://github.com/jimididit/koncreet) as `/usr/local/bin/koncreet` and renders `/etc/koncreet.conf` once, but nothing runs it. Koncreet is optional: when its release lookup, checksum, or download fails, apply prints a warning, skips it, and finishes the rest; a release installed earlier stays in place. It is a first-hour hardening toolkit: a sudo user with SSH keys, sysctl, swap, a journald cap, time sync, a ufw default-deny firewall, fail2ban on SSH, unattended security updates, and finally SSH with password and root login turned off.

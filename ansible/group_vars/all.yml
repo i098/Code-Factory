@@ -72,6 +72,8 @@ factory_vnc_dir: "{{ factory_cfg.home }}/.vnc"
 # Exactly one persistent Chrome profile for the VNC desktop. Never seeded,
 # copied, cloned or duplicated (docs/security.md).
 factory_vnc_chrome_profile: "{{ factory_cfg.home }}/.vnc-chrome-profile"
+# Generated on the host for `ssh mac` (tasks/mac_ssh.yml), never copied.
+factory_mac_ssh_key: "{{ factory_cfg.home }}/.ssh/id_ed25519_mac"
 
 # Private runtime for the Chrome pruner. The exported pruner calls
 # psutil.Process.net_connections(), which exists from psutil 6 onwards, while

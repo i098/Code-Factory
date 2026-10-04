@@ -782,3 +782,56 @@ def test_planning_koncreet_installs_nothing_and_warns_of_nothing(tmp_path):
     assert result.returncode == 0, result.stdout
     assert "WARNING" not in result.stdout
     assert not (tmp_path / "prefix").exists()
+
+
+def test_mac_ssh_keeps_the_existing_key_and_other_host_entries(tmp_path):
+    home = tmp_path / "home"
+    (home / ".ssh").mkdir(parents=True)
+    other = "Host build\n  HostName build.example\n"
+    (home / ".ssh/config").write_text(other)
+    playbook = tmp_path / "playbook.yml"
+    playbook.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "hosts": "localhost",
+                    "connection": "local",
+                    "gather_facts": True,
+                    "tasks": [
+                        {"ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/mac_ssh.yml")}
+                    ],
+                }
+            ]
+        )
+    )
+    variables = {
+        "factory_cfg": {
+            "user": "coder",
+            "home": str(home),
+            "mac_ssh": {"host": "mac.example", "user": "operator"},
+        },
+        "factory_mac_ssh_key": str(home / ".ssh/id_ed25519_mac"),
+    }
+
+    def apply():
+        result = _ansible(
+            tmp_path, "ansible-playbook", "-i", "localhost,", str(playbook),
+            "--extra-vars", json.dumps(variables),
+        )
+        assert result.returncode == 0, result.stdout
+        return result.stdout
+
+    first = apply()
+    key = (home / ".ssh/id_ed25519_mac").read_bytes()
+    public = (home / ".ssh/id_ed25519_mac.pub").read_text().strip()
+    config = (home / ".ssh/config").read_text()
+    line = (home / ".ssh/id_ed25519_mac.authorized_keys").read_text()
+    assert line.startswith('from="') and line.endswith(f'" {public}\n')
+    assert public in first and "PRIVATE KEY" not in first
+    assert config.endswith(other) and config.splitlines().count("Host mac") == 1
+    assert "IdentitiesOnly yes" in config
+
+    second = apply()
+    assert "changed=0" in second
+    assert (home / ".ssh/id_ed25519_mac").read_bytes() == key
+    assert (home / ".ssh/config").read_text() == config
