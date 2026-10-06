@@ -37,7 +37,7 @@ You need Ubuntu 24.04 or 26.04 on x86_64 or aarch64 with systemd, a non-root acc
 2. Clone the repository:
 
    ```bash
-   git clone https://github.com/undeemed/Code-Factory.git
+   git clone https://github.com/i098/Code-Factory.git
    cd Code-Factory
    ```
 

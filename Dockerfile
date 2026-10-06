@@ -167,7 +167,7 @@ ENV CODE_FACTORY_IMAGE=worker \
 
 LABEL org.opencontainers.image.title="code-factory-worker" \
       org.opencontainers.image.description="Isolated non-root Code Factory worker; no systemd, Tailscale or desktop." \
-      org.opencontainers.image.source="https://github.com/undeemed/Code-Factory" \
+      org.opencontainers.image.source="https://github.com/i098/Code-Factory" \
       org.opencontainers.image.base.name="docker.io/library/ubuntu:latest"
 
 WORKDIR ${FACTORY_WORKSPACE}

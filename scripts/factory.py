@@ -14,7 +14,7 @@ import jsonschema
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-STALE_FIRSTMATE_URL = "https://github.com/undeemed/firstmate.git"
+STALE_FIRSTMATE_URL = "https://github.com/i098/firstmate.git"
 LEGACY_BROWSER_KEYS = ("obscura_version", "obscura_sha256")
 
 
