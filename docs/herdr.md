@@ -228,6 +228,8 @@ herdr-patch <user>@<host>
 
 In a mobile mosh app, or with plain mosh, set the host command to `herdr-patch` (`mosh <user>@<host> -- herdr-patch`). The [herdr-patch README](../herdr-patch/README.md) has the install steps for your computer, the images, the `HERDR_PATCH_FILL` fill list, the limits, and the removal steps.
 
+Retired: `herdr-mosh` is now `herdr-patch`. An apply on a host that still has `~/.local/bin/herdr-mosh` or `/usr/local/bin/herdr-mosh` removes both, so a saved mosh command that runs `herdr-mosh` must change to `herdr-patch`.
+
 ## Known limits
 
 - Agents without the extension, including non-omp agents, show only their dot on line 1: nothing reports their `who` token.

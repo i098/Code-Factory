@@ -135,6 +135,18 @@
     - herdr
     - herdr-patch
 
+# herdr-mosh is retired: herdr-patch replaced it. Hosts that applied the
+# earlier install keep the old copy and its link until this removes them.
+- name: Remove retired herdr-mosh
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  become: true
+  become_user: root
+  loop:
+    - /usr/local/bin/herdr-mosh
+    - "{{ factory_local_bin }}/herdr-mosh"
+
 # btop fitted to its pane (docs/herdr.md#btop): the launcher takes the place of
 # the btop command and runs the installer's btop-bin with a preset of this
 # config. btop rewrites its config on exit; every apply puts the saved one back.
