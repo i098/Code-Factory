@@ -40,6 +40,16 @@
   become: true
   when: not ansible_check_mode or factory_apt_indexes.matched > 0
 
+- name: Install chat client runtime libraries
+  ansible.builtin.apt:
+    name: "{{ factory_chat_packages }}"
+    state: present
+    install_recommends: false
+  become: true
+  when:
+    - factory_cfg.profiles.chat | bool
+    - not ansible_check_mode or factory_apt_indexes.matched > 0
+
 - name: Install development prerequisites
   ansible.builtin.apt:
     name: "{{ factory_development_packages }}"

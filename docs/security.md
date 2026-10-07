@@ -108,6 +108,27 @@ A new host gets its own key; never copy `~/.ssh/id_ed25519_mac` from the old hos
 3. Run `ssh mac true` on the new host.
 4. At cutover, remove the old host's line from the Mac's `~/.ssh/authorized_keys`. Each line ends with the comment `<user>@<hostname> code-factory mac`, which names the host. Keep the old line until the new host works.
 
+### From a Mac to the host
+
+The other direction, from the operator's Mac to the host, is also a manual setup on the Mac. Apply does not change it. Every host gets `mosh` (`mosh-server`) in the base packages.
+
+Add a `Host` alias for the host to `~/.ssh/config` on the Mac. Set `User` to the host's factory account, so `ssh <alias>` and `mosh <alias>` log in as that account without `user@`:
+
+```text
+Host <alias>
+  HostName <host tailnet name or IP>
+  User <factory account>
+```
+
+mosh reads the alias too, because it starts its session over `ssh`. Then:
+
+```bash
+ssh <alias>
+mosh <alias> -- herdr-mosh
+```
+
+[Over mosh](herdr.md#over-mosh) explains `herdr-mosh`. Keep the alias, the host's address and the account name out of this repository.
+
 ## Host hardening
 
 Every apply on a host that starts services (not the container worker image) installs [Koncreet](https://github.com/jimididit/koncreet) as `/usr/local/bin/koncreet` and renders `/etc/koncreet.conf` once, but nothing runs it. Koncreet is optional: when its release lookup, checksum, or download fails, apply prints a warning, skips it, and finishes the rest; a release installed earlier stays in place. It is a first-hour hardening toolkit: a sudo user with SSH keys, sysctl, swap, a journald cap, time sync, a ufw default-deny firewall, fail2ban on SSH, unattended security updates, and finally SSH with password and root login turned off.

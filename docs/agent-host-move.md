@@ -44,6 +44,7 @@ Services that hold state other hosts share, such as a model relay, a monitoring 
 | omp rules, extensions and custom models (`~/.omp/agent/rules/`, `extensions/`, `models.yml`) | `rsync -a --exclude herdr-omp-agent-state.ts` them from the old host when they hold no credentials. Apply already installed Herdr's own omp extension for the new host's herdr ([Pane state](herdr.md#pane-state)). |
 | omp keys and MCP credentials (`~/.omp/agent/*.key`, `mcp.json`) and each home's `state/secrets/` | Never copy them ([Never export](security.md#never-export)). Recreate each on the new host by hand, mode `600`, entering the keys yourself. |
 | `ssh mac` access to the operator Mac | Never copy `~/.ssh/id_ed25519_mac`. Apply on the new host generates a new key. Add the new host's line on the Mac, and remove the old host's line at [Cutover](#cutover) step 8 ([Host move](security.md#host-move)). |
+| Concord and slk logins (`~/.local/state/concord/`, `~/.local/share/slk/tokens/`) | Never copy them. Sign in again on the new host ([Sign in](chat.md#sign-in)). Apply seeds each client's config only when it is absent, so add slk's `[workspaces.*]` blocks again by signing in. |
 
 ```bash
 for g in ~/Dev/*/.git ~/Dev/*/projects/*/.git ~/.treehouse/*/*/*/.git ~/.treehouse/*/*/*/projects/*/.git; do

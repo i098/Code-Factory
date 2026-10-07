@@ -36,8 +36,20 @@ from pathlib import Path, PurePosixPath
 GITHUB_API = "https://api.github.com/repos/{}/releases"
 # How release asset names spell each platform.
 ARCH = {
-    "linux-x86_64": {"node": "x64", "go": "amd64", "bun": "x64-baseline", "gnu": "x86_64"},
-    "linux-aarch64": {"node": "arm64", "go": "arm64", "bun": "aarch64", "gnu": "aarch64"},
+    "linux-x86_64": {
+        "node": "x64",
+        "go": "amd64",
+        "bun": "x64-baseline",
+        "gnu": "x86_64",
+        "goreleaser": "x86_64",
+    },
+    "linux-aarch64": {
+        "node": "arm64",
+        "go": "arm64",
+        "bun": "aarch64",
+        "gnu": "aarch64",
+        "goreleaser": "arm64",
+    },
 }
 # Native tools on their latest GitHub release: repository, tag prefix, asset
 # name, and where each command sits inside the asset.
@@ -75,6 +87,14 @@ GITHUB_LATEST = {
     # The grammars of the same sentrux release. sentrux downloads them itself,
     # unverified, when ~/.sentrux/plugins lacks them; link_grammars puts them there.
     "sentrux-grammars": ("sentrux/sentrux", "v", "grammars-{key}.tar.gz", {}),
+    # Terminal chat clients for the chat profile (docs/chat.md).
+    "concord": (
+        "chojs23/concord",
+        "v",
+        "concord-{gnu}-unknown-linux-gnu.tar.xz",
+        {"concord": "concord-*/concord"},
+    ),
+    "slk": ("gammons/slk", "v", "slk_{v}_linux_{goreleaser}.tar.gz", {"slk": "slk"}),
     # Resolved for the fleet browser ladder (ansible/tasks/fleet-browsers.yml), not installed here.
     "obscura": (
         "h4ckf0r0day/obscura",

@@ -2,7 +2,7 @@
 
 Code Factory renders `~/.config/herdr/config.toml` from [`ansible/templates/herdr.toml.j2`](../ansible/templates/herdr.toml.j2) and the `herdr` block of `.local/host.yml`. This guide covers the two sidebar layouts it ships, Spaces and Agents, and the two feeders that report their `$` tokens: an omp extension for Agents and a reporter timer for Spaces.
 
-The sidebar is 46 columns wide (`sidebar_width`; it may grow to `sidebar_max_width`, 56). That fits the widest pull request line: a 4-digit pull request and issue, 5-digit line counts and a 3-digit file count. There is no status word: the color of the state dot already shows it.
+The sidebar is 46 columns wide (`sidebar_width`; it may grow to `sidebar_max_width`, 56). That fits the widest pull request line: a 4-digit pull request and issue, 5-digit line counts and a 3-digit file count. There is no status word: the state icon already shows it. The recipe sets `[ui] status_indicators = "symbols"`, so the state icon is a different symbol for each agent state, not only a different color. This guide calls it the state dot.
 
 ## Spaces: one entry per home
 

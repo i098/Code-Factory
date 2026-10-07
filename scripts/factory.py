@@ -89,7 +89,7 @@ def initialize(args):
     config["factory"].update(user=user, home=home, workspace=str(Path(home) / "Dev"))
     if args.container:
         config["factory"].update(start_services=False, enable_linger=False)
-        for profile in ("docker", "tailscale", "desktop", "firstmate"):
+        for profile in ("docker", "tailscale", "desktop", "firstmate", "chat"):
             config["factory"]["profiles"][profile] = False
         config["factory"]["browser_prune"]["enabled"] = False
     destination = ROOT / ".local/host.yml"

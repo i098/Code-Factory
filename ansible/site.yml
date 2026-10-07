@@ -55,6 +55,16 @@
       when: factory_account_ready | bool
       tags: [herdr]
 
+    - name: Terminal chat client configs
+      ansible.builtin.import_tasks: tasks/chat.yml
+      become: "{{ factory_become_target | bool }}"
+      become_user: "{{ factory_cfg.user }}"
+      environment: "{{ factory_user_env }}"
+      when:
+        - factory_account_ready | bool
+        - factory_cfg.profiles.chat | bool
+      tags: [chat]
+
     - name: Agent harness preferences
       ansible.builtin.import_tasks: tasks/agents.yml
       become: "{{ factory_become_target | bool }}"
@@ -207,6 +217,14 @@
       become: true
       when: factory_manage_services | bool
       listen: restart journald
+
+    - name: Load the agent host sysctl settings
+      ansible.builtin.command:
+        argv: [sysctl, -p, /etc/sysctl.d/60-agent-host.conf]
+      become: true
+      changed_when: true
+      when: factory_manage_services | bool
+      listen: load agent host sysctl
 
     - name: Restart fleet browser obscura
       ansible.builtin.systemd_service:
