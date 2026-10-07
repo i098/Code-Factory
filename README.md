@@ -1,6 +1,6 @@
 # ⚡ Code Factory
 
-Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, and the omp agent fleet, provisioned by Ansible from a checksum-verified toolchain (the three omp marketplace plugins are the one exception). No Nix, no chezmoi, no cloud dependencies.
+Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, and the omp agent fleet, provisioned by Ansible from a checksum-verified toolchain (the three omp marketplace plugins and herdr-mosh are the exceptions). No Nix, no chezmoi, no cloud dependencies.
 
 ```mermaid
 flowchart TD

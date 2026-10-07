@@ -220,7 +220,7 @@ Pane state (the sidebar dots) is reported on the host by the omp integration `./
 
 Herdr 0.9.3 keeps a "host background" color in the server. After a client attaches again, Herdr can paint this color over older panes as an opaque fill ([herdr#3773](https://github.com/herdrdev/herdr/issues/3773)). mosh does not answer the OSC 10 and OSC 11 color queries. Thus, the fill shows as a solid block and not as the transparent background of your terminal.
 
-`./factory apply` installs [`maintenance/herdr-mosh`](../maintenance/herdr-mosh) as `~/.local/bin/herdr-mosh`. It runs `herdr --session default` in its own pseudo-terminal and sends your keys and window size to Herdr without change. In the output of Herdr, it changes only a truecolor background on its fill list to the default background. All other output bytes go through without change.
+`./factory apply` installs `herdr-mosh` from the default branch of [i098/herdr-patch](https://github.com/i098/herdr-patch) as `~/.local/bin/herdr-mosh`, so every apply brings the latest version. `herdr-mosh` runs Herdr and removes that fill from the output of Herdr. `mosh-server` starts its command with the system `PATH`, which has no `~/.local/bin`, so apply also links `/usr/local/bin/herdr-mosh` and `/usr/local/bin/herdr` to the installed files.
 
 To attach over mosh, use `herdr-mosh` as the host command:
 
@@ -228,17 +228,7 @@ To attach over mosh, use `herdr-mosh` as the host command:
 mosh <host> -- herdr-mosh
 ```
 
-In the iPhone mosh app, set the host command to `herdr-mosh`. Arguments replace `--session default`, for example `herdr-mosh --session lab`.
-
-The fill list comes from `HERDR_MOSH_FILL`: hex colors, separated by commas. The default is `1e1e1e,232136`: the fallback color of Herdr, and a rose-pine-moon background that Herdr keeps after a `herdr --remote` client. An empty value changes nothing. To add a color, set the variable in the host command:
-
-```bash
-mosh <host> -- env HERDR_MOSH_FILL=1e1e1e,232136,2a273f herdr-mosh
-```
-
-A pane program that uses a color from the fill list as its own background also loses that background. `herdr --remote` and plain SSH do not use `herdr-mosh`, because their terminals answer the color queries.
-
-When Herdr fixes #3773, remove `maintenance/herdr-mosh` and its install task. Then attach with `mosh <host> -- herdr` again.
+The [herdr-patch README](https://github.com/i098/herdr-patch#herdr-mosh) has the arguments, the `HERDR_MOSH_FILL` fill list, and the removal steps.
 
 ## Known limits
 

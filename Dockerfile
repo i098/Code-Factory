@@ -22,7 +22,7 @@
 # treats operating-system security updates as an OS responsibility rather than
 # pinning a whole vulnerable package index. Every tool the installer adds is
 # its latest release, verified against the checksum its publisher posts (the
-# three omp marketplace plugins are the one exception: no publisher posts one).
+# three omp marketplace plugins and herdr-mosh are the exceptions: no publisher posts one).
 
 ARG UBUNTU_IMAGE=ubuntu:latest
 

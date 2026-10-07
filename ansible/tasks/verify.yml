@@ -196,6 +196,30 @@
           "{{ factory_verify_herdr_link.stat.lnk_source | default('(missing)') }}".
         quiet: true
 
+    # mosh-server and non-interactive SSH run commands with the system PATH,
+    # which has no ~/.local/bin; the /usr/local/bin links make both resolve.
+    - name: Resolve herdr and herdr-mosh with the mosh-server PATH
+      ansible.builtin.command:
+        argv: [env, -i, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+               sh, -c, "command -v herdr && command -v herdr-mosh"]
+      become: "{{ factory_become_target | bool }}"
+      become_user: "{{ factory_cfg.user }}"
+      register: factory_verify_mosh_path
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Assert herdr and herdr-mosh resolve through /usr/local/bin
+      ansible.builtin.assert:
+        that:
+          - factory_verify_mosh_path.stdout_lines == ['/usr/local/bin/herdr', '/usr/local/bin/herdr-mosh']
+        fail_msg: >-
+          With the mosh-server PATH, `herdr` and `herdr-mosh` resolve to
+          "{{ factory_verify_mosh_path.stdout_lines | join(', ') | default('(nothing)', true) }}",
+          not /usr/local/bin/herdr and /usr/local/bin/herdr-mosh, so
+          `mosh <host> -- herdr-mosh` fails.
+        quiet: true
+
     # --- the omp release this run resolved is the one installed ------------
 
     - name: Stat the managed omp symlink
