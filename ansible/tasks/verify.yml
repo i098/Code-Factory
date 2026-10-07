@@ -312,6 +312,37 @@
         quiet: true
       when: factory_manage_profile_path | bool
 
+    # --- data disk (factory.data_dir) --------------------------------------
+
+    - name: Assert the login shell sends the npm and pip caches to the data disk
+      ansible.builtin.assert:
+        that:
+          - (factory_verify_profile.content | b64decode) is search('export ' ~ item.key ~ '="' ~ (item.value | regex_escape) ~ '"')
+        fail_msg: "{{ factory_cfg.home }}/.profile does not export {{ item.key }}={{ item.value }}."
+        quiet: true
+      loop: "{{ factory_data_cache_env | dict2items }}"
+      when: factory_manage_profile_path | bool
+
+    - name: Read the Docker daemon configuration
+      ansible.builtin.slurp:
+        src: "{{ factory_docker_daemon_json }}"
+      become: true
+      register: factory_verify_docker_daemon
+      changed_when: false
+      when:
+        - factory_cfg.profiles.docker | bool
+        - factory_docker_data_root | length > 0
+
+    - name: Assert Docker's data root is on the data disk
+      ansible.builtin.assert:
+        that:
+          - ((factory_verify_docker_daemon.content | b64decode | from_json)['data-root'] | default('')) == factory_docker_data_root
+        fail_msg: "{{ factory_docker_daemon_json }} does not set data-root to {{ factory_docker_data_root }}."
+        quiet: true
+      when:
+        - factory_cfg.profiles.docker | bool
+        - factory_docker_data_root | length > 0
+
     # --- pruner runtime and unit -------------------------------------------
 
     - name: Read the pruner unit

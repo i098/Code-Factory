@@ -151,12 +151,15 @@
     mode: "0755"
   become: true
 
-- name: Point daemon-spawned omp at the overlay
+- name: Point daemon-spawned omp at the overlay and pipelines at the data-disk caches
   ansible.builtin.copy:
     content: |
       # Managed by Code Factory (docs/omp.md#no-mistakes-pipeline-agent).
       [Service]
       Environment="PI_CONFIG_FILES={{ factory_no_mistakes_omp_overlay }}"
+      {% for key, value in factory_data_cache_env | dictsort %}
+      Environment="{{ key }}={{ value }}"
+      {% endfor %}
     dest: "{{ factory_user_units }}/no-mistakes-daemon-.service.d/code-factory.conf"
     owner: "{{ factory_cfg.user }}"
     group: "{{ factory_group }}"

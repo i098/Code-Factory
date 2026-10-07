@@ -25,6 +25,7 @@ factory:
   workspace: /home/coder/Dev
   start_services: true
   enable_linger: true
+  data_dir: ""            # Data disk for Docker and the npm and pip caches; see Data disk below
   profiles:
     agents: true          # Chrome autoprune, AXI tools, browser defaults
     development: true     # Rust, build tools
@@ -92,3 +93,34 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 | `desktop` | off | Loopback-only XFCE + TigerVNC + noVNC operator desktop on `127.0.0.1:6080`, and the Google Chrome apt package. Needs an operator-created VNC password; see [Desktop access](recovery.md#desktop-access). |
 
 The latest Herdr release is always installed, with the captured UI preferences, the [Spaces and Agents sidebar layouts](herdr.md) with the reporter timer that feeds Spaces, and one canonical, versioned user-service executable. What each profile installs, and where it comes from, is in [Dependencies](dependencies.md).
+
+## Data disk
+
+Set `data_dir` to an absolute path on a large data disk to keep fast-growing data off the system disk. The default `""` keeps today's layout.
+
+| Data | Location with `data_dir` set | How |
+| --- | --- | --- |
+| Docker images, containers and volumes | `<data_dir>/docker` | `data-root` in `/etc/docker/daemon.json` (`docker` profile) |
+| npm cache | `<data_dir>/cache/npm` | `npm_config_cache` |
+| pip cache | `<data_dir>/cache/pip` | `PIP_CACHE_DIR` |
+
+The variables go into the managed block of `~/.profile`, the Herdr unit and the no-mistakes daemon drop-in. A running Herdr server or no-mistakes daemon reads them only after its next restart. Apply creates `<data_dir>/cache` for the account; Docker creates its own data root. The cargo cache stays in `~/.cargo` on purpose: `CARGO_HOME` also holds `bin` and `config.toml`, so moving it would break `cargo install` on PATH and ignore the existing cargo config.
+
+The bun, pnpm and uv caches stay on the system disk on purpose. These tools hardlink packages from their cache into each worktree's `node_modules` or `.venv`, and a hardlink works only on one filesystem. With the cache on another disk, each install copies full packages into the worktree, so the worktree pools grow faster on the system disk. Move these caches only together with the pools (see below).
+
+### Moving an existing Docker data root
+
+Apply sets the new `data-root` but copies nothing, so Docker starts with an empty root and pulls images again. Apply refuses the switch while a container runs, because `live-restore` cannot carry containers to a new root. To keep the images, volumes and stopped containers, move the root by hand before apply:
+
+1. Make sure that `sudo docker ps -q` prints nothing. Do not stop containers that other work needs.
+2. `sudo systemctl stop docker.socket docker.service`
+3. `sudo rsync -aHAX /var/lib/docker/ <data_dir>/docker/`
+4. Set `"data-root": "<data_dir>/docker"` in `/etc/docker/daemon.json`, or run `./factory apply`.
+5. `sudo systemctl start docker.service`, then make sure that `sudo docker info -f '{{.DockerRootDir}}'` and `sudo docker images` show the new root and the images.
+6. Remove `/var/lib/docker` only after that check.
+
+For a cache, copy it with `rsync -aHAX`, apply, check the new path (for example `npm config get cache`), then remove the old copy.
+
+### Later: pools and hardlinking caches together
+
+The worktree pools are the largest user of the system disk after Docker. Treehouse places new pools under `<root>/.treehouse`, where `<root>` comes from `--root`, the `TREEHOUSE_ROOT` variable, or `root` in a project's `treehouse.toml` (default `$HOME`). Treehouse looks up a pool under the same root, so a changed root does not find the pools that exist now. Change it only for a project whose pool has no live worktree. When the pools are on the data disk, point the bun (`BUN_INSTALL_CACHE_DIR`), pnpm (`store-dir`) and uv (`UV_CACHE_DIR`) caches to the same disk, so the hardlinks work again. The recipe does not do this step.

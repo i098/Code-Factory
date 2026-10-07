@@ -24,6 +24,9 @@ Environment=FLEET_BROWSER_TIER=obscura
 Environment="{{ key }}={{ value }}"
 {% endfor %}
 {% endif %}
+{% for key, value in factory_data_cache_env | dictsort %}
+Environment="{{ key }}={{ value }}"
+{% endfor %}
 Restart=on-failure
 RestartSec=2
 

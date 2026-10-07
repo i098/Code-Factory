@@ -62,6 +62,16 @@ factory_chrome_devtools_mcp_path: "{{ factory_share_dir }}/chrome-devtools-mcp/c
 # the chrome-devtools-axi bridge, chrome-devtools-mcp and acpx.
 factory_managed_shell_env:
   CHROME_DEVTOOLS_AXI_MCP_PATH: "{{ factory_chrome_devtools_mcp_path }}"
+# factory.data_dir: Docker's data root and the caches that never hardlink into
+# a worktree. Exported next to factory_managed_shell_env on every profile.
+# bun, pnpm and uv stay on the system disk on purpose: they hardlink packages
+# into each worktree, which only works on one filesystem
+# (docs/configuration.md#data-disk).
+factory_data_dir: "{{ factory_cfg.data_dir | default('', true) }}"
+factory_docker_data_root: "{{ (factory_data_dir ~ '/docker') if factory_data_dir else '' }}"
+factory_data_cache_env: >-
+  {{ {'npm_config_cache': factory_data_dir ~ '/cache/npm',
+      'PIP_CACHE_DIR': factory_data_dir ~ '/cache/pip'} if factory_data_dir else {} }}
 # Contract: compute the unit ExecStart directly, never /usr/local/bin or $PATH.
 factory_herdr_bin: "{{ factory_tools_root }}/herdr/{{ factory_herdr_version }}/{{ factory_platform }}/herdr"
 factory_herdr_config_dir: "{{ factory_cfg.home }}/.config/herdr"

@@ -3,12 +3,13 @@
 #
 # One package family only - the source host runs Ubuntu's docker.io, so Docker
 # CE repositories are deliberately not added. /etc/docker/daemon.json is
-# MERGED, never replaced: the keys in factory_docker_daemon_settings are set,
-# every other key an operator put there is kept, and the daemon is restarted
-# only when the merged document differs. With live-restore on, that restart
-# leaves running containers untouched; the very first apply that turns
-# live-restore on is the one restart that recycles them (restart policies
-# bring them back), and the debug task below says so before it happens.
+# MERGED, never replaced: the engine settings (and data-root when
+# factory.data_dir is set) are set, every other key an operator put there is
+# kept, and the daemon is restarted only when the merged document differs.
+# With live-restore on, that restart leaves running containers untouched; the
+# very first apply that turns live-restore on is the one restart that recycles
+# them (restart policies bring them back), and the debug task below says so
+# before it happens. A data-root switch is refused while containers run.
 #
 # Membership of the docker group is equivalent to passwordless root on the
 # host, so it is never granted implicitly. factory_docker_group_users is an
@@ -77,7 +78,23 @@
     factory_docker_daemon_desired: >-
       {{ factory_docker_daemon_current
          | combine({'init': factory_cfg.docker.init | bool,
-                    'live-restore': factory_cfg.docker.live_restore | bool}) }}
+                    'live-restore': factory_cfg.docker.live_restore | bool})
+         | combine({'data-root': factory_docker_data_root} if factory_docker_data_root else {}) }}
+
+# A new data root starts empty and live-restore cannot carry containers across
+# it, so the switch waits for a host with nothing running. Nothing is copied:
+# docs/configuration.md#data-disk has the move that keeps the images.
+- name: Refuse to switch the Docker data root under running containers
+  ansible.builtin.command: docker ps -q
+  become: true
+  register: factory_docker_running
+  changed_when: false
+  check_mode: false
+  # A stopped or missing daemon runs nothing; only listed containers block.
+  failed_when: factory_docker_running.stdout | default('') | length > 0
+  when: >-
+    (factory_docker_daemon_current['data-root'] | default('/var/lib/docker'))
+    != (factory_docker_daemon_desired['data-root'] | default('/var/lib/docker'))
 
 - name: Warn that the first live-restore switch recycles running containers
   ansible.builtin.debug:

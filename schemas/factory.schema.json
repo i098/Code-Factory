@@ -29,6 +29,10 @@
         "enable_linger": {
           "type": "boolean"
         },
+        "data_dir": {
+          "type": "string",
+          "pattern": "^(/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*$"
+        },
         "profiles": {
           "type": "object",
           "additionalProperties": false,
