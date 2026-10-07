@@ -1,6 +1,6 @@
 # ⚡ Code Factory
 
-Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, and the omp agent fleet, provisioned by Ansible from a checksum-verified toolchain (the three omp marketplace plugins and herdr-mosh are the exceptions). No Nix, no chezmoi, no cloud dependencies.
+Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, and the omp agent fleet, provisioned by Ansible from a checksum-verified toolchain (the three omp marketplace plugins are the one exception). No Nix, no chezmoi, no cloud dependencies.
 
 ```mermaid
 flowchart TD
@@ -83,6 +83,7 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 | [Dependencies](docs/dependencies.md) | Every tool, package, and image the recipe installs, and what the host must already have |
 | [Fleet guards](docs/fleet-guards.md) | Shared Supabase, Docker guard, dev-server reaper, storage guard, spawn memory floor, browser ladder |
 | [Herdr sidebar](docs/herdr.md) | The Spaces and Agents sidebar layouts, what each line and token shows, the reporter timer and omp extension that feed them, and how to override them or turn parts off |
+| [herdr-patch](herdr-patch/README.md) | Herdr over mosh: no opaque background fill, and real images with `herdr-patch <user>@<host>` |
 | [omp configuration](docs/omp.md) | Signing in, model roles, fallbacks, the advisor, and updating an existing host |
 | [Capacity and pruners](docs/capacity.md) | Host sizing per lane count and every auto pruner |
 | [Architecture](docs/architecture.md) | Why Ansible, host and container boundary, Docker worker, CI |

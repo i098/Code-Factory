@@ -218,17 +218,15 @@ Pane state (the sidebar dots) is reported on the host by the omp integration `./
 
 ## Over mosh
 
-Herdr 0.9.3 keeps a "host background" color in the server. After a client attaches again, Herdr can paint this color over older panes as an opaque fill ([herdr#3773](https://github.com/herdrdev/herdr/issues/3773)). mosh does not answer the OSC 10 and OSC 11 color queries. Thus, the fill shows as a solid block and not as the transparent background of your terminal.
+Over mosh, Herdr 0.9.3 can paint an opaque fill over older panes ([herdr#3773](https://github.com/herdrdev/herdr/issues/3773)), and mosh drops the images in the panes. `./factory apply` installs [`herdr-patch/herdr-patch`](../herdr-patch/herdr-patch) as `~/.local/bin/herdr-patch`, which fixes both. `mosh-server` starts its command with the system `PATH`, which has no `~/.local/bin`, so apply also links `/usr/local/bin/herdr-patch` and `/usr/local/bin/herdr` to the installed files.
 
-`./factory apply` installs `herdr-mosh` from the default branch of [i098/herdr-patch](https://github.com/i098/herdr-patch) as `~/.local/bin/herdr-mosh`, so every apply brings the latest version. `herdr-mosh` runs Herdr and removes that fill from the output of Herdr. `mosh-server` starts its command with the system `PATH`, which has no `~/.local/bin`, so apply also links `/usr/local/bin/herdr-mosh` and `/usr/local/bin/herdr` to the installed files.
-
-To attach over mosh, use `herdr-mosh` as the host command:
+On your computer, install the same script and attach with real images:
 
 ```bash
-mosh <host> -- herdr-mosh
+herdr-patch <user>@<host>
 ```
 
-The [herdr-patch README](https://github.com/i098/herdr-patch#herdr-mosh) has the arguments, the `HERDR_MOSH_FILL` fill list, and the removal steps.
+In a mobile mosh app, or with plain mosh, set the host command to `herdr-patch` (`mosh <user>@<host> -- herdr-patch`). The [herdr-patch README](../herdr-patch/README.md) has the install steps for your computer, the images, the `HERDR_PATCH_FILL` fill list, the limits, and the removal steps.
 
 ## Known limits
 

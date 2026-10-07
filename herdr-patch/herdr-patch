@@ -1,0 +1,845 @@
+#!/usr/bin/env python3
+r"""herdr over mosh: no opaque background fill, and real images (README.md).
+
+    herdr-patch <host> [herdr arguments...]               on your computer
+    herdr-patch [--channel TOKEN] [herdr arguments...]    on the server: the mosh command
+    herdr-patch --read TOKEN                              on the server: the image reader
+    herdr-patch --help
+
+The first argument decides where it runs. If it does not start with "-", it is
+the host, and herdr-patch runs on your computer. With no argument, or with a
+first argument that starts with "-", herdr-patch runs on the server. Herdr
+arguments default to --session default.
+
+On the server, herdr-patch runs herdr in its own pseudo-terminal. Keys and
+window size go through unchanged. Herdr 0.9.3 keeps a "host background" color
+in the server and, after a client attaches again, paints it over older panes
+as an opaque fill (herdrdev/herdr#3773). mosh never answers the OSC 10/11 color
+queries, so the fill shows as a solid block instead of the terminal's own,
+often transparent, background. In herdr's output, a truecolor background
+(48;2;R;G;B, 48:2:R:G:B, 48:2::R:G:B or 48:2:<cs>:R:G:B) whose RGB is on the
+fill list becomes the default background (49). Exits with herdr's exit status.
+
+Images: herdr sends each pane image as kitty graphics (a transmit, then one
+placement per cell row after a CUP, deletes on scroll and clear). mosh drops
+them, so the server takes them out of the stream and paints each placement as
+half-block cells, which every mosh client can show. Each half cell is the mean
+of at most 4 sampled pixels, so the work for a placement does not grow with the
+size of the image. With --channel, it also serves the graphics on a unix socket
+that only this user can open, and `herdr-patch --read TOKEN` copies them to
+stdout.
+
+What the server changes in herdr's output, and nothing else: a fill-list
+background becomes SGR 49; kitty graphics commands (ESC _ G ... ESC \) are
+taken out; half-block cells are painted into the cells of each image (and
+blanked when herdr deletes the image). Every other byte goes through unchanged.
+
+On your computer, `herdr-patch <host>` starts `mosh <host> -- herdr-patch
+--channel TOKEN ...` in a pseudo-terminal, with a new random TOKEN, and reads
+the graphics of exactly that server through `ssh <host> herdr-patch --read
+TOKEN`. Keys and window size go through to mosh unchanged. The graphics go into
+the terminal output only between escape sequences, wrapped in ESC 7 ... ESC 8.
+After mosh output that can erase image cells (EL, ECH, ED, scrolls, insert and
+delete), and after a resize, the current placements go out again. When the ssh
+channel stops, mosh goes on without images and the channel connects again.
+
+HERDR_PATCH_FILL: comma-separated hex colors, default "1e1e1e,232136" (herdr's
+own fallback and a rose-pine-moon background). An empty value changes nothing.
+HERDR_BIN_PATH: the herdr program the server runs, default "herdr".
+
+Needs only the Python 3.9 standard library (the one macOS ships). Your computer
+needs mosh, ssh, and a terminal with kitty graphics, such as WezTerm or kitty.
+"""
+
+from __future__ import annotations
+
+import base64
+import fcntl
+import os
+import pty
+import re
+import secrets
+import select
+import signal
+import socket
+import stat
+import struct
+import subprocess
+import sys
+import termios
+import time
+import tty
+import zlib
+
+HERDR = os.environ.get("HERDR_BIN_PATH", "herdr")
+REMOTE = "herdr-patch"  # the command that mosh and ssh run on the server
+SGR = re.compile(rb"\x1b\[([0-9;:]*)m")
+# What a read can end in that may still become an SGR sequence or an APC.
+PARTIAL = re.compile(rb"\x1b(?:\[[0-9;:]*|_)?")
+HOLD = 0.05  # seconds a partial sequence waits for its rest before it goes out as is
+SAMPLES = 2  # pixels read along each axis of a half cell: at most SAMPLES * SAMPLES per half
+PNG_CHANNELS = {2: 3, 6: 4}  # the PNG color types the server decodes: RGB and RGBA
+PNG_MAX = 1 << 15  # a PNG of more pixels is sent to the channel but not painted: decoding it would stall the loop
+IMAGE_MAX = 64 << 20  # an image that inflates to more bytes is dropped
+APC = re.compile(rb"\x1b_G([^;\x1b]*)(?:;([^\x1b]*))?\x1b\\")
+APC_MAX = 1 << 20  # an unterminated APC longer than this goes out as text
+# herdr's text: CUP, other CSI, OSC, ESC 7/8, other ESC, and printed runs.
+TOKEN = re.compile(
+    rb"\x1b\[(\d*)(?:;(\d*))?[Hf]|\x1b\[[0-?]*[ -/]*([@-~])|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"
+    rb"|\x1b([78])|\x1b[ -/]*[0-Z\\^-~]?|([^\x1b]+)"
+)
+CUP_END = re.compile(rb"\x1b\[(\d*)(?:;(\d*))?[Hf]\Z")
+CONTROL = re.compile(rb"[\x00-\x1f\x7f]")
+NEUTRAL = b"mhlnctuq"  # CSI finals that move no cursor and change no cell
+TOKEN_FORM = re.compile(r"[A-Za-z0-9_-]{16,64}")
+RUNTIME = "/tmp"  # the channel sockets go in RUNTIME/herdr-patch-<uid>/
+UPPER = "\u2580".encode()  # ▀: fg is the top half of the cell, bg the bottom half
+DELETE_ALL = b"\x1b_Ga=d,d=A,q=2\x1b\\"
+# The computer's side: a channel graphic (with its CUP), and one complete piece
+# of mosh output: CSI (final byte in group 1), OSC, DCS/APC/PM/SOS, another ESC
+# sequence, or text.
+GRAPHIC = re.compile(rb"(?:\x1b\[\d+;\d+H)?\x1b_G([^;\x1b]*)(?:;[^\x1b]*)?\x1b\\")
+PIECE = re.compile(
+    rb"\x1b\[[0-?]*[ -/]*([@-~])|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[P_^X][^\x1b]*\x1b\\"
+    rb"|\x1b[ -/]*[0-OQ-WYZ\\`-~]|[^\x1b]+"
+)
+ERASE = b"KXJLMSTP@r"  # CSI finals after which the terminal may have lost image cells
+TAIL_MAX = 1 << 16  # an unterminated sequence longer than this is not waited for
+
+
+def fill_colors(spec: str) -> set[tuple[int, ...]]:
+    return {tuple(bytes.fromhex(c.strip().removeprefix("#"))) for c in spec.split(",") if c.strip()}
+
+
+def rgb(parts: list[bytes]) -> tuple[int, ...] | None:
+    try:
+        return tuple(int(p) for p in parts)
+    except ValueError:  # an empty component
+        return None
+
+
+def params(text: bytes, fill: set) -> bytes:
+    """SGR parameters with every fill background replaced by 49, the rest as is.
+
+    Walks whole parameter groups, so the B of `38;2;R;G;48` or the N of
+    `38;5;48` is never read as the start of a background.
+    """
+    p = text.split(b";")
+    out, i = [], 0
+    while i < len(p):
+        sub = p[i].split(b":")
+        if len(sub) > 1:  # colon form: the whole group is one parameter
+            bg = sub[:2] == [b"48", b"2"] and len(sub) in (5, 6) and rgb(sub[-3:]) in fill
+            out.append(b"49" if bg else p[i])
+            i += 1
+        elif p[i] in (b"38", b"48", b"58") and p[i + 1 : i + 2] in ([b"2"], [b"5"]):
+            n = 5 if p[i + 1] == b"2" else 3
+            group = p[i : i + n]
+            bg = p[i] == b"48" and n == 5 and len(group) == 5 and rgb(group[2:]) in fill
+            out += [b"49"] if bg else group
+            i += n
+        else:
+            out.append(p[i])
+            i += 1
+    return b";".join(out)
+
+
+def rewrite(data: bytes, fill: set) -> bytes:
+    if not fill or b"48" not in data:
+        return data
+    return SGR.sub(lambda m: b"\x1b[" + params(m[1], fill) + b"m", data)
+
+
+def apc(keys: str, payload: bytes = b"") -> bytes:
+    """One kitty graphics command; a payload goes out in 4096-byte chunks."""
+    if not payload:
+        return b"\x1b_G" + keys.encode() + b"\x1b\\"
+    data = base64.b64encode(payload)
+    chunks = [data[i : i + 4096] for i in range(0, len(data), 4096)]
+    return b"".join(
+        b"\x1b_G%s%s;%s\x1b\\" % (keys.encode() + b"," if n == 0 else b"", b"m=%d" % (n < len(chunks) - 1), chunk)
+        for n, chunk in enumerate(chunks)
+    )
+
+
+def cup(row: int, col: int) -> bytes:
+    return b"\x1b[%d;%dH" % (row, col)
+
+
+def inflate(data: bytes, limit: int) -> bytes:
+    """zlib.decompress that raises zlib.error when the result is longer than limit."""
+    inflater = zlib.decompressobj()
+    out = inflater.decompress(data, limit + 1)
+    if len(out) > limit or inflater.unconsumed_tail or not inflater.eof:
+        raise zlib.error("inflates past its limit or ends early")
+    return out
+
+
+def png_pixels(data: bytes) -> tuple[int, int, int, bytes] | None:
+    """(width, height, bytes per pixel, pixels) of an 8-bit, non-interlaced RGB or RGBA PNG, else None."""
+    try:
+        if data[:8] != b"\x89PNG\r\n\x1a\n":
+            return None
+        pos, idat, head = 8, [], None
+        while pos + 8 <= len(data):
+            size, kind = struct.unpack(">I4s", data[pos : pos + 8])
+            body = data[pos + 8 : pos + 8 + size]
+            pos += 12 + size
+            if kind == b"IHDR":
+                head = struct.unpack(">IIBBBBB", body)
+            elif kind == b"IDAT":
+                idat.append(body)
+            elif kind == b"IEND":
+                break
+        width, height, depth, color, _, _, interlace = head
+        bpp = PNG_CHANNELS.get(color)
+        if depth != 8 or interlace or not bpp or not 0 < width * height <= PNG_MAX:
+            return None
+        stride = width * bpp
+        raw = inflate(b"".join(idat), height * (stride + 1))
+        if len(raw) < height * (stride + 1):
+            return None
+        out, prev = bytearray(), bytes(stride)
+        for r in range(height):
+            start = r * (stride + 1)
+            kind, row = raw[start], bytearray(raw[start + 1 : start + 1 + stride])
+            if kind == 1:
+                for i in range(bpp, stride):
+                    row[i] = (row[i] + row[i - bpp]) & 255
+            elif kind == 2:
+                row = bytearray((a + b) & 255 for a, b in zip(row, prev))
+            elif kind == 3:
+                for i in range(stride):
+                    row[i] = (row[i] + ((row[i - bpp] if i >= bpp else 0) + prev[i]) // 2) & 255
+            elif kind == 4:
+                for i in range(stride):
+                    a, c = (row[i - bpp], prev[i - bpp]) if i >= bpp else (0, 0)
+                    b = prev[i]
+                    p = a + b - c
+                    pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                    row[i] = (row[i] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+            elif kind != 0:
+                return None
+            out += row
+            prev = row
+        return width, height, bpp, bytes(out)
+    except (struct.error, TypeError, zlib.error):  # TypeError: no IHDR
+        return None
+
+
+def points(a: int, b: int) -> list[int]:
+    """Up to SAMPLES evenly spread pixel positions in [a, b), one when the range is empty."""
+    span = max(b - a, 1)
+    n = min(SAMPLES, span)
+    return [a + (2 * i + 1) * span // (2 * n) for i in range(n)]
+
+
+class Image:
+    def __init__(self, width: int, height: int, bpp: int, pixels: bytes | None, wire: bytes):
+        self.width, self.height, self.bpp, self.pixels, self.wire = width, height, bpp, pixels, wire
+        self.cache: dict[tuple, list[bytes]] = {}  # a source rect and cell grid -> painted rows
+
+    def mean(self, x0: int, x1: int, y0: int, y1: int) -> list[int]:
+        """The average RGB of up to SAMPLES * SAMPLES pixels of a box (alpha is ignored)."""
+        xs, ys = points(x0, x1), points(y0, y1)
+        total = [0, 0, 0]
+        for y in ys:
+            for x in xs:
+                i = (y * self.width + x) * self.bpp
+                for ch, value in enumerate(self.pixels[i : i + 3]):
+                    total[ch] += value
+        n = len(xs) * len(ys)
+        return [t // n for t in total]
+
+    def halfblocks(self, x: int, y: int, w: int, h: int, cols: int, rows: int) -> list[bytes]:
+        """One line of ▀ cells for each cell row of the source rect."""
+        key = (x, y, w, h, cols, rows)
+        if key not in self.cache:
+            lines = []
+            for r in range(rows):
+                ys = [y + (2 * r + k) * h // (2 * rows) for k in range(3)]
+                line, last = [], None
+                for c in range(cols):
+                    x0, x1 = x + c * w // cols, x + (c + 1) * w // cols
+                    sgr = b"\x1b[38;2;%d;%d;%d;48;2;%d;%d;%dm" % (
+                        *self.mean(x0, x1, ys[0], ys[1]),
+                        *self.mean(x0, x1, ys[1], ys[2]),
+                    )
+                    line += [b"" if sgr == last else sgr, UPPER]
+                    last = sgr
+                lines.append(b"".join(line))
+            self.cache[key] = lines
+        return self.cache[key]
+
+
+class Graphics:
+    """herdr's kitty graphics: the images, the placements, and their half-block cells.
+
+    herdr writes each text run after a CUP, and each graphics burst inside
+    ESC 7 ... ESC 8 (measured on herdr 0.9.3). `text` follows the cursor
+    through that output and forgets each painted cell that herdr writes again.
+    When herdr deletes a placement, the cells it still owns become blank: in
+    herdr's own model of the screen they are already blank, so herdr does not
+    write them again.
+    """
+
+    def __init__(self, cols: int = 80, rows: int = 24, send=None):
+        self.cols, self.rows, self.send = cols, rows, send
+        self.images: dict[int, Image] = {}
+        # (image id, placement id) -> (row, col, the placement's keys, the bytes for the channel)
+        self.places: dict[tuple[int, int], tuple[int, int, dict, bytes]] = {}
+        self.painted: dict[int, dict[int, tuple[int, int]]] = {}  # row -> col -> placement
+        self.cursor: tuple[int, int] | None = None
+        self.burst = False  # inside herdr's ESC 7 ... ESC 8
+        self.loading: tuple[dict, list[bytes]] | None = None  # a chunked transmit
+
+    def emit(self, data: bytes) -> None:
+        if self.send:
+            self.send(data)
+
+    # ponytail: images stay until herdr deletes them with d=I or d=A, as in herdr itself.
+
+    def snapshot(self) -> bytes:
+        """Everything a new channel reader needs: a reset, the images, the placements."""
+        return b"".join(
+            [DELETE_ALL]
+            + [img.wire for img in self.images.values()]
+            + [place[3] for place in self.places.values()]
+        )
+
+    def text(self, data: bytes) -> None:
+        if not self.painted:  # the fast path: only the CUP before an a=p matters
+            m = CUP_END.search(data)
+            self.cursor = (int(m[1] or 1), int(m[2] or 1)) if m else None if data else self.cursor
+            save, restore = data.rfind(b"\x1b7"), data.rfind(b"\x1b8")
+            if save != restore:
+                self.burst = save > restore
+            return
+        for m in TOKEN.finditer(data):
+            if m.start(1) >= 0:  # CUP
+                self.cursor = (int(m[1] or 1), int(m[2] or 1))
+            elif m[3]:
+                if m[3] not in NEUTRAL:  # an erase, scroll, or cursor move: stop tracking
+                    self.painted.clear()
+                    self.cursor = None
+            elif m[4]:
+                self.burst = m[4] == b"7"
+                if m[4] == b"8":
+                    self.cursor = None  # herdr writes a CUP before its next text
+            elif m[5]:
+                self.printed(m[5])
+
+    def printed(self, run: bytes) -> None:
+        if self.cursor is None or CONTROL.search(run):
+            self.painted.clear()
+            self.cursor = None
+            return
+        row, col = self.cursor
+        if run.isascii():
+            end = col + len(run)
+        else:  # widths of wide and combining characters vary: forget the rest of the row
+            end = self.cols + 1
+        cells = self.painted.get(row)
+        if cells:
+            for c in [c for c in cells if col <= c < end]:
+                del cells[c]
+            if not cells:
+                del self.painted[row]
+        self.cursor = (row, col + len(run.decode("utf-8", "replace")))
+
+    def command(self, keys: bytes, payload: bytes) -> bytes:
+        """Act on one graphics command; return what replaces it in the mosh stream."""
+        args = dict(kv.split("=", 1) for kv in keys.decode("ascii", "replace").split(",") if "=" in kv)
+        try:
+            return self.act(args, keys, payload)
+        except (ValueError, KeyError, IndexError):  # a malformed command never stops the text
+            self.loading = None
+            return b""
+
+    def act(self, args: dict, keys: bytes, payload: bytes) -> bytes:
+        if self.loading:  # the next chunk of a transmit
+            self.loading[1].append(payload)
+            if args.get("m") != "1":
+                self.transmit(*self.loading)
+                self.loading = None
+            return b""
+        action = args.get("a", "t")
+        if action == "t" and args.get("t", "d") == "d":
+            if args.get("m") == "1":
+                self.loading = (args, [payload])
+            else:
+                self.transmit(args, [payload])
+        elif action == "p":
+            return self.place(args, keys)
+        elif action == "d":
+            return self.delete(args, keys)
+        return b""
+
+    def transmit(self, args: dict, chunks: list[bytes]) -> None:
+        image = int(args.get("i", 0))
+        if not image:
+            return
+        fmt = int(args.get("f", 32))
+        width, height = int(args.get("s", 0)), int(args.get("v", 0))
+        try:
+            data = base64.b64decode(b"".join(chunks))
+            if args.get("o") == "z":
+                data = inflate(data, min(width * height * fmt // 8, IMAGE_MAX) if fmt in (24, 32) else IMAGE_MAX)
+        except (ValueError, zlib.error):
+            return
+        bpp, pixels = 0, None
+        if fmt in (24, 32) and width and height and len(data) >= width * height * fmt // 8:
+            bpp, pixels = fmt // 8, data
+            keys = f"a=t,f={fmt},o=z,s={width},v={height},i={image},q=2"
+            body = zlib.compress(data, 1) if self.send else b""  # only a channel reader needs it
+        else:
+            keys, body = f"a=t,f={fmt},i={image},q=2", data
+            png = png_pixels(data) if fmt == 100 else None
+            if png:
+                width, height, bpp, pixels = png
+        self.images[image] = Image(width, height, bpp, pixels, apc(keys, body) if self.send else b"")
+        self.emit(self.images[image].wire)
+
+    def place(self, args: dict, keys: bytes) -> bytes:
+        if self.cursor is None or "i" not in args:
+            return b""
+        row, col = self.cursor
+        key = (int(args["i"]), int(args.get("p", 0)))
+        wire = cup(row, col) + b"\x1b_G" + keys + b"\x1b\\"
+        self.places[key] = (row, col, args, wire)
+        self.emit(wire)
+        painted = self.paint(key, row, col, args)
+        return self.wrap(painted + cup(row, col)) if painted else b""
+
+    def paint(self, key: tuple[int, int], row: int, col: int, args: dict) -> bytes:
+        img = self.images.get(key[0])
+        cols, rows = int(args.get("c", 0)), int(args.get("r", 0)) or 1
+        if img is None or img.pixels is None or not cols:
+            return b""
+        x, y = min(int(args.get("x", 0)), img.width - 1), min(int(args.get("y", 0)), img.height - 1)
+        w = min(int(args.get("w", 0)) or img.width, img.width - x)
+        h = min(int(args.get("h", 0)) or img.height, img.height - y)
+        visible = max(0, min(cols, self.cols - col + 1))  # never wrap into the next row
+        out = []
+        for r, line in enumerate(img.halfblocks(x, y, w, h, cols, rows)):
+            if row + r > self.rows or not visible:
+                break
+            if visible < cols:
+                line = b"".join(re.findall(rb"(?:\x1b\[[0-9;]*m)?" + UPPER, line)[:visible])
+            out.append(cup(row + r, col) + line)
+            self.painted.setdefault(row + r, {}).update(dict.fromkeys(range(col, col + visible), key))
+        return b"".join(out)
+
+    def delete(self, args: dict, keys: bytes) -> bytes:
+        what = args.get("d", "a")
+        if what in "aA":
+            gone = set(self.places)
+        elif what in "iI" and "i" in args:
+            image = int(args["i"])
+            gone = {k for k in self.places if k[0] == image and ("p" not in args or k[1] == int(args["p"]))}
+        else:
+            gone = set()
+        for key in gone:
+            del self.places[key]
+        if what == "A":
+            self.images.clear()
+        elif what == "I" and "i" in args:
+            self.images.pop(int(args["i"]), None)
+        self.emit(b"\x1b_G" + keys + b"\x1b\\")
+        return self.wrap(self.blank(gone))
+
+    def blank(self, gone: set) -> bytes:
+        """Blank the cells that deleted placements still own."""
+        out = []
+        for row in sorted(self.painted):
+            cells = self.painted[row]
+            cols = sorted(c for c, key in cells.items() if key in gone)
+            for c in cols:
+                del cells[c]
+            if not cells:
+                del self.painted[row]
+            start = None
+            for i, c in enumerate(cols):
+                start = c if start is None else start
+                if i + 1 == len(cols) or cols[i + 1] != c + 1:
+                    out.append(cup(row, start) + b" " * (c - start + 1))
+                    start = None
+        if not out:
+            return b""
+        return b"\x1b[0m" + b"".join(out) + (cup(*self.cursor) if self.cursor else b"")
+
+    def wrap(self, data: bytes) -> bytes:
+        """Inside herdr's burst, ESC 8 restores the cursor and SGR; outside it, do it here."""
+        return data if not data or self.burst else b"\x1b7" + data + b"\x1b8"
+
+
+def feed(held: bytes, data: bytes, fill: set, gfx: Graphics) -> tuple[bytes, bytes]:
+    """(bytes to write, bytes to hold): a sequence cut by the read waits for its rest."""
+    data = held + data
+    out, pos = [], 0
+    for m in APC.finditer(data):
+        out.append(text(data[pos : m.start()], fill, gfx))
+        out.append(gfx.command(m[1], m[2] or b""))
+        pos = m.end()
+    rest = data[pos:]
+    start = rest.find(b"\x1b_G")
+    if start >= 0 and len(rest) - start <= APC_MAX:
+        cut = start
+    else:
+        cut = rest.rfind(b"\x1b")
+        if cut < 0 or not PARTIAL.fullmatch(rest, cut):
+            cut = len(rest)
+    out.append(text(rest[:cut], fill, gfx))
+    return b"".join(out), rest[cut:]
+
+
+def text(data: bytes, fill: set, gfx: Graphics) -> bytes:
+    gfx.text(data)
+    return rewrite(data, fill)
+
+
+def write_all(fd: int, data: bytes) -> None:
+    while data:
+        data = data[os.write(fd, data) :]
+
+
+def winsize(fd: int) -> bytes:
+    return fcntl.ioctl(fd, termios.TIOCGWINSZ, bytes(8))
+
+
+def channel_path(token: str) -> str:
+    """The socket for a token, in a directory that only this user can open."""
+    if not TOKEN_FORM.fullmatch(token):
+        raise ValueError("a channel token is 16 to 64 letters, digits, '-' or '_'")
+    folder = os.path.join(RUNTIME, f"herdr-patch-{os.getuid()}")
+    try:
+        os.mkdir(folder, 0o700)
+    except FileExistsError:
+        pass
+    info = os.lstat(folder)
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+        raise PermissionError(f"{folder} must be a directory of this user with mode 700")
+    return os.path.join(folder, token)
+
+
+class Channel:
+    """A unix socket that copies the graphics to each reader, never blocking herdr."""
+
+    LIMIT = 64 << 20  # a reader this far behind is dropped; it gets a snapshot when it comes back
+
+    def __init__(self, path: str):
+        self.path = path
+        self.listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        old = os.umask(0o177)
+        try:
+            if os.path.exists(path):
+                os.unlink(path)
+            self.listener.bind(path)
+        finally:
+            os.umask(old)
+        os.chmod(path, 0o600)
+        self.listener.listen()
+        self.listener.setblocking(False)
+        self.readers: dict[socket.socket, bytearray] = {}
+
+    def accept(self, snapshot: bytes) -> None:
+        try:
+            reader, _ = self.listener.accept()
+        except BlockingIOError:
+            return
+        reader.setblocking(False)
+        self.readers[reader] = bytearray(snapshot)
+        self.flush(reader)
+
+    def send(self, data: bytes) -> None:
+        for reader in list(self.readers):
+            self.readers[reader] += data
+            self.flush(reader)
+
+    def flush(self, reader: socket.socket) -> None:
+        buf = self.readers[reader]
+        try:
+            while buf:
+                del buf[: reader.send(buf)]
+        except BlockingIOError:
+            if len(buf) > self.LIMIT:
+                self.drop(reader)
+        except OSError:
+            self.drop(reader)
+
+    def drop(self, reader: socket.socket) -> None:
+        self.readers.pop(reader, None)
+        reader.close()
+
+    def close(self) -> None:
+        for reader in list(self.readers):
+            self.drop(reader)
+        self.listener.close()
+        try:
+            os.unlink(self.path)
+        except FileNotFoundError:
+            pass
+
+
+def read_channel(token: str) -> int:
+    """Copy the channel of a running `herdr-patch --channel TOKEN` to stdout."""
+    try:
+        path = channel_path(token)
+        conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        conn.connect(path)
+    except (OSError, ValueError) as e:
+        print(f"herdr-patch: {e}", file=sys.stderr)
+        return 1
+    try:
+        while data := conn.recv(65536):
+            write_all(1, data)
+    except OSError:  # the ssh side went away
+        pass
+    return 0
+
+
+def serve(args: list[str]) -> int:
+    """The server side: herdr for a mosh client, with its images on a channel if asked."""
+    channel = None
+    if args[:1] == ["--channel"] and len(args) >= 2:
+        try:
+            channel = Channel(channel_path(args[1]))
+        except (OSError, ValueError) as e:  # the images stay off, the terminal works
+            print(f"herdr-patch: no image channel: {e}", file=sys.stderr)
+        args = args[2:]
+    fill = fill_colors(os.environ.get("HERDR_PATCH_FILL", "1e1e1e,232136"))
+    args = args or ["--session", "default"]
+    size = winsize(0)
+    pid, master = pty.fork()
+    if pid == 0:
+        # Before exec, so herdr's first look at the grid sees the real size.
+        fcntl.ioctl(0, termios.TIOCSWINSZ, size)
+        os.execvp(HERDR, [HERDR, *args])
+    rows, cols = struct.unpack("HH", size[:4])
+    gfx = Graphics(cols, rows, channel.send if channel else None)
+
+    def resize(*_):
+        size = winsize(0)
+        gfx.rows, gfx.cols = struct.unpack("HH", size[:4])
+        fcntl.ioctl(master, termios.TIOCSWINSZ, size)
+
+    signal.signal(signal.SIGWINCH, resize)
+    for sig in (signal.SIGHUP, signal.SIGTERM):  # mosh-server going away: still remove the socket
+        signal.signal(sig, lambda signum, _: sys.exit(128 + signum))
+    saved = termios.tcgetattr(0)
+    held = b""
+    try:
+        tty.setraw(0)
+        while True:
+            wait = HOLD if held and not held.startswith(b"\x1b_G") else None
+            readers = list(channel.readers) if channel else []
+            listen = [channel.listener] if channel else []
+            pending = [r for r in readers if channel.readers[r]]
+            ready, writable, _ = select.select([0, master, *listen, *readers], pending, [], wait)
+            if not ready and not writable:
+                write_all(1, held)
+                held = b""
+            if master in ready:
+                try:
+                    data = os.read(master, 65536)
+                except OSError:  # EIO: herdr exited and closed the terminal
+                    data = b""
+                if not data:
+                    break
+                out, held = feed(held, data, fill, gfx)
+                write_all(1, out)
+            if 0 in ready:
+                data = os.read(0, 65536)
+                if not data:
+                    break
+                write_all(master, data)
+            if channel:
+                if channel.listener in ready:
+                    channel.accept(gfx.snapshot())
+                for reader in readers:
+                    if reader not in channel.readers:  # dropped while the text was handled
+                        continue
+                    if reader in ready:  # a reader sends nothing: this is its close
+                        try:
+                            gone = not reader.recv(4096)
+                        except OSError:
+                            gone = True
+                        if gone:
+                            channel.drop(reader)
+                    elif reader in writable:
+                        channel.flush(reader)
+        write_all(1, held)
+    finally:
+        if channel:
+            channel.close()
+        termios.tcsetattr(0, termios.TCSAFLUSH, saved)
+    os.close(master)
+    return exit_status(pid)
+
+
+def exit_status(pid: int) -> int:
+    """The exit status of a child, or 128 + the signal that ended it."""
+    code = os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1])
+    return code if code >= 0 else 128 - code
+
+
+class Images:
+    """The computer's side: the graphics from the channel, what still has to go out, and the placements."""
+
+    def __init__(self):
+        self.places = {}  # (image id, placement id) -> CUP + a=p command
+        self.queue = []
+        self.buf = b""
+
+    def feed(self, data):
+        self.buf += data
+        end = 0
+        for m in GRAPHIC.finditer(self.buf):
+            end = m.end()
+            args = dict(kv.split(b"=", 1) for kv in m[1].split(b",") if b"=" in kv)
+            action = args.get(b"a", b"t")
+            if action == b"p" and b"i" in args:
+                self.places[(args[b"i"], args.get(b"p", b"0"))] = m[0]
+            elif action == b"d":
+                what = args.get(b"d", b"a")
+                if what in (b"a", b"A"):
+                    self.places.clear()
+                elif what in (b"i", b"I") and b"i" in args:
+                    for key in [k for k in self.places if k[0] == args[b"i"]]:
+                        if b"p" not in args or key[1] == args[b"p"]:
+                            del self.places[key]
+            self.queue.append(m[0])
+        self.buf = self.buf[end:]
+
+    def take(self, restore=False):
+        """The queued graphics, then all placements again if `restore`."""
+        data = b"".join(self.queue) + (b"".join(self.places.values()) if restore else b"")
+        self.queue = []
+        return b"\x1b7" + data + b"\x1b8" if data else b""
+
+
+class Splicer:
+    """Finds where in mosh's output graphics can go in, and whether cells were erased."""
+
+    def __init__(self):
+        self.tail = b""  # an escape sequence or UTF-8 character still open
+        self.restore = False  # the placements go out again at the next safe point
+
+    def splice(self, data, images):
+        """data with the waiting graphics put in at its last safe point."""
+        safe, erased = self.scan(data)
+        self.restore = self.restore or erased
+        if safe is None:
+            return data
+        out = data[:safe] + images.take(self.restore) + data[safe:]
+        self.restore = False
+        return out
+
+    def scan(self, data):
+        """(offset in data where graphics can go in, or None; True if data erased cells)."""
+        buf = self.tail + data
+        pos, erased = 0, False
+        while pos < len(buf):
+            m = PIECE.match(buf, pos)
+            if m is None:
+                nxt = buf.find(b"\x1b", pos + 1)
+                if nxt < 0:
+                    break
+                pos = nxt  # not a sequence this parser knows: skip to the next one
+                continue
+            erased = erased or (m[1] is not None and m[1] in ERASE)
+            pos = m.end()
+        if pos == len(buf):
+            pos -= open_utf8(buf)
+        self.tail = buf[pos:] if len(buf) - pos <= TAIL_MAX else b""
+        safe = pos - (len(buf) - len(data))
+        return (safe if safe >= 0 else None), erased
+
+
+def open_utf8(buf):
+    """The number of bytes at the end of buf that start a UTF-8 character but do not end it."""
+    for back in range(1, min(4, len(buf)) + 1):
+        b = buf[-back]
+        if b & 0xC0 != 0x80:  # the lead byte
+            need = 2 if b >> 5 == 6 else 3 if b >> 4 == 14 else 4 if b >> 3 == 30 else 1
+            return back if back < need else 0
+    return 0
+
+
+def connect(host: str, rest: list[str]) -> int:
+    """The computer's side: mosh to the server, with its images through ssh."""
+    token = secrets.token_urlsafe(24)
+    size = winsize(0)
+    pid, master = pty.fork()
+    if pid == 0:
+        fcntl.ioctl(0, termios.TIOCSWINSZ, size)
+        os.execvp("mosh", ["mosh", host, "--", REMOTE, "--channel", token, *rest])
+    images, splicer = Images(), Splicer()
+
+    def resize(*_):
+        fcntl.ioctl(master, termios.TIOCSWINSZ, winsize(0))
+        splicer.restore = True
+
+    signal.signal(signal.SIGWINCH, resize)
+    ssh = [
+        "ssh", "-T", "-o", "BatchMode=yes", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2",
+        host, REMOTE, "--read", token,
+    ]
+    channel, retry_at, delay = None, time.monotonic() + 1, 1
+    saved = termios.tcgetattr(0)
+    try:
+        tty.setraw(0)
+        while True:
+            if channel is None and time.monotonic() >= retry_at:
+                channel = subprocess.Popen(ssh, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                           stderr=subprocess.DEVNULL)
+            fds = [0, master] + ([channel.stdout] if channel else [])
+            wait = None if channel else max(0, retry_at - time.monotonic())
+            ready, _, _ = select.select(fds, [], [], wait)
+            if master in ready:
+                try:
+                    data = os.read(master, 65536)
+                except OSError:  # EIO: mosh exited
+                    data = b""
+                if not data:
+                    break
+                write_all(1, splicer.splice(data, images))
+            if channel and channel.stdout in ready:
+                data = os.read(channel.stdout.fileno(), 65536)
+                if data:
+                    delay = 1
+                    images.feed(data)
+                    if not splicer.tail:  # mosh's output stopped between sequences
+                        write_all(1, images.take())
+                else:  # the channel ended: mosh goes on, the channel tries again
+                    channel.wait()
+                    channel = None
+                    retry_at, delay = time.monotonic() + delay, min(delay * 2, 30)
+            if 0 in ready:
+                data = os.read(0, 65536)
+                if not data:
+                    break
+                write_all(master, data)
+    finally:
+        if channel:
+            channel.kill()
+        write_all(1, DELETE_ALL)
+        termios.tcsetattr(0, termios.TCSAFLUSH, saved)
+    os.close(master)
+    return exit_status(pid)
+
+
+def main(argv: list[str]) -> int:
+    args = argv[1:]
+    if args[:1] in (["-h"], ["--help"]):
+        print(__doc__)
+        return 0
+    if args and not args[0].startswith("-"):
+        return connect(args[0], args[1:])
+    if args[:1] == ["--read"] and len(args) == 2:
+        return read_channel(args[1])
+    return serve(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
