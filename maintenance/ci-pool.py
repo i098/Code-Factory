@@ -35,6 +35,7 @@ CONFIG = HOME / ".config/ci-pool/pool.json"
 UNITS = HOME / ".config/systemd/user"
 TEMPLATE = UNITS / "ci-runner@.service"
 WANTS = UNITS / "default.target.wants"
+HOOK = HOME / ".config/ci-pool/job-started.sh"
 UNIT_TEXT = """\
 # Written by ci-pool.py apply (Code Factory); instances come from factory.ci_pool.
 [Unit]
@@ -48,6 +49,8 @@ Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 Restart=always
 RestartSec=5
 TimeoutStopSec=90
+# 143 is a slot stopped by systemctl (SIGTERM): inactive, not failed.
+SuccessExitStatus=143
 
 [Install]
 WantedBy=default.target
@@ -59,6 +62,27 @@ CONTAINER_PREP = (
     " && sudo chown runner:runner /home/runner/_work /opt/hostedtoolcache /home/runner/.cache"
     " && exec /home/runner/run.sh"
 )
+# The runner's job-started hook (ACTIONS_RUNNER_HOOK_JOB_STARTED) runs before
+# any step, and a non-zero exit fails the job. Only the repository's own code
+# runs on the host: a job for a fork's pull request is refused.
+HOOK_TEXT = """\
+#!/usr/bin/env bash
+# Written by ci-pool.py apply (Code Factory): refuse code from outside the repository.
+exec python3 - <<'PY'
+import json, os, sys
+repo = os.environ["GITHUB_REPOSITORY"]
+with open(os.environ["GITHUB_EVENT_PATH"]) as f:
+    event = json.load(f)
+heads = []
+if "pull_request" in event:
+    heads.append(((event["pull_request"].get("head") or {}).get("repo") or {}).get("full_name"))
+if "workflow_run" in event:
+    heads.append((event["workflow_run"].get("head_repository") or {}).get("full_name"))
+for head in heads:
+    if head != repo:
+        sys.exit(f"ci-pool: refused, the code comes from {head or 'a deleted fork'}, not {repo}")
+PY
+"""
 
 
 def slug(repo):
@@ -150,6 +174,7 @@ def apply(check):
         return True
 
     write(CONFIG, json.dumps(pool, indent=2, sort_keys=True) + "\n")
+    write(HOOK, HOOK_TEXT)
     if write(TEMPLATE, UNIT_TEXT) and not check:
         systemctl("daemon-reload")
     for name in sorted(set(have) - set(want)):
@@ -246,6 +271,10 @@ def run(instance):
                 "--volume", f"{work}:/home/runner/_work",
                 "--volume", f"{cache / 'tool'}:/opt/hostedtoolcache",
                 "--volume", f"{cache / 'home'}:/home/runner/.cache",
+                # --mount, not --volume: a missing hook fails the create instead of
+                # becoming an empty directory, so no job runs without the check.
+                "--mount", f"type=bind,src={HOOK},dst=/home/runner/job-started.sh,readonly",
+                "--env", "ACTIONS_RUNNER_HOOK_JOB_STARTED=/home/runner/job-started.sh",
                 IMAGE, "bash", "-c", CONTAINER_PREP,
             ], check=True, stdout=subprocess.DEVNULL)
         rc = subprocess.run([*docker(), "start", "--attach", container]).returncode

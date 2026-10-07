@@ -24,6 +24,29 @@ factory = load("factory_config_ci_pool", "scripts/factory.py")
 POOL = {"job_cpus": 4, "job_memory_gb": 8}
 
 
+@pytest.mark.parametrize(
+    ("event", "allowed"),
+    [
+        ({"ref": "refs/heads/main"}, True),
+        ({"pull_request": {"head": {"repo": {"full_name": "o/repo"}}}}, True),
+        ({"pull_request": {"head": {"repo": {"full_name": "outsider/repo"}}}}, False),
+        ({"pull_request": {"head": {"repo": None}}}, False),
+        ({"workflow_run": {"head_repository": {"full_name": "outsider/repo"}}}, False),
+    ],
+)
+def test_job_started_hook_refuses_code_from_outside_the_repository(tmp_path, event, allowed):
+    hook = tmp_path / "job-started.sh"
+    hook.write_text(pool_script.HOOK_TEXT)
+    (tmp_path / "event.json").write_text(json.dumps(event))
+    result = subprocess.run(
+        ["bash", str(hook)], capture_output=True, text=True,
+        env={"PATH": "/usr/bin:/bin", "GITHUB_REPOSITORY": "o/repo",
+             "GITHUB_EVENT_PATH": str(tmp_path / "event.json")},
+    )
+    assert (result.returncode == 0) is allowed, result.stderr
+    assert ("refused" in result.stderr) is not allowed
+
+
 def test_auto_size_takes_half_the_spare_cpu_or_memory_whichever_is_tighter():
     # 96 CPUs at load 8: 44 spare CPUs / 4 per job = 11; 199 GiB / 2 / 8 = 12.
     assert pool_script.auto_slots(POOL, 96, 8.0, 199.0) == 11
@@ -65,6 +88,7 @@ def slots(tmp_path, monkeypatch):
     monkeypatch.setattr(pool_script, "CONFIG", tmp_path / "pool.json")
     monkeypatch.setattr(pool_script, "TEMPLATE", units / "ci-runner@.service")
     monkeypatch.setattr(pool_script, "WANTS", wants)
+    monkeypatch.setattr(pool_script, "HOOK", tmp_path / "job-started.sh")
     monkeypatch.setattr(pool_script, "busy", lambda name: False)
     monkeypatch.setattr(pool_script, "remove_tree", shutil.rmtree)
     calls = []
@@ -88,6 +112,7 @@ def test_check_lists_removed_slots_and_their_directories_without_touching_them(
 
     assert capsys.readouterr().out.splitlines() == [
         f"write {tmp_path / 'pool.json'}",
+        f"write {tmp_path / 'job-started.sh'}",
         "stop ci-runner@o-gone-1.service",
         f"remove {data / 'ci-pool/work/o-gone-1'}",
         f"remove {data / 'ci-pool/cache/o-gone'}",
