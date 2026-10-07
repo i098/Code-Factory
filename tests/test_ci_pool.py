@@ -128,6 +128,27 @@ def test_shrinking_stops_idle_slots_but_only_drains_busy_ones(slots, monkeypatch
     assert "drain ci-runner@o-kept-2.service" in capsys.readouterr().out
 
 
+def test_busy_reads_docker_top_output_with_a_pid_column(monkeypatch):
+    tops = {
+        "ci-runner-idle": "PID  COMM\n1  run.sh\n20  Runner.Listener\n",
+        "ci-runner-busy": "PID  COMM\n1  run.sh\n20  Runner.Listener\n31  Runner.Worker\n",
+    }
+
+    def fake_run(argv, **kwargs):
+        # Docker rejects `top -eo comm`: it needs a pid field.
+        listing = tops.get(argv[-3])
+        ok = listing is not None and "pid" in argv[-1]
+        return subprocess.CompletedProcess(
+            argv, 0 if ok else 1, listing if ok else "",
+            "" if ok else "Couldn't find PID field in ps output" if listing else "No such container",
+        )
+
+    monkeypatch.setattr(pool_script.subprocess, "run", fake_run)
+    assert not pool_script.busy("idle")
+    assert pool_script.busy("busy")
+    assert not pool_script.busy("missing")
+
+
 def test_a_drained_slot_keeps_its_repository_cache_while_it_is_busy(slots, monkeypatch):
     data, calls, apply = slots
     monkeypatch.setattr(pool_script, "busy", lambda name: name == "o-gone-1")

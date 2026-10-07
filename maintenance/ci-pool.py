@@ -105,7 +105,7 @@ def quiet(argv):
 
 def busy(name):
     """True while the slot's container runs a job; unknown counts as busy."""
-    result = subprocess.run([*docker(), "top", f"ci-runner-{name}", "-eo", "comm"],
+    result = subprocess.run([*docker(), "top", f"ci-runner-{name}", "-eo", "pid,comm"],
                             capture_output=True, text=True)
     return "Runner.Worker" in result.stdout or (
         result.returncode != 0 and "No such container" not in result.stderr
