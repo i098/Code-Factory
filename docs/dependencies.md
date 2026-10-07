@@ -69,6 +69,7 @@ Every host that starts services (`start_services: true`); the container worker i
 
 - Worker base `ubuntu:latest` (the newest Ubuntu LTS) plus apt: bash, build-essential, ca-certificates, curl, git, iproute2, jq, less, libssl-dev, openssh-client, pkg-config, procps, python3, python3-apt, python3-venv, sudo, tar, unzip, xz-utils, zstd.
 - Optional compose backing services, never installed by apply: `postgres:18-bookworm`, `redis:8-alpine`, digest-pinned because a floating Postgres tag would move a data volume across major versions it cannot read.
+- CI pool job containers (`maintenance/ci-pool.py`, only with `factory.ci_pool`): the official `ghcr.io/actions/actions-runner:latest`, pulled again when a new image is available. It is the runner GitHub publishes, so it is not checksum-verified here; see [CI pool](ci-pool.md).
 
 ## Assumed on the host
 

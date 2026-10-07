@@ -87,6 +87,7 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 | [omp configuration](docs/omp.md) | Signing in, model roles, fallbacks, the advisor, and updating an existing host |
 | [Chat clients](docs/chat.md) | The Concord (Discord) and slk (Slack) terminal clients: install, config, and sign-in |
 | [Capacity and pruners](docs/capacity.md) | Host sizing per lane count and every auto pruner |
+| [CI pool](docs/ci-pool.md) | Self-hosted GitHub Actions slots: one job per fresh container, sized from spare CPU and memory |
 | [Architecture](docs/architecture.md) | Why Ansible, host and container boundary, Docker worker, CI |
 | [Migration and recovery](docs/recovery.md) | New-device sequence, desktop access, troubleshooting, upgrades |
 | [Security](docs/security.md) | What is never exported, how to handle credentials, and remote access, including SSH between the host and a Mac |

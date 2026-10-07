@@ -255,6 +255,70 @@
             "live_restore"
           ]
         },
+        "ci_pool": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "data_dir": {
+              "type": "string",
+              "pattern": "^/[A-Za-z0-9_./-]+$"
+            },
+            "total_slots": {
+              "oneOf": [
+                {
+                  "const": "auto"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              ]
+            },
+            "job_cpus": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "job_memory_gb": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "repos": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "repo": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+                  },
+                  "slots": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "labels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_.-]+$"
+                    },
+                    "minItems": 1,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "repo",
+                  "slots",
+                  "labels"
+                ]
+              }
+            }
+          },
+          "required": [
+            "data_dir",
+            "repos"
+          ]
+        },
         "fleet": {
           "type": "object",
           "additionalProperties": false,

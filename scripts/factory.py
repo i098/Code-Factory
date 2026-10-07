@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import pwd
+import re
 import shutil
 import subprocess
 import sys
@@ -52,6 +53,16 @@ def validate_config(document):
         fixture = config.get("fleet", {}).get("fixture_archive", "")
         if fixture and ".." in Path(fixture).parts:
             raise ValueError("fleet.fixture_archive must not traverse; give a plain path")
+    if "ci_pool" in config:
+        pool = config["ci_pool"]
+        if not config["profiles"]["docker"]:
+            raise ValueError("the CI pool requires the docker profile")
+        if ".." in Path(pool["data_dir"]).parts:
+            raise ValueError("ci_pool.data_dir must not traverse; give a plain path")
+        # Unit instance names; the same rule as slug() in maintenance/ci-pool.py.
+        slugs = [re.sub(r"[^a-z0-9]+", "-", e["repo"].lower()).strip("-") for e in pool["repos"]]
+        if len(set(slugs)) != len(slugs):
+            raise ValueError("ci_pool.repos names a repository twice (or two that share a unit name)")
     prune = config["browser_prune"]
     if prune["enabled"] and not config["profiles"]["agents"]:
         raise ValueError("browser pruning requires the agents profile")
