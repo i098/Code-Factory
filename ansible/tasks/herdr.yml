@@ -123,13 +123,13 @@
 # mosh-server and non-interactive SSH commands run with the system PATH, which
 # has no ~/.local/bin, so `mosh <host> -- herdr-mosh` finds the command, and
 # herdr-mosh finds herdr, only through these links.
+# No owner or group: the file module follows links, so setting root here would
+# chown the targets in ~/.local/bin and the next apply could not rewrite them.
 - name: Link herdr and herdr-mosh into /usr/local/bin
   ansible.builtin.file:
     src: "{{ factory_local_bin }}/{{ item }}"
     dest: "/usr/local/bin/{{ item }}"
     state: link
-    owner: root
-    group: root
     force: true
   become: true
   become_user: root
