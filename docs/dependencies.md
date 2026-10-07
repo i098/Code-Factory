@@ -39,7 +39,7 @@ The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests 
 
 ## Fleet browsers and Supabase
 
-- `fleet_browsers` or `fleet_guards` profile: Obscura, the latest [h4ckf0r0day/obscura release](https://github.com/h4ckf0r0day/obscura/releases/latest) for the host's platform, verified against the GitHub release-asset digest (`ansible/tasks/fleet-browsers.yml`). Each release extracts into its own `~/oss-fleet/browsers/obscura-<version>/`. The `vnc` tier's Ubuntu packages: tigervnc-standalone-server, websockify, novnc.
+- `fleet_browsers` or `fleet_guards` profile: Obscura, the latest [h4ckf0r0day/obscura release](https://github.com/h4ckf0r0day/obscura/releases/latest) for the host's platform, verified against the GitHub release-asset digest (`ansible/tasks/fleet-browsers.yml`). Each release extracts into its own `~/oss-fleet/browsers/obscura-<version>/`. The `vnc` tier's Ubuntu packages: tigervnc-standalone-server, websockify, novnc, xfwm4.
 - `fleet_guards` profile: Supabase CLI, the npm registry's latest `supabase`, installed with `npm install` into `~/oss-fleet/shared-supabase` (`ansible/tasks/fleet_guards.yml`).
 
 ## Koncreet

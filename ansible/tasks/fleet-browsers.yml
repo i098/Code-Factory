@@ -41,6 +41,7 @@
   ansible.builtin.apt:
     name: "{{ factory_fleet_browser_vnc_packages }}"
     state: present
+  when: not ansible_check_mode or factory_apt_indexes.matched > 0
   become: true
 
 - name: Ensure fleet browser directories
