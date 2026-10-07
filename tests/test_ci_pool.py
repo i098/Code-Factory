@@ -287,3 +287,28 @@ def test_failed_container_create_deletes_the_runner_and_pauses(tmp_path, monkeyp
     assert pool_script.run("o-kept-1") == 1
     assert sleeps == [pool_script.FAILURE_PAUSE_SECONDS]
     assert any(argv[:3] == ["gh", "api", "--method"] and argv[3] == "DELETE" for argv in calls)
+
+
+def test_listener_failure_with_exit_zero_deletes_the_runner_and_pauses(tmp_path, monkeypatch):
+    monkeypatch.setattr(pool_script, "CONFIG", tmp_path / "pool.json")
+    (tmp_path / "pool.json").write_text(json.dumps({
+        "data_dir": str(tmp_path / "data"), "job_cpus": 4, "job_memory_gb": 8,
+        "repos": [{"repo": "o/kept", "slots": 1, "labels": ["x"]}],
+    }))
+    monkeypatch.setattr(pool_script, "docker", lambda: ["docker"])
+    monkeypatch.setattr(pool_script, "quiet", lambda argv: calls.append(argv) or 0)
+    monkeypatch.setattr(pool_script.signal, "signal", lambda *args: None)
+    sleeps, calls = [], []
+    monkeypatch.setattr(pool_script.time, "sleep", sleeps.append)
+
+    def fake_run(argv, **kwargs):
+        if argv[0] == "gh":
+            out = json.dumps({"runner": {"id": 7}, "encoded_jit_config": "jit"})
+            return subprocess.CompletedProcess(argv, 0, out, "")
+        return subprocess.CompletedProcess(argv, 0)  # run.sh hides the listener failure as exit 0
+
+    monkeypatch.setattr(pool_script.subprocess, "run", fake_run)
+
+    assert pool_script.run("o-kept-1") == 1
+    assert sleeps == [pool_script.FAILURE_PAUSE_SECONDS]
+    assert any(argv[:3] == ["gh", "api", "--method"] and argv[3] == "DELETE" for argv in calls)

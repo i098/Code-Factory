@@ -30,6 +30,9 @@ SHARE = 0.5
 # A failed GitHub call or container start waits this long before systemd's
 # restart, so a broken slot costs at most two API calls a minute.
 FAILURE_PAUSE_SECONDS = 60
+# The runner image's run.sh exits 0 even when the listener fails, so a
+# container that ends sooner than this did not run a job.
+MIN_JOB_SECONDS = 30
 HOME = Path.home()
 CONFIG = HOME / ".config/ci-pool/pool.json"
 UNITS = HOME / ".config/systemd/user"
@@ -256,7 +259,7 @@ def run(instance):
 
     # systemctl stop: unwind through `finally` so the container goes too.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
-    container, rc = f"ci-runner-{instance}", 1
+    container, rc, started = f"ci-runner-{instance}", 1, time.monotonic()
     try:
         quiet([*docker(), "rm", "--force", container])
         # The single-use JIT config travels in a 0600 env file, never in argv.
@@ -287,9 +290,10 @@ def run(instance):
         print(f"{instance}: container start failed: {error}", file=sys.stderr)
     finally:
         quiet([*docker(), "rm", "--force", container])
-        if rc:
-            # The job did not finish, so GitHub still lists the runner.
-            quiet(["gh", "api", "--method", "DELETE", f"repos/{repo}/actions/runners/{jit['runner']['id']}"])
+        # GitHub already removed a runner that finished a job, so this is then a harmless 404.
+        quiet(["gh", "api", "--method", "DELETE", f"repos/{repo}/actions/runners/{jit['runner']['id']}"])
+    if not rc and time.monotonic() - started < MIN_JOB_SECONDS:
+        rc = 1
     if rc:
         time.sleep(FAILURE_PAUSE_SECONDS)
     return rc
