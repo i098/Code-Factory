@@ -4,8 +4,9 @@
 # docs/fleet-guards.md owns the design; fleet/browsers/fleet-browser owns the
 # runtime. The obscura tier needs its latest binary + unit and the vnc tier its
 # apt packages; chrome and vnc are started on demand by the operator or the
-# fleet-browser CLI and gc'd after idle_timeout_min. The Herdr unit carries the ladder's
-# environment (templates/herdr.service.j2), so this file never edits it.
+# fleet-browser CLI and gc'd after idle_timeout_min. The Herdr unit carries
+# the ladder's environment (templates/herdr.service.j2), so this file never
+# edits it.
 
 - name: Ensure the journald drop-in directory
   tags: [journald]
