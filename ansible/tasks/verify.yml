@@ -37,7 +37,7 @@
               factory_user_units ~ '/default.target.wants/herdr.service',
               factory_herdr_spaces_script,
               factory_local_bin ~ '/herdr-sidebar-to-client.py',
-              factory_local_bin ~ '/herdr-mosh',
+              factory_local_bin ~ '/herdr-patch',
               factory_local_bin ~ '/btop',
               factory_local_bin ~ '/btop-bin',
               factory_btop_config,
@@ -198,10 +198,10 @@
 
     # mosh-server and non-interactive SSH run commands with the system PATH,
     # which has no ~/.local/bin; the /usr/local/bin links make both resolve.
-    - name: Resolve herdr and herdr-mosh with the mosh-server PATH
+    - name: Resolve herdr and herdr-patch with the mosh-server PATH
       ansible.builtin.command:
         argv: [env, -i, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-               sh, -c, "command -v herdr && command -v herdr-mosh"]
+               sh, -c, "command -v herdr && command -v herdr-patch"]
       become: "{{ factory_become_target | bool }}"
       become_user: "{{ factory_cfg.user }}"
       register: factory_verify_mosh_path
@@ -209,15 +209,15 @@
       failed_when: false
       check_mode: false
 
-    - name: Assert herdr and herdr-mosh resolve through /usr/local/bin
+    - name: Assert herdr and herdr-patch resolve through /usr/local/bin
       ansible.builtin.assert:
         that:
-          - factory_verify_mosh_path.stdout_lines == ['/usr/local/bin/herdr', '/usr/local/bin/herdr-mosh']
+          - factory_verify_mosh_path.stdout_lines == ['/usr/local/bin/herdr', '/usr/local/bin/herdr-patch']
         fail_msg: >-
-          With the mosh-server PATH, `herdr` and `herdr-mosh` resolve to
+          With the mosh-server PATH, `herdr` and `herdr-patch` resolve to
           "{{ factory_verify_mosh_path.stdout_lines | join(', ') | default('(nothing)', true) }}",
-          not /usr/local/bin/herdr and /usr/local/bin/herdr-mosh, so
-          `mosh <host> -- herdr-mosh` fails.
+          not /usr/local/bin/herdr and /usr/local/bin/herdr-patch, so
+          `mosh <host> -- herdr-patch` fails.
         quiet: true
 
     # --- the omp release this run resolved is the one installed ------------
