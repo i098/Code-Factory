@@ -106,17 +106,36 @@
   become: true
 
 # The mosh entry point (docs/herdr.md#over-mosh): runs herdr and drops herdr's
-# opaque background fill (herdr#3773). Each mosh login starts a fresh process,
-# so a rewritten script needs no restart.
-- name: Install the herdr-mosh filter
-  ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/maintenance/herdr-mosh"
+# opaque background fill (herdr#3773). It lives in i098/herdr-patch, which
+# publishes no checksum; force fetches the default branch on every apply, so a
+# host tracks the latest. Each mosh login starts a fresh process, so a new
+# version needs no restart.
+- name: Install the herdr-mosh filter from herdr-patch
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/i098/herdr-patch/main/herdr-mosh
     dest: "{{ factory_local_bin }}/herdr-mosh"
+    force: true
     owner: "{{ factory_cfg.user }}"
     group: "{{ factory_group }}"
     mode: "0755"
-    remote_src: true
   become: true
+
+# mosh-server and non-interactive SSH commands run with the system PATH, which
+# has no ~/.local/bin, so `mosh <host> -- herdr-mosh` finds the command, and
+# herdr-mosh finds herdr, only through these links.
+- name: Link herdr and herdr-mosh into /usr/local/bin
+  ansible.builtin.file:
+    src: "{{ factory_local_bin }}/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    owner: root
+    group: root
+    force: true
+  become: true
+  become_user: root
+  loop:
+    - herdr
+    - herdr-mosh
 
 # btop fitted to its pane (docs/herdr.md#btop): the launcher takes the place of
 # the btop command and runs the installer's btop-bin with a preset of this
