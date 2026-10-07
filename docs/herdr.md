@@ -216,6 +216,30 @@ It copies the host's `sidebar_width`, `sidebar_max_width`, `[ui.sidebar.agents]`
 
 Pane state (the sidebar dots) is reported on the host by the omp integration `./factory apply` installs, so the host needs nothing more. A machine that views the host with `herdr --remote` should run the same Herdr release as the host: the host runs the latest, so on the viewing machine run `herdr update`, then compare `herdr --version` with the host's.
 
+## Over mosh
+
+Herdr 0.9.3 keeps a "host background" color in the server. After a client attaches again, Herdr can paint this color over older panes as an opaque fill ([herdr#3773](https://github.com/herdrdev/herdr/issues/3773)). mosh does not answer the OSC 10 and OSC 11 color queries. Thus, the fill shows as a solid block and not as the transparent background of your terminal.
+
+`./factory apply` installs [`maintenance/herdr-mosh`](../maintenance/herdr-mosh) as `~/.local/bin/herdr-mosh`. It runs `herdr --session default` in its own pseudo-terminal and sends your keys and window size to Herdr without change. In the output of Herdr, it changes only a truecolor background on its fill list to the default background. All other output bytes go through without change.
+
+To attach over mosh, use `herdr-mosh` as the host command:
+
+```bash
+mosh <host> -- herdr-mosh
+```
+
+In the iPhone mosh app, set the host command to `herdr-mosh`. Arguments replace `--session default`, for example `herdr-mosh --session lab`.
+
+The fill list comes from `HERDR_MOSH_FILL`: hex colors, separated by commas. The default is `1e1e1e,232136`: the fallback color of Herdr, and a rose-pine-moon background that Herdr keeps after a `herdr --remote` client. An empty value changes nothing. To add a color, set the variable in the host command:
+
+```bash
+mosh <host> -- env HERDR_MOSH_FILL=1e1e1e,232136,2a273f herdr-mosh
+```
+
+A pane program that uses a color from the fill list as its own background also loses that background. `herdr --remote` and plain SSH do not use `herdr-mosh`, because their terminals answer the color queries.
+
+When Herdr fixes #3773, remove `maintenance/herdr-mosh` and its install task. Then attach with `mosh <host> -- herdr` again.
+
 ## Known limits
 
 - Agents without the extension, including non-omp agents, show only their dot on line 1: nothing reports their `who` token.
