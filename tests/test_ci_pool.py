@@ -220,6 +220,24 @@ def test_a_config_change_restarts_idle_slots_and_leaves_busy_ones(slots, monkeyp
     assert "restart ci-runner@o-kept-1.service" in capsys.readouterr().out
 
 
+def test_a_failed_apply_keeps_the_old_config_so_the_rerun_restarts_idle_slots(slots, monkeypatch):
+    data, calls, apply = slots
+    repos = [{"repo": "o/kept", "slots": 2, "labels": ["y"]}]
+
+    def fail(path):
+        raise subprocess.CalledProcessError(1, "docker")
+
+    monkeypatch.setattr(pool_script, "remove_tree", fail)
+    with pytest.raises(subprocess.CalledProcessError):
+        apply(repos=repos)
+    assert not pool_script.CONFIG.exists()
+
+    monkeypatch.setattr(pool_script, "remove_tree", shutil.rmtree)
+    assert apply(repos=repos) == 0
+
+    assert ("restart", "ci-runner@o-kept-1.service") in calls
+    assert json.loads(pool_script.CONFIG.read_text())["repos"] == repos
+
 
 @pytest.fixture
 def configuration():

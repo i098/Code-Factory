@@ -150,7 +150,6 @@ def apply(check):
     have = sorted(p.name[len("ci-runner@"):-len(".service")] for p in WANTS.glob("ci-runner@*.service"))
     # The pool deletes only below this directory, which it alone creates.
     root = Path(pool["data_dir"]) / "ci-pool"
-    running = {name for name in {*have, *(p.name for p in (root / "work").glob("*"))} if busy(name)}
     total = pool["total_slots"]
     if total == "auto":
         total = auto_slots(pool, *totals())
@@ -167,13 +166,16 @@ def apply(check):
             path.write_text(text)
         return True
 
-    reconfigured = write(CONFIG, json.dumps(pool, indent=2, sort_keys=True) + "\n")
+    config = json.dumps(pool, indent=2, sort_keys=True) + "\n"
+    reconfigured = not CONFIG.exists() or CONFIG.read_text() != config
+    if reconfigured:
+        changes.append(f"write {CONFIG}")
     write(HOOK, HOOK_TEXT)
     if write(TEMPLATE, UNIT_TEXT) and not check:
         systemctl("daemon-reload")
     for name in sorted(set(have) - set(want)):
         unit = f"ci-runner@{name}.service"
-        if name in running:
+        if busy(name):
             # Not stopped: the slot leaves after its current job (see run).
             changes.append(f"drain {unit}")
             if not check:
@@ -186,7 +188,7 @@ def apply(check):
     for path in sorted((root / "work").glob("*")):
         if path.name in want:
             continue
-        if path.name in running:
+        if busy(path.name):
             held.add(path.name.rpartition("-")[0])
         else:
             stale.append(path)
@@ -195,13 +197,16 @@ def apply(check):
         changes.append(f"remove {path}")
         if not check:
             remove_tree(path)
+    if reconfigured and not check:
+        CONFIG.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG.write_text(config)
     for name in want:
         unit = f"ci-runner@{name}.service"
         if name not in have:
             changes.append(f"start {unit}")
             if not check:
                 systemctl("enable", "--now", unit)
-        elif reconfigured and name not in running:
+        elif reconfigured and not busy(name):
             # A busy slot reads the new config when its next job starts.
             changes.append(f"restart {unit}")
             if not check:
