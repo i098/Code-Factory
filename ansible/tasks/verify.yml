@@ -309,7 +309,7 @@
 
     # --- data disk (factory.data_dir) --------------------------------------
 
-    - name: Assert the login shell sends the npm, pip and cargo caches to the data disk
+    - name: Assert the login shell sends the npm and pip caches to the data disk
       ansible.builtin.assert:
         that:
           - (factory_verify_profile.content | b64decode) is search('export ' ~ item.key ~ '="' ~ (item.value | regex_escape) ~ '"')

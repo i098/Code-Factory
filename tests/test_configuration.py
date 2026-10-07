@@ -148,7 +148,6 @@ def test_data_dir_moves_docker_and_only_the_caches_that_never_hardlink(tmp_path)
         {
             "npm_config_cache": "/srv/data/cache/npm",
             "PIP_CACHE_DIR": "/srv/data/cache/pip",
-            "CARGO_HOME": "/srv/data/cache/cargo",
         },
         "/srv/data/docker",
     ]

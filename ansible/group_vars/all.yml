@@ -71,8 +71,7 @@ factory_data_dir: "{{ factory_cfg.data_dir | default('', true) }}"
 factory_docker_data_root: "{{ (factory_data_dir ~ '/docker') if factory_data_dir else '' }}"
 factory_data_cache_env: >-
   {{ {'npm_config_cache': factory_data_dir ~ '/cache/npm',
-      'PIP_CACHE_DIR': factory_data_dir ~ '/cache/pip',
-      'CARGO_HOME': factory_data_dir ~ '/cache/cargo'} if factory_data_dir else {} }}
+      'PIP_CACHE_DIR': factory_data_dir ~ '/cache/pip'} if factory_data_dir else {} }}
 # Contract: compute the unit ExecStart directly, never /usr/local/bin or $PATH.
 factory_herdr_bin: "{{ factory_tools_root }}/herdr/{{ factory_herdr_version }}/{{ factory_platform }}/herdr"
 factory_herdr_config_dir: "{{ factory_cfg.home }}/.config/herdr"

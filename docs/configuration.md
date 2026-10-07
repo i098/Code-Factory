@@ -25,7 +25,7 @@ factory:
   workspace: /home/coder/Dev
   start_services: true
   enable_linger: true
-  data_dir: ""            # Data disk for Docker and the npm, pip and cargo caches; see Data disk below
+  data_dir: ""            # Data disk for Docker and the npm and pip caches; see Data disk below
   profiles:
     agents: true          # Chrome autoprune, AXI tools, browser defaults
     development: true     # Rust, build tools
@@ -100,9 +100,8 @@ Set `data_dir` to an absolute path on a large data disk to keep fast-growing dat
 | Docker images, containers and volumes | `<data_dir>/docker` | `data-root` in `/etc/docker/daemon.json` (`docker` profile) |
 | npm cache | `<data_dir>/cache/npm` | `npm_config_cache` |
 | pip cache | `<data_dir>/cache/pip` | `PIP_CACHE_DIR` |
-| cargo registry and git cache | `<data_dir>/cache/cargo` | `CARGO_HOME` |
 
-The variables go into the managed block of `~/.profile`, the Herdr unit and the no-mistakes daemon drop-in. A running Herdr server or no-mistakes daemon reads them only after its next restart. Apply creates `<data_dir>/cache` for the account; Docker creates its own data root. `CARGO_HOME` moves only the download cache: the toolchain stays in `~/.rustup`, and the `cargo` and `rustup` links in `~/.local/bin` still point at `~/.cargo/bin`.
+The variables go into the managed block of `~/.profile`, the Herdr unit and the no-mistakes daemon drop-in. A running Herdr server or no-mistakes daemon reads them only after its next restart. Apply creates `<data_dir>/cache` for the account; Docker creates its own data root. The cargo cache stays in `~/.cargo` on purpose: `CARGO_HOME` also holds `bin` and `config.toml`, so moving it would break `cargo install` on PATH and ignore the existing cargo config.
 
 The bun, pnpm and uv caches stay on the system disk on purpose. These tools hardlink packages from their cache into each worktree's `node_modules` or `.venv`, and a hardlink works only on one filesystem. With the cache on another disk, each install copies full packages into the worktree, so the worktree pools grow faster on the system disk. Move these caches only together with the pools (see below).
 

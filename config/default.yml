@@ -5,8 +5,8 @@ factory:
   workspace: /home/coder/Dev
   start_services: true
   enable_linger: true
-  # Absolute path on a data disk for Docker's data root and the npm, pip and
-  # cargo caches. Empty keeps both on the system disk (docs/configuration.md#data-disk).
+  # Absolute path on a data disk for Docker's data root and the npm and pip
+  # caches. Empty keeps both on the system disk (docs/configuration.md#data-disk).
   data_dir: ""
   profiles:
     agents: true
