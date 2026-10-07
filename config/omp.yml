@@ -10,8 +10,8 @@ modelRoles:
   slow: anthropic/claude-fable-5-1:xhigh
   vision: anthropic/claude-opus-5-5:auto
   plan: anthropic/claude-fable-5-1
-  commit: anthropic/claude-sonnet-5-5:off
-  tiny: anthropic/claude-sonnet-5-5:off
+  commit: anthropic/claude-haiku-5-5
+  tiny: anthropic/claude-haiku-5-5
   advisor: anthropic/claude-opus-5-5:auto
   Kimi: kimi-code/k3
   task: anthropic/claude-opus-5-5:auto
