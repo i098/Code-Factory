@@ -339,6 +339,15 @@ factory_fleet_browsers_dir: "{{ factory_fleet_dir }}/browsers"
 # publishes for the asset; each release extracts into its own directory.
 factory_browser_obscura: "{{ factory_latest.obscura.assets[factory_platform] }}"
 factory_browser_obscura_dir: "{{ factory_fleet_browsers_dir }}/obscura-{{ factory_latest.obscura.version }}"
+# The vnc tier's own packages, so it works without the desktop profile:
+# /usr/bin/tigervncserver, websockify, the noVNC web root /usr/share/novnc, and
+# xfwm4, the window manager the tier's xstartup runs so Chrome maximizes and
+# its pop-ups can be moved and closed.
+factory_fleet_browser_vnc_packages:
+  - tigervnc-standalone-server
+  - websockify
+  - novnc
+  - xfwm4
 factory_fleet_browser_units:
   - fleet-browser-obscura.service
   - fleet-browser-chrome.service
