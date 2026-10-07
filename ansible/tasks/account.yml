@@ -194,7 +194,7 @@
   ansible.builtin.copy:
     dest: /etc/sysctl.d/60-agent-host.conf
     content: |
-      {{ ansible_managed | comment }}
+      # Managed by Code Factory (docs/capacity.md).
       fs.inotify.max_user_instances = 8192
     owner: root
     group: root
