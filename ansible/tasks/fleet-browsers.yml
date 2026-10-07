@@ -2,10 +2,11 @@
 # Fleet browsers: obscura -> chrome -> vnc tier ladder, shared session jar.
 # profiles.fleet_browsers or profiles.fleet_guards turns it on.
 # docs/fleet-guards.md owns the design; fleet/browsers/fleet-browser owns the
-# runtime. Only the obscura tier needs provisioning (latest binary + unit);
-# chrome and vnc are started on demand by the operator or the fleet-browser
-# CLI and gc'd after idle_timeout_min. The Herdr unit carries the ladder's
-# environment (templates/herdr.service.j2), so this file never edits it.
+# runtime. The obscura tier needs its latest binary + unit and the vnc tier its
+# apt packages; chrome and vnc are started on demand by the operator or the
+# fleet-browser CLI and gc'd after idle_timeout_min. The Herdr unit carries
+# the ladder's environment (templates/herdr.service.j2), so this file never
+# edits it.
 
 - name: Ensure the journald drop-in directory
   tags: [journald]
@@ -36,6 +37,13 @@
     mode: "0644"
   become: true
   notify: restart journald
+
+- name: Install the vnc tier packages
+  ansible.builtin.apt:
+    name: "{{ factory_fleet_browser_vnc_packages }}"
+    state: present
+  when: not ansible_check_mode or (factory_apt_indexes.matched | default(0)) > 0
+  become: true
 
 - name: Ensure fleet browser directories
   ansible.builtin.file:

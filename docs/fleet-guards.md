@@ -121,8 +121,8 @@ only on a run that includes the `herdr` tag, for example
 Move down one tier only when the tier above cannot do the job; move back to
 `obscura` for the next task. `fleet-browser-gc.timer` (every 5 min) stops tiers
 2 and 3 after 30 idle minutes (`FLEET_BROWSER_IDLE_MIN`, no CDP client
-connected). Tier 3 needs the `desktop` profile's TigerVNC/noVNC packages
-(`ConditionPathExists=/usr/bin/tigervncserver`). Tiers 2 and 3 need a
+connected). Tier 3 needs TigerVNC and noVNC, which the ladder installs from
+Ubuntu (`ConditionPathExists=/usr/bin/tigervncserver`). Tiers 2 and 3 need a
 Chrome/Chromium binary (`FLEET_CHROME_BIN`, Google Chrome, Chromium, or a
 Playwright Chromium).
 
@@ -208,6 +208,11 @@ fleet-browser env chrome     # or: eval "$(fleet-browser env chrome)" to escalat
    Bring up `vnc`, sign in through noVNC (`ssh -L 6909:127.0.0.1:6909 <host>`,
    then `http://127.0.0.1:6909/vnc.html?autoconnect=1`), and the next sync
    carries the session to `obscura` and `chrome`. A Google sign-in stays in `vnc`.
+   On a tailnet host, publish noVNC to the tailnet once, never with Funnel:
+   `sudo tailscale serve --bg --https=6909 http://127.0.0.1:6909`. Then open
+   `https://<host>.<tailnet>.ts.net:6909/vnc.html?autoconnect=1`. The VNC
+   display has no password, so every tailnet device that the tailnet policy
+   lets reach that port can drive the signed-in browser.
 
 ## Devtools-bridge reaper
 
