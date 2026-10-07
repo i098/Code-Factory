@@ -15,7 +15,7 @@ The source machine already uses Ubuntu packages, user-level systemd services, ho
 | OpenTofu | Cloud instances, networks, DNS, resource lifecycle | Add when a provider/resource contract is chosen; no pretend provider configuration is shipped |
 | cloud-init | Initial VM prerequisites before configuration management | Small vendor-neutral bootstrap input only |
 
-This is repeatable configuration, not a bit-identical OS image. Ubuntu packages receive distribution security updates. Everything the recipe installs is latest, verified by published checksums (the three omp marketplace plugins are the one exception: no publisher checksums them), so a later rebuild installs newer versions. Rebuilding an environment does not recreate authenticated accounts, databases, or running processes.
+This is repeatable configuration, not a bit-identical OS image. Ubuntu packages receive distribution security updates. Everything the recipe installs is latest, verified by published checksums (the three omp marketplace plugins and herdr-mosh are the exceptions: no publisher checksums them), so a later rebuild installs newer versions. Rebuilding an environment does not recreate authenticated accounts, databases, or running processes.
 
 ## Host and container boundary
 
@@ -53,7 +53,7 @@ Host sizing and every auto pruner are listed in [Capacity and pruners](capacity.
 
 ## Reproducibility policy
 
-1. Everything latest, verified by published checksums. Each apply resolves the newest release of every tool the host installs, once (`scripts/install_tools.py --resolve`, with the same `--tools`, `--npm` and `--development` selection as the install), installs exactly that, and verifies each download against the checksum its publisher posts for that exact release. A release without a published checksum is refused; the one exception is the omp marketplace plugins, which no publisher checksums. What each source is verified against is in [Dependencies](dependencies.md) and [Primary sources](#primary-sources).
+1. Everything latest, verified by published checksums. Each apply resolves the newest release of every tool the host installs, once (`scripts/install_tools.py --resolve`, with the same `--tools`, `--npm` and `--development` selection as the install), installs exactly that, and verifies each download against the checksum its publisher posts for that exact release. A release without a published checksum is refused; the exceptions are the omp marketplace plugins and herdr-mosh, which no publisher checksums. What each source is verified against is in [Dependencies](dependencies.md) and [Primary sources](#primary-sources).
 2. Do not copy a live global package directory.
 3. Two locks stay, because they are this repository's own development environment rather than installed tools: change Python dependencies with `uv lock` and commit the lock, and keep each GitHub Action pinned to the commit SHA of its latest release, which `.github/dependabot.yml` advances weekly.
 4. Keep machine differences in ignored `.local/host.yml`; schema validation precedes provisioning.
