@@ -152,7 +152,8 @@ def systemctl(*args):
 def apply(check):
     pool = {**DEFAULTS, **json.load(sys.stdin)}
     have = sorted(p.name[len("ci-runner@"):-len(".service")] for p in WANTS.glob("ci-runner@*.service"))
-    running = {name for name in have if busy(name)}
+    root = Path(pool["data_dir"]) / "ci-pool"
+    running = {name for name in {*have, *(p.name for p in (root / "work").glob("*"))} if busy(name)}
     total = pool["total_slots"]
     if total == "auto":
         # ponytail: the pool's own load is added back per busy slot at its cap,
@@ -160,7 +161,6 @@ def apply(check):
         total = auto_slots(pool, *measure(), len(running))
     want = wanted_slots(pool, total)
     # The pool deletes only below this directory, which it alone creates.
-    root = Path(pool["data_dir"]) / "ci-pool"
     keep_caches = {slug(entry["repo"]) for entry in pool["repos"]}
     changes = []
 

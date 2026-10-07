@@ -186,6 +186,19 @@ def test_a_drained_slot_keeps_its_repository_cache_while_it_is_busy(slots, monke
     assert not (data / "ci-pool/cache/o-kept").exists()
 
 
+def test_auto_size_adds_back_a_drained_slot_that_is_still_busy(slots, monkeypatch, capsys):
+    data, calls, apply = slots
+    (data / "ci-pool/work/o-drained-1").mkdir()
+    monkeypatch.setattr(pool_script, "busy", lambda name: name == "o-drained-1")
+    # The drained slot's job holds 4 CPUs and 8 GiB of the measured load.
+    monkeypatch.setattr(pool_script, "measure", lambda: (96, 12.0, 191.0))
+
+    assert apply(total_slots="auto") == 0
+
+    assert "pool: 2 of 11 slots" in capsys.readouterr().err
+
+
+
 @pytest.fixture
 def configuration():
     document = yaml.safe_load((ROOT / "config/default.yml").read_text())
