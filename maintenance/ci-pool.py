@@ -249,6 +249,8 @@ def run(instance):
                 IMAGE, "bash", "-c", CONTAINER_PREP,
             ], check=True, stdout=subprocess.DEVNULL)
         rc = subprocess.run([*docker(), "start", "--attach", container]).returncode
+    except Exception as error:
+        print(f"{instance}: container start failed: {error}", file=sys.stderr)
     finally:
         quiet([*docker(), "rm", "--force", container])
         if rc:
