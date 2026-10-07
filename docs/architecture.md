@@ -74,8 +74,6 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on pushes to `main`, on every p
 - Audits of the Dockerfile, devcontainer, and Compose definitions (the image builds from `ubuntu:latest`, Compose services are digest-pinned, no host namespaces or socket, resource caps).
 - A full worker image build and the behavior smoke in `tests/container-smoke.sh`.
 
-The first job (lint, tests, and validation) runs twice: once on a GitHub-hosted runner, and once on the self-hosted [CI pool](ci-pool.md) through the `code-factory` label.
-
 Every action is pinned to the commit SHA of its latest release (Dependabot moves the pins weekly), and the token is read-only. uv and Bun are their latest releases, the same as `./bootstrap.sh` and `./factory apply` install.
 
 ## Primary sources

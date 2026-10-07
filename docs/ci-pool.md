@@ -37,13 +37,13 @@ flowchart LR
 
 Every slot carries the `self-hosted` label and the labels of its repository entry. The account that runs the pool must have a `gh` login that can administer the repository's runners (the `repo` scope).
 
-To remove a repository, delete its entry and apply again. Its units stop and are disabled, and its work and cache directories are deleted. To stop the whole pool, set `repos: []` and apply. Removing the whole `ci_pool` section does not stop running slots, because apply then skips the pool.
+To remove a repository, delete its entry and apply again. Its idle slots stop and are disabled, and its work and cache directories are deleted. A slot that runs a job at that time is disabled but not stopped: it finishes the job, then leaves, and a later apply deletes its directories. To stop the whole pool, set `repos: []` and apply. Removing the whole `ci_pool` section does not stop running slots, because apply then skips the pool.
 
 ## Configuration
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `data_dir` | required | Root of every work directory and cache. Apply creates it, owned by `factory.user`. Put it on a data disk. |
+| `data_dir` | required | Parent of the pool's directory `<data_dir>/ci-pool/`, which holds every work directory and cache. Apply creates `data_dir`, owned by `factory.user`. Put it on a data disk. The pool deletes only inside `<data_dir>/ci-pool/`, so `data_dir` may hold other data. |
 | `total_slots` | `auto` | Most slots the pool runs. `auto` computes it at apply (see below). A number fixes it. |
 | `job_cpus` | `4` | `docker --cpus` of each job container. |
 | `job_memory_gb` | `8` | `docker --memory` and `--memory-swap` of each job container, in GiB. |
@@ -55,18 +55,20 @@ To remove a repository, delete its entry and apply again. Its units stop and are
 
 ## Pool size
 
-With `total_slots: auto`, apply measures the host and takes half of what is spare:
+With `total_slots: auto`, apply measures the host and takes half of what is spare. The CPU and memory that the pool's own busy slots hold count as spare, so jobs in flight do not change the size:
 
 ```
-spare CPUs  = CPUs - 15-minute load average
-spare GiB   = MemAvailable
+spare CPUs  = CPUs - 15-minute load average + job_cpus × busy slots
+spare GiB   = MemAvailable + job_memory_gb × busy slots
 total_slots = floor(min(spare CPUs × 0.5 / job_cpus,
                         spare GiB × 0.5 / job_memory_gb))
 ```
 
-The other half stays free for the agents and for load peaks. Example: 96 CPUs at load 8 with 199 GiB available and the default caps gives `min(11, 12.4)`, so 11 slots.
+The other half stays free for the agents and for load peaks. Example: 96 CPUs at load 8 with 199 GiB available and the default caps gives `min(11, 12.4)`, so 11 slots. A busy slot is counted at its cap, so a job that uses less than its cap makes the size read slightly high.
 
-Slots are assigned in list order. When the repository entries ask for more slots than the total, apply starts the first ones, prints a warning that names the slots it did not start, and starts nothing else. The measurement includes CI jobs that run at that time, so apply while the pool is idle, or set a number, when the size must stay the same.
+Slots are assigned in list order. When the repository entries ask for more slots than the total, apply starts the first ones, prints a warning that names the slots it did not start, and starts nothing else.
+
+When the total drops, apply stops the idle slots that are over it. A slot that runs a job is never stopped: apply disables it, and it leaves after its current job. A job is never killed by apply.
 
 ## What a job gets
 
@@ -83,8 +85,8 @@ Slots are assigned in list order. When the repository entries ask for more slots
 | `~/.local/bin/ci-pool.py` | The script: `apply` converges the slots, `run <slot>` is each slot's `ExecStart`. |
 | `~/.config/systemd/user/ci-runner@.service` | The one unit template. Apply writes it; instances are `ci-runner@<owner>-<name>-<n>.service`. |
 | `~/.config/ci-pool/pool.json` | The `ci_pool` section as apply last wrote it. Each slot reads it when it starts. |
-| `<data_dir>/work/<slot>/` | The slot's job work directory. |
-| `<data_dir>/cache/<owner>-<name>/tool/`, `.../home/` | The repository's tool cache and `~/.cache`. |
+| `<data_dir>/ci-pool/work/<slot>/` | The slot's job work directory. |
+| `<data_dir>/ci-pool/cache/<owner>-<name>/tool/`, `.../home/` | The repository's tool cache and `~/.cache`. |
 
 No token is stored. Each slot reads the host's `gh` login when it starts. When an account is not in the `docker` group, the script runs `sudo -n docker`.
 
@@ -116,6 +118,7 @@ echo '{"data_dir": "/mnt/data/ci", "repos": [{"repo": "owner/name", "slots": 2, 
 
 A self-hosted runner runs the code of the workflow that selects it. On a public repository, a pull request from a fork can change the workflow and run any code on this host. The job container limits CPU, memory, and processes, and has no Docker socket, but it shares the host's network, and its caches stay for the next job of the same repository.
 
-- Keep the repository's Actions setting "Require approval for fork pull request workflows" on, for **all external contributors** (Settings, Actions, General). Approve a run only after you read the change.
+- Opt in private repositories freely. For a public repository, select the pool only in workflows that outside contributors cannot start: `workflow_dispatch` and `push` to protected branches. Never use `pull_request` from forks.
+- This repository's `ci.yml` stays on GitHub-hosted runners. `ci-pool-smoke.yml` runs the same checks on the pool, and only `workflow_dispatch` starts it.
 - Do not opt in a repository whose jobs need secrets that a fork pull request could reach.
-- A pull request job can change the repository's caches (`<data_dir>/cache/<owner>-<name>/`), which later jobs of that repository read, including jobs on the default branch. Each JIT runner is registered to one repository only, so other repositories' jobs never run in its slots or read its caches.
+- A job can change the repository's caches (`<data_dir>/ci-pool/cache/<owner>-<name>/`), which later jobs of that repository read, including jobs on the default branch. Each JIT runner is registered to one repository only, so other repositories' jobs never run in its slots or read its caches.

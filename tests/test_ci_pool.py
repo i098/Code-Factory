@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -31,6 +32,13 @@ def test_auto_size_takes_half_the_spare_cpu_or_memory_whichever_is_tighter():
     assert pool_script.auto_slots(POOL, 8, 12.0, 199.0) == 0
 
 
+def test_busy_slots_do_not_shrink_the_auto_size():
+    # 6 busy slots hold 24 CPUs and 48 GiB of the load: the size is the idle host's.
+    loaded = pool_script.auto_slots(POOL, 96, 8.0 + 24, 199.0 - 48, 6)
+    assert loaded == pool_script.auto_slots(POOL, 96, 8.0, 199.0)
+    assert pool_script.auto_slots(POOL, 96, 8.0 + 24, 199.0 - 48) < loaded
+
+
 def test_slots_past_the_pool_total_are_dropped_from_the_end_of_the_list(capsys):
     pool = {"repos": [{"repo": "o/First", "slots": 2}, {"repo": "o/second.repo", "slots": 2}]}
     assert pool_script.wanted_slots(pool, 3) == ["o-first-1", "o-first-2", "o-second-repo-1"]
@@ -40,9 +48,9 @@ def test_slots_past_the_pool_total_are_dropped_from_the_end_of_the_list(capsys):
     ]
 
 
-def test_check_lists_removed_slots_and_their_directories_without_touching_them(
-    tmp_path, monkeypatch, capsys
-):
+@pytest.fixture
+def slots(tmp_path, monkeypatch):
+    """Pool state: kept-1 and gone-1 enabled, work/cache dirs for both, a foreign dir."""
     units = tmp_path / "units"
     wants = units / "default.target.wants"
     wants.mkdir(parents=True)
@@ -50,27 +58,85 @@ def test_check_lists_removed_slots_and_their_directories_without_touching_them(
     for name in ("o-kept-1", "o-gone-1"):
         (wants / f"ci-runner@{name}.service").touch()
     data = tmp_path / "data"
-    for path in ("work/o-kept-1", "work/o-gone-1", "cache/o-kept", "cache/o-gone"):
+    for path in ("ci-pool/work/o-kept-1", "ci-pool/work/o-gone-1", "ci-pool/cache/o-kept",
+                 "ci-pool/cache/o-gone", "work/projects", "cache/models"):
         (data / path).mkdir(parents=True)
     monkeypatch.setattr(pool_script, "CONFIG", tmp_path / "pool.json")
     monkeypatch.setattr(pool_script, "TEMPLATE", units / "ci-runner@.service")
     monkeypatch.setattr(pool_script, "WANTS", wants)
-    config = {"data_dir": str(data), "total_slots": 5,
-              "repos": [{"repo": "o/kept", "slots": 2, "labels": ["x"]}]}
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(config)))
+    monkeypatch.setattr(pool_script, "busy", lambda name: False)
+    monkeypatch.setattr(pool_script, "remove_tree", shutil.rmtree)
+    calls = []
+    monkeypatch.setattr(pool_script, "systemctl", lambda *args: calls.append(args))
 
-    assert pool_script.apply(check=True) == 0
+    def apply(check=False, **overrides):
+        config = {"data_dir": str(data), "total_slots": 5,
+                  "repos": [{"repo": "o/kept", "slots": 2, "labels": ["x"]}], **overrides}
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(config)))
+        return pool_script.apply(check=check)
+
+    return data, calls, apply
+
+
+def test_check_lists_removed_slots_and_their_directories_without_touching_them(
+    slots, tmp_path, capsys
+):
+    data, calls, apply = slots
+
+    assert apply(check=True) == 0
 
     assert capsys.readouterr().out.splitlines() == [
         f"write {tmp_path / 'pool.json'}",
         "stop ci-runner@o-gone-1.service",
-        f"remove {data / 'work/o-gone-1'}",
-        f"remove {data / 'cache/o-gone'}",
+        f"remove {data / 'ci-pool/work/o-gone-1'}",
+        f"remove {data / 'ci-pool/cache/o-gone'}",
         "start ci-runner@o-kept-2.service",
     ]
     assert not (tmp_path / "pool.json").exists()
-    assert (wants / "ci-runner@o-gone-1.service").exists()
-    assert (data / "work/o-gone-1").is_dir()
+    assert (data / "ci-pool/work/o-gone-1").is_dir()
+    assert calls == []
+
+
+def test_apply_deletes_only_what_the_pool_created(slots):
+    data, calls, apply = slots
+
+    assert apply() == 0
+
+    assert not (data / "ci-pool/work/o-gone-1").exists()
+    assert not (data / "ci-pool/cache/o-gone").exists()
+    assert (data / "ci-pool/work/o-kept-1").is_dir()
+    assert (data / "work/projects").is_dir()
+    assert (data / "cache/models").is_dir()
+    assert ("disable", "--now", "ci-runner@o-gone-1.service") in calls
+
+
+def test_shrinking_stops_idle_slots_but_only_drains_busy_ones(slots, monkeypatch, capsys):
+    data, calls, apply = slots
+    monkeypatch.setattr(pool_script, "busy", lambda name: name == "o-kept-2")
+    (data / "ci-pool/work/o-kept-2").mkdir()
+    (pool_script.WANTS / "ci-runner@o-kept-2.service").touch()
+
+    assert apply(total_slots=1) == 0
+
+    assert ("disable", "ci-runner@o-kept-2.service") in calls
+    assert ("disable", "--now", "ci-runner@o-kept-2.service") not in calls
+    assert ("disable", "--now", "ci-runner@o-gone-1.service") in calls
+    assert (data / "ci-pool/work/o-kept-2").is_dir()
+    assert (data / "ci-pool/cache/o-kept").is_dir()
+    assert not (data / "ci-pool/work/o-gone-1").exists()
+    assert "drain ci-runner@o-kept-2.service" in capsys.readouterr().out
+
+
+def test_a_drained_slot_keeps_its_repository_cache_while_it_is_busy(slots, monkeypatch):
+    data, calls, apply = slots
+    monkeypatch.setattr(pool_script, "busy", lambda name: name == "o-gone-1")
+
+    assert apply(repos=[]) == 0
+
+    assert (data / "ci-pool/work/o-gone-1").is_dir()
+    assert (data / "ci-pool/cache/o-gone").is_dir()
+    assert not (data / "ci-pool/work/o-kept-1").exists()
+    assert not (data / "ci-pool/cache/o-kept").exists()
 
 
 @pytest.fixture

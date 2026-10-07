@@ -73,9 +73,10 @@ def measure():
     return len(os.sched_getaffinity(0)), load15, available_gib
 
 
-def auto_slots(pool, cpus, load15, available_gib):
-    by_cpu = max(cpus - load15, 0) * SHARE / pool["job_cpus"]
-    by_memory = available_gib * SHARE / pool["job_memory_gb"]
+def auto_slots(pool, cpus, load15, available_gib, busy_slots=0):
+    # A busy slot's cap is spare capacity the pool itself holds: add it back.
+    by_cpu = min(max(cpus - load15 + busy_slots * pool["job_cpus"], 0), cpus) * SHARE / pool["job_cpus"]
+    by_memory = (available_gib + busy_slots * pool["job_memory_gb"]) * SHARE / pool["job_memory_gb"]
     return math.floor(min(by_cpu, by_memory))
 
 
@@ -102,11 +103,21 @@ def quiet(argv):
     return subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
 
 
+def busy(name):
+    """True while the slot's container runs a job; unknown counts as busy."""
+    result = subprocess.run([*docker(), "top", f"ci-runner-{name}", "-eo", "comm"],
+                            capture_output=True, text=True)
+    return "Runner.Worker" in result.stdout or (
+        result.returncode != 0 and "No such container" not in result.stderr
+    )
+
+
 def remove_tree(path):
     # Job files belong to the container's runner uid, so delete as root inside
     # the runner image rather than needing sudo rights on the host path.
-    quiet([*docker(), "run", "--rm", "--user", "0", "--volume", f"{path}:/w",
-           "--entrypoint", "find", IMAGE, "/w", "-mindepth", "1", "-delete"])
+    subprocess.run([*docker(), "run", "--rm", "--user", "0", "--volume", f"{path}:/w",
+                    "--entrypoint", "find", IMAGE, "/w", "-mindepth", "1", "-delete"],
+                   check=True, stdout=subprocess.DEVNULL)
     path.rmdir()
 
 
@@ -116,14 +127,16 @@ def systemctl(*args):
 
 def apply(check):
     pool = {**DEFAULTS, **json.load(sys.stdin)}
+    have = sorted(p.name[len("ci-runner@"):-len(".service")] for p in WANTS.glob("ci-runner@*.service"))
+    running = {name for name in have if busy(name)}
     total = pool["total_slots"]
     if total == "auto":
-        # ponytail: measured once per apply, CI jobs in flight included; run apply
-        # while the pool is idle, or set total_slots, if the size must not move.
-        total = auto_slots(pool, *measure())
+        # ponytail: the pool's own load is added back per busy slot at its cap,
+        # so a job that uses less than its cap makes the size read a little high.
+        total = auto_slots(pool, *measure(), len(running))
     want = wanted_slots(pool, total)
-    have = sorted(p.name[len("ci-runner@"):-len(".service")] for p in WANTS.glob("ci-runner@*.service"))
-    data = Path(pool["data_dir"])
+    # The pool deletes only below this directory, which it alone creates.
+    root = Path(pool["data_dir"]) / "ci-pool"
     keep_caches = {slug(entry["repo"]) for entry in pool["repos"]}
     changes = []
 
@@ -140,11 +153,25 @@ def apply(check):
     if write(TEMPLATE, UNIT_TEXT) and not check:
         systemctl("daemon-reload")
     for name in sorted(set(have) - set(want)):
-        changes.append(f"stop ci-runner@{name}.service")
-        if not check:
-            systemctl("disable", "--now", f"ci-runner@{name}.service")
-    stale = [p for p in sorted((data / "work").glob("*")) if p.name not in want]
-    stale += [p for p in sorted((data / "cache").glob("*")) if p.name not in keep_caches]
+        unit = f"ci-runner@{name}.service"
+        if name in running:
+            # Not stopped: the slot leaves after its current job (see run).
+            changes.append(f"drain {unit}")
+            if not check:
+                systemctl("disable", unit)
+        else:
+            changes.append(f"stop {unit}")
+            if not check:
+                systemctl("disable", "--now", unit)
+    stale, held = [], set()
+    for path in sorted((root / "work").glob("*")):
+        if path.name in want:
+            continue
+        if busy(path.name):
+            held.add(path.name.rpartition("-")[0])
+        else:
+            stale.append(path)
+    stale += [p for p in sorted((root / "cache").glob("*")) if p.name not in keep_caches | held]
     for path in stale:
         changes.append(f"remove {path}")
         if not check:
@@ -161,6 +188,11 @@ def apply(check):
 
 
 def run(instance):
+    unit = f"ci-runner@{instance}.service"
+    if quiet(["systemctl", "--user", "--quiet", "is-enabled", unit]):
+        # Drained by apply while it held a job: that job is done, leave for good.
+        systemctl("stop", unit)
+        return 0
     pool = json.loads(CONFIG.read_text())
     base = instance.rpartition("-")[0]
     entry = next((e for e in pool["repos"] if slug(e["repo"]) == base), None)
@@ -169,8 +201,8 @@ def run(instance):
         time.sleep(FAILURE_PAUSE_SECONDS)
         return 1
     repo = entry["repo"]
-    data = Path(pool["data_dir"])
-    work, cache = data / "work" / instance, data / "cache" / base
+    root = Path(pool["data_dir"]) / "ci-pool"
+    work, cache = root / "work" / instance, root / "cache" / base
     for path in (work, cache / "tool", cache / "home"):
         path.mkdir(parents=True, exist_ok=True)
 
