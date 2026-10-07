@@ -1,5 +1,5 @@
 # CI pool (factory.ci_pool, docs/ci-pool.md): just-in-time GitHub Actions
-# runners, one job per fresh container, sized from spare CPU and memory.
+# runners, one job per fresh container, sized from half of the host's CPU and memory.
 #
 # maintenance/ci-pool.py owns the slots: `apply` writes the one unit template
 # ci-runner@.service, enables one instance per configured slot and stops and

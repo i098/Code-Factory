@@ -55,20 +55,20 @@ To remove a repository, delete its entry and apply again. Its idle slots stop an
 
 ## Pool size
 
-With `total_slots: auto`, apply measures the host and takes half of what is spare. The CPU and memory that the pool's own busy slots hold count as spare, so jobs in flight do not change the size:
+With `total_slots: auto`, apply takes half of the host's CPUs and memory. It reads the totals, not the load, so the size is the same on every apply and does not change while jobs run:
 
 ```
-spare CPUs  = CPUs - 15-minute load average + job_cpus × busy slots
-spare GiB   = MemAvailable + job_memory_gb × busy slots
-total_slots = floor(min(spare CPUs × 0.5 / job_cpus,
-                        spare GiB × 0.5 / job_memory_gb))
+total_slots = floor(min(CPUs × 0.5 / job_cpus,
+                        MemTotal GiB × 0.5 / job_memory_gb))
 ```
 
-The other half stays free for the agents and for load peaks. Example: 96 CPUs at load 8 with 199 GiB available and the default caps gives `min(11, 12.4)`, so 11 slots. A busy slot is counted at its cap, so a job that uses less than its cap makes the size read slightly high.
+The other half stays free for the agents and for load peaks. Example: 96 CPUs and 247 GiB with the default caps give `min(12, 15.4)`, so 12 slots.
 
 Slots are assigned in list order. When the repository entries ask for more slots than the total, apply starts the first ones, prints a warning that names the slots it did not start, and starts nothing else.
 
 When the total drops, apply stops the idle slots that are over it. A slot that runs a job is never stopped: apply disables it, and it leaves after its current job. A job is never killed by apply.
+
+When apply changes `pool.json`, it restarts the idle slots, so they register again with the new labels and caps. A slot that runs a job keeps its settings until the job ends; its next start reads the new file.
 
 ## What a job gets
 

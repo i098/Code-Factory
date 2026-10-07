@@ -57,20 +57,11 @@ def test_job_started_hook_kills_the_container_for_code_from_outside_the_reposito
         assert (tmp_path / "sudo-args").read_text().split() == ["kill", "-KILL", "-1"]
 
 
-def test_auto_size_takes_half_the_spare_cpu_or_memory_whichever_is_tighter():
-    # 96 CPUs at load 8: 44 spare CPUs / 4 per job = 11; 199 GiB / 2 / 8 = 12.
-    assert pool_script.auto_slots(POOL, 96, 8.0, 199.0) == 11
+def test_auto_size_takes_half_the_host_cpus_or_memory_whichever_is_tighter():
+    # 96 CPUs / 2 / 4 = 12; 247 GiB / 2 / 8 = 15.4.
+    assert pool_script.auto_slots(POOL, 96, 247.0) == 12
     # Memory binds: 40 GiB / 2 / 8 = 2.5.
-    assert pool_script.auto_slots(POOL, 96, 8.0, 40.0) == 2
-    # A host loaded past its CPU count has no spare CPU.
-    assert pool_script.auto_slots(POOL, 8, 12.0, 199.0) == 0
-
-
-def test_busy_slots_do_not_shrink_the_auto_size():
-    # 6 busy slots hold 24 CPUs and 48 GiB of the load: the size is the idle host's.
-    loaded = pool_script.auto_slots(POOL, 96, 8.0 + 24, 199.0 - 48, 6)
-    assert loaded == pool_script.auto_slots(POOL, 96, 8.0, 199.0)
-    assert pool_script.auto_slots(POOL, 96, 8.0 + 24, 199.0 - 48) < loaded
+    assert pool_script.auto_slots(POOL, 96, 40.0) == 2
 
 
 def test_slots_past_the_pool_total_are_dropped_from_the_end_of_the_list(capsys):
@@ -126,6 +117,7 @@ def test_check_lists_removed_slots_and_their_directories_without_touching_them(
         "stop ci-runner@o-gone-1.service",
         f"remove {data / 'ci-pool/work/o-gone-1'}",
         f"remove {data / 'ci-pool/cache/o-gone'}",
+        "restart ci-runner@o-kept-1.service",
         "start ci-runner@o-kept-2.service",
     ]
     assert not (tmp_path / "pool.json").exists()
@@ -196,16 +188,36 @@ def test_a_drained_slot_keeps_its_repository_cache_while_it_is_busy(slots, monke
     assert not (data / "ci-pool/cache/o-kept").exists()
 
 
-def test_auto_size_adds_back_a_drained_slot_that_is_still_busy(slots, monkeypatch, capsys):
+def test_auto_size_comes_from_host_totals_whatever_the_slots_are_doing(slots, monkeypatch, capsys):
     data, calls, apply = slots
-    (data / "ci-pool/work/o-drained-1").mkdir()
-    monkeypatch.setattr(pool_script, "busy", lambda name: name == "o-drained-1")
-    # The drained slot's job holds 4 CPUs and 8 GiB of the measured load.
-    monkeypatch.setattr(pool_script, "measure", lambda: (96, 12.0, 191.0))
+    monkeypatch.setattr(pool_script, "busy", lambda name: True)
+    monkeypatch.setattr(pool_script, "totals", lambda: (96, 247.0))
 
-    assert apply(total_slots="auto") == 0
+    assert apply(total_slots="auto", repos=[{"repo": "o/kept", "slots": 20, "labels": ["x"]}]) == 0
 
-    assert "pool: 2 of 11 slots" in capsys.readouterr().err
+    assert "pool: 12 of 12 slots" in capsys.readouterr().err
+
+
+def test_a_config_change_restarts_idle_slots_and_leaves_busy_ones(slots, monkeypatch, capsys):
+    data, calls, apply = slots
+    assert apply() == 0
+    calls.clear()
+    capsys.readouterr()
+
+    assert apply() == 0
+    assert not [call for call in calls if call[0] == "restart"]
+
+    monkeypatch.setattr(pool_script, "busy", lambda name: name == "o-kept-1")
+    assert apply(repos=[{"repo": "o/kept", "slots": 2, "labels": ["y"]}]) == 0
+
+    assert [call for call in calls if call[0] == "restart"] == []
+    assert "start ci-runner@o-kept-2.service" in capsys.readouterr().out
+
+    monkeypatch.setattr(pool_script, "busy", lambda name: False)
+    assert apply(repos=[{"repo": "o/kept", "slots": 2, "labels": ["z"]}]) == 0
+
+    assert ("restart", "ci-runner@o-kept-1.service") in calls
+    assert "restart ci-runner@o-kept-1.service" in capsys.readouterr().out
 
 
 

@@ -25,7 +25,7 @@ from pathlib import Path
 
 IMAGE = "ghcr.io/actions/actions-runner:latest"
 DEFAULTS = {"total_slots": "auto", "job_cpus": 4, "job_memory_gb": 8}
-# The auto size takes this share of the CPU and memory the host leaves spare.
+# The auto size takes this share of the host's CPUs and memory.
 SHARE = 0.5
 # A failed GitHub call or container start waits this long before systemd's
 # restart, so a broken slot costs at most two API calls a minute.
@@ -90,19 +90,14 @@ def slug(repo):
     return re.sub(r"[^a-z0-9]+", "-", repo.lower()).strip("-")
 
 
-def measure():
-    """CPUs, 15-minute load average, and MemAvailable in GiB."""
-    load15 = float(Path("/proc/loadavg").read_text().split()[2])
+def totals():
+    """CPUs and MemTotal in GiB."""
     meminfo = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
-    available_gib = int(meminfo["MemAvailable"].split()[0]) / 1024**2
-    return len(os.sched_getaffinity(0)), load15, available_gib
+    return len(os.sched_getaffinity(0)), int(meminfo["MemTotal"].split()[0]) / 1024**2
 
 
-def auto_slots(pool, cpus, load15, available_gib, busy_slots=0):
-    # A busy slot's cap is spare capacity the pool itself holds: add it back.
-    by_cpu = min(max(cpus - load15 + busy_slots * pool["job_cpus"], 0), cpus) * SHARE / pool["job_cpus"]
-    by_memory = (available_gib + busy_slots * pool["job_memory_gb"]) * SHARE / pool["job_memory_gb"]
-    return math.floor(min(by_cpu, by_memory))
+def auto_slots(pool, cpus, memory_gib):
+    return math.floor(min(cpus * SHARE / pool["job_cpus"], memory_gib * SHARE / pool["job_memory_gb"]))
 
 
 def wanted_slots(pool, total):
@@ -158,9 +153,7 @@ def apply(check):
     running = {name for name in {*have, *(p.name for p in (root / "work").glob("*"))} if busy(name)}
     total = pool["total_slots"]
     if total == "auto":
-        # ponytail: the pool's own load is added back per busy slot at its cap,
-        # so a job that uses less than its cap makes the size read a little high.
-        total = auto_slots(pool, *measure(), len(running))
+        total = auto_slots(pool, *totals())
     want = wanted_slots(pool, total)
     keep_caches = {slug(entry["repo"]) for entry in pool["repos"]}
     changes = []
@@ -174,7 +167,7 @@ def apply(check):
             path.write_text(text)
         return True
 
-    write(CONFIG, json.dumps(pool, indent=2, sort_keys=True) + "\n")
+    reconfigured = write(CONFIG, json.dumps(pool, indent=2, sort_keys=True) + "\n")
     write(HOOK, HOOK_TEXT)
     if write(TEMPLATE, UNIT_TEXT) and not check:
         systemctl("daemon-reload")
@@ -203,10 +196,16 @@ def apply(check):
         if not check:
             remove_tree(path)
     for name in want:
+        unit = f"ci-runner@{name}.service"
         if name not in have:
-            changes.append(f"start ci-runner@{name}.service")
+            changes.append(f"start {unit}")
             if not check:
-                systemctl("enable", "--now", f"ci-runner@{name}.service")
+                systemctl("enable", "--now", unit)
+        elif reconfigured and name not in running:
+            # A busy slot reads the new config when its next job starts.
+            changes.append(f"restart {unit}")
+            if not check:
+                systemctl("restart", unit)
     if changes:
         print("\n".join(changes))
     print(f"pool: {len(want)} of {total} slots", file=sys.stderr)
@@ -260,7 +259,7 @@ def run(instance):
             env.write(f"ACTIONS_RUNNER_INPUT_JITCONFIG={jit['encoded_jit_config']}\n")
             env.flush()
             subprocess.run([
-                *docker(), "create", "--pull", "always", "--rm", "--name", container,
+                *docker(), "create", "--init", "--pull", "always", "--rm", "--name", container,
                 "--label", f"code-factory.ci-pool={instance}",
                 "--cpus", str(pool["job_cpus"]),
                 "--memory", f"{pool['job_memory_gb']}g", "--memory-swap", f"{pool['job_memory_gb']}g",
