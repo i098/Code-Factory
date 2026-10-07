@@ -109,6 +109,51 @@ def test_unknown_fleet_field_is_rejected(configuration):
         factory.validate_config(configuration)
 
 
+@pytest.mark.parametrize("data_dir", ["data", "/", "/srv/../root", "/srv/data/"])
+def test_data_dir_must_be_a_plain_absolute_path(configuration, data_dir):
+    configuration["factory"]["data_dir"] = data_dir
+    with pytest.raises(ValueError):
+        factory.validate_config(configuration)
+
+
+def _data_disk_vars(tmp_path, data_dir):
+    result = _ansible(
+        tmp_path,
+        "ansible",
+        "localhost",
+        "-i",
+        "localhost,",
+        "-c",
+        "local",
+        "-m",
+        "ansible.builtin.debug",
+        "-a",
+        "msg={{ [factory_data_cache_env, factory_docker_data_root] }}",
+        "-e",
+        f"@{ROOT / 'ansible/group_vars/all.yml'}",
+        "-e",
+        json.dumps({"factory_cfg": {"data_dir": data_dir}}),
+    )
+    assert result.returncode == 0, result.stdout
+    return json.loads(result.stdout.split("=>", 1)[1])["msg"]
+
+
+def test_no_data_dir_keeps_docker_and_every_cache_on_the_system_disk(tmp_path):
+    assert _data_disk_vars(tmp_path, "") == [{}, ""]
+
+
+def test_data_dir_moves_docker_and_only_the_caches_that_never_hardlink(tmp_path):
+    # bun, pnpm and uv hardlink into worktrees, so they must stay beside the pools.
+    assert _data_disk_vars(tmp_path, "/srv/data") == [
+        {
+            "npm_config_cache": "/srv/data/cache/npm",
+            "PIP_CACHE_DIR": "/srv/data/cache/pip",
+            "CARGO_HOME": "/srv/data/cache/cargo",
+        },
+        "/srv/data/docker",
+    ]
+
+
 def test_bad_polling_window_cannot_disable_idle_accrual(configuration):
     configuration["factory"]["browser_prune"]["max_gap_seconds"] = 120
     with pytest.raises(ValueError, match="observation intervals"):

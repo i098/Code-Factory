@@ -160,6 +160,20 @@
     - "{{ factory_cfg.workspace }}"
   when: factory_account_ready | bool
 
+# A data disk mounts root-owned, so the account cannot create its cache root
+# there itself. Docker creates its own data root.
+- name: Ensure the account's cache directory on the data disk
+  ansible.builtin.file:
+    path: "{{ factory_data_dir }}/cache"
+    state: directory
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0755"
+  become: true
+  when:
+    - factory_data_dir | length > 0
+    - factory_account_ready | bool
+
 - name: Keep the managed bin directory and environment on the interactive shell
   ansible.builtin.blockinfile:
     path: "{{ factory_cfg.home }}/.profile"
@@ -179,6 +193,9 @@
       export {{ key }}="{{ value }}"
       {% endfor %}
       {% endif %}
+      {% for key, value in factory_data_cache_env | dictsort %}
+      export {{ key }}="{{ value }}"
+      {% endfor %}
   become: "{{ factory_become_target | bool }}"
   become_user: "{{ factory_cfg.user }}"
   environment: "{{ factory_user_env }}"
