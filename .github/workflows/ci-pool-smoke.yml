@@ -7,9 +7,6 @@ name: ci-pool-smoke
 
 on:
   workflow_dispatch:
-  # Temporary: runs the proof job once from this branch. Removed before merge.
-  push:
-    branches: [fm/cf-ci-pool-p1]
 
 permissions:
   contents: read
