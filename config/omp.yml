@@ -17,7 +17,7 @@ modelRoles:
   task: anthropic/claude-opus-5-5:auto
   subagent: anthropic/claude-opus-5-5:auto
   default: anthropic/claude-opus-5-5:xhigh
-  memory: anthropic/claude-opus-5-5:off
+  memory: anthropic/claude-haiku-5-5
 # Off globally on purpose: Firstmate layers config/omp-crew-overlay.yml onto
 # omp crewmate and scout launches, which turns the advisor on for crews only:
 # fable 5.1 at low thinking, syncBacklog "off" overriding the '1' below so crews

@@ -124,10 +124,10 @@ mosh reads the alias too, because it starts its session over `ssh`. Then:
 
 ```bash
 ssh <alias>
-mosh <alias> -- herdr-mosh
+mosh <alias> -- herdr-patch
 ```
 
-[Over mosh](herdr.md#over-mosh) explains `herdr-mosh`. Keep the alias, the host's address and the account name out of this repository.
+[Over mosh](herdr.md#over-mosh) explains `herdr-patch`. Keep the alias, the host's address and the account name out of this repository.
 
 ## Host hardening
 
