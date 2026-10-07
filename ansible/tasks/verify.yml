@@ -37,6 +37,7 @@
               factory_user_units ~ '/default.target.wants/herdr.service',
               factory_herdr_spaces_script,
               factory_local_bin ~ '/herdr-sidebar-to-client.py',
+              factory_local_bin ~ '/herdr-mosh',
               factory_local_bin ~ '/btop',
               factory_local_bin ~ '/btop-bin',
               factory_btop_config,
