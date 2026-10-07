@@ -34,17 +34,27 @@ POOL = {"job_cpus": 4, "job_memory_gb": 8}
         ({"workflow_run": {"head_repository": {"full_name": "outsider/repo"}}}, False),
     ],
 )
-def test_job_started_hook_refuses_code_from_outside_the_repository(tmp_path, event, allowed):
+def test_job_started_hook_kills_the_container_for_code_from_outside_the_repository(
+    tmp_path, event, allowed
+):
     hook = tmp_path / "job-started.sh"
     hook.write_text(pool_script.HOOK_TEXT)
     (tmp_path / "event.json").write_text(json.dumps(event))
+    (tmp_path / "bin").mkdir()
+    sudo = tmp_path / "bin" / "sudo"
+    sudo.write_text(f'#!/bin/sh\necho "$@" > {tmp_path / "sudo-args"}\n')
+    sudo.chmod(0o755)
     result = subprocess.run(
         ["bash", str(hook)], capture_output=True, text=True,
-        env={"PATH": "/usr/bin:/bin", "GITHUB_REPOSITORY": "o/repo",
+        env={"PATH": f"{tmp_path / 'bin'}:/usr/bin:/bin", "GITHUB_REPOSITORY": "o/repo",
              "GITHUB_EVENT_PATH": str(tmp_path / "event.json")},
     )
     assert (result.returncode == 0) is allowed, result.stderr
     assert ("refused" in result.stderr) is not allowed
+    killed = (tmp_path / "sudo-args").exists()
+    assert killed is not allowed
+    if killed:
+        assert (tmp_path / "sudo-args").read_text().split() == ["kill", "-KILL", "-1"]
 
 
 def test_auto_size_takes_half_the_spare_cpu_or_memory_whichever_is_tighter():

@@ -77,7 +77,7 @@ When the total drops, apply stops the idle slots that are over it. A slot that r
 - No Docker daemon: the host's Docker socket is not mounted. Jobs that build or run containers stay on GitHub-hosted runners.
 - An empty `_work` directory for each job, emptied when the container starts.
 - Caches that stay between the jobs of one repository: the tool cache (`RUNNER_TOOL_CACHE`, which the `actions/setup-*` actions use) and `~/.cache` (uv, pip, and other tools).
-- A check before the first step: the runner's job-started hook fails the job when its code comes from outside the repository, which is a pull request from a fork or a `workflow_run` that a fork's pull request started. Only the repositories in the pool's list, and only their own branches, run on the host.
+- A check before the first step: the runner's job-started hook ends the job container when its code comes from outside the repository, which is a pull request from a fork or a `workflow_run` that a fork's pull request started. The hook kills every process in the container, so no later step runs, not even an `if: always()` step. The slot then deletes the runner. Only the repositories in the pool's list, and only their own branches, run on the host.
 
 ## Files on the host
 
@@ -118,7 +118,7 @@ echo '{"data_dir": "/mnt/data/ci", "repos": [{"repo": "owner/name", "slots": 2, 
 
 ## Public repositories
 
-A self-hosted runner runs the code of the workflow that selects it. On a public repository, a pull request from a fork can change the workflow. The job-started hook refuses such a job before any of its steps run. That is the first barrier; the trigger rule below is the second. The job container limits CPU, memory, and processes, and has no Docker socket, but it shares the host's network, and its caches stay for the next job of the same repository.
+A self-hosted runner runs the code of the workflow that selects it. On a public repository, a pull request from a fork can change the workflow. The job-started hook ends such a job's container before any of its steps run. That is the first barrier; the trigger rule below is the second. The job container limits CPU, memory, and processes, and has no Docker socket, but it shares the host's network, and its caches stay for the next job of the same repository.
 
 - Opt in private repositories freely. For a public repository, select the pool only in workflows that outside contributors cannot start: `workflow_dispatch` and `push` to protected branches. Never use `pull_request` from forks.
 - This repository's `ci.yml` stays on GitHub-hosted runners. `ci-pool-smoke.yml` runs the same checks on the pool, and only `workflow_dispatch` starts it. It stays queued until `.local/host.yml` has the entry `{ repo: i098/Code-Factory, slots: N, labels: [code-factory] }` in `factory.ci_pool.repos`.

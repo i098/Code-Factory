@@ -63,12 +63,13 @@ CONTAINER_PREP = (
     " && exec /home/runner/run.sh"
 )
 # The runner's job-started hook (ACTIONS_RUNNER_HOOK_JOB_STARTED) runs before
-# any step, and a non-zero exit fails the job. Only the repository's own code
-# runs on the host: a job for a fork's pull request is refused.
+# any step. Only the repository's own code runs on the host: for a fork's pull
+# request the hook kills every process in the container, because a failed hook
+# alone would still let later `if: always()` steps run.
 HOOK_TEXT = """\
 #!/usr/bin/env bash
 # Written by ci-pool.py apply (Code Factory): refuse code from outside the repository.
-exec python3 - <<'PY'
+python3 - <<'PY' || { sudo kill -KILL -1; exit 1; }
 import json, os, sys
 repo = os.environ["GITHUB_REPOSITORY"]
 with open(os.environ["GITHUB_EVENT_PATH"]) as f:
@@ -152,6 +153,7 @@ def systemctl(*args):
 def apply(check):
     pool = {**DEFAULTS, **json.load(sys.stdin)}
     have = sorted(p.name[len("ci-runner@"):-len(".service")] for p in WANTS.glob("ci-runner@*.service"))
+    # The pool deletes only below this directory, which it alone creates.
     root = Path(pool["data_dir"]) / "ci-pool"
     running = {name for name in {*have, *(p.name for p in (root / "work").glob("*"))} if busy(name)}
     total = pool["total_slots"]
@@ -160,7 +162,6 @@ def apply(check):
         # so a job that uses less than its cap makes the size read a little high.
         total = auto_slots(pool, *measure(), len(running))
     want = wanted_slots(pool, total)
-    # The pool deletes only below this directory, which it alone creates.
     keep_caches = {slug(entry["repo"]) for entry in pool["repos"]}
     changes = []
 
@@ -192,7 +193,7 @@ def apply(check):
     for path in sorted((root / "work").glob("*")):
         if path.name in want:
             continue
-        if busy(path.name):
+        if path.name in running:
             held.add(path.name.rpartition("-")[0])
         else:
             stale.append(path)
