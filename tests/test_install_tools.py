@@ -111,6 +111,11 @@ RELEASES = {
     "gammons/slk": ("v9.9.9", "slk_9.9.9_linux_x86_64.tar.gz"),
     "h4ckf0r0day/obscura": ("v9.9.9", "obscura-x86_64-linux.tar.gz"),
     "jimididit/koncreet": ("v9.9.9", "koncreet.tar.gz"),
+    "googleworkspace/cli": (
+        "v9.9.9",
+        "google-workspace-cli-x86_64-unknown-linux-musl.tar.gz",
+        "google-workspace-cli-x86_64-unknown-linux-musl.tar.gz.sha256",
+    ),
 }
 
 
@@ -164,6 +169,10 @@ def upstream(monkeypatch, unverified=None, seen=None):
         elif url.endswith("/rustup-init.sha256"):
             checksum = "" if unverified == "rustup-init" else "d" * 64
             return io.BytesIO(f"{checksum} *./rustup-init\n".encode())
+        elif url.startswith("https://github.com/google-workspace-cli-") and url.endswith(".sha256"):
+            # gws publishes its own .sha256 file, which wins over the GitHub digest.
+            checksum = "" if unverified == "googleworkspace/cli" else "f" * 64
+            return io.BytesIO(f"{checksum}  google-workspace-cli.tar.gz\n".encode())
         elif url == "https://pypi.org/pypi/psutil/json":
             files = [] if unverified == "psutil" else [{"digests": {"sha256": "e" * 64}}]
             body = {"info": {"version": "9.9.9"}, "urls": files}
@@ -217,6 +226,9 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
         "koncreet",
     ):
         assert latest[tool]["version"] == "9.9.9"
+    gws = latest["gws"]["assets"]["linux-x86_64"]
+    assert (latest["gws"]["version"], gws["sha256"]) == ("9.9.9", "f" * 64)
+    assert gws["url"].endswith("google-workspace-cli-x86_64-unknown-linux-musl.tar.gz")
     assert latest["gh"]["assets"]["linux-x86_64"]["format"] == "tar"
     assert latest["bun"]["assets"]["linux-x86_64"]["format"] == "zip"
     assert latest["sentrux"]["assets"]["linux-x86_64"]["format"] == "file"

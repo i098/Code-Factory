@@ -7,7 +7,8 @@ are never replaced. Archives cannot write outside their staging directory.
 Nothing is pinned: every tool tracks its latest release (no-mistakes its newest
 non-draft one, prereleases included). Native assets are
 verified against the SHA-256 their publisher lists for that exact release (the
-GitHub release-asset digest, Node's SHASUMS256.txt, rustup's .sha256), npm tools
+GitHub release-asset digest, or the release's own .sha256 file for gws, Node's
+SHASUMS256.txt, rustup's .sha256), npm tools
 against the integrity npm records for the resolved version, psutil against the
 digests PyPI publishes. The Rust toolchain follows the stable channel. The omp
 marketplace plugins are the one exception: no publisher checksums them, so they
@@ -104,9 +105,18 @@ GITHUB_LATEST = {
     ),
     # Resolved for host hardening (ansible/tasks/koncreet.yml), installed there as root.
     "koncreet": ("jimididit/koncreet", "v", "koncreet.tar.gz", {"koncreet": "koncreet/koncreet"}),
+    # Google Workspace CLI, verified against the .sha256 file the release publishes.
+    "gws": (
+        "googleworkspace/cli",
+        "v",
+        "google-workspace-cli-{gnu}-unknown-linux-musl.tar.gz",
+        {"gws": "gws"},
+    ),
 }
 # Resolved when they can be, skipped with a warning when they cannot: they never stop a run.
 OPTIONAL = {"koncreet"}
+# Verified against the `<asset>.sha256` file of the release instead of the GitHub digest.
+SHA256_FILE = {"gws"}
 # npm tools on the registry's latest version, each installed into its own prefix.
 NPM_LATEST = {
     "omp": "@oh-my-pi/pi-coding-agent",
@@ -122,7 +132,7 @@ NPM_LATEST = {
 # included, instead of the latest stable one.
 PRERELEASE_CHANNEL = {"no-mistakes"}
 # Native tools the agents profile adds.
-AGENT_TOOLS = ["gh", "no-mistakes", "treehouse"]
+AGENT_TOOLS = ["gh", "no-mistakes", "treehouse", "gws"]
 
 
 def digest(path):
@@ -198,6 +208,10 @@ def resolve_latest(key, names):
             asset = next((a for a in release["assets"] if a["name"] == name), {})
             checksum = (asset.get("digest") or "").removeprefix("sha256:")
             url = asset.get("browser_download_url", "")
+            if tool in SHA256_FILE:
+                sums = next((a for a in release["assets"] if a["name"] == name + ".sha256"), {})
+                text = fetch(sums["browser_download_url"], f"{tool} checksum") if sums else b""
+                checksum = text.decode().split(" ")[0]
             latest[tool] = verified(tool, version, key, name, url, checksum, binaries)
         except (OSError, ValueError, KeyError) as error:
             if tool not in OPTIONAL:

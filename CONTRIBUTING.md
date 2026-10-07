@@ -47,7 +47,7 @@ uv run ansible-playbook -i ansible/inventory.yml ansible/site.yml --syntax-check
 
 ## Adding a new tool
 
-1. Add it to `GITHUB_LATEST` (a GitHub release whose assets carry a SHA-256 digest) or `NPM_LATEST` in `scripts/install_tools.py`. A tool from elsewhere needs its own resolver in `resolve_latest` that reads the checksum its publisher posts for the release.
+1. Add it to `GITHUB_LATEST` (a GitHub release whose assets carry a SHA-256 digest; when the release publishes its own `<asset>.sha256` files, also list it in `SHA256_FILE` to verify against those) or `NPM_LATEST` in `scripts/install_tools.py`. A tool from elsewhere needs its own resolver in `resolve_latest` that reads the checksum its publisher posts for the release.
 2. Register where it installs: `factory_core_tools` in `group_vars/all.yml` for every host, `AGENT_TOOLS` in `scripts/install_tools.py` for the `agents` profile's native tools (npm tools in `NPM_LATEST` need no step), or `factory_installer_also` in `group_vars/all.yml` for a source Ansible installs itself.
 3. If it needs a systemd unit, add a `.j2` template in `ansible/templates/` and wire it in the relevant task file.
 4. If it needs environment variables, add them to `group_vars/all.yml` (not to shell rc files).

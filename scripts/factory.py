@@ -143,6 +143,7 @@ def doctor(document):
             "gh",
             "no-mistakes",
             "treehouse",
+            "gws",
             "gh-axi",
             "chrome-devtools-axi",
             "tasks-axi",
