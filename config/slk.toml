@@ -1,0 +1,5 @@
+# Seeded once by Code Factory (docs/chat.md); slk owns this file afterwards and
+# adds a [workspaces.*] block for each workspace you sign in to.
+[appearance]
+# Images go out as kitty graphics, which WezTerm, kitty and Ghostty draw.
+image_protocol = "kitty"

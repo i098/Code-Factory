@@ -38,6 +38,7 @@ factory:
     docker: false
     tailscale: false
     desktop: false
+    chat: false
   herdr:
     theme: catppuccin
     toast_delivery: herdr

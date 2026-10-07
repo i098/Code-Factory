@@ -6,18 +6,18 @@
 # decision. Keep this note in agreement with config/crew-dispatch.json.
 modelRoles:
   designer: anthropic/claude-fable-5-1
-  smol: anthropic/claude-sonnet-5:off
+  smol: anthropic/claude-sonnet-5-5:off
   slow: anthropic/claude-fable-5-1:xhigh
   vision: anthropic/claude-opus-5-5:auto
   plan: anthropic/claude-fable-5-1
-  commit: anthropic/claude-sonnet-5:off
-  tiny: anthropic/claude-sonnet-5:off
-  advisor: anthropic/claude-sonnet-5
+  commit: anthropic/claude-haiku-5-5
+  tiny: anthropic/claude-haiku-5-5
+  advisor: anthropic/claude-opus-5-5:auto
   Kimi: kimi-code/k3
   task: anthropic/claude-opus-5-5:auto
   subagent: anthropic/claude-opus-5-5:auto
   default: anthropic/claude-opus-5-5:xhigh
-  memory: anthropic/claude-opus-5-5:off
+  memory: anthropic/claude-haiku-5-5
 # Off globally on purpose: Firstmate layers config/omp-crew-overlay.yml onto
 # omp crewmate and scout launches, which turns the advisor on for crews only:
 # fable 5.1 at low thinking, syncBacklog "off" overriding the '1' below so crews
@@ -31,9 +31,10 @@ theme:
   dark: dark-rose-pine
 symbolPreset: nerd
 defaultThinkingLevel: auto
-hideThinkingBlock: false
+hideThinkingBlock: true
 autocompleteMaxVisible: 10
 steeringMode: one-at-a-time
+followUpMode: all
 interruptMode: immediate
 includeModelInPrompt: false
 readLineNumbers: true
@@ -73,6 +74,17 @@ composer:
   shape: borderless
 mnemopi:
   noEmbeddings: true
+  llmMode: smol
+  polyphonicRecall: true
+  enhancedRecall: true
+  proactiveLinking: true
+memory:
+  backend: mnemopi
+task:
+  maxConcurrency: 128
+tui:
+  vimMode: true
+  vimModeDisplay: icon
 retry:
   fallbackChains:
     anthropic/claude-fable-5-1:

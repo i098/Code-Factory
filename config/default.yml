@@ -14,9 +14,11 @@ factory:
     desktop: false
     fleet_guards: false
     fleet_browsers: false
+    chat: true
   herdr:
-    theme: catppuccin
-    toast_delivery: herdr
+    theme: rose-pine
+    # The outer terminal shows Herdr's notifications as desktop notifications.
+    toast_delivery: terminal
     agent_panel_sort: spaces
     headless_cols: 120
     headless_rows: 40

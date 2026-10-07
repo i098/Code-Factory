@@ -27,7 +27,7 @@ Use a Linux host for the native recipe. macOS and other client devices can reach
 
 ### Docker worker
 
-The Dockerfile's `worker` target is an isolated, non-root, devcontainer-style image built by the same recipe. It runs `./factory apply --config containers/factory.container.yml`, which sets `start_services: false` and `enable_linger: false` and turns off the `docker`, `tailscale`, `desktop`, and `firstmate` profiles and the browser pruner. The image carries the agent and development toolchain and the rendered agent configs, with no systemd services, linger, or Docker-in-Docker. The devcontainer, Compose, and CI use the same image.
+The Dockerfile's `worker` target is an isolated, non-root, devcontainer-style image built by the same recipe. It runs `./factory apply --config containers/factory.container.yml`, which sets `start_services: false` and `enable_linger: false` and turns off the `docker`, `tailscale`, `desktop`, `firstmate`, and `chat` profiles and the browser pruner. The image carries the agent and development toolchain and the rendered agent configs, with no systemd services, linger, or Docker-in-Docker. The devcontainer, Compose, and CI use the same image.
 
 ```bash
 docker build --target worker --tag code-factory/worker .
@@ -45,9 +45,12 @@ The `firstmate` profile copies each name in `factory_firstmate_config_names` (`a
 | `secondmate-harness` | `omp anthropic/claude-opus-5-5 xhigh`. |
 | `omp-crew-overlay.yml` | omp overlay Firstmate applies to crewmate and scout launches, never secondmates, ahead of its tracked worker overlay. It sets `modelRoles.advisor: anthropic/claude-fable-5-1:low`, `advisor.enabled: true`, `advisor.immuneTurns: 10` and `advisor.syncBacklog: "off"`, plus `providers.anthropic.serverSideFallback: false`: with the global server-side fallback on, Anthropic rejects every advisor call with a 400. Every omp crewmate runs a fable-5.1 advisor at low thinking (its lowest level). Crews never wait on it, because `syncBacklog: "off"` overrides the global `"1"`. Turns that land during a review batch into the next call instead of one call per turn, and the advisor interrupts at most once per 10 turns. omp has no every-N-turns setting. |
 | `spawn-memory-floor-mb` | `8000`; see [fleet guards](fleet-guards.md). |
-| `crew-harness`, `backend`, `startup-memory-budget` | Harness, Herdr backend, and startup memory budget. |
+| `crew-harness`, `backend` | Crew harness and Herdr backend. |
+| `startup-memory-budget` | `1000000` estimated tokens: no practical cap on the startup prompt memory. |
+| `herdr-presentation-spaces` | `off`: crewmates and scouts use the flat Herdr layout, not one workspace per task. |
+| `turnend-churn-absorb` | Present (empty): the watcher may also count a pane that changed as work evidence for a bare turn end. |
 
-`config/omp.yml` seeds `~/.omp/agent/config.yml` on first write only. It holds the host's `modelRoles` (`default` is `anthropic/claude-opus-5-5:xhigh`, `task` and `subagent` are `anthropic/claude-opus-5-5:auto`, `memory` is `anthropic/claude-opus-5-5:off`, and `smol`, `commit` and `tiny` are `anthropic/claude-sonnet-5:off`) and `retry.fallbackChains` with no `default` chain. Its `advisor` block keeps the global advisor off (`enabled: false`) with `syncBacklog: '1'`; only crews and the omp the no-mistakes daemon spawns turn it on. Crews do it through the overlay above, which also sets `syncBacklog` to `"off"`; the daemon's omp does it through its own overlay ([no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)). No router or gateway sits between omp and the provider.
+`config/omp.yml` seeds `~/.omp/agent/config.yml` on first write only. It holds the host's `modelRoles` (`default` is `anthropic/claude-opus-5-5:xhigh`, `task` and `subagent` are `anthropic/claude-opus-5-5:auto`, `memory` is `anthropic/claude-haiku-5-5`, `advisor` is `anthropic/claude-opus-5-5:auto`, `smol` is `anthropic/claude-sonnet-5-5:off`, and `commit` and `tiny` are `anthropic/claude-haiku-5-5`) and `retry.fallbackChains` with no `default` chain. Its `advisor` block keeps the global advisor off (`enabled: false`) with `syncBacklog: '1'`; only crews and the omp the no-mistakes daemon spawns turn it on. Crews do it through the overlay above, which also sets `syncBacklog` to `"off"`; the daemon's omp does it through its own overlay ([no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)). No router or gateway sits between omp and the provider.
 
 Host sizing and every auto pruner are listed in [Capacity and pruners](capacity.md).
 

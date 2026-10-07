@@ -107,6 +107,8 @@ RELEASES = {
     "astral-sh/uv": ("9.9.9", "uv-x86_64-unknown-linux-gnu.tar.gz"),
     "aristocratos/btop": ("v9.9.9", "btop-x86_64-unknown-linux-musl.tar.gz"),
     "sentrux/sentrux": ("v9.9.9", "sentrux-linux-x86_64", "grammars-linux-x86_64.tar.gz"),
+    "chojs23/concord": ("v9.9.9", "concord-x86_64-unknown-linux-gnu.tar.xz"),
+    "gammons/slk": ("v9.9.9", "slk_9.9.9_linux_x86_64.tar.gz"),
     "h4ckf0r0day/obscura": ("v9.9.9", "obscura-x86_64-linux.tar.gz"),
     "jimididit/koncreet": ("v9.9.9", "koncreet.tar.gz"),
 }
@@ -195,16 +197,31 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
         "btop",
         "sentrux",
         "sentrux-grammars",
+        "concord",
+        "slk",
         "obscura",
         "koncreet",
     ):
         assert latest[tool]["assets"]["linux-x86_64"]["sha256"] == "a" * 64
-    for tool in ("herdr", "bun", "gh", "treehouse", "uv", "btop", "sentrux", "obscura", "koncreet"):
+    for tool in (
+        "herdr",
+        "bun",
+        "gh",
+        "treehouse",
+        "uv",
+        "btop",
+        "sentrux",
+        "concord",
+        "slk",
+        "obscura",
+        "koncreet",
+    ):
         assert latest[tool]["version"] == "9.9.9"
     assert latest["gh"]["assets"]["linux-x86_64"]["format"] == "tar"
     assert latest["bun"]["assets"]["linux-x86_64"]["format"] == "zip"
     assert latest["sentrux"]["assets"]["linux-x86_64"]["format"] == "file"
     assert latest["sentrux-grammars"]["assets"]["linux-x86_64"]["format"] == "tar"
+    assert latest["concord"]["assets"]["linux-x86_64"]["format"] == "tar"
     # The newest Node release, not the first index entry, verified by SHASUMS256.
     node = latest["node"]["assets"]["linux-x86_64"]
     assert latest["node"]["version"] == "30.1.0"
