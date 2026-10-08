@@ -298,7 +298,8 @@ of them from there too.`, `${ta.replace(/\s*\n\s*/g, " ")}\n${tb.replace(/\s*\n\
       context.push(x);
     }
     shrink(context, end, CONTEXT_MAX, (x) => bytes(render(this.nodes, x)) + 1, (x) => this.nodes.has(key(x)));
-    const head = `<chat>\n${context.map((x) => render(this.nodes, x)).join("\n")}\n</chat>\n${task}\n<input>\n`;
+    // shrink() merges only built pairs, so during a model outage the context can still pass CONTEXT_MAX: clip it.
+    const head = `<chat>\n${clip(context.map((x) => render(this.nodes, x)).join("\n"), CONTEXT_MAX)}\n</chat>\n${task}\n<input>\n`;
     const tail = "\n</input>";
     const prompt = head + clip(input, CEILING - OVERHEAD - RETRY_RESERVE - bytes(COMPACT_PROMPT) - bytes(head) - bytes(tail)) + tail;
     let spent = OVERHEAD + bytes(COMPACT_PROMPT) + bytes(prompt);

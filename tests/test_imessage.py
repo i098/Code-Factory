@@ -432,6 +432,24 @@ console.log(JSON.stringify({{
     assert result["size"] <= result["LIMIT"]
 
 
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_compaction_stays_under_the_ceiling_when_the_model_keeps_failing(tmp_path):
+    """Short messages and a model that always throws leave the context unmerged; its request is still clipped."""
+    result = bun(f"""
+import {{ CEILING, Memory }} from {MEMORY};
+let largest = 0;
+const chat = () => ({{
+  async say(text) {{ largest = Math.max(largest, Buffer.byteLength(text)); throw new Error("down"); }},
+  end() {{}},
+}});
+const m = new Memory({json.dumps(str(tmp_path))}, chat);
+for (let i = 0; i < 900; i++) m.append("owner", "x".repeat(260));
+while (m.pending) await Bun.sleep(0);
+console.log(JSON.stringify({{ largest, CEILING }}));
+""")
+    assert 0 < result["largest"] <= result["CEILING"]
+
+
 @pytest.mark.parametrize("args", [("hello",), ("--reply", "1", "hi"), ("--typing",), ("--react", "👍")])
 def test_send_commands_carry_the_local_header(tmp_path, args):
     result, calls = send(tmp_path, *args)
