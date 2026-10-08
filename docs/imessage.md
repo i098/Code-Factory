@@ -6,12 +6,12 @@ The iMessage bridge lets the owner talk to Firstmate from a phone. It is a small
 
 For each text from the owner, the service does these steps:
 
-1. It marks the text as read.
-2. It shows the typing bubble and asks a front desk for an instant reply. The front desk is a one-shot `omp -p` call with no tools. It gets the owner's last texts and the output of `fm-inbox.sh status`.
-3. It sends the desk's reply in the thread. When the text is only an acknowledgement (ok, thanks), the desk adds a tapback instead. The desk writes plain text, says only that it passed the text on, and never claims work that it cannot see.
-4. It files the text as a Firstmate inbox note (`fm-inbox.sh note`), with the desk's reply attached. The note wakes Firstmate, which answers in full with `fm-imessage`.
+1. It files the text as a Firstmate inbox note (`fm-inbox.sh note`) first, so the wake never waits on a model. The note wakes Firstmate, which answers in full with `fm-imessage`. If the note fails, the service replies "firstmate did not get that, send it again" and stops there.
+2. It marks the text as read and shows the typing bubble.
+3. In parallel with the next texts, it asks a front desk for an instant reply. The front desk is a one-shot `omp -p` call with no tools. It gets the owner's last texts and the output of `fm-inbox.sh status`.
+4. It sends the desk's reply in the thread. The desk prefers a tapback and picks the emoji itself. It writes text only when a tapback cannot carry the answer: short, blunt, plain text. The desk says only that it passed the text on, and never claims work that it cannot see.
 
-If the desk fails or times out after 45 seconds, the service sends a fixed reply. If the note fails, the service asks the owner to send the text again.
+If the desk fails or times out after 45 seconds, the service puts a 👍 tapback on the text. The service appends each desk reply (time, message id, `react <emoji>` or the reply text) to `~/.local/state/fm-imessage/desk.log`, which is private to the account, so Firstmate can read what the desk sent.
 
 The service ignores texts from all other senders. It saves attachments in `~/.local/state/fm-imessage/attachments/` for Firstmate to open. That directory is private to the account (mode `0700`). The service also keeps the owner's latest text in `~/.local/state/fm-imessage/latest`, so replies still work after a restart.
 
