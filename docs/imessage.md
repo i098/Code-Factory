@@ -52,6 +52,8 @@ Apply installs these items:
 
 The service listens on `127.0.0.1:8765`. To use a different port, set `FM_IMESSAGE_PORT` in a unit drop-in (`systemctl --user edit fm-imessage`) and in the environment of the commands. `FM_INBOX_CMD` overrides the inbox command, which is `<workspace>/firstmate/bin/fm-inbox.sh` by default.
 
+The service is for the host's own commands (`fm-imessage`, `fm-location`) only. It answers `403` to any request that lacks the header `X-Firstmate: 1` or whose `Host` is not exactly `127.0.0.1:<port>`, before it looks at the path. A web page open in a browser on the host cannot set a custom header without a CORS preflight, which the service never answers, and the `Host` check stops DNS rebinding. So a page cannot send messages as Firstmate or read the location. If you call the service with your own `curl`, add `-H "X-Firstmate: 1"`.
+
 To turn it off, remove the block, then run `systemctl --user disable --now fm-imessage` and delete the unit.
 
 ## Commands

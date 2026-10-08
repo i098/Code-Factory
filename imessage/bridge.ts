@@ -12,7 +12,7 @@ import { mkdirSync } from "node:fs";
 import type { AdvancedIMessage } from "@photon-ai/advanced-imessage/grpc";
 import { Spectrum, type Message } from "spectrum-ts";
 import { imessage } from "spectrum-ts/providers/imessage";
-import { deskPrompt, noteText, parseReact } from "./desk.ts";
+import { deskPrompt, localCommand, noteText, parseReact } from "./desk.ts";
 
 const env = process.env;
 const need = (name: string) => env[name] || (() => { throw new Error(`fm-imessage: ${name} is not set`); })();
@@ -43,14 +43,19 @@ if (!raw) throw new Error("fm-imessage: no Advanced iMessage client in spectrum-
 let latest: Message | undefined;
 const saved = Bun.file(LATEST_FILE);
 if (await saved.exists()) {
-  const [spaceId = "", messageId = ""] = (await saved.text()).trim().split("\n");
-  latest = await (await imessage(app).space.get(spaceId)).getMessage(messageId);
+  try {
+    const [spaceId = "", messageId = ""] = (await saved.text()).trim().split("\n");
+    latest = await (await imessage(app).space.get(spaceId)).getMessage(messageId);
+  } catch (e) {
+    console.error("fm-imessage: could not restore the latest text; treating it as unknown:", e);
+  }
 }
 
 Bun.serve({
   hostname: "127.0.0.1",
   port: PORT,
   async fetch(req) {
+    if (!localCommand(req.headers, PORT)) return new Response("forbidden\n", { status: 403 });
     const path = new URL(req.url).pathname;
     if (req.method === "GET" && path === "/location") {
       try {
@@ -83,44 +88,65 @@ Bun.serve({
 });
 console.log(`fm-imessage: listening on 127.0.0.1:${PORT}, latest text ${latest ? "restored" : "unknown"}`);
 
+async function handle(message: Message) {
+  const c = message.content;
+  let file = "";
+  let attachmentLost = false;
+  if (c.type === "attachment") {
+    try {
+      file = `${ATTACH_DIR}/${message.id}-${String(c.name ?? "file").replace(/[^\w.-]/g, "_")}`;
+      await Bun.write(file, await c.read());
+    } catch (e) {
+      attachmentLost = true;
+      console.error("fm-imessage: could not save an attachment:", e);
+    }
+  }
+  const text = attachmentLost ? "(sent an attachment that could not be saved)" : noteText(c, file);
+  if (text === undefined) return;
+  latest = message;
+  // The desk is best effort: whatever fails here, the owner's text still becomes an inbox note below.
+  let replied = "";
+  try {
+    await Bun.write(LATEST_FILE, `${message.space.id}\n${message.id}\n`);
+    await message.read();
+    await message.space.startTyping();
+    thread.push(`Owner: ${text}`);
+    thread.splice(0, Math.max(0, thread.length - 12));
+    const status = Bun.spawnSync([INBOX, "status"], { cwd: FM_HOME, env: { ...env, FM_HOME } }).stdout.toString();
+    const desk = Bun.spawn(
+      ["omp", "-p", "--no-extensions", "--no-tools", "--no-skills", "--no-rules", "--no-session",
+        "--thinking=off", "--model", DESK_MODEL, "--system-prompt", DESK_PROMPT,
+        `Fleet status (durable records, may lag):\n${status}\n\nRecent thread:\n${thread.join("\n")}\n\nWrite your reply to his last text.`],
+      { cwd: DESK_DIR, stdout: "pipe", stderr: "ignore", timeout: 45_000 },
+    );
+    const drafted = (await new Response(desk.stdout).text()).replace(/^Working\.\.\.\s*/m, "").trim();
+    const answer = (await desk.exited) === 0 && drafted ? drafted : "Got it, Firstmate is on it and will answer here.";
+    await message.space.stopTyping();
+    const tapback = parseReact(answer);
+    if (tapback) await message.react(tapback);
+    else await message.reply(answer);
+    replied = answer;
+    thread.push(tapback ? `Firstmate reacted ${tapback} to his last text` : `Firstmate: ${answer}`);
+  } catch (e) {
+    console.error("fm-imessage: front desk failed:", e);
+  }
+  const note = Bun.spawnSync(
+    [INBOX, "note", "--request-id", `photon-${message.id}`, "--",
+      `[iMessage from the owner; answer with fm-imessage] ${text}\n[front desk ${replied ? `already replied: ${replied}` : "could not reply"}]`],
+    { cwd: FM_HOME, env: { ...env, FM_HOME } },
+  );
+  if (note.exitCode !== 0) await message.reply("Firstmate did not get that; send it again.");
+}
+
 for await (const [, message] of app.messages) {
   if (message.direction === "outbound") continue;
   if (message.sender?.id !== OWNER) {
     console.log(`fm-imessage: ignored a message from ${message.sender?.id ?? "unknown"}`);
     continue;
   }
-  const c = message.content;
-  let file = "";
-  if (c.type === "attachment") {
-    file = `${ATTACH_DIR}/${message.id}-${c.name.replace(/[^\w.-]/g, "_")}`;
-    await Bun.write(file, await c.read());
+  try {
+    await handle(message);
+  } catch (e) {
+    console.error("fm-imessage: failed to handle a message:", e);
   }
-  const text = noteText(c, file);
-  if (text === undefined) continue;
-  latest = message;
-  await Bun.write(LATEST_FILE, `${message.space.id}\n${message.id}\n`);
-  await message.read();
-  await message.space.startTyping();
-  thread.push(`Owner: ${text}`);
-  thread.splice(0, Math.max(0, thread.length - 12));
-  const status = Bun.spawnSync([INBOX, "status"], { cwd: FM_HOME, env: { ...env, FM_HOME } }).stdout.toString();
-  const desk = Bun.spawn(
-    ["omp", "-p", "--no-extensions", "--no-tools", "--no-skills", "--no-rules", "--no-session",
-      "--thinking=off", "--model", DESK_MODEL, "--system-prompt", DESK_PROMPT,
-      `Fleet status (durable records, may lag):\n${status}\n\nRecent thread:\n${thread.join("\n")}\n\nWrite your reply to his last text.`],
-    { cwd: DESK_DIR, stdout: "pipe", stderr: "ignore", timeout: 45_000 },
-  );
-  const drafted = (await new Response(desk.stdout).text()).replace(/^Working\.\.\.\s*/m, "").trim();
-  const answer = (await desk.exited) === 0 && drafted ? drafted : "Got it, Firstmate is on it and will answer here.";
-  await message.space.stopTyping();
-  const tapback = parseReact(answer);
-  if (tapback) await message.react(tapback);
-  else await message.reply(answer);
-  thread.push(tapback ? `Firstmate reacted ${tapback} to his last text` : `Firstmate: ${answer}`);
-  const note = Bun.spawnSync(
-    [INBOX, "note", "--request-id", `photon-${message.id}`, "--",
-      `[iMessage from the owner; answer with fm-imessage] ${text}\n[front desk already replied: ${answer}]`],
-    { cwd: FM_HOME, env: { ...env, FM_HOME } },
-  );
-  if (note.exitCode !== 0) await message.reply("Firstmate did not get that; send it again.");
 }

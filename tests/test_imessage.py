@@ -93,6 +93,46 @@ console.log(JSON.stringify({{
     assert result["reacts"] == ["👍", "❤️", None, None, None]
 
 
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_service_refuses_foreign_requests():
+    code = f"""
+import {{ localCommand }} from {json.dumps(str(ROOT / "imessage/desk.ts"))};
+const h = (host, marker) => new Headers({{ ...(host ? {{ host }} : {{}}), ...(marker ? {{ "x-firstmate": marker }} : {{}}) }});
+console.log(JSON.stringify([
+  localCommand(h("127.0.0.1:8765", "1"), 8765),
+  localCommand(h("127.0.0.1:8765"), 8765),
+  localCommand(h("127.0.0.1:8765", "0"), 8765),
+  localCommand(h("evil.example:8765", "1"), 8765),
+  localCommand(h("localhost:8765", "1"), 8765),
+  localCommand(h("127.0.0.1:9000", "1"), 8765),
+  localCommand(h(undefined, "1"), 8765),
+]));
+"""
+    out = subprocess.run(
+        ["bun", "-e", code], capture_output=True, text=True, check=True, timeout=60
+    ).stdout
+    assert json.loads(out) == [True, False, False, False, False, False, False]
+
+
+@pytest.mark.parametrize("args", [("hello",), ("--typing",), ("--react", "👍")])
+def test_send_commands_carry_the_local_header(tmp_path, args):
+    result, calls = send(tmp_path, *args)
+    assert result.returncode == 0
+    assert len(calls) == 1 and "-H X-Firstmate: 1" in calls[0]
+
+
+def test_location_carries_the_local_header(tmp_path):
+    (tmp_path / "curl").write_text(f'#!/bin/bash\necho "$*" >> {tmp_path / "calls"}\n')
+    (tmp_path / "curl").chmod(0o755)
+    env = {**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}"}
+    result = subprocess.run(
+        [str(ROOT / "imessage/fm-location")], capture_output=True, text=True, env=env, timeout=10
+    )
+    assert result.returncode == 0
+    calls = (tmp_path / "calls").read_text().splitlines()
+    assert len(calls) == 1 and "-H X-Firstmate: 1" in calls[0] and calls[0].endswith("/location")
+
+
 def load_factory():
     spec = importlib.util.spec_from_file_location("factory_imessage", ROOT / "scripts/factory.py")
     module = importlib.util.module_from_spec(spec)
