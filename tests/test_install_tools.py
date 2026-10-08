@@ -97,6 +97,50 @@ def test_download_rejects_plain_http(tmp_path):
         installer.download("http://example.test/tool", "0" * 64, tmp_path / "download")
 
 
+def http_error(code):
+    return installer.urllib.error.HTTPError(
+        "https://downloads.example.test/tool", code, "x", {}, None
+    )
+
+
+def test_download_retries_a_transient_server_error(tmp_path, monkeypatch):
+    payload = b"payload"
+    replies = [http_error(500), installer.urllib.error.URLError("reset"), Download(payload)]
+    pauses = []
+
+    def urlopen(*args, **kwargs):
+        reply = replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(installer.time, "sleep", pauses.append)
+    target = tmp_path / "download"
+    installer.download(
+        "https://downloads.example.test/tool", hashlib.sha256(payload).hexdigest(), target
+    )
+    assert target.read_bytes() == payload
+    assert pauses == [1, 2]
+
+
+@pytest.mark.parametrize(("failure", "calls"), [(http_error(404), 1), (http_error(503), 3)])
+def test_download_never_retries_a_client_error_and_gives_up_after_three_attempts(
+    tmp_path, monkeypatch, failure, calls
+):
+    seen = []
+
+    def urlopen(*args, **kwargs):
+        seen.append(args)
+        raise failure
+
+    monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(installer.time, "sleep", lambda seconds: None)
+    with pytest.raises(installer.urllib.error.HTTPError):
+        installer.download("https://downloads.example.test/tool", "0" * 64, tmp_path / "download")
+    assert len(seen) == calls
+
+
 # What each fake GitHub release publishes for linux-x86_64: tag and asset name.
 RELEASES = {
     "herdrdev/herdr": ("v9.9.9", "herdr-linux-x86_64"),
@@ -107,6 +151,7 @@ RELEASES = {
     "astral-sh/uv": ("9.9.9", "uv-x86_64-unknown-linux-gnu.tar.gz"),
     "aristocratos/btop": ("v9.9.9", "btop-x86_64-unknown-linux-musl.tar.gz"),
     "sentrux/sentrux": ("v9.9.9", "sentrux-linux-x86_64", "grammars-linux-x86_64.tar.gz"),
+    "fallow-rs/fallow": ("v9.9.9", "fallow-linux-x64-musl"),
     "chojs23/concord": ("v9.9.9", "concord-x86_64-unknown-linux-gnu.tar.xz"),
     "gammons/slk": ("v9.9.9", "slk_9.9.9_linux_x86_64.tar.gz"),
     "h4ckf0r0day/obscura": ("v9.9.9", "obscura-x86_64-linux.tar.gz"),
@@ -206,6 +251,7 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
         "btop",
         "sentrux",
         "sentrux-grammars",
+        "fallow",
         "concord",
         "slk",
         "obscura",
@@ -220,6 +266,7 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
         "uv",
         "btop",
         "sentrux",
+        "fallow",
         "concord",
         "slk",
         "obscura",
@@ -232,6 +279,7 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
     assert latest["gh"]["assets"]["linux-x86_64"]["format"] == "tar"
     assert latest["bun"]["assets"]["linux-x86_64"]["format"] == "zip"
     assert latest["sentrux"]["assets"]["linux-x86_64"]["format"] == "file"
+    assert latest["fallow"]["assets"]["linux-x86_64"]["format"] == "file"
     assert latest["sentrux-grammars"]["assets"]["linux-x86_64"]["format"] == "tar"
     assert latest["concord"]["assets"]["linux-x86_64"]["format"] == "tar"
     # The newest Node release, not the first index entry, verified by SHASUMS256.

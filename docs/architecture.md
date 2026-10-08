@@ -72,6 +72,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on pushes to `main`, on every p
 - `bash config/omp-as-pi/test.sh`, the offline tests of the omp-as-pi wrapper ([no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)).
 - `./factory validate` for `config/default.yml` and `containers/factory.container.yml`.
 - Audits of the Dockerfile, devcontainer, and Compose definitions (the image builds from `ubuntu:latest`, Compose services are digest-pinned, no host namespaces or socket, resource caps).
+- On pull requests, the `quality gate` job: `sentrux gate .` against the committed `.sentrux/baseline.json` fails on a `DEGRADED` verdict, on a drop past `FM_QUALITY_MAX_DROP`, and when the gate cannot give a verdict; `fallow audit` on the changed JS/TS only warns ([Quality gate](omp.md#quality-gate)).
 - A full worker image build and the behavior smoke in `tests/container-smoke.sh`.
 
 Every action is pinned to the commit SHA of its latest release (Dependabot moves the pins weekly), and the token is read-only. uv and Bun are their latest releases, the same as `./bootstrap.sh` and `./factory apply` install.

@@ -85,6 +85,48 @@ jobs:
       - name: Validate container configuration
         run: ./factory validate --config containers/factory.container.yml
 
+  # The repository's own quality gate (docs/omp.md#quality-gate): the same
+  # blocking rule the omp extension applies at turn end, against the committed
+  # .sentrux/baseline.json, plus fallow audit on the changed files as a warning.
+  quality-gate:
+    name: quality gate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install latest Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: latest
+
+      # The recipe's own verified installer; the sentrux binary links GTK 3.
+      - name: Install the latest sentrux and fallow
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libgtk-3-0t64
+          python3 scripts/install_tools.py --home "$HOME" --tools sentrux,fallow
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: sentrux gate
+        run: bun config/omp-quality-gate.ts
+
+      - name: fallow audit (advisory)
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          fallow audit --changed-since "origin/${BASE_REF}" ||
+            echo "::warning title=fallow audit::the changed JS/TS has findings (advisory, see the log)"
+
   container-smoke:
     name: worker image behavior smoke
     runs-on: ubuntu-24.04

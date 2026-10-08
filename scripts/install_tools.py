@@ -28,6 +28,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -88,6 +89,8 @@ GITHUB_LATEST = {
     # The grammars of the same sentrux release. sentrux downloads them itself,
     # unverified, when ~/.sentrux/plugins lacks them; link_grammars puts them there.
     "sentrux-grammars": ("sentrux/sentrux", "v", "grammars-{key}.tar.gz", {}),
+    # JS/TS changed-code health for the omp quality gate (docs/omp.md#quality-gate).
+    "fallow": ("fallow-rs/fallow", "v", "fallow-linux-{node}-musl", {"fallow": "fallow"}),
     # Terminal chat clients for the chat profile (docs/chat.md).
     "concord": (
         "chojs23/concord",
@@ -133,6 +136,8 @@ NPM_LATEST = {
 PRERELEASE_CHANNEL = {"no-mistakes"}
 # Native tools the agents profile adds.
 AGENT_TOOLS = ["gh", "no-mistakes", "treehouse", "gws"]
+# Attempts per download; transient 5xx and connection errors back off 1 s, then 2 s.
+DOWNLOAD_ATTEMPTS = 3
 
 
 def digest(path):
@@ -280,10 +285,22 @@ def download(url, checksum, destination):
     ):
         raise ValueError("downloads require HTTPS and an explicit SHA-256")
     print(f"Downloading {url}", file=sys.stderr)
-    with urllib.request.urlopen(url, timeout=120) as response, destination.open("wb") as stream:
-        if urllib.parse.urlsplit(response.geturl()).scheme != "https":
-            raise ValueError("refusing an insecure download redirect")
-        shutil.copyfileobj(response, stream)
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            with (
+                urllib.request.urlopen(url, timeout=120) as response,
+                destination.open("wb") as stream,
+            ):
+                if urllib.parse.urlsplit(response.geturl()).scheme != "https":
+                    raise ValueError("refusing an insecure download redirect")
+                shutil.copyfileobj(response, stream)
+            break
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
+            # GitHub release assets intermittently answer 5xx; a 4xx is final.
+            status = getattr(error, "code", 500)
+            if status < 500 or attempt == DOWNLOAD_ATTEMPTS:
+                raise
+            time.sleep(attempt)
     if digest(destination) != checksum:
         raise ValueError(f"checksum mismatch for {url}")
 
@@ -583,7 +600,7 @@ def omp_plugins(home, environment):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--home", type=Path, required=True)
-    parser.add_argument("--tools", default="herdr,node,bun,uv,btop,sentrux")
+    parser.add_argument("--tools", default="herdr,node,bun,uv,btop,sentrux,fallow")
     parser.add_argument("--npm", action="store_true")
     parser.add_argument("--development", action="store_true")
     parser.add_argument(

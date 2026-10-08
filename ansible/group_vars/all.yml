@@ -227,7 +227,7 @@ factory_desktop_packages:
   - iproute2
 
 # --- Tool installer ---------------------------------------------------------
-factory_core_tools: [herdr, node, bun, uv, btop, sentrux]
+factory_core_tools: [herdr, node, bun, uv, btop, sentrux, fallow]
 # The terminal chat clients of the chat profile (docs/chat.md).
 factory_chat_tools: [concord, slk]
 # The installer flags that choose which tools a run covers. tasks/preflight.yml
@@ -260,6 +260,8 @@ factory_omp_sidebar_extension: "{{ factory_cfg.home }}/.omp/agent/extensions/cod
 factory_omp_status_icons_extension: "{{ factory_cfg.home }}/.omp/agent/extensions/aa-mode-icons.ts"
 # Blocks pkill/killall/kill-by-pgrep in every omp session (docs/omp.md).
 factory_omp_no_pattern_kill_extension: "{{ factory_cfg.home }}/.omp/agent/extensions/fm-no-pattern-kill.ts"
+# The sentrux/fallow quality gate at the end of every omp agent turn (docs/omp.md#quality-gate).
+factory_omp_quality_gate_extension: "{{ factory_cfg.home }}/.omp/agent/extensions/code-factory-quality-gate.ts"
 # Herdr's own omp state extension; `herdr integration install omp` writes it (docs/herdr.md).
 factory_herdr_omp_integration: "{{ factory_cfg.home }}/.omp/agent/extensions/herdr-omp-agent-state.ts"
 # omp as the no-mistakes pi agent, and the omp overlay only daemon-spawned omp
