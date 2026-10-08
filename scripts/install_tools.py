@@ -28,6 +28,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -135,6 +136,8 @@ NPM_LATEST = {
 PRERELEASE_CHANNEL = {"no-mistakes"}
 # Native tools the agents profile adds.
 AGENT_TOOLS = ["gh", "no-mistakes", "treehouse", "gws"]
+# Attempts per download; transient 5xx and connection errors back off 1 s, then 2 s.
+DOWNLOAD_ATTEMPTS = 3
 
 
 def digest(path):
@@ -282,10 +285,22 @@ def download(url, checksum, destination):
     ):
         raise ValueError("downloads require HTTPS and an explicit SHA-256")
     print(f"Downloading {url}", file=sys.stderr)
-    with urllib.request.urlopen(url, timeout=120) as response, destination.open("wb") as stream:
-        if urllib.parse.urlsplit(response.geturl()).scheme != "https":
-            raise ValueError("refusing an insecure download redirect")
-        shutil.copyfileobj(response, stream)
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            with (
+                urllib.request.urlopen(url, timeout=120) as response,
+                destination.open("wb") as stream,
+            ):
+                if urllib.parse.urlsplit(response.geturl()).scheme != "https":
+                    raise ValueError("refusing an insecure download redirect")
+                shutil.copyfileobj(response, stream)
+            break
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
+            # GitHub release assets intermittently answer 5xx; a 4xx is final.
+            status = getattr(error, "code", 500)
+            if status < 500 or attempt == DOWNLOAD_ATTEMPTS:
+                raise
+            time.sleep(attempt)
     if digest(destination) != checksum:
         raise ValueError(f"checksum mismatch for {url}")
 

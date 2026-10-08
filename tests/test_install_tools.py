@@ -97,6 +97,50 @@ def test_download_rejects_plain_http(tmp_path):
         installer.download("http://example.test/tool", "0" * 64, tmp_path / "download")
 
 
+def http_error(code):
+    return installer.urllib.error.HTTPError(
+        "https://downloads.example.test/tool", code, "x", {}, None
+    )
+
+
+def test_download_retries_a_transient_server_error(tmp_path, monkeypatch):
+    payload = b"payload"
+    replies = [http_error(500), installer.urllib.error.URLError("reset"), Download(payload)]
+    pauses = []
+
+    def urlopen(*args, **kwargs):
+        reply = replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(installer.time, "sleep", pauses.append)
+    target = tmp_path / "download"
+    installer.download(
+        "https://downloads.example.test/tool", hashlib.sha256(payload).hexdigest(), target
+    )
+    assert target.read_bytes() == payload
+    assert pauses == [1, 2]
+
+
+@pytest.mark.parametrize(("failure", "calls"), [(http_error(404), 1), (http_error(503), 3)])
+def test_download_never_retries_a_client_error_and_gives_up_after_three_attempts(
+    tmp_path, monkeypatch, failure, calls
+):
+    seen = []
+
+    def urlopen(*args, **kwargs):
+        seen.append(args)
+        raise failure
+
+    monkeypatch.setattr(installer.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(installer.time, "sleep", lambda seconds: None)
+    with pytest.raises(installer.urllib.error.HTTPError):
+        installer.download("https://downloads.example.test/tool", "0" * 64, tmp_path / "download")
+    assert len(seen) == calls
+
+
 # What each fake GitHub release publishes for linux-x86_64: tag and asset name.
 RELEASES = {
     "herdrdev/herdr": ("v9.9.9", "herdr-linux-x86_64"),
