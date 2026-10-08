@@ -61,13 +61,20 @@ export function shrink(view: Line[], T: number, target: number, size: (x: Line) 
 
 // The chat as stored on disk. Read-only: the zoom tool loads it from its own process.
 export function load(dir: string) {
+  const parse = <T>(r: string): T[] => {
+    try {
+      return [JSON.parse(r) as T];
+    } catch {
+      return []; // a torn line from a crash
+    }
+  };
   const rows = <T>(sub: string): T[] =>
     existsSync(`${dir}/${sub}`)
-      ? readdirSync(`${dir}/${sub}`).sort().flatMap((f) => readFileSync(`${dir}/${sub}/${f}`, "utf8").split("\n").filter(Boolean).map((r) => JSON.parse(r) as T))
+      ? readdirSync(`${dir}/${sub}`).sort().flatMap((f) => readFileSync(`${dir}/${sub}/${f}`, "utf8").split("\n").filter(Boolean).flatMap((r) => parse<T>(r)))
       : [];
   const msgs = rows<Msg>("main");
   const nodes = new Map(rows<Node>("tree").map((n) => [key([n.l, n.i]), n]));
-  const view: Line[] = existsSync(`${dir}/view.json`) ? JSON.parse(readFileSync(`${dir}/view.json`, "utf8")) : [];
+  const view: Line[] = existsSync(`${dir}/view.json`) ? parse<Line[]>(readFileSync(`${dir}/view.json`, "utf8"))[0] ?? [] : [];
   return { msgs, nodes, view };
 }
 
@@ -132,7 +139,13 @@ export class Memory {
     private chat: (system: string) => Chat,
     private log: (e: unknown) => void = console.error,
   ) {
-    for (const sub of ["main", "tree"]) mkdirSync(`${dir}/${sub}`, { recursive: true, mode: 0o700 });
+    for (const sub of ["main", "tree"]) {
+      mkdirSync(`${dir}/${sub}`, { recursive: true, mode: 0o700 });
+      for (const f of readdirSync(`${dir}/${sub}`)) {
+        const text = readFileSync(`${dir}/${sub}/${f}`, "utf8");
+        if (text && !text.endsWith("\n")) appendFileSync(`${dir}/${sub}/${f}`, "\n");
+      }
+    }
     ({ msgs: this.msgs, nodes: this.nodes, view: this.view } = load(dir));
     // A crash between logging a message and saving the view leaves the view short of the newest messages.
     const covered = this.view.reduce((s, [l]) => s + 2 ** l, 0);
@@ -158,8 +171,12 @@ export class Memory {
     // counts as its placeholder until its compaction ends, so the view can pass VIEW_MAX by that growth.
     const size = (x: Line) => bytes(render(this.nodes, x)) + 1;
     if (this.view.reduce((s, x) => s + size(x), 0) > VIEW_MAX) shrink(this.view, this.msgs.length, VIEW_MIN, size, (x) => this.nodes.has(key(x)));
-    writeFileSync(`${this.dir}/view.json.tmp`, JSON.stringify(this.view), { mode: 0o600 });
-    renameSync(`${this.dir}/view.json.tmp`, `${this.dir}/view.json`);
+    try {
+      writeFileSync(`${this.dir}/view.json.tmp`, JSON.stringify(this.view), { mode: 0o600 });
+      renameSync(`${this.dir}/view.json.tmp`, `${this.dir}/view.json`);
+    } catch (e) {
+      this.log(e); // the next start rebuilds the view's tail from the log
+    }
     return msg.i;
   }
 

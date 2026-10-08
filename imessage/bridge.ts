@@ -39,7 +39,7 @@ let burstFrom: number | undefined; // the memory id of his first text the desk h
 const recent: Message[] = []; // his last texts, newest last, for a threaded reply to one a few bubbles up
 const log = (what: string) => (e: unknown) => console.error(`fm-imessage: ${what}:`, e);
 // This service is the memory's one writer: systemd runs one instance of the unit.
-const memory = new Memory(MEMORY_DIR, compactChat, log("compaction failed"));
+const memory = new Memory(MEMORY_DIR, compactChat, log("memory"));
 const desk = new DeskTiming(QUIET_MS, (current) => void runDesk(current).catch(log("desk failed")));
 let deskRun: Bun.Subprocess | undefined;
 
@@ -101,7 +101,11 @@ Bun.serve({
       const emoji = (await req.text()).trim();
       if (!emoji) return new Response("no emoji", { status: 400 });
       await latest.react(emoji);
-      memory.append("supervisor", `tapback ${emoji} on his last text`);
+      try {
+        memory.append("supervisor", `tapback ${emoji} on his last text`);
+      } catch (e) {
+        log("memory")(e);
+      }
       return new Response("reacted\n");
     }
     const parts = bubbles(await req.text());
@@ -125,7 +129,11 @@ Bun.serve({
       log("send failed")(e);
       return new Response(`send failed: ${e instanceof Error ? e.message : String(e)}\n`, { status: 502 });
     }
-    memory.append("supervisor", parts.join("\n\n"));
+    try {
+      memory.append("supervisor", parts.join("\n\n"));
+    } catch (e) {
+      log("memory")(e);
+    }
     return new Response(`sent ${parts.length} bubble(s)\n`);
   },
 });
@@ -160,7 +168,13 @@ async function runDesk(current: () => boolean) {
   const tapback = skip ? undefined : parseReact(drafted);
   if (tapback) await target.react(tapback);
   else if (!skip) await target.space.send(drafted);
-  if (!skip) memory.append("desk", tapback ? `tapback ${tapback} on his last text` : drafted);
+  if (!skip) {
+    try {
+      memory.append("desk", tapback ? `tapback ${tapback} on his last text` : drafted);
+    } catch (e) {
+      log("memory")(e);
+    }
+  }
   const outcome = !ok ? "skip (desk failed)" : skip ? "skip" : tapback ? `react ${tapback}` : drafted.replace(/\s+/g, " ");
   appendFileSync(DESK_LOG, `${new Date().toISOString()} ${target.id} ${outcome}\n`, { mode: 0o600 });
 }
@@ -203,8 +217,12 @@ async function handle(message: Message) {
     await message.reply("firstmate did not get that, send it again");
     return;
   }
-  const id = memory.append("owner", text);
-  burstFrom ??= id;
+  try {
+    const id = memory.append("owner", text);
+    burstFrom ??= id;
+  } catch (e) {
+    log("memory")(e);
+  }
   latest = message;
   recent.push(message);
   recent.splice(0, Math.max(0, recent.length - 10));
