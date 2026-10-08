@@ -11,7 +11,7 @@ For each text from the owner, the service does these steps:
 3. In parallel with the next texts, it asks a front desk for an instant reply. The front desk is a one-shot `omp -p` call with no tools. It gets the owner's last texts and the output of `fm-inbox.sh status`.
 4. It sends the desk's reply in the thread. The desk prefers a tapback and picks the emoji itself. It writes text only when a tapback cannot carry the answer: short, blunt, plain text. The desk says only that it passed the text on, and never claims work that it cannot see.
 
-If the desk fails or times out after 45 seconds, the service puts a 👍 tapback on the text. The service appends each desk reply (time, message id, `react <emoji>` or the reply text) to `~/.local/state/fm-imessage/desk.log`, which is private to the account, so Firstmate can read what the desk sent.
+If the desk fails or times out after 45 seconds, the service puts a 👍 tapback on the text. If sending the desk's tapback or reply fails, the service retries once with the 👍 tapback, and then only logs the error. The service appends the outcome of each desk reply (time, message id, `react <emoji>`, the reply text, or `send failed: ...`) to `~/.local/state/fm-imessage/desk.log`, which is private to the account, so Firstmate can read what the desk sent.
 
 The service ignores texts from all other senders. It saves attachments in `~/.local/state/fm-imessage/attachments/` for Firstmate to open. That directory is private to the account (mode `0700`). The service also keeps the owner's latest text in `~/.local/state/fm-imessage/latest`, so replies still work after a restart.
 
@@ -65,6 +65,8 @@ To turn it off, remove the block, then run `systemctl --user disable --now fm-im
 | `fm-imessage --react '👍'` | Adds a tapback to the owner's latest text. |
 | `fm-imessage --help` | Shows the usage. It sends nothing. |
 | `fm-location` | Prints the location that the owner shares with the line in Find My, as JSON. |
+
+If a spectrum-ts upgrade changes the internals that the service reads to reach the location client, the service logs one warning at start and keeps running. Only `fm-location` then fails, with HTTP 503, until the bridge is updated.
 
 `fm-imessage` exits non-zero when it sends nothing. An unknown option sends nothing and exits with code 2.
 
