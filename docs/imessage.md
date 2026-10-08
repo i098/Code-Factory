@@ -9,7 +9,7 @@ For each message from the owner, the service does these steps:
 1. It turns the message into text. A threaded reply, an edit, a message effect, or a group of messages is unwrapped, so nothing that he writes is lost. A threaded reply also names the text that it replies to. A message kind that the service does not know becomes a note that names the kind. Tapbacks, typing, read receipts, unsends, and chat changes are only signals, and the service ignores them.
 2. It files the text as a Firstmate inbox note (`fm-inbox.sh note`) first, so the wake never waits on a model. The note wakes Firstmate, which answers in full with `fm-imessage`. If the note fails, the service replies "firstmate did not get that, send it again" and stops there.
 3. It marks the text as read.
-4. It starts the quiet period, 8 seconds by default. Each new text from the owner starts the quiet period again. Any send, tapback, or typing bubble from Firstmate since his last text stops the desk for that burst of texts.
+4. It starts the quiet period, 8 seconds. Each new text from the owner starts the quiet period again. Any send, tapback, or typing bubble from Firstmate since his last text stops the desk for that burst of texts.
 5. If the quiet period ends and Firstmate stayed silent, the front desk gets one turn for the whole burst. The front desk is a one-shot `omp -p` call with no tools. It gets the last lines of the conversation and the output of `fm-inbox.sh status`, and it shows the typing bubble while it writes.
 6. The desk acts like a person who texts, not like a bot. Its answer is one of three things, in this order of preference: `SKIP` (it sends nothing), `REACT:` and one emoji that it picks itself (a tapback on his latest text), or a short text. The text style is short, blunt, Gen Z, and lowercase. The desk never claims work that it cannot see, never promises a time, and never invents facts.
 7. Before it sends, the service checks again. If the owner sent a new text or Firstmate became active while the desk wrote, the service drops the draft. The next quiet period reads the whole conversation again.
@@ -46,7 +46,6 @@ factory:
   imessage:
     owner: "+<country code><number>"  # the owner's phone number, E.164 form
     owner_name: the owner           # optional; this is the default; how the desk prompt names him
-    quiet_seconds: 8                # optional; this is the default; the desk waits this long for Firstmate
     desk_model: claude-haiku-5-5    # optional; this is the default
     supervisor_model: ""            # optional; the model that runs Firstmate
 ```
@@ -82,7 +81,7 @@ If a spectrum-ts upgrade changes the internals that the service reads to reach t
 
 ## Plain messages and the shared line
 
-A send is a plain message into the conversation of the owner's latest text. The free shared line refuses a plain message only into a conversation that the service opens itself ("Target not allowed for this project"). If the line refuses a plain message, the service sends it as a threaded reply to his latest text. Typing bubbles and tapbacks also go to his latest text. Before the owner sends the first text, the commands fail with HTTP 503.
+A send is a plain message into the conversation of the owner's latest text. Measured on the free shared line: plain sends into the owner's own conversation work, while a conversation that the service opened itself was refused ("Target not allowed for this project"). If the line refuses a send, the service answers `/send` with HTTP 502 and the error, and logs it, so `fm-imessage` exits non-zero. Threading happens only with `--reply N`. Typing bubbles and tapbacks also go to his latest text. Before the owner sends the first text, the commands fail with HTTP 503.
 
 ## Location is personal data
 
