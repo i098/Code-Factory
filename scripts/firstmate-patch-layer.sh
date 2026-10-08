@@ -11,8 +11,9 @@
 # The layer is built to one side, in a temporary index with git commit-tree, and
 # main moves only once the whole layer exists: a patch that stops the run leaves
 # the checkout as it was. Each commit takes its author, committer, date and
-# message from the patch file, so one target and one set of patches always give
-# the same sha. That is what makes an unchanged host a no-op.
+# message from the patch file, plus a Code-Factory-Patch trailer naming it, so
+# one target and one set of patches always give the same sha. That is what makes
+# an unchanged host a no-op.
 set -euo pipefail
 
 mode=$1 dir=$2 target=$3
@@ -55,6 +56,7 @@ for patch in "${patches[@]}"; do
         echo
         cat "$tmp/msg"
       fi
+      printf '\nCode-Factory-Patch: %s\n' "$name"
     } | g commit-tree --no-gpg-sign "$tree" -p "$layer")
     echo "applied: $name"
   elif [ -n "${tree:-}" ] ||
@@ -91,26 +93,16 @@ fi
   die "$dir is checked out on $branch instead of main. Switch to main yourself;" \
     "provisioning will not move another branch or a detached HEAD."
 
-# Every commit main has beyond upstream must be one of the known patches: its
-# patch-id equals the patch-id of a patch file applied to the same parent, so
-# upstream drift around a hunk does not hide a patch. Its old copy is replaced
-# by the rebuilt layer, so nothing else can be lost.
-pid() { g patch-id --stable | cut -d' ' -f1; }
+# Every commit main has beyond upstream must be a layer commit, marked by its
+# Code-Factory-Patch trailer. The rebuilt layer replaces them all, so an edited,
+# added or dropped patch needs no manual reset and nothing else can be lost.
 base=$(g merge-base "$head" "$target") ||
   die "$dir at $head shares no history with origin/main ($target)."
 for commit in $(g rev-list "$base..$head"); do
-  id=$(g diff-tree -p "$commit" | pid) known=
-  for patch in "${patches[@]}"; do
-    if [ -n "$id" ] && tree=$(apply_on "$commit^" "$patch") &&
-      [ "$id" = "$(g diff-tree -p "$commit^" "$tree" | pid)" ]; then
-      known=1
-      break
-    fi
-  done
-  [ -n "$known" ] ||
-    die "$dir carries local commit $commit, which is not upstream and not one" \
-      "of the patches in patches/firstmate/. Provisioning never discards local" \
-      "work. Push or move that commit, then re-run."
+  [ -n "$(g log -1 --format='%(trailers:key=Code-Factory-Patch,valueonly)' "$commit")" ] ||
+    die "$dir carries local commit $commit, which is not upstream and not a" \
+      "patch layer commit (no Code-Factory-Patch trailer). Provisioning never" \
+      "discards local work. Push or move that commit, then re-run."
 done
 
 if [ "$mode" = check ]; then

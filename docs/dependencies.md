@@ -71,7 +71,7 @@ Every host that starts services (`start_services: true`); the container worker i
 
 ### Firstmate patch layer
 
-`patches/firstmate/` holds fixes that upstream Firstmate does not have yet. Apply builds one local commit per patch on top of `origin/main`, in file-name order. Each commit takes its author, date, and message from the patch file, so an unchanged host gets the same commits again and the apply changes nothing.
+`patches/firstmate/` holds fixes that upstream Firstmate does not have yet. Apply builds one local commit per patch on top of `origin/main`, in file-name order. Each commit takes its author, date, and message from the patch file, plus a `Code-Factory-Patch: <file name>` trailer, so an unchanged host gets the same commits again and the apply changes nothing.
 
 | Patch | What it does |
 | --- | --- |
@@ -83,11 +83,11 @@ How apply handles each case:
 - Upstream moved: apply builds the layer again on the new `origin/main`. It applies each patch three-way, so upstream edits near a patch do not break it.
 - Upstream already has a patch's change: apply prints `skipped, upstream already has it: <file>` and makes no commit for it.
 - A patch no longer applies: the play stops and names the patch. The checkout stays as it was. Update the patch for the new upstream code, or drop it.
-- Local commits: a commit on `main` that is not upstream must be one of the patches (same `git patch-id` as the patch applied to the same parent). Apply refuses any other local commit, and a dirty tree or another branch, and never resets, stashes, or cleans.
+- Local commits: every commit on `main` that is not upstream must carry the `Code-Factory-Patch` trailer. Apply replaces all of them with the rebuilt layer, so an edited, added, or dropped patch needs no manual step. Apply refuses any commit without the trailer, and a dirty tree or another branch, and never resets, stashes, or cleans.
 
 Verification requires `main` to be exactly `origin/main` plus the patch layer.
 
-To drop a patch once upstream has it, wait until apply reports it as skipped on each host, then delete the file in a pull request. If you delete it earlier, a host whose `main` still has that patch's commit refuses the commit as unknown. On such a host, make sure that `git log origin/main..main` shows only patch commits, run `git checkout -B main origin/main` in the checkout, and apply again.
+To update a patch, edit its file in a pull request. To drop a patch, delete its file, once upstream has it or when it is no longer needed. On the next apply, each host rebuilds the layer from the files.
 
 ## Container images
 

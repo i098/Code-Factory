@@ -197,6 +197,42 @@ def test_an_unknown_local_commit_is_still_refused(host):
 
     result, _ = apply(host)
     assert result.returncode != 0
-    assert "not one of the patches" in result.stdout
+    assert "Code-Factory-Patch" in result.stdout
     assert git(host["checkout"], "rev-parse", "HEAD") == before
     assert (host["checkout"] / "mine.txt").exists()
+
+
+def test_an_edited_patch_rebuilds_the_layer_on_a_host_that_has_the_old_one(host):
+    assert apply(host)[0].returncode == 0
+    old = git(host["checkout"], "rev-parse", "HEAD")
+    dev = host["dev"]
+    git(dev, "checkout", "-q", "-b", "edit")
+    lines = [f"line {n}" for n in range(1, 41)]
+    lines[4] = "line 5 edited"
+    commit(dev, "watch.sh", lines, "fix: first v2")
+    edited = Path(git(dev, "format-patch", "-1", "-o", str(host["tmp"] / "edit")))
+    git(dev, "checkout", "-q", "main")
+    git(dev, "branch", "-q", "-D", "edit")
+    host["first"].write_text(edited.read_text())
+
+    result, changed = apply(host)
+    assert result.returncode == 0, result.stdout
+    assert changed > 0
+    assert layer(host, 2) == ["fix: first v2", "fix: second"]
+    assert git(host["checkout"], "branch", "--contains", old) == ""
+    assert verify(host).returncode == 0
+    assert apply(host)[1] == 0
+
+
+def test_a_dropped_patch_rebuilds_the_layer_on_a_host_that_has_the_old_one(host):
+    assert apply(host)[0].returncode == 0
+    next(host["patches"].glob("0002-*.patch")).unlink()
+
+    result, changed = apply(host)
+    assert result.returncode == 0, result.stdout
+    assert changed > 0
+    assert git(host["checkout"], "rev-parse", "HEAD~1") == git(
+        host["upstream"], "rev-parse", "main"
+    )
+    assert layer(host, 1) == ["fix: first"]
+    assert verify(host).returncode == 0
