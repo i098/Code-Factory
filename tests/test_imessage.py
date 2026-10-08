@@ -181,34 +181,34 @@ function clock() {{
 }}
 function desk() {{
   const c = clock(), turns = [];
-  const d = new DeskTiming(8000, (current) => turns.push(current), c);
+  const d = new DeskTiming(4000, (current) => turns.push(current), c);
   return {{ c, d, turns }};
 }}
 const out = {{}};
 {{ // quiet period
   const {{ c, d, turns }} = desk();
-  d.inboundText(); c.advance(7999);
+  d.inboundText(); c.advance(3999);
   out.beforeQuiet = turns.length;
   c.advance(1);
   out.afterQuiet = turns.length; out.current = turns[0]();
 }}
 {{ // a burst: each text restarts the wait, one turn for all of it
   const {{ c, d, turns }} = desk();
-  d.inboundText(); c.advance(5000); d.inboundText(); c.advance(5000);
+  d.inboundText(); c.advance(2500); d.inboundText(); c.advance(2500);
   out.burstEarly = turns.length;
-  c.advance(3000); c.advance(60000);
+  c.advance(1500); c.advance(60000);
   out.burstTurns = turns.length;
 }}
 {{ // Firstmate active before the quiet period ends: no turn; his next text starts a new one
   const {{ c, d, turns }} = desk();
-  d.inboundText(); c.advance(3000); d.firstmateActive(); c.advance(60000);
+  d.inboundText(); c.advance(1500); d.firstmateActive(); c.advance(60000);
   out.standDown = turns.length;
-  d.inboundText(); c.advance(8000);
+  d.inboundText(); c.advance(4000);
   out.nextBurst = turns.length; out.nextCurrent = turns[0]();
 }}
 {{ // the draft is dropped when Firstmate or a newer text arrives while the desk writes
   const {{ c, d, turns }} = desk();
-  d.inboundText(); c.advance(8000); d.firstmateActive();
+  d.inboundText(); c.advance(4000); d.firstmateActive();
   out.firstmateWhileDrafting = turns[0]();
   d.inboundText(); c.advance(1000);
   out.newerWhileDrafting = turns[0]();
