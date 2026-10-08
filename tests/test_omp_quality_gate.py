@@ -177,20 +177,50 @@ def test_advisory_needs_uncommitted_changes_and_does_not_stack(repo):
     assert sum(call.startswith("fallow") for call in calls) == 1
 
 
-def test_ci_entry_point_exits_1_on_a_block(repo):
+def ci(repo, gate, rc=0, tools=True):
     out = repo.parent / "gate.out"
-    out.write_text(DEGRADED)
+    out.write_text(gate)
     environment = {
-        "PATH": f"{repo.parent / 'bin'}:/usr/bin:/bin",
+        "PATH": f"{repo.parent / 'bin'}:/usr/bin:/bin" if tools else "/usr/bin:/bin",
         "FAKE_CALLS": os.devnull,
         "FAKE_SENTRUX_OUT": str(out),
+        "FAKE_SENTRUX_RC": str(rc),
     }
-    run = subprocess.run(
+    return subprocess.run(
         [BUN, str(ROOT / "config/omp-quality-gate.ts")],
         cwd=repo,
         capture_output=True,
         text=True,
         env=environment,
     )
+
+
+def test_ci_entry_point_exits_1_on_a_block(repo):
+    run = ci(repo, DEGRADED)
     assert run.returncode == 1
     assert "DEGRADED" in run.stderr
+
+
+def test_ci_entry_point_passes_on_a_verdict_without_a_block(repo):
+    run = ci(repo, "Quality:      7000 -> 6990\n✓ No degradation detected\n")
+    assert run.returncode == 0
+    assert "no block" in run.stdout
+
+
+def test_ci_entry_point_fails_closed_without_sentrux(repo):
+    run = ci(repo, "", tools=False)
+    assert run.returncode == 1
+    assert "did not run" in run.stderr
+
+
+def test_ci_entry_point_fails_closed_on_a_crash(repo):
+    run = ci(repo, "error while loading shared libraries: libgtk-3.so.0\n", rc=127)
+    assert run.returncode == 1
+    assert "no verdict (exit 127)" in run.stderr
+
+
+def test_ci_entry_point_fails_closed_without_a_baseline(repo):
+    (repo / ".sentrux/baseline.json").unlink()
+    run = ci(repo, "Quality:      7000 -> 6990\n")
+    assert run.returncode == 1
+    assert "baseline.json is missing" in run.stderr

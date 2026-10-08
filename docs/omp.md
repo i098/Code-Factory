@@ -129,7 +129,7 @@ sentrux gate --save .
 git add .sentrux/baseline.json
 ```
 
-This repository gates itself the same way. The `quality gate` CI job runs `bun config/omp-quality-gate.ts` (the same blocking rule, exit 1 on a block) against the committed [`.sentrux/baseline.json`](../.sentrux/baseline.json), and `fallow audit` on the changed files as a warning that never fails the job.
+This repository gates itself the same way. The `quality gate` CI job runs `bun config/omp-quality-gate.ts` (the same blocking rule, exit 1 on a block) against the committed [`.sentrux/baseline.json`](../.sentrux/baseline.json), and `fallow audit` on the changed files as a warning that never fails the job. Unlike the omp extension, the CI job fails closed: it also exits 1, naming the cause, when `.sentrux/baseline.json` is missing, when `sentrux` is missing, crashes or times out, or when its output has no parseable `Quality:` line.
 
 ## no-mistakes pipeline agent
 

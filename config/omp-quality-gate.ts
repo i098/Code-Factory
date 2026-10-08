@@ -14,6 +14,8 @@
 // A missing tool, no baseline, a timeout or unparseable output never blocks.
 // `bun config/omp-quality-gate.ts` runs the blocking check once in the current
 // directory and exits 1 on a block (the CI job in .github/workflows/ci.yml).
+// That entry point fails closed: a missing baseline or sentrux, a timeout or
+// no parseable verdict also exits 1, naming the cause.
 // @ts-nocheck
 
 import { execFile } from "node:child_process";
@@ -42,6 +44,8 @@ export function maxDrop(env = process.env): number {
   return env.FM_QUALITY_MAX_DROP && Number.isFinite(n) ? n : 250;
 }
 
+const QUALITY = /Quality:\s*(\d+)\s*(?:->|→)\s*(\d+)/;
+
 // The blocking reason for `sentrux gate` output, or "" when it does not block.
 export function blockReason(output: string, limit = maxDrop()): string {
   const evidence = output
@@ -53,7 +57,7 @@ export function blockReason(output: string, limit = maxDrop()): string {
   if (output.includes("DEGRADED")) {
     return `sentrux gate: structural regression against the baseline (DEGRADED).\n${evidence}\nFix the structure. ${rebaseline}`;
   }
-  const m = output.match(/Quality:\s*(\d+)\s*(?:->|→)\s*(\d+)/);
+  const m = output.match(QUALITY);
   if (!m) return "";
   const drop = Number(m[1]) - Number(m[2]);
   if (drop <= limit) return "";
@@ -157,10 +161,15 @@ export default function (pi) {
 }
 
 if (import.meta.main) {
-  const reason = await gate(process.cwd());
-  if (reason) {
-    console.error(reason);
+  const fail = (message: string) => {
+    console.error(message);
     process.exit(1);
-  }
+  };
+  if (!existsSync(".sentrux/baseline.json")) fail("sentrux gate: the committed .sentrux/baseline.json is missing.");
+  const { code, out } = await run("sentrux", ["gate", "."], process.cwd(), GATE_TIMEOUT_MS);
+  if (code === -1) fail(`sentrux gate: sentrux did not run (not on PATH, timed out after ${GATE_TIMEOUT_MS / 1000} s, or killed).`);
+  if (!out.includes("DEGRADED") && !QUALITY.test(out)) fail(`sentrux gate: sentrux printed no verdict (exit ${code}).\n${out}`);
+  const reason = blockReason(out);
+  if (reason) fail(reason);
   console.log("sentrux gate: no block");
 }
