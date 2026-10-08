@@ -1,0 +1,22 @@
+#!/bin/bash
+# Keep a Chromium browser on the Mac running with a local CDP port, so CDP
+# connections need no "Allow remote debugging?" prompt. Run every 15 s by launchd.
+# Change BUNDLE and APP for another non-Google Chromium build (Brave, Arc, Chromium).
+BUNDLE=${BROWSER_BUNDLE:-company.thebrowser.dia}
+APP=${BROWSER_APP:-Dia}
+PORT=${BROWSER_DEBUG_PORT:-9222}
+FLAG=--remote-debugging-port=$PORT
+pid=$(pgrep -xo "$APP") || exit 0
+case " $(ps -o command= -p "$pid") " in *" $FLAG "*) exit 0 ;; esac
+if [ "$1" != --now ]; then
+  # Relaunch only a browser that just started (Dock, link, login, self-update), once per pid.
+  mark=${TMPDIR:-/tmp}/browser-debug.$pid
+  [ -e "$mark" ] && exit 0
+  t=$(ps -o etime= -p "$pid" | tr -d ' ')
+  case $t in *-*|*:*:*) exit 0 ;; esac
+  [ $((10#${t%%:*} * 60 + 10#${t##*:})) -lt 90 ] || exit 0
+  touch "$mark"
+fi
+kill -TERM "$pid"  # Chromium's graceful quit: the session is saved
+for _ in $(seq 50); do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
+open -b "$BUNDLE" --args "$FLAG"
