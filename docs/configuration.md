@@ -57,6 +57,10 @@ factory:
   # mac_ssh:              # Optional; set only in .local/host.yml. See security.md#ssh-to-a-mac
   #   host: <Mac tailnet name or IP>
   #   user: <Mac login>
+  # imessage:             # Optional, off when absent; set only in .local/host.yml. See imessage.md
+  #   owner: "+<country code><number>"
+  #   desk_model: claude-haiku-5-5   # the default
+  #   supervisor_model: ""           # the default: the desk says it does not know
   # ci_pool:              # Optional; self-hosted GitHub Actions slots. See ci-pool.md
   #   data_dir: /mnt/data/ci
   #   repos:
@@ -69,6 +73,7 @@ factory:
 - `firstmate` and `browser_prune.enabled` need `agents`.
 - `fleet_guards` needs `docker` and `firstmate`. Obscura is always its latest release. An older `.local/host.yml` that still sets `browsers.obscura_version` or `browsers.obscura_sha256` keeps working: both keys are deprecated, ignored, and reported in one warning on stderr. No edit is required.
 - `ci_pool` needs `docker`, and no two `ci_pool.repos` entries may make the same unit name.
+- `imessage` needs `firstmate`, and `imessage.owner` is a phone number in E.164 form (`+` and digits).
 
 The Firstmate checkout tracks the default branch of upstream Firstmate, not a sha. Every apply fetches `origin/main` and fast-forwards `main`, so tracking it is how a host stays current. Do not re-pin it to a sha. Each run resolves `origin/main` once and reports the sha it installed. To track a fork, set `firstmate.url` in `.local/host.yml`. The URL applies to a fresh clone; verification fails when an existing checkout's `origin` is a different URL, and provisioning never changes it for you. To switch an existing checkout, run `git -C <workspace>/firstmate remote set-url origin <url>` and `git -C <workspace>/firstmate fetch origin`, reconcile any local commits on `main` with `origin/main` by hand, then run `./factory apply`.
 

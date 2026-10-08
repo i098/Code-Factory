@@ -57,6 +57,12 @@ Every host that starts services (`start_services: true`); the container worker i
 
 - psutil, the latest PyPI release, installed into a private venv with `uv pip install --require-hashes` against the SHA-256 digests PyPI publishes for that release (`ansible/tasks/browser_prune.yml`).
 
+## iMessage bridge
+
+`factory.imessage` set ([iMessage bridge](imessage.md)).
+
+- spectrum-ts, the npm registry's latest release, installed with `bun add --exact` into `~/.local/share/code-factory/imessage` (`ansible/tasks/imessage.yml`). bun is a core tool.
+
 ## Firstmate
 
 `firstmate` profile.
