@@ -78,6 +78,8 @@ factory_herdr_config_dir: "{{ factory_cfg.home }}/.config/herdr"
 factory_herdr_config: "{{ factory_herdr_config_dir }}/config.toml"
 factory_user_units: "{{ factory_cfg.home }}/.config/systemd/user"
 factory_firstmate_dir: "{{ factory_cfg.workspace }}/firstmate"
+# One local commit per patch on top of origin/main (tasks/firstmate.yml).
+factory_firstmate_patch_dir: "{{ code_factory_repo }}/patches/firstmate"
 factory_vnc_dir: "{{ factory_cfg.home }}/.vnc"
 # Exactly one persistent Chrome profile for the VNC desktop. Never seeded,
 # copied, cloned or duplicated (docs/security.md).

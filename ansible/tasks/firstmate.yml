@@ -1,10 +1,12 @@
 ---
 # Firstmate: a public clone that tracks the default branch `main` of
 # factory.firstmate.url (upstream Firstmate unless .local/host.yml overrides
-# it), plus its gitignored dispatch settings.
+# it), plus the patch layer in patches/firstmate/ and its gitignored dispatch
+# settings.
 #
-# Every apply fetches and fast-forwards `main`, so tracking it is how a host
-# stays current - which is also why it must not be re-pinned to a sha.
+# Every apply fetches `main` and puts the patch layer on top of it, so
+# tracking it is how a host stays current - which is also why it must not be
+# re-pinned to a sha.
 #
 # Safety rules (contract + docs/security.md):
 #   * `origin/main` is resolved once per run; that captured sha is what this
@@ -12,11 +14,16 @@
 #     mid-run cannot turn a correct apply into a failed verification
 #   * a fresh clone ends on branch `main` tracking `origin/main` - never a
 #     detached HEAD, which breaks Firstmate's own git handling
+#   * main ends at `origin/main` plus one local commit per patch in
+#     patches/firstmate/, built by scripts/firstmate-patch-layer.sh. A patch
+#     upstream already has is skipped; a patch that no longer applies stops
+#     the play and leaves the checkout as it was
 #   * an existing checkout is never force-checked-out, reset, stashed or
-#     cleaned. Dirty, diverged or independently advanced trees are refused and
-#     the play stops so a human can look
-#   * a clean checkout strictly behind the target on `main` is fast-forwarded
-#     only
+#     cleaned. Dirty trees, other branches and local commits without the
+#     Code-Factory-Patch trailer are refused and the play stops so a human can
+#     look; commits with it are the old layer and are rebuilt
+#   * an unchanged host is a no-op: the layer commits take their author, date
+#     and message from the patch files, so they get the same sha every run
 #   * provisioning never runs Firstmate startup or fleet restore
 
 - name: Check for an existing Firstmate checkout
@@ -80,20 +87,6 @@
 - name: Inspect the existing checkout
   when: factory_fm_git.stat.exists
   block:
-    - name: Read the checked out revision
-      ansible.builtin.command:
-        argv: [git, -C, "{{ factory_firstmate_dir }}", rev-parse, HEAD]
-      register: factory_fm_head
-      changed_when: false
-      check_mode: false
-
-    - name: Read the current branch
-      ansible.builtin.command:
-        argv: [git, -C, "{{ factory_firstmate_dir }}", rev-parse, --abbrev-ref, HEAD]
-      register: factory_fm_branch
-      changed_when: false
-      check_mode: false
-
     - name: Read the working tree status
       ansible.builtin.command:
         argv: [git, -C, "{{ factory_firstmate_dir }}", status, --porcelain, --untracked-files=no]
@@ -123,8 +116,8 @@
       check_mode: false
 
 # --- resolve the target revision once ---------------------------------------
-# The fast-forward below and tasks/verify.yml both use this captured sha
-# instead of re-reading origin/main later in the run.
+# The patch layer and tasks/verify.yml both use this captured sha instead of
+# re-reading origin/main later in the run.
 
 - name: Resolve the target revision from origin/main
   ansible.builtin.command:
@@ -150,89 +143,30 @@
       in {{ factory_firstmate_dir }} and what verification asserts.
   when: factory_firstmate_target is defined
 
-# --- existing checkout: refuse or fast-forward ------------------------------
+# --- put the patch layer on the target revision -----------------------------
 
-- name: Reconcile the existing checkout with the target revision
-  when: factory_fm_git.stat.exists
-  block:
-    - name: Test whether the checkout already contains the target revision
-      ansible.builtin.command:
-        argv: [git, -C, "{{ factory_firstmate_dir }}", merge-base, --is-ancestor, "{{ factory_firstmate_target }}", HEAD]
-      register: factory_fm_target_is_ancestor
-      changed_when: false
-      failed_when: false
-      check_mode: false
+- name: Put the Firstmate patch layer on the target revision
+  ansible.builtin.command:
+    argv:
+      - bash
+      - "{{ code_factory_repo }}/scripts/firstmate-patch-layer.sh"
+      - "{{ 'check' if ansible_check_mode else 'apply' }}"
+      - "{{ factory_firstmate_dir }}"
+      - "{{ factory_firstmate_target }}"
+      - "{{ factory_firstmate_patch_dir }}"
+  become: "{{ factory_become_target | bool }}"
+  become_user: "{{ factory_cfg.user }}"
+  environment: "{{ factory_user_env }}"
+  register: factory_fm_layer
+  # check mode builds the layer to report it, but moves nothing.
+  check_mode: false
+  changed_when: (factory_fm_layer.stdout_lines | last | default('')) == 'changed'
+  when: factory_firstmate_target is defined
 
-    - name: Test whether the checkout is behind the target revision
-      ansible.builtin.command:
-        argv: [git, -C, "{{ factory_firstmate_dir }}", merge-base, --is-ancestor, HEAD, "{{ factory_firstmate_target }}"]
-      register: factory_fm_head_is_ancestor
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: Classify the existing checkout
-      ansible.builtin.set_fact:
-        factory_fm_at_target: "{{ (factory_fm_head.stdout | trim) == factory_firstmate_target }}"
-        factory_fm_behind: "{{ factory_fm_head_is_ancestor.rc == 0 and factory_fm_target_is_ancestor.rc != 0 }}"
-        factory_fm_ahead: "{{ factory_fm_target_is_ancestor.rc == 0 and factory_fm_head_is_ancestor.rc != 0 }}"
-        factory_fm_on_main: "{{ (factory_fm_branch.stdout | trim) == 'main' }}"
-
-    - name: Refuse a checkout that is ahead of the target revision
-      ansible.builtin.assert:
-        that:
-          - not (factory_fm_ahead | bool)
-        fail_msg: >-
-          {{ factory_firstmate_dir }} is at {{ factory_fm_head.stdout | trim }},
-          which is ahead of origin/main ({{ factory_firstmate_target }}): local
-          commits that have not been pushed. Moving it backwards would discard
-          that work. Push or move those commits, then re-run.
-        quiet: true
-
-    - name: Refuse a diverged checkout
-      ansible.builtin.assert:
-        that:
-          - (factory_fm_at_target | bool) or (factory_fm_behind | bool)
-        fail_msg: >-
-          {{ factory_firstmate_dir }} at {{ factory_fm_head.stdout | trim }} has
-          diverged from origin/main ({{ factory_firstmate_target }}). Reconcile
-          the branch by hand; provisioning will not force, reset or merge it.
-        quiet: true
-
-    - name: Refuse to fast-forward a branch other than main
-      ansible.builtin.assert:
-        that:
-          - factory_fm_on_main | bool
-        fail_msg: >-
-          {{ factory_firstmate_dir }} is behind origin/main but checked out on
-          "{{ factory_fm_branch.stdout | trim }}" instead of main. Switch to
-          main yourself; provisioning will not move another branch or a
-          detached HEAD.
-        quiet: true
-      when: factory_fm_behind | bool
-
-    - name: Fast-forward main to the target revision
-      ansible.builtin.command:
-        argv: [git, -C, "{{ factory_firstmate_dir }}", merge, --ff-only, "{{ factory_firstmate_target }}"]
-      become: "{{ factory_become_target | bool }}"
-      become_user: "{{ factory_cfg.user }}"
-      environment: "{{ factory_user_env }}"
-      changed_when: true
-      when:
-        - factory_fm_behind | bool
-        - factory_fm_on_main | bool
-        - not ansible_check_mode
-
-    - name: Note a detached checkout that already matches the target revision
-      ansible.builtin.debug:
-        msg: >-
-          {{ factory_firstmate_dir }} matches origin/main but HEAD is detached
-          ({{ factory_fm_branch.stdout | trim }}). Firstmate expects a named
-          branch and verification requires main; run `git checkout main` there.
-          Provisioning does not change an existing checkout's branch.
-      when:
-        - factory_fm_at_target | bool
-        - not (factory_fm_on_main | bool)
+- name: Report the Firstmate patch layer
+  ansible.builtin.debug:
+    msg: "{{ factory_fm_layer.stdout_lines[:-1] }}"
+  when: factory_fm_layer.stdout_lines is defined
 
 # --- gitignored dispatch settings ------------------------------------------
 # Firstmate already ignores these paths inside its own checkout, so writing

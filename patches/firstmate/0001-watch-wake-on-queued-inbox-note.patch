@@ -1,0 +1,212 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Code Factory <noreply@example.invalid>
+Date: Thu, 8 Oct 2026 06:04:52 +0000
+Subject: [PATCH 1/2] fix(watch): wake firstmate on a queued captain inbox note
+
+The watcher surfaced queued check rows on its own only for procevent keys,
+so an inbox note waited until an unrelated wake arrived. Extend the queued
+surfacer to inbox:<id> rows with a per-key .seen-inbox-* marker written only
+after the wake is reported.
+---
+ bin/fm-inbox.sh               |  4 +--
+ bin/fm-watch.sh               | 61 +++++++++++++++++++++--------------
+ tests/fm-watch-triage.test.sh | 29 +++++++++++++++++
+ 3 files changed, 68 insertions(+), 26 deletions(-)
+
+diff --git a/bin/fm-inbox.sh b/bin/fm-inbox.sh
+index 1e128a65..7799366d 100755
+--- a/bin/fm-inbox.sh
++++ b/bin/fm-inbox.sh
+@@ -6,7 +6,7 @@
+ #
+ #   note    Queue an idea for firstmate while firstmate is mid-turn and cannot
+ #           answer. Writes a durable record and appends ONE `check` wake, so the
+-#           note survives a crash and is presented at firstmate's next drain.
++#           note survives a crash and wakes firstmate on the watcher's next cycle.
+ #           `announce` may append that same wake for an already-saved note.
+ #           These two are the only subcommands that touch firstmate's wake queue.
+ #   say     Same as `note`, but the body comes from spoken audio on stdin.
+@@ -321,7 +321,7 @@ sys.stdout.write("\n")
+ PY
+ }
+ 
+-# Append exactly one wake so firstmate picks the note up at its next drain.
++# Append exactly one wake; bin/fm-watch.sh surfaces it to firstmate on its next cycle.
+ # Failure to wake is NOT allowed to lose the note: the record is already on
+ # disk, so we report the wake failure and still exit non-zero loudly.
+ #
+diff --git a/bin/fm-watch.sh b/bin/fm-watch.sh
+index 6e51f767..e60a0f33 100755
+--- a/bin/fm-watch.sh
++++ b/bin/fm-watch.sh
+@@ -84,6 +84,10 @@
+ #                          successful attempts never wake firstmate
+ #                          (bin/fm-task-inbox-lib.sh owns the ladder policy)
+ #   check: <script>: <out> authenticated check output, always actionable
++#   check: captain inbox note <id> - <summary>
++#                          a bin/fm-inbox.sh note is queued and has not been
++#                          surfaced yet; reported once per note, never again
++#                          while that record stays queued
+ #   check: process-event result captured: <keys>
+ #                          a durably captured process-to-event result is queued
+ #                          and has not been surfaced yet; reported once per
+@@ -2012,26 +2016,28 @@ scan_signals() {
+   return 0
+ }
+ 
+-# Deliver a durably queued process-event result to firstmate. Publication is
+-# owned by bin/fm-procevent.sh - by the runner at capture time and by reconcile's
+-# re-announcement - so this decides only whether a queued check record has been
+-# surfaced yet, then reports it through the same actionable exit every other wake
+-# uses. Without it a captured result sits on the queue until something else
+-# happens to wake firstmate, which is exactly the missed delivery this repairs.
++# Deliver a durably queued process-event result or captain inbox note to
++# firstmate. Publication is owned elsewhere - process-event rows by
++# bin/fm-procevent.sh (the runner at capture time and reconcile's
++# re-announcement), inbox rows by bin/fm-inbox.sh - so this decides only whether
++# a queued check record has been surfaced yet, then reports it through the same
++# actionable exit every other wake uses. Without it such a row sits on the queue
++# until something else happens to wake firstmate, which is exactly the missed
++# delivery this repairs.
+ # Dedup uses the same .seen-* discipline as scan_signals: the durable record is
+ # always written before its marker, so nothing is suppressed before it is queued,
+ # and re-announcement, drain-time deduplication, and the handled acknowledgement
+ # keep their existing owners untouched.
+-procevent_surfaced_marker() {  # <queue-key>
+-  printf '%s/.seen-procevent-%s' "$STATE" "$(printf '%s' "$1" | LC_ALL=C od -An -tx1 | tr -d ' \n')"
++queued_surfaced_marker() {  # <queue-key>
++  printf '%s/.seen-%s-%s' "$STATE" "${1%%:*}" "$(printf '%s' "$1" | LC_ALL=C od -An -tx1 | tr -d ' \n')"
+ }
+ 
+-procevent_surface_after_output() {
++queued_surface_after_output() {
+   local output_status=$1 key marker tmp status=0
+   if [ "$output_status" -eq 0 ]; then
+-    for key in $PROCEVENT_SURFACED; do
+-      marker=$(procevent_surfaced_marker "$key")
+-      tmp=$(umask 077; mktemp "$STATE/.seen-procevent.XXXXXX") || { status=1; continue; }
++    for key in $QUEUED_SURFACED; do
++      marker=$(queued_surfaced_marker "$key")
++      tmp=$(umask 077; mktemp "$STATE/.seen-queued.XXXXXX") || { status=1; continue; }
+       if ! mv -f -- "$tmp" "$marker"; then
+         rm -f -- "$tmp"
+         status=1
+@@ -2042,31 +2048,38 @@ procevent_surface_after_output() {
+   return "$status"
+ }
+ 
+-procevent_surface_queued() {
+-  local key reason captured="" stranded="" unstarted=""
+-  PROCEVENT_SURFACED=
++surface_queued_checks() {
++  local key reason captured="" stranded="" unstarted="" notes=""
++  QUEUED_SURFACED=
+   [ -s "$FM_WAKE_QUEUE" ] || return 0
+   fm_lock_acquire_wait "$FM_WAKE_QUEUE_LOCK"
+   while IFS= read -r key; do
+-    case "$key" in procevent:*) ;; *) continue ;; esac
+-    [ -e "$(procevent_surfaced_marker "$key")" ] && continue
+-    PROCEVENT_SURFACED="$PROCEVENT_SURFACED $key"
++    case "$key" in procevent:*|inbox:*) ;; *) continue ;; esac
++    [ -e "$(queued_surfaced_marker "$key")" ] && continue
++    QUEUED_SURFACED="$QUEUED_SURFACED $key"
+     # A stranded source or one whose launch never proved itself is the opposite
+     # of a captured result: nothing is collecting for it. Headlining either as
+     # a capture would present it as healthy, which is the shape of defect
+     # these wakes exist to surface.
+     case "$key" in
++      inbox:*)
++        reason=$(awk -F '\t' -v k="$key" 'NF >= 5 && $3 == "check" && $4 == k { print $5; exit }' "$FM_WAKE_QUEUE")
++        notes="$notes; ${reason#check: }" ;;
+       procevent:*:stranded:*) stranded="$stranded $key" ;;
+       procevent:*:launch-failed:*) unstarted="$unstarted $key" ;;
+       *) captured="$captured $key" ;;
+     esac
+   done < <(fm_wake_queued_keys_locked check)
+-  if [ -z "$PROCEVENT_SURFACED" ]; then
++  if [ -z "$QUEUED_SURFACED" ]; then
+     fm_lock_release "$FM_WAKE_QUEUE_LOCK"
+     return 0
+   fi
+   reason="check:"
+-  [ -z "$captured" ] || reason="$reason process-event result captured:$captured"
++  [ -z "$notes" ] || reason="$reason ${notes#; }"
++  if [ -n "$captured" ]; then
++    [ "$reason" = "check:" ] || reason="$reason;"
++    reason="$reason process-event result captured:$captured"
++  fi
+   if [ -n "$stranded" ]; then
+     [ "$reason" = "check:" ] || reason="$reason;"
+     reason="$reason process-event source stranded:$stranded"
+@@ -2076,7 +2089,7 @@ procevent_surface_queued() {
+     reason="$reason process-event source failed to start:$unstarted"
+   fi
+   # shellcheck disable=SC2034 # Consumed by wake() in the separately linted transition owner.
+-  FM_WAKE_POST_OUTPUT_ACTION=procevent_surface_after_output
++  FM_WAKE_POST_OUTPUT_ACTION=queued_surface_after_output
+   wake "$reason"
+ }
+ 
+@@ -2711,9 +2724,9 @@ while :; do
+   if [ -d "$STATE/procevent" ]; then
+     FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-procevent.sh" reconcile >/dev/null 2>&1 || true
+   fi
+-  # Then deliver any queued-but-unsurfaced result, including one a runner
+-  # published while this watcher was between cycles.
+-  procevent_surface_queued
++  # Then deliver any queued-but-unsurfaced process-event result or captain
++  # inbox note, including one published while this watcher was between cycles.
++  surface_queued_checks
+ 
+   # A process-event result carries richer adapter-owned wake context than the
+   # generic recovery reason, so give that owner first refusal.
+diff --git a/tests/fm-watch-triage.test.sh b/tests/fm-watch-triage.test.sh
+index c2a2d609..2b606ded 100755
+--- a/tests/fm-watch-triage.test.sh
++++ b/tests/fm-watch-triage.test.sh
+@@ -5892,6 +5892,34 @@ test_procevent_marker_keys_are_injective() {
+   pass "complete process-event queue keys map to distinct seen markers"
+ }
+ 
++# A captain inbox note appended while the watcher idles must wake firstmate on
++# the next cycle, not wait for an unrelated wake, and only once per note.
++test_inbox_note_wakes_idle_watcher() {
++  local dir state out pid id
++  dir=$(make_case inbox-note-wake); state="$dir/state"; out="$dir/watch.out"
++  procevent_watch_bg "$dir" "$out"
++  pid=$!
++  wait_poll_cycle "$state" "$pid" || fail "the watcher did not idle on an empty queue: $(cat "$out")"
++  FM_HOME="$dir" FM_STATE_OVERRIDE="$state" "$ROOT/bin/fm-inbox.sh" note "stop leaving me on read" >/dev/null 2>&1 \
++    || fail "fm-inbox.sh note failed"
++  id=$(awk -F '\t' '$4 ~ /^inbox:/ { print substr($4, 7); exit }' "$state/.wake-queue")
++  [ -n "$id" ] || fail "the note queued no inbox wake row"
++  wait_for_exit "$pid" 100 || fail "an idle watcher never surfaced the queued inbox note"
++  [ "$(grep -c . "$out")" = 1 ] || fail "the note did not produce exactly one wake: $(cat "$out")"
++  grep -Fx "check: captain inbox note $id - stop leaving me on read" "$out" >/dev/null \
++    || fail "the wake did not name the note: $(cat "$out")"
++
++  # The row stays queued until firstmate acknowledges it; a successor cycle
++  # must not announce the same note again.
++  : > "$out"
++  FM_WATCH_HANDLING_SUCCESSOR=1 procevent_watch_bg "$dir" "$out"
++  pid=$!
++  wait_poll_cycle "$state" "$pid" || fail "an already-surfaced inbox note woke the watcher again: $(cat "$out")"
++  reap "$pid"
++  [ ! -s "$out" ] || fail "an already-surfaced inbox note printed a second wake: $(cat "$out")"
++  pass "a captain inbox note wakes an idle watcher once"
++}
++
+ # The reason line is the headline firstmate reads before the payload. Every
+ # procevent:* key used to surface as "process-event result captured", which
+ # presents a source that is collecting NOTHING as a healthy capture - the exact
+@@ -6736,6 +6764,7 @@ test_procevent_launch_failed_episodes_are_each_delivered
+ test_procevent_surface_serializes_with_drain
+ test_procevent_surface_crash_boundaries
+ test_procevent_marker_failure_exits_and_replays
++test_inbox_note_wakes_idle_watcher
+ test_heartbeat_no_change_absorbed
+ test_heartbeat_backstop_surfaces_unsurfaced_status
+ test_heartbeat_backstop_surfaces_a_masked_status
+-- 
+2.53.0
+
