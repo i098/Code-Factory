@@ -1,6 +1,6 @@
 # ⚡ Code Factory
 
-Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, and the omp agent fleet, provisioned by Ansible from a checksum-verified toolchain (the three omp marketplace plugins are the one exception). No Nix, no chezmoi, no cloud dependencies.
+Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, the omp agent fleet, and the Concord (Discord) and slk (Slack) terminal chat clients, provisioned by Ansible from a checksum-verified toolchain (the three omp marketplace plugins are the one exception). No Nix, no chezmoi, no cloud dependencies. Each apply installs the latest Concord and slk release and verifies its checksum; see [docs/chat.md](docs/chat.md).
 
 ```mermaid
 flowchart TD
@@ -16,12 +16,14 @@ flowchart TD
         agents["omp agents"]
         guards["Fleet guards"]
         docker["Docker engine"]
+        chat["Concord and slk chat clients"]
     end
     profiles --> herdr
     profiles --> fm
     profiles --> agents
     profiles --> guards
     profiles --> docker
+    profiles --> chat
 ```
 
 ## Quick start
