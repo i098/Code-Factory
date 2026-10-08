@@ -375,7 +375,7 @@ def test_desk_call_stays_under_the_ceiling():
     result = bun(f"""
 import {{ deskInput }} from {DESK};
 import {{ Budget, CEILING, LIMIT_REACHED, OVERHEAD, ZOOM_MAX, ZOOM_RESERVE }} from {MEMORY};
-const system = "s".repeat(3000), view = "v".repeat(64000);
+const system = "s".repeat(3000), view = "v".repeat(400000); // a view grown past VIEW_MAX by a compaction outage
 const {{ prompt, spent }} = deskInput(system, view, "q".repeat(500000), "HEAD" + "m".repeat(1000000) + "TAIL");
 const budget = new Budget(spent);
 const results = [], requests = [spent];

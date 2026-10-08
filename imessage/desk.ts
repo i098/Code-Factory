@@ -1,6 +1,6 @@
 // Pure decisions of the iMessage bridge (bridge.ts), kept free of spectrum-ts so tests run without it.
 import type { Message } from "spectrum-ts";
-import { CEILING, clip, OVERHEAD, STATUS_MAX, UNBUILT, ZOOM_RESERVE } from "./memory.ts";
+import { CEILING, clip, OVERHEAD, STATUS_MAX, UNBUILT, VIEW_MAX, ZOOM_RESERVE } from "./memory.ts";
 
 // The front desk's system prompt. The owner's name and the model names come from config, never from this text.
 export function deskPrompt(owner: string, deskModel: string, supervisorModel: string): string {
@@ -31,7 +31,7 @@ and zoom(id, 1) gives the message whole.`;
 // what is left), so the system prompt and the input stay ZOOM_RESERVE under CEILING. `spent` is the call's size
 // in bytes so far, for the zoom tool's budget.
 export function deskInput(system: string, view: string, status: string, latest: string): { prompt: string; spent: number } {
-  const head = `<chat>\n${view}\n</chat>\n\nFleet status (durable records, may lag):\n${clip(status, STATUS_MAX)}\n\nLatest messages, after the chat:\n`;
+  const head = `<chat>\n${clip(view, VIEW_MAX)}\n</chat>\n\nFleet status (durable records, may lag):\n${clip(status, STATUS_MAX)}\n\nLatest messages, after the chat:\n`;
   const tail = "\n\nDecide your response to his latest texts.";
   const room = CEILING - OVERHEAD - ZOOM_RESERVE - Buffer.byteLength(system + head + tail);
   const prompt = head + clip(latest, room) + tail;
