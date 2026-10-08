@@ -4,14 +4,21 @@ The iMessage bridge lets the owner talk to Firstmate from a phone. It is a small
 
 ## What it does
 
-For each text from the owner, the service does these steps:
+For each message from the owner, the service does these steps:
 
-1. It files the text as a Firstmate inbox note (`fm-inbox.sh note`) first, so the wake never waits on a model. The note wakes Firstmate, which answers in full with `fm-imessage`. If the note fails, the service replies "firstmate did not get that, send it again" and stops there.
-2. It marks the text as read and shows the typing bubble.
-3. In parallel with the next texts, it asks a front desk for an instant reply. The front desk is a one-shot `omp -p` call with no tools. It gets the owner's last texts and the output of `fm-inbox.sh status`.
-4. It sends the desk's reply in the thread. The desk prefers a tapback and picks the emoji itself. It writes text only when a tapback cannot carry the answer: short, blunt, plain text. The desk says only that it passed the text on, and never claims work that it cannot see.
+1. It turns the message into text. A threaded reply, an edit, a message effect, or a group of messages is unwrapped, so nothing that he writes is lost. A threaded reply also names the text that it replies to. A message kind that the service does not know becomes a note that names the kind. Tapbacks, typing, read receipts, unsends, and chat changes are only signals, and the service ignores them.
+2. It files the text as a Firstmate inbox note (`fm-inbox.sh note`) first, so the wake never waits on a model. The note wakes Firstmate, which answers in full with `fm-imessage`. If the note fails, the service replies "firstmate did not get that, send it again" and stops there.
+3. It marks the text as read.
+4. It starts the quiet period, 8 seconds by default. Each new text from the owner starts the quiet period again. Any send, tapback, or typing bubble from Firstmate since his last text stops the desk for that burst of texts.
+5. If the quiet period ends and Firstmate stayed silent, the front desk gets one turn for the whole burst. The front desk is a one-shot `omp -p` call with no tools. It gets the last lines of the conversation and the output of `fm-inbox.sh status`, and it shows the typing bubble while it writes.
+6. The desk acts like a person who texts, not like a bot. Its answer is one of three things, in this order of preference: `SKIP` (it sends nothing), `REACT:` and one emoji that it picks itself (a tapback on his latest text), or a short text. The text style is short, blunt, Gen Z, and lowercase. The desk never claims work that it cannot see, never promises a time, and never invents facts.
+7. Before it sends, the service checks again. If the owner sent a new text or Firstmate became active while the desk wrote, the service drops the draft. The next quiet period reads the whole conversation again.
 
-If the desk fails or times out after 45 seconds, the service puts a 👍 tapback on the text. If sending the desk's tapback or reply fails, the service retries once with the 👍 tapback, and then only logs the error. The service appends the outcome of each desk reply (time, message id, `react <emoji>`, the reply text, or `send failed: ...`) to `~/.local/state/fm-imessage/desk.log`, which is private to the account, so Firstmate can read what the desk sent.
+Photon reports no typing events from the owner, so only a new text starts the wait again.
+
+If the desk fails or times out after 45 seconds, the service sends nothing: Firstmate has the note. The service appends the outcome of each desk turn (time, message id, `skip`, `react <emoji>`, or the reply text) to `~/.local/state/fm-imessage/desk.log`, which is private to the account, so Firstmate can read what the desk did.
+
+The desk's system prompt is `deskPrompt` in `imessage/desk.ts`. The owner's name and the two model names come from the config.
 
 The service ignores texts from all other senders. It saves attachments in `~/.local/state/fm-imessage/attachments/` for Firstmate to open. That directory is private to the account (mode `0700`). The service also keeps the owner's latest text in `~/.local/state/fm-imessage/latest`, so replies still work after a restart.
 
@@ -38,6 +45,8 @@ Add this block to `.local/host.yml`, then run `./factory apply`. The `firstmate`
 factory:
   imessage:
     owner: "+<country code><number>"  # the owner's phone number, E.164 form
+    owner_name: the owner           # optional; this is the default; how the desk prompt names him
+    quiet_seconds: 8                # optional; this is the default; the desk waits this long for Firstmate
     desk_model: claude-haiku-5-5    # optional; this is the default
     supervisor_model: ""            # optional; the model that runs Firstmate
 ```
@@ -60,7 +69,8 @@ To turn it off, remove the block, then run `systemctl --user disable --now fm-im
 
 | Command | What it does |
 | --- | --- |
-| `fm-imessage 'text'` | Sends the text to the owner. Without an argument, it reads the text from stdin. |
+| `fm-imessage 'text'` | Sends the text to the owner. Without an argument, it reads the text from stdin. Paragraphs that a blank line separates become separate chat bubbles. The lines of one paragraph, for example a list or a schedule, stay in one bubble. Before each bubble after the first, the typing bubble shows for 400 ms plus 25 ms for each character, 2.5 seconds at most. |
+| `fm-imessage --reply N 'text'` | Sends the text, but threads the first bubble as a reply to the owner's Nth most recent text (1 is the latest, 10 is the oldest that the service keeps). Use it only when the answer is about a text a few bubbles up. Any other value of N sends nothing and exits with code 2. |
 | `fm-imessage --typing` | Shows the typing bubble. The next send removes it. |
 | `fm-imessage --react '👍'` | Adds a tapback to the owner's latest text. |
 | `fm-imessage --help` | Shows the usage. It sends nothing. |
@@ -70,9 +80,9 @@ If a spectrum-ts upgrade changes the internals that the service reads to reach t
 
 `fm-imessage` exits non-zero when it sends nothing. An unknown option sends nothing and exits with code 2.
 
-## The shared-line limit
+## Plain messages and the shared line
 
-The free shared line refuses a new message to the owner ("Target not allowed for this project"). It accepts a reply in a thread. Thus every send, typing bubble, and tapback goes to the owner's latest text. Before the owner sends the first text, the commands fail with HTTP 503.
+A send is a plain message into the conversation of the owner's latest text. The free shared line refuses a plain message only into a conversation that the service opens itself ("Target not allowed for this project"). If the line refuses a plain message, the service sends it as a threaded reply to his latest text. Typing bubbles and tapbacks also go to his latest text. Before the owner sends the first text, the commands fail with HTTP 503.
 
 ## Location is personal data
 

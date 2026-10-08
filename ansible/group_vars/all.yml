@@ -90,6 +90,8 @@ factory_mac_ssh_key: "{{ factory_cfg.home }}/.ssh/id_ed25519_mac"
 factory_imessage_dir: "{{ factory_share_dir }}/imessage"
 factory_imessage_desk_model: "{{ factory_cfg.imessage.desk_model | default('claude-haiku-5-5') }}"
 factory_imessage_supervisor_model: "{{ factory_cfg.imessage.supervisor_model | default('') }}"
+factory_imessage_owner_name: "{{ factory_cfg.imessage.owner_name | default('the owner') }}"
+factory_imessage_quiet_seconds: "{{ factory_cfg.imessage.quiet_seconds | default(8) }}"
 
 # Private runtime for the Chrome pruner. The exported pruner calls
 # psutil.Process.net_connections(), which exists from psutil 6 onwards, while

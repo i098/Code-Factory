@@ -1,13 +1,18 @@
 #!/bin/bash
-# Send one iMessage to the owner from the Firstmate line (docs/imessage.md).
-# Usage: fm-imessage 'text' | fm-imessage --typing | fm-imessage --react '👍'   (or text on stdin)
-# --typing shows the typing bubble while you compose; the next send clears it. --react puts a tapback on his latest text.
-# Only for really important items, milestone summaries, and answers to his texts. Exit non-zero = not sent.
+# Send iMessage to the owner from the Firstmate line (docs/imessage.md).
+# Usage: fm-imessage 'text' | fm-imessage --reply N 'text' | fm-imessage --typing | fm-imessage --react '👍'
+# Blank-line-separated paragraphs become separate bubbles; a list stays one bubble. Plain messages by default;
+# --reply N threads the first bubble to his Nth most recent text, only when addressing something a few bubbles up.
+# --typing shows the typing bubble while you compose; --react puts a tapback on his latest text. Exit non-zero = not sent.
 url=http://127.0.0.1:${FM_IMESSAGE_PORT:-8765}
+B=(curl -fsS --max-time 60 -H 'X-Firstmate: 1')
+q=
 case "${1:-}" in
-  -h|--help) sed -n '2,5p' "$0" | cut -c3-; exit 0 ;;
-  --typing) curl -fsS --max-time 30 -H "X-Firstmate: 1" -X POST "$url/typing"; exit ;;
-  --react) printf '%s' "${2:?emoji}" | curl -fsS --max-time 30 -H "X-Firstmate: 1" --data-binary @- "$url/react"; exit ;;
+  -h|--help) sed -n '2,6p' "$0" | cut -c3-; exit 0 ;;
+  --typing) "${B[@]}" -X POST "$url/typing"; exit ;;
+  --react) printf '%s' "${2:?emoji}" | "${B[@]}" --data-binary @- "$url/react"; exit ;;
+  --reply) case "${2:-}" in [1-9]|10) ;; *) echo "fm-imessage: --reply needs a number from 1 to 10 (nothing sent)" >&2; exit 2 ;; esac
+           q="?reply=$2"; shift 2 ;;
   -*) echo "fm-imessage: unknown option $1 (nothing sent)" >&2; exit 2 ;;
 esac
-if [ $# -gt 0 ]; then printf '%s' "$*"; else cat; fi | curl -fsS --max-time 30 -H "X-Firstmate: 1" --data-binary @- "$url/send"
+if [ $# -gt 0 ]; then printf '%s' "$*"; else cat; fi | "${B[@]}" --data-binary @- "$url/send$q"

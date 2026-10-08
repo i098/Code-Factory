@@ -59,6 +59,8 @@ factory:
   #   user: <Mac login>
   # imessage:             # Optional, off when absent; set only in .local/host.yml. See imessage.md
   #   owner: "+<country code><number>"
+  #   owner_name: the owner          # the default; how the desk prompt names him
+  #   quiet_seconds: 8               # the default; the desk waits this long for Firstmate
   #   desk_model: claude-haiku-5-5   # the default
   #   supervisor_model: ""           # the default: the desk says it does not know
   # ci_pool:              # Optional; self-hosted GitHub Actions slots. See ci-pool.md
