@@ -107,6 +107,7 @@ RELEASES = {
     "astral-sh/uv": ("9.9.9", "uv-x86_64-unknown-linux-gnu.tar.gz"),
     "aristocratos/btop": ("v9.9.9", "btop-x86_64-unknown-linux-musl.tar.gz"),
     "sentrux/sentrux": ("v9.9.9", "sentrux-linux-x86_64", "grammars-linux-x86_64.tar.gz"),
+    "fallow-rs/fallow": ("v9.9.9", "fallow-linux-x64-musl"),
     "chojs23/concord": ("v9.9.9", "concord-x86_64-unknown-linux-gnu.tar.xz"),
     "gammons/slk": ("v9.9.9", "slk_9.9.9_linux_x86_64.tar.gz"),
     "h4ckf0r0day/obscura": ("v9.9.9", "obscura-x86_64-linux.tar.gz"),
@@ -206,6 +207,7 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
         "btop",
         "sentrux",
         "sentrux-grammars",
+        "fallow",
         "concord",
         "slk",
         "obscura",
@@ -220,6 +222,7 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
         "uv",
         "btop",
         "sentrux",
+        "fallow",
         "concord",
         "slk",
         "obscura",
@@ -232,6 +235,7 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
     assert latest["gh"]["assets"]["linux-x86_64"]["format"] == "tar"
     assert latest["bun"]["assets"]["linux-x86_64"]["format"] == "zip"
     assert latest["sentrux"]["assets"]["linux-x86_64"]["format"] == "file"
+    assert latest["fallow"]["assets"]["linux-x86_64"]["format"] == "file"
     assert latest["sentrux-grammars"]["assets"]["linux-x86_64"]["format"] == "tar"
     assert latest["concord"]["assets"]["linux-x86_64"]["format"] == "tar"
     # The newest Node release, not the first index entry, verified by SHASUMS256.

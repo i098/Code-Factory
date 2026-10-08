@@ -42,12 +42,14 @@
               factory_local_bin ~ '/btop-bin',
               factory_btop_config,
               factory_local_bin ~ '/sentrux',
+              factory_local_bin ~ '/fallow',
               factory_user_units ~ '/herdr-spaces.service',
               factory_user_units ~ '/herdr-spaces.timer',
               factory_user_units ~ '/timers.target.wants/herdr-spaces.timer',
               factory_cfg.home ~ '/.profile']
              + ([factory_chrome_devtools_mcp_path, factory_omp_sidebar_extension,
                  factory_omp_status_icons_extension, factory_omp_no_pattern_kill_extension,
+                 factory_omp_quality_gate_extension,
                  factory_omp_as_pi_dir ~ '/omp-as-pi', factory_no_mistakes_omp_overlay,
                  factory_user_units ~ '/no-mistakes-daemon-.service.d/code-factory.conf']
                 if (factory_cfg.profiles.agents | bool) else [])

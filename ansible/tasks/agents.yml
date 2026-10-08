@@ -114,6 +114,18 @@
     remote_src: true
   become: true
 
+# The omp extension that runs the sentrux and fallow quality gate at the end of
+# every agent turn (docs/omp.md#quality-gate). Managed: every apply rewrites it.
+- name: Install the quality gate omp extension
+  ansible.builtin.copy:
+    src: "{{ code_factory_repo }}/config/omp-quality-gate.ts"
+    dest: "{{ factory_omp_quality_gate_extension }}"
+    owner: "{{ factory_cfg.user }}"
+    group: "{{ factory_group }}"
+    mode: "0644"
+    remote_src: true
+  become: true
+
 # --- no-mistakes pipeline agent (docs/omp.md#no-mistakes-pipeline-agent) ----
 # omp runs through the no-mistakes pi adapter via the omp-as-pi wrapper, with
 # acp:omp as the fallback. Managed: every apply rewrites these files.

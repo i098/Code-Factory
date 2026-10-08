@@ -11,7 +11,8 @@ With the `agents` profile on, `./factory apply`:
 3. Installs the extension `~/.omp/agent/extensions/code-factory-herdr-sidebar.ts`, which feeds the Herdr Agent sidebar the session topic, the pane's short name, and the pull request line (pull request, issue and diff size). Every apply rewrites it. See [Herdr sidebar](herdr.md).
 4. Installs the extension `~/.omp/agent/extensions/aa-mode-icons.ts` from [`config/omp-status-icons.ts`](../config/omp-status-icons.ts). Every apply rewrites it. See [Status line icons](#status-line-icons).
 5. Installs the extension `~/.omp/agent/extensions/fm-no-pattern-kill.ts` from [`config/omp-no-pattern-kill.ts`](../config/omp-no-pattern-kill.ts). It blocks `pkill`, `killall` and kill-by-`pgrep` commands in every omp session: all agents on the host run as one user and each worker's brief sits in its command line, so a name or pattern can match other workers. Kill a process by the PID you started instead. Every apply rewrites it. It is a best-effort seatbelt, not a barrier: it matches the command text, so it lets through an absolute path (`/usr/bin/pkill`), a kill whose targets come from `pidof`, `ps | grep` or a `pgrep` loop, and the list form in an eval cell (`subprocess.run(["pkill", ...])`), and it blocks read-only mentions such as `grep -rn pkill docs/`. Removing worker briefs from the command line is the real fix and is out of scope for this recipe.
-6. Sets up omp as the no-mistakes pipeline agent. See [no-mistakes pipeline agent](#no-mistakes-pipeline-agent).
+6. Installs the extension `~/.omp/agent/extensions/code-factory-quality-gate.ts` from [`config/omp-quality-gate.ts`](../config/omp-quality-gate.ts), the sentrux and fallow check at the end of every agent turn. Every apply rewrites it. See [Quality gate](#quality-gate).
+7. Sets up omp as the no-mistakes pipeline agent. See [no-mistakes pipeline agent](#no-mistakes-pipeline-agent).
 
 Both copies are first-write-only. If a file already exists, the recipe leaves it alone, so an account's own settings and provider configuration are never overwritten. The one exception is the two status line keys the [status line icons](#status-line-icons) need, which every apply ensures. See [Updating an existing host](#updating-an-existing-host).
 
@@ -98,6 +99,37 @@ The row needs two keys in `statusLine`: `status` in `leftSegments`, which shows 
 omp config get statusLine.leftSegments
 omp config get statusLine.showHookStatus
 ```
+
+## Quality gate
+
+The quality gate extension runs when an agent turn ends, in the git repository of the session's working directory. It has two parts.
+
+**Blocking.** This part runs only when the repository has `.sentrux/baseline.json` and the turn changed files (a new commit counts). It runs `sentrux gate .` once. A `DEGRADED` verdict, or a `Quality: <baseline> -> <current>` drop of more than `FM_QUALITY_MAX_DROP` points, sends the agent one continuation with the evidence: fix the structure, or re-baseline on purpose. A low score alone never blocks. The gate blocks at most once per prompt: the continuation turn it starts is never blocked again.
+
+**Advisory.** When the repository has uncommitted changes, these checks run in the background:
+
+- `sentrux check .`, when `.sentrux/rules.toml` exists.
+- `fallow audit --changed-since HEAD`, when `package.json` or `tsconfig.json` exists.
+
+A check that fails is shown to the agent at the start of its next prompt. The advisory checks never block. A second run does not start while one runs, or for a diff that was already checked.
+
+A missing `sentrux` or `fallow`, a repository without a baseline, a timeout, or output the extension cannot parse never blocks. Supervisor homes without `.sentrux/baseline.json` are not gated.
+
+Two environment variables change the gate. Set them in the environment that starts omp:
+
+| Variable | Effect |
+| --- | --- |
+| `SENTRUX_GATE=advisory` | Turns the block off. The advisory checks still run. |
+| `FM_QUALITY_MAX_DROP` | The quality drop, in points, that the gate tolerates. Default `250`. |
+
+To turn the gate on for a repository, or to accept a structural change on purpose, save a new baseline and commit it:
+
+```bash
+sentrux gate --save .
+git add .sentrux/baseline.json
+```
+
+This repository gates itself the same way. The `quality gate` CI job runs `bun config/omp-quality-gate.ts` (the same blocking rule, exit 1 on a block) against the committed [`.sentrux/baseline.json`](../.sentrux/baseline.json), and `fallow audit` on the changed files as a warning that never fails the job.
 
 ## no-mistakes pipeline agent
 
