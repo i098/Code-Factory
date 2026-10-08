@@ -25,7 +25,7 @@
     dest: "{{ factory_imessage_dir }}/{{ item }}"
     mode: "0644"
     remote_src: true
-  loop: [bridge.ts, desk.ts]
+  loop: [bridge.ts, desk.ts, memory.ts, zoom.ts]
   notify: restart fm-imessage
 
 - name: Install the iMessage commands

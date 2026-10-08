@@ -247,6 +247,128 @@ console.log(JSON.stringify([
     assert result == [True, False, False, False, False, False, False]
 
 
+MEMORY = json.dumps(str(ROOT / "imessage/memory.ts"))
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_memory_merges_in_push_order():
+    """With the rollback push's list length as the budget, the view makes exactly the merges push makes."""
+    result = bun(f"""
+import {{ shrink }} from {MEMORY};
+function push(n, s) {{
+  if (s === null) return {{ keep: 0, life: 0, state: n, older: null }};
+  const {{ keep, life, state, older }} = s;
+  if (keep === 0) return {{ keep: 1, life, state, older }};
+  if (life > 0) return {{ keep: 0, life: 0, state: n, older: {{ keep: 0, life: life - 1, state, older }} }};
+  return {{ keep: 0, life, state: n, older: push(state, older) }};
+}}
+let s = null, view = [], bad = [];
+for (let t = 0; t <= 2000; t++) {{
+  s = push(t, s);
+  const starts = [];
+  for (let x = s; x; x = x.older) starts.unshift(x.state);
+  const want = starts.map((a, k) => {{ const n = (starts[k + 1] ?? t + 1) - a; return [Math.log2(n), a / n]; }});
+  view.push([0, t]);
+  shrink(view, t + 1, want.length, () => 1, () => true);
+  if (JSON.stringify(view) !== JSON.stringify(want)) bad.push(t);
+}}
+console.log(JSON.stringify(bad));
+""")
+    assert result == []
+
+
+# A fake desk model: each conversation answers with lines of the lengths in `sizes`, one per turn.
+FAKE = """
+import { readdirSync, readFileSync } from "node:fs";
+const calls = [];
+function fake(sizes) {
+  return () => {
+    const turns = [];
+    calls.push(turns);
+    return { say: async (text) => { turns.push(text); return "x".repeat(sizes[Math.min(turns.length, sizes.length) - 1]); }, end() {} };
+  };
+}
+async function idle(m) { while (m.pending) await Bun.sleep(0); }
+const files = (dir) => Object.fromEntries(["main", "tree"].flatMap((sub) =>
+  readdirSync(`${dir}/${sub}`).map((f) => [`${sub}/${f}`, readFileSync(`${dir}/${sub}/${f}`, "utf8")])).concat([["view.json", readFileSync(`${dir}/view.json`, "utf8")]]));
+"""
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_memory_view_is_a_sawtooth(tmp_path):
+    """The view grows one line per message and, past VIEW_MAX, drops back to at most VIEW_MIN in one batch."""
+    result = bun(f"""
+import {{ Memory, VIEW_MAX, VIEW_MIN }} from {MEMORY};
+{FAKE}
+const m = new Memory({json.dumps(str(tmp_path))}, fake([400]));
+const sizes = [];
+for (let n = 0; n < 3000; n++) {{
+  m.append(["owner", "supervisor", "desk"][n % 3], `text ${{n}} `.padEnd(100, "."));
+  sizes.push(Buffer.byteLength(m.render()));
+  await idle(m);
+}}
+const drops = sizes.flatMap((s, k) => (k && s < sizes[k - 1] ? [s] : []));
+const covered = m.view.reduce((s, [l]) => s + 2 ** l, 0);
+console.log(JSON.stringify({{ max: Math.max(...sizes), drops, covered, VIEW_MAX, VIEW_MIN }}));
+""")
+    assert result["max"] <= result["VIEW_MAX"]
+    assert len(result["drops"]) >= 2
+    assert all(drop <= result["VIEW_MIN"] for drop in result["drops"])
+    assert result["covered"] == 3000
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_memory_survives_a_restart(tmp_path):
+    """The log, the tree and the view load back unchanged; nothing is rebuilt; zoom opens lines from disk."""
+    result = bun(f"""
+import {{ load, Memory, zoom }} from {MEMORY};
+{FAKE}
+const dir = {json.dumps(str(tmp_path))};
+const a = new Memory(dir, fake([300]));
+for (let n = 0; n < 40; n++) {{ a.append(n % 2 ? "desk" : "owner", n === 5 ? "y".repeat(900) : `text ${{n}}`); await idle(a); }}
+const before = files(dir), callsBefore = calls.length;
+const b = new Memory(dir, fake([300]));
+await idle(b);
+const after = files(dir);
+const view = JSON.stringify(a.view) === JSON.stringify(b.view) && a.render() === b.render();
+const id = b.append("owner", "after restart");
+const disk = load(dir);
+console.log(JSON.stringify({{
+  same: JSON.stringify(before) === JSON.stringify(after),
+  view,
+  newCalls: calls.length - callsBefore,
+  id,
+  long: zoom(disk.msgs, disk.nodes, 5, 1),
+  pair: zoom(disk.msgs, disk.nodes, 0, 2),
+  bad: zoom(disk.msgs, disk.nodes, 3, 2),
+}}));
+""")
+    assert result["same"] and result["view"]
+    assert result["newCalls"] == 0
+    assert result["id"] == 40
+    assert result["long"].endswith(" desk: " + "y" * 900)
+    assert result["pair"] == "0+1|owner: text 0\n1+1|desk: text 1"
+    assert result["bad"].startswith("no line 3+2")
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_memory_nodes_fit_the_limit(tmp_path):
+    """A line over LIMIT is asked again in the same conversation, at most TRIES calls, and every node fits."""
+    result = bun(f"""
+import {{ LIMIT, Memory, TRIES }} from {MEMORY};
+{FAKE}
+const shrinking = new Memory({json.dumps(str(tmp_path / "a"))}, fake([2000, 1000, 500]));
+shrinking.append("owner", "z".repeat(3000)); await idle(shrinking);
+const stubborn = new Memory({json.dumps(str(tmp_path / "b"))}, fake([2000, 1500, 900, 700, 600, 100]));
+stubborn.append("owner", "z".repeat(3000)); await idle(stubborn);
+const sizes = [...shrinking.nodes.values(), ...stubborn.nodes.values()].map((n) => n.size);
+console.log(JSON.stringify({{ turns: calls.map((c) => c.length), sizes, LIMIT, TRIES, retry: calls[0][1] }}));
+""")
+    assert result["turns"] == [3, result["TRIES"]]
+    assert result["sizes"] == [500, result["LIMIT"]]
+    assert result["retry"].startswith("Too long: your line is 2000 bytes, over the 512-byte limit.")
+
+
 @pytest.mark.parametrize("args", [("hello",), ("--reply", "1", "hi"), ("--typing",), ("--react", "👍")])
 def test_send_commands_carry_the_local_header(tmp_path, args):
     result, calls = send(tmp_path, *args)

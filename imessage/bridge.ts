@@ -2,7 +2,8 @@
 // Inbound: each text the owner sends is filed first as a Firstmate inbox note, which wakes Firstmate for the
 //   real answer, then marked read. A one-shot front-desk model steps in only when Firstmate stays silent for the
 //   quiet period after his last text; it often skips or uses a tapback, like a person would. Photon reports no
-//   inbound typing, so a new text is what restarts the wait.
+//   inbound typing, so a new text is what restarts the wait. The desk sees the whole chat through its memory
+//   (memory.ts), which logs every text both ways.
 // Outbound: POST text to http://127.0.0.1:$FM_IMESSAGE_PORT/send (the fm-imessage command does this).
 //   It sends plain messages into the space of his latest text; a refused send fails visibly (HTTP 502). Measured on the
 //   free shared line: plain sends into the owner's own conversation work, while a conversation the service opened
@@ -10,11 +11,12 @@
 //   still reach him.
 // Location: when he shares his location with the line in Find My, GET /location (the fm-location command).
 // Runs as the systemd --user service fm-imessage (docs/imessage.md). Docs: https://photon.codes/docs/spectrum-ts
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import type { AdvancedIMessage } from "@photon-ai/advanced-imessage/grpc";
 import { Spectrum, type Message } from "spectrum-ts";
 import { imessage } from "spectrum-ts/providers/imessage";
 import { type Attachment, bubbles, describe, DeskTiming, deskPrompt, isSkip, localCommand, parseReact, typingPause } from "./desk.ts";
+import { type Chat, Memory } from "./memory.ts";
 
 const env = process.env;
 const need = (name: string) => env[name] || (() => { throw new Error(`fm-imessage: ${name} is not set`); })();
@@ -31,10 +33,13 @@ const LATEST_FILE = `${STATE}/latest`;
 const DESK_DIR = `${STATE}/desk`; // empty cwd: no project context files load
 const DESK_LOG = `${STATE}/desk.log`; // what the desk did, for Firstmate to read
 const ATTACH_DIR = `${STATE}/attachments`; // his files, for Firstmate to open
+const MEMORY_DIR = `${STATE}/memory`; // the desk's memory: the whole chat, word for word (memory.ts)
 for (const dir of [STATE, DESK_DIR, ATTACH_DIR]) mkdirSync(dir, { recursive: true, mode: 0o700 });
-const thread: string[] = []; // the last few lines of the conversation, for the desk's context
+let burstFrom: number | undefined; // the memory id of his first text the desk has not answered yet
 const recent: Message[] = []; // his last texts, newest last, for a threaded reply to one a few bubbles up
 const log = (what: string) => (e: unknown) => console.error(`fm-imessage: ${what}:`, e);
+// This service is the memory's one writer: systemd runs one instance of the unit.
+const memory = new Memory(MEMORY_DIR, compactChat, log("compaction failed"));
 const desk = new DeskTiming(QUIET_MS, (current) => void runDesk(current).catch(log("desk failed")));
 let deskRun: Bun.Subprocess | undefined;
 
@@ -85,6 +90,7 @@ Bun.serve({
     if (!latest) return new Response("no text from the owner since the bridge started; he must text the line first\n", { status: 503 });
     // Any Firstmate activity on the line means the real answer is coming, so the desk stands down.
     desk.firstmateActive();
+    burstFrom = undefined;
     cancelDesk();
     // Typing shows only while Firstmate is really composing: /typing starts it, and every send clears it.
     if (url.pathname === "/typing") {
@@ -95,7 +101,7 @@ Bun.serve({
       const emoji = (await req.text()).trim();
       if (!emoji) return new Response("no emoji", { status: 400 });
       await latest.react(emoji);
-      thread.push(`Firstmate reacted ${emoji} to his last text`);
+      memory.append("supervisor", `tapback ${emoji} on his last text`);
       return new Response("reacted\n");
     }
     const parts = bubbles(await req.text());
@@ -119,7 +125,7 @@ Bun.serve({
       log("send failed")(e);
       return new Response(`send failed: ${e instanceof Error ? e.message : String(e)}\n`, { status: 502 });
     }
-    thread.push(`Firstmate: ${parts.join(" / ")}`);
+    memory.append("supervisor", parts.join("\n\n"));
     return new Response(`sent ${parts.length} bubble(s)\n`);
   },
 });
@@ -133,11 +139,14 @@ async function runDesk(current: () => boolean) {
   const inbox = Bun.spawn([INBOX, "status"], { cwd: FM_HOME, env: { ...env, FM_HOME }, stdout: "pipe", stderr: "ignore" });
   const status = await new Response(inbox.stdout).text();
   if (!current()) return target.space.stopTyping();
+  // The view of the chat before his burst, then the per-turn state, then his burst whole.
+  const from = burstFrom ?? memory.msgs.length;
+  const prompt = `<chat>\n${memory.render(from)}\n</chat>\n\nFleet status (durable records, may lag):\n${status}\n\n` +
+    `His latest texts:\n${memory.msgs.slice(from).map((m) => m.text).join("\n")}\n\nDecide your response to his latest texts.`;
   const proc = Bun.spawn(
-    ["omp", "-p", "--no-extensions", "--no-tools", "--no-skills", "--no-rules", "--no-session",
-      "--thinking=off", "--model", DESK_MODEL, "--system-prompt", DESK_PROMPT,
-      `Fleet status (durable records, may lag):\n${status}\n\nRecent thread:\n${thread.join("\n")}\n\nDecide your response to his latest texts.`],
-    { cwd: DESK_DIR, stdout: "pipe", stderr: "ignore", timeout: 45_000 },
+    ["omp", "-p", "--no-extensions", "-e", `${import.meta.dir}/zoom.ts`, "--no-tools", "--no-skills", "--no-rules", "--no-session",
+      "--thinking=off", "--model", DESK_MODEL, "--system-prompt", DESK_PROMPT],
+    { cwd: DESK_DIR, env: { ...env, FM_DESK_MEMORY: MEMORY_DIR }, stdin: new Blob([prompt]), stdout: "pipe", stderr: "ignore", timeout: 45_000 },
   );
   deskRun = proc;
   const drafted = (await new Response(proc.stdout).text()).replace(/^Working\.\.\.\s*/m, "").trim();
@@ -146,13 +155,33 @@ async function runDesk(current: () => boolean) {
   deskRun = undefined;
   await target.space.stopTyping();
   if (!current()) return;
+  burstFrom = undefined;
   const skip = !ok || isSkip(drafted); // a failed desk stays quiet; Firstmate still has the note
   const tapback = skip ? undefined : parseReact(drafted);
   if (tapback) await target.react(tapback);
   else if (!skip) await target.space.send(drafted);
-  if (!skip) thread.push(tapback ? `Firstmate reacted ${tapback} to his last text` : `Firstmate: ${drafted}`);
+  if (!skip) memory.append("desk", tapback ? `tapback ${tapback} on his last text` : drafted);
   const outcome = !ok ? "skip (desk failed)" : skip ? "skip" : tapback ? `react ${tapback}` : drafted.replace(/\s+/g, " ");
   appendFileSync(DESK_LOG, `${new Date().toISOString()} ${target.id} ${outcome}\n`, { mode: 0o600 });
+}
+
+// One compaction conversation: an omp session in its own private directory, which end() removes.
+function compactChat(system: string): Chat {
+  const dir = mkdtempSync(`${STATE}/compact-`);
+  let turns = 0;
+  return {
+    async say(text) {
+      const proc = Bun.spawn(
+        ["omp", "-p", "--no-extensions", "--no-tools", "--no-skills", "--no-rules", "--session-dir", dir, ...(turns++ ? ["--continue"] : []),
+          "--thinking=off", "--model", DESK_MODEL, "--system-prompt", system],
+        { cwd: DESK_DIR, stdin: new Blob([text]), stdout: "pipe", stderr: "ignore", timeout: 60_000 },
+      );
+      const line = (await new Response(proc.stdout).text()).replace(/^Working\.\.\.\s*/m, "").trim();
+      if ((await proc.exited) !== 0 || !line) throw new Error(`compaction call failed (exit ${proc.exitCode})`);
+      return line;
+    },
+    end: () => rmSync(dir, { recursive: true, force: true }),
+  };
 }
 
 async function saveAttachment(c: Attachment, id: string) {
@@ -174,6 +203,8 @@ async function handle(message: Message) {
     await message.reply("firstmate did not get that, send it again");
     return;
   }
+  const id = memory.append("owner", text);
+  burstFrom ??= id;
   latest = message;
   recent.push(message);
   recent.splice(0, Math.max(0, recent.length - 10));
@@ -181,8 +212,6 @@ async function handle(message: Message) {
   desk.inboundText();
   await Bun.write(LATEST_FILE, `${message.space.id}\n${message.id}\n`).catch(log("persist the latest text"));
   await message.read().catch(log("mark read"));
-  thread.push(`Owner: ${text}`);
-  thread.splice(0, Math.max(0, thread.length - 12));
 }
 
 for await (const [, message] of app.messages) {
