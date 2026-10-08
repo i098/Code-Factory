@@ -5,7 +5,7 @@
 # --reply N threads the first bubble to his Nth most recent text, only when addressing something a few bubbles up.
 # --typing shows the typing bubble while you compose; --react puts a tapback on his latest text. Exit non-zero = not sent.
 url=http://127.0.0.1:${FM_IMESSAGE_PORT:-8765}
-B=(curl -fsS --max-time 60 -H 'X-Firstmate: 1')
+B=(curl -sS --fail-with-body --max-time 60 -H 'X-Firstmate: 1')
 q=
 case "${1:-}" in
   -h|--help) sed -n '2,6p' "$0" | cut -c3-; exit 0 ;;

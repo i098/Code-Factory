@@ -69,7 +69,7 @@ To turn it off, remove the block, then run `systemctl --user disable --now fm-im
 | Command | What it does |
 | --- | --- |
 | `fm-imessage 'text'` | Sends the text to the owner. Without an argument, it reads the text from stdin. Paragraphs that a blank line separates become separate chat bubbles. The lines of one paragraph, for example a list or a schedule, stay in one bubble. Before each bubble after the first, the typing bubble shows for 400 ms plus 25 ms for each character, 2.5 seconds at most. |
-| `fm-imessage --reply N 'text'` | Sends the text, but threads the first bubble as a reply to the owner's Nth most recent text (1 is the latest, 10 is the oldest that the service keeps). Use it only when the answer is about a text a few bubbles up. Any other value of N sends nothing and exits with code 2. |
+| `fm-imessage --reply N 'text'` | Sends the text, but threads the first bubble as a reply to the owner's Nth most recent text (1 is the latest). The service keeps at most 10 texts, and only those received since it started. If the Nth text is not kept, nothing is sent and the command exits non-zero. Use it only when the answer is about a text a few bubbles up. Any other value of N sends nothing and exits with code 2. |
 | `fm-imessage --typing` | Shows the typing bubble. The next send removes it. |
 | `fm-imessage --react '👍'` | Adds a tapback to the owner's latest text. |
 | `fm-imessage --help` | Shows the usage. It sends nothing. |

@@ -104,6 +104,7 @@ Bun.serve({
     // Firstmate addresses something a few bubbles up.
     const replyTo = Number(url.searchParams.get("reply") ?? 0);
     const target = replyTo > 0 ? recent[recent.length - replyTo] : undefined;
+    if (replyTo > 0 && !target) return new Response(`nothing sent: only ${recent.length} text(s) kept since the service started\n`, { status: 400 });
     try {
       for (const [i, bubble] of parts.entries()) {
         if (i > 0) {
