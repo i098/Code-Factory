@@ -93,7 +93,8 @@ const log = (what: string) => (e: unknown) => console.error(`fm-imessage: ${what
 const FALLBACK = "REACT:👍";
 
 async function draft(id: string): Promise<string> {
-  const status = Bun.spawnSync([INBOX, "status"], { cwd: FM_HOME, env: { ...env, FM_HOME } }).stdout.toString();
+  const inbox = Bun.spawn([INBOX, "status"], { cwd: FM_HOME, env: { ...env, FM_HOME }, stdout: "pipe", stderr: "ignore" });
+  const status = await new Response(inbox.stdout).text();
   const desk = Bun.spawn(
     ["omp", "-p", "--no-extensions", "--no-tools", "--no-skills", "--no-rules", "--no-session",
       "--thinking=off", "--model", DESK_MODEL, "--system-prompt", DESK_PROMPT,
@@ -105,14 +106,22 @@ async function draft(id: string): Promise<string> {
   return drafted;
 }
 
-async function frontDesk(message: Message) {
-  const answer = await draft(message.id).catch((e) => { log("desk failed, tapping back")(e); return FALLBACK; });
-  await message.space.stopTyping().catch(log("stop typing"));
+async function send(message: Message, answer: string): Promise<string> {
   const tapback = parseReact(answer);
   if (tapback) await message.react(tapback);
   else await message.reply(answer);
   thread.push(tapback ? `Firstmate reacted ${tapback} to his last text` : `Firstmate: ${answer}`);
-  appendFileSync(DESK_LOG, `${new Date().toISOString()} ${message.id} ${tapback ? `react ${tapback}` : answer.replace(/\s+/g, " ")}\n`, { mode: 0o600 });
+  return tapback ? `react ${tapback}` : answer.replace(/\s+/g, " ");
+}
+
+async function frontDesk(message: Message) {
+  const answer = await draft(message.id).catch((e) => { log("desk failed, tapping back")(e); return FALLBACK; });
+  await message.space.stopTyping().catch(log("stop typing"));
+  const outcome = await send(message, answer).catch(async (e) => {
+    log("desk send failed, tapping back")(e);
+    return send(message, FALLBACK).catch((e2) => { log("fallback tapback failed")(e2); return `send failed: ${answer.replace(/\s+/g, " ")}`; });
+  });
+  appendFileSync(DESK_LOG, `${new Date().toISOString()} ${message.id} ${outcome}\n`, { mode: 0o600 });
 }
 
 async function handle(message: Message) {
