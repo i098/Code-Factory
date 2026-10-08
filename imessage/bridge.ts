@@ -142,7 +142,7 @@ async function runDesk(current: () => boolean) {
   // The view of the chat before his burst, then the per-turn state, then his burst whole.
   const from = burstFrom ?? memory.msgs.length;
   const prompt = `<chat>\n${memory.render(from)}\n</chat>\n\nFleet status (durable records, may lag):\n${status}\n\n` +
-    `His latest texts:\n${memory.msgs.slice(from).map((m) => m.text).join("\n")}\n\nDecide your response to his latest texts.`;
+    `Latest messages, after the chat:\n${memory.msgs.slice(from).map((m) => `${m.kind}: ${m.text}`).join("\n")}\n\nDecide your response to his latest texts.`;
   const proc = Bun.spawn(
     ["omp", "-p", "--no-extensions", "-e", `${import.meta.dir}/zoom.ts`, "--no-tools", "--no-skills", "--no-rules", "--no-session",
       "--thinking=off", "--model", DESK_MODEL, "--system-prompt", DESK_PROMPT],
