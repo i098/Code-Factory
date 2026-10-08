@@ -10,7 +10,7 @@ For each message from the owner, the service does these steps:
 2. It files the text as a Firstmate inbox note (`fm-inbox.sh note`) first, so the wake never waits on a model. The note wakes Firstmate, which answers in full with `fm-imessage`. If the note fails, the service replies "firstmate did not get that, send it again" and stops there.
 3. It marks the text as read.
 4. It starts the quiet period, 8 seconds. Each new text from the owner starts the quiet period again. Any send, tapback, or typing bubble from Firstmate since his last text stops the desk for that burst of texts.
-5. If the quiet period ends and Firstmate stayed silent, the front desk gets one turn for the whole burst. The front desk is a one-shot `omp -p` call with no tools. It gets the last lines of the conversation and the output of `fm-inbox.sh status`, and it shows the typing bubble while it writes.
+5. If the quiet period ends and Firstmate stayed silent, the front desk gets one turn for the whole burst. The front desk is a one-shot `omp -p` call with one tool, `zoom`. It gets its view of the whole conversation (see [Desk memory](#desk-memory)), the output of `fm-inbox.sh status`, and every message since his burst began, each with its kind as a prefix. It shows the typing bubble while it writes.
 6. The desk acts like a person who texts, not like a bot. Its answer is one of three things, in this order of preference: `SKIP` (it sends nothing), `REACT:` and one emoji that it picks itself (a tapback on his latest text), or a short text. The text style is short, blunt, Gen Z, and lowercase. The desk never claims work that it cannot see, never promises a time, and never invents facts.
 7. Before it sends, the service checks again. If the owner sent a new text or Firstmate became active while the desk wrote, the service drops the draft. The next quiet period reads the whole conversation again.
 
@@ -21,6 +21,20 @@ If the desk fails or times out after 45 seconds, the service sends nothing: Firs
 The desk's system prompt is `deskPrompt` in `imessage/desk.ts`. The owner's name and the two model names come from the config.
 
 The service ignores texts from all other senders. It saves attachments in `~/.local/state/fm-imessage/attachments/` for Firstmate to open. That directory is private to the account (mode `0700`). The service also keeps the owner's latest text in `~/.local/state/fm-imessage/latest`, so replies still work after a restart.
+
+## Desk memory
+
+The desk remembers the whole conversation, after the design in [UniiChat: one chat that never ends](https://gist.github.com/VictorTaelin/91837951a5ce5b38f341ec1ba1df6449). The code is `imessage/memory.ts`.
+
+- **The log.** The service appends one record for each text from the owner, each send and tapback from Firstmate, and each desk text and tapback. The records are in `~/.local/state/fm-imessage/memory/main/YYYY-MM-DD.jsonl`. The service never edits or deletes a record.
+- **The tree.** In the background, the desk model compresses the log into a binary tree of one-line summaries of at most 512 bytes. A text that fits in 512 bytes is its own line. Two adjacent lines merge into one line, again and again. The nodes are in `memory/tree/YYYY-MM-DD.jsonl`. At most 3 compaction calls run at the same time, and they never delay a desk turn.
+- **The view.** Each desk turn gets a list of lines that covers the whole conversation: recent lines are fine, old lines are coarse. The view grows by one line for each message. When it is larger than 64 KB, one batch merges lines until it is 32 KB or less. The view is in `memory/view.json`, and the service loads it at start.
+- **Zoom.** When a line is too vague, the desk calls `zoom(id, n)` to open the line into the two lines under it. `zoom(id, 1)` gives one message whole. A text that is not summarized yet shows as "(not summarized yet: zoom it)".
+- **The input cap.** The model's price rises past 100,000 tokens of input, so no desk or compaction request sends more than 180,000 bytes (about 60,000 tokens, counted as bytes / 3). The service clips the fleet status, long texts, and each zoom result (16 KB) to their head and tail. After the cap, zoom returns "context limit reached".
+
+The memory holds the owner's texts word for word, on the host only. The directory is private to the account (mode `0700`). To make the desk forget everything, stop the service, delete `~/.local/state/fm-imessage/memory/`, and start the service again.
+
+A memory error never stops a send, a tapback, or the inbox note: the service logs it and goes on. At start, the service skips a log line that does not parse (a torn last line after a crash).
 
 ## Set up the Photon project
 
