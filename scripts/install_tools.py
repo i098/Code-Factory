@@ -250,10 +250,12 @@ def resolve_latest(key, names):
         if tool in names:
             registry = fetch(f"https://registry.npmjs.org/{package}/latest", f"{tool} version")
             latest[tool] = json.loads(registry)["version"]
-    if "supabase" in names:
-        # Resolved for the fleet guards' shared Supabase stack, installed by Ansible.
-        registry = fetch("https://registry.npmjs.org/supabase/latest", "supabase version")
-        latest["supabase"] = json.loads(registry)["version"]
+    # Installed by Ansible itself: supabase for the fleet guards' shared Supabase
+    # stack, spectrum-ts for the iMessage bridge.
+    for package in ("supabase", "spectrum-ts"):
+        if package in names:
+            registry = fetch(f"https://registry.npmjs.org/{package}/latest", f"{package} version")
+            latest[package] = json.loads(registry)["version"]
     if "psutil" in names:
         # The Chrome pruner's runtime, installed by Ansible with uv --require-hashes.
         pypi = json.loads(fetch("https://pypi.org/pypi/psutil/json", "psutil release"))

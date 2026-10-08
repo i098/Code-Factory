@@ -1,0 +1,13 @@
+#!/bin/bash
+# Send one iMessage to the owner from the Firstmate line (docs/imessage.md).
+# Usage: fm-imessage 'text' | fm-imessage --typing | fm-imessage --react '👍'   (or text on stdin)
+# --typing shows the typing bubble while you compose; the next send clears it. --react puts a tapback on his latest text.
+# Only for really important items, milestone summaries, and answers to his texts. Exit non-zero = not sent.
+url=http://127.0.0.1:${FM_IMESSAGE_PORT:-8765}
+case "${1:-}" in
+  -h|--help) sed -n '2,5p' "$0" | cut -c3-; exit 0 ;;
+  --typing) curl -fsS --max-time 30 -H "X-Firstmate: 1" -X POST "$url/typing"; exit ;;
+  --react) printf '%s' "${2:?emoji}" | curl -fsS --max-time 30 -H "X-Firstmate: 1" --data-binary @- "$url/react"; exit ;;
+  -*) echo "fm-imessage: unknown option $1 (nothing sent)" >&2; exit 2 ;;
+esac
+if [ $# -gt 0 ]; then printf '%s' "$*"; else cat; fi | curl -fsS --max-time 30 -H "X-Firstmate: 1" --data-binary @- "$url/send"

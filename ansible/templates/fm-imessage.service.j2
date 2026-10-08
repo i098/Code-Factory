@@ -1,0 +1,28 @@
+{{ ansible_managed | comment }}
+# Two-way iMessage between the owner and Firstmate over a Photon Spectrum line
+# (docs/imessage.md). PHOTON_PROJECT_ID and PHOTON_PROJECT_SECRET come from the
+# host's secret store, ~/super.env, at start; no credential is in this unit.
+
+[Unit]
+Description=iMessage bridge between the owner and Firstmate (Code Factory managed)
+After=network-online.target
+
+[Service]
+WorkingDirectory={{ factory_imessage_dir }}
+# omp (the front desk) starts with "#!/usr/bin/env bun", and bun lives in ~/.local/bin.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment="FM_HOME={{ factory_firstmate_dir }}"
+Environment="FM_IMESSAGE_OWNER={{ factory_cfg.imessage.owner }}"
+Environment="FM_IMESSAGE_DESK_MODEL={{ factory_imessage_desk_model }}"
+Environment="FM_IMESSAGE_SUPERVISOR_MODEL={{ factory_imessage_supervisor_model }}"
+EnvironmentFile=%h/super.env
+# ~/.local/state/fm-imessage: the latest text, attachments, and the desk's empty cwd.
+StateDirectory=fm-imessage
+StateDirectoryMode=0700
+UMask=0077
+ExecStart={{ factory_local_bin }}/bun bridge.ts
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target

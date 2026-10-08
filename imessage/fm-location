@@ -1,0 +1,4 @@
+#!/bin/bash
+# Print where the owner is, from the location he shares with the Firstmate line in Find My (docs/imessage.md).
+# Personal data: use only when the work needs it, and keep it on this host.
+curl -fsS --max-time 30 -H "X-Firstmate: 1" "http://127.0.0.1:${FM_IMESSAGE_PORT:-8765}/location"

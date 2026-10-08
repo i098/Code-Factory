@@ -53,6 +53,8 @@ def validate_config(document):
         fixture = config.get("fleet", {}).get("fixture_archive", "")
         if fixture and ".." in Path(fixture).parts:
             raise ValueError("fleet.fixture_archive must not traverse; give a plain path")
+    if "imessage" in config and not config["profiles"]["firstmate"]:
+        raise ValueError("the iMessage bridge requires the firstmate profile")
     if "ci_pool" in config:
         pool = config["ci_pool"]
         if not config["profiles"]["docker"]:

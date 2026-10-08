@@ -84,6 +84,12 @@ factory_vnc_dir: "{{ factory_cfg.home }}/.vnc"
 factory_vnc_chrome_profile: "{{ factory_cfg.home }}/.vnc-chrome-profile"
 # Generated on the host for `ssh mac` (tasks/mac_ssh.yml), never copied.
 factory_mac_ssh_key: "{{ factory_cfg.home }}/.ssh/id_ed25519_mac"
+# iMessage bridge (factory.imessage, tasks/imessage.yml, docs/imessage.md).
+# The service runs from this copy of imessage/ with the latest spectrum-ts,
+# resolved once per run (factory_latest). Photon credentials stay in ~/super.env.
+factory_imessage_dir: "{{ factory_share_dir }}/imessage"
+factory_imessage_desk_model: "{{ factory_cfg.imessage.desk_model | default('claude-haiku-5-5') }}"
+factory_imessage_supervisor_model: "{{ factory_cfg.imessage.supervisor_model | default('') }}"
 
 # Private runtime for the Chrome pruner. The exported pruner calls
 # psutil.Process.net_connections(), which exists from psutil 6 onwards, while
@@ -236,7 +242,8 @@ factory_installer_also: >-
      + (['psutil'] if ((factory_cfg.profiles.agents | bool)
                        and (factory_cfg.browser_prune.enabled | bool)) else [])
      + (['obscura'] if (factory_fleet_browsers_enabled | bool) else [])
-     + (['supabase'] if (factory_cfg.profiles.fleet_guards | bool) else []) }}
+     + (['supabase'] if (factory_cfg.profiles.fleet_guards | bool) else [])
+     + (['spectrum-ts'] if (factory_cfg.imessage is defined) else []) }}
 
 # --- Herdr static config ----------------------------------------------------
 # Only the reviewed, non-secret subset is templated. experimental.pane_history

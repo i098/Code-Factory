@@ -88,6 +88,7 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 | [herdr-patch](herdr-patch/README.md) | Herdr over mosh: no opaque background fill, and real images with `herdr-patch <user>@<host>` |
 | [omp configuration](docs/omp.md) | Signing in, model roles, fallbacks, the advisor, and updating an existing host |
 | [Chat clients](docs/chat.md) | The Concord (Discord) and slk (Slack) terminal clients: install, config, and sign-in |
+| [iMessage bridge](docs/imessage.md) | Optional: text Firstmate over a Photon Spectrum iMessage line, with an instant front-desk reply, and send, typing, tapback, and location commands |
 | [Capacity and pruners](docs/capacity.md) | Host sizing per lane count and every auto pruner |
 | [CI pool](docs/ci-pool.md) | Self-hosted GitHub Actions slots: one job per fresh container, sized from half of the host's CPU and memory |
 | [Architecture](docs/architecture.md) | Why Ansible, host and container boundary, Docker worker, CI |
