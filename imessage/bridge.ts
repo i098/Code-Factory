@@ -14,7 +14,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import type { AdvancedIMessage } from "@photon-ai/advanced-imessage/grpc";
 import { Spectrum, type Message } from "spectrum-ts";
 import { imessage } from "spectrum-ts/providers/imessage";
-import { type Attachment, bubbles, describe, DeskTiming, deskPrompt, localCommand, parseReact, typingPause } from "./desk.ts";
+import { type Attachment, bubbles, describe, DeskTiming, deskPrompt, isSkip, localCommand, parseReact, typingPause } from "./desk.ts";
 
 const env = process.env;
 const need = (name: string) => env[name] || (() => { throw new Error(`fm-imessage: ${name} is not set`); })();
@@ -146,7 +146,7 @@ async function runDesk(current: () => boolean) {
   deskRun = undefined;
   await target.space.stopTyping();
   if (!current()) return;
-  const skip = !ok || /^skip\W*$/i.test(drafted); // a failed desk stays quiet; Firstmate still has the note
+  const skip = !ok || isSkip(drafted); // a failed desk stays quiet; Firstmate still has the note
   const tapback = skip ? undefined : parseReact(drafted);
   if (tapback) await target.react(tapback);
   else if (!skip) await target.space.send(drafted);

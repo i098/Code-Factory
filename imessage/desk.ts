@@ -25,6 +25,11 @@ export function parseReact(answer: string): string | undefined {
   return answer.match(/^REACT:\s*(\S+)\s*$/u)?.[1];
 }
 
+// True when the desk's whole answer is SKIP (any case, trailing punctuation allowed): send nothing.
+export function isSkip(answer: string): boolean {
+  return /^skip\W*$/i.test(answer);
+}
+
 // Only the host's own commands may call the service: Host must be the loopback address and port (stops DNS
 // rebinding) and the custom header must be present (a browser page cannot set it without a CORS preflight).
 export function localCommand(headers: { get(name: string): string | null }, port: number): boolean {

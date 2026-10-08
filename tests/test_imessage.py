@@ -128,15 +128,18 @@ console.log(JSON.stringify(await Promise.all(contents.map(async (c) => (await de
 @pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
 def test_desk_answer_and_prompt():
     result = bun(f"""
-import {{ deskPrompt, parseReact }} from {DESK};
+import {{ deskPrompt, isSkip, parseReact }} from {DESK};
 const answers = ["REACT:👍", "REACT: 🫡 ", "REACT:👍 thanks", "got it", "ok REACT:👍", "SKIP"];
+const skips = ["skip", "Skip", "SKIP.", "skip!!", "skip it", "REACT:👍", "ok"];
 console.log(JSON.stringify({{
   reacts: answers.map((a) => parseReact(a) ?? null),
+  skips: skips.map(isSkip),
   named: deskPrompt("Ana", "desk-model-a", "boss-model-b"),
   unnamed: deskPrompt("the owner", "desk-model-a", ""),
 }}));
 """)
     assert result["reacts"] == ["👍", "🫡", None, None, None, None]
+    assert result["skips"] == [True, True, True, True, False, False, False]
     assert "Ana's AI supervisor" in result["named"]
     assert "you're desk-model-a" in result["named"] and "Firstmate is boss-model-b" in result["named"]
     assert "say you don't know" in result["unnamed"]
