@@ -373,7 +373,7 @@
         - factory_cfg.profiles.agents | bool
         - factory_cfg.browser_prune.enabled | bool
 
-    # --- Firstmate is on main at the revision this run resolved -------------
+    # --- Firstmate is on main at the revision this run resolved + patches ----
 
     - name: Assert this run resolved a Firstmate target revision
       ansible.builtin.assert:
@@ -413,41 +413,21 @@
         quiet: true
       when: factory_cfg.profiles.firstmate | bool
 
-    - name: Read the Firstmate revision
+    - name: Verify Firstmate is on main at the resolved revision plus the patch layer
       ansible.builtin.command:
-        argv: [git, -C, "{{ factory_firstmate_dir }}", rev-parse, HEAD]
+        argv:
+          - bash
+          - "{{ code_factory_repo }}/scripts/firstmate-patch-layer.sh"
+          - verify
+          - "{{ factory_firstmate_dir }}"
+          - "{{ factory_firstmate_target }}"
+          - "{{ factory_firstmate_patch_dir }}"
       become: "{{ factory_become_target | bool }}"
       become_user: "{{ factory_cfg.user }}"
       environment: "{{ factory_user_env }}"
       register: factory_verify_fm_head
       changed_when: false
       check_mode: false
-      when: factory_cfg.profiles.firstmate | bool
-
-    - name: Read the Firstmate branch
-      ansible.builtin.command:
-        argv: [git, -C, "{{ factory_firstmate_dir }}", rev-parse, --abbrev-ref, HEAD]
-      become: "{{ factory_become_target | bool }}"
-      become_user: "{{ factory_cfg.user }}"
-      environment: "{{ factory_user_env }}"
-      register: factory_verify_fm_branch
-      changed_when: false
-      check_mode: false
-      when: factory_cfg.profiles.firstmate | bool
-
-    - name: Assert Firstmate is on main at the revision this run resolved
-      ansible.builtin.assert:
-        that:
-          - (factory_verify_fm_head.stdout | trim) == factory_firstmate_target
-          - (factory_verify_fm_branch.stdout | trim) == 'main'
-        fail_msg: >-
-          {{ factory_firstmate_dir }} is at
-          {{ factory_verify_fm_head.stdout | default('(unknown)') | trim }} on
-          branch
-          {{ factory_verify_fm_branch.stdout | default('(unknown)') | trim }},
-          not main at {{ factory_firstmate_target }} - the revision origin/main
-          resolved to during this run.
-        quiet: true
       when: factory_cfg.profiles.firstmate | bool
 
     # A host that cannot name the Firstmate it installed is how a fleet ends up
@@ -457,8 +437,9 @@
       ansible.builtin.debug:
         msg: >-
           Firstmate in {{ factory_firstmate_dir }} is on main at
-          {{ factory_firstmate_target }}, the revision origin/main of
-          {{ factory_cfg.firstmate.url }} resolved to during this run.
+          {{ factory_verify_fm_head.stdout | trim }}: {{ factory_firstmate_target }},
+          the revision origin/main of {{ factory_cfg.firstmate.url }} resolved to
+          during this run, plus the patch layer in patches/firstmate/.
       when: factory_cfg.profiles.firstmate | bool
 
     # --- runtime state, only where services are managed ---------------------

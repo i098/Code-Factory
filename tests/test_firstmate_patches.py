@@ -1,0 +1,202 @@
+"""tasks/firstmate.yml keeps the checkout at origin/main plus patches/firstmate/.
+
+Each test drives the real task file with ansible-playbook against throwaway local
+repositories: an upstream bare repository, a clone to push upstream changes
+from, and two format-patch files made against upstream main.
+"""
+
+import getpass
+import grp
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).parents[1]
+SCRIPT = ROOT / "scripts/firstmate-patch-layer.sh"
+GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+
+
+def git(repo, *args):
+    return subprocess.run(
+        [*GIT, "-C", str(repo), *args], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def commit(repo, path, lines, message):
+    (repo / path).write_text("".join(f"{line}\n" for line in lines))
+    git(repo, "add", path)
+    git(repo, "commit", "-q", "-m", message)
+
+
+@pytest.fixture
+def host(tmp_path):
+    upstream = tmp_path / "upstream.git"
+    dev = tmp_path / "dev"
+    patches = tmp_path / "patches"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(upstream)], check=True)
+    subprocess.run(["git", "clone", "-q", str(upstream), str(dev)], check=True)
+    lines = [f"line {n}" for n in range(1, 41)]
+    commit(dev, "watch.sh", lines, "upstream: initial")
+    git(dev, "push", "-q", "origin", "HEAD:main")
+    git(dev, "checkout", "-q", "-b", "fix")
+    lines[4] = "line 5 patched"
+    commit(dev, "watch.sh", lines, "fix: first")
+    lines[29] = "line 30 patched"
+    commit(dev, "watch.sh", lines, "fix: second")
+    git(dev, "format-patch", "-q", "-o", str(patches), "main..fix")
+    git(dev, "checkout", "-q", "main")
+    git(dev, "branch", "-q", "-D", "fix")
+    return {
+        "tmp": tmp_path,
+        "upstream": upstream,
+        "dev": dev,
+        "patches": patches,
+        "checkout": tmp_path / "firstmate",
+        "first": next(patches.glob("0001-*.patch")),
+    }
+
+
+def apply(host):
+    playbook = host["tmp"] / "firstmate.yml"
+    playbook.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "hosts": "localhost",
+                    "connection": "local",
+                    "gather_facts": False,
+                    "tasks": [
+                        {"ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/firstmate.yml")}
+                    ],
+                }
+            ]
+        )
+    )
+    variables = {
+        # The dispatch-settings tasks ask for root; nothing here needs it.
+        "ansible_become": False,
+        "code_factory_repo": str(ROOT),
+        "factory_become_target": False,
+        "factory_user_env": {},
+        "factory_group": grp.getgrgid(os.getgid()).gr_name,
+        "factory_firstmate_dir": str(host["checkout"]),
+        "factory_firstmate_patch_dir": str(host["patches"]),
+        "factory_firstmate_config_names": [],
+        "factory_cfg": {"user": getpass.getuser(), "firstmate": {"url": str(host["upstream"])}},
+    }
+    result = subprocess.run(
+        [
+            Path(sys.executable).parent / "ansible-playbook",
+            "-i",
+            "localhost,",
+            str(playbook),
+            "--extra-vars",
+            json.dumps(variables),
+        ],
+        cwd=host["tmp"],
+        capture_output=True,
+        text=True,
+    )
+    recap = result.stdout.rsplit("changed=", 1)
+    changed = int(recap[1].split()[0]) if len(recap) == 2 else None
+    return result, changed
+
+
+def push_upstream(host, path, lines, message):
+    commit(host["dev"], path, lines, message)
+    git(host["dev"], "push", "-q", "origin", "HEAD:main")
+    return git(host["dev"], "rev-parse", "HEAD")
+
+
+def layer(host, count):
+    """Subjects of the top <count> commits on main, oldest first."""
+    return git(host["checkout"], "log", "--reverse", "--format=%s", f"-{count}").splitlines()
+
+
+def verify(host):
+    target = git(host["checkout"], "rev-parse", "origin/main")
+    return subprocess.run(
+        ["bash", SCRIPT, "verify", host["checkout"], target, host["patches"]],
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_fresh_clone_gets_the_layer_and_a_second_apply_changes_nothing(host):
+    result, changed = apply(host)
+    assert result.returncode == 0, result.stdout
+    assert changed > 0
+    checkout = host["checkout"]
+    assert git(checkout, "rev-parse", "HEAD~2") == git(host["upstream"], "rev-parse", "main")
+    assert layer(host, 2) == ["fix: first", "fix: second"]
+    assert git(checkout, "rev-parse", "--abbrev-ref", "HEAD") == "main"
+    assert git(checkout, "rev-parse", "--abbrev-ref", "main@{upstream}") == "origin/main"
+    assert git(checkout, "status", "--porcelain") == ""
+    assert verify(host).returncode == 0
+    head = git(checkout, "rev-parse", "HEAD")
+
+    result, changed = apply(host)
+    assert result.returncode == 0, result.stdout
+    assert changed == 0
+    assert git(checkout, "rev-parse", "HEAD") == head
+
+
+def test_upstream_advance_rebuilds_the_layer_on_the_new_origin_main(host):
+    assert apply(host)[0].returncode == 0
+    old = git(host["checkout"], "rev-parse", "HEAD")
+    new_main = push_upstream(host, "other.sh", ["echo new"], "upstream: unrelated")
+
+    result, changed = apply(host)
+    assert result.returncode == 0, result.stdout
+    assert changed > 0
+    assert git(host["checkout"], "rev-parse", "HEAD~2") == new_main
+    assert layer(host, 3) == ["upstream: unrelated", "fix: first", "fix: second"]
+    assert git(host["checkout"], "branch", "--contains", old) == ""
+    assert verify(host).returncode == 0
+
+
+def test_a_patch_upstream_already_has_is_skipped(host):
+    assert apply(host)[0].returncode == 0
+    git(host["dev"], "am", "-q", str(host["first"]))
+    git(host["dev"], "push", "-q", "origin", "HEAD:main")
+    new_main = git(host["dev"], "rev-parse", "HEAD")
+
+    result, changed = apply(host)
+    assert result.returncode == 0, result.stdout
+    assert f"skipped, upstream already has it: {host['first'].name}" in result.stdout
+    assert changed > 0
+    assert git(host["checkout"], "rev-parse", "HEAD~1") == new_main
+    assert layer(host, 1) == ["fix: second"]
+    assert verify(host).returncode == 0
+
+
+def test_a_patch_that_no_longer_applies_stops_and_leaves_the_checkout_as_it_was(host):
+    assert apply(host)[0].returncode == 0
+    before = git(host["checkout"], "rev-parse", "HEAD")
+    lines = [f"line {n}" for n in range(1, 41)]
+    lines[4] = "line 5 rewritten upstream"
+    push_upstream(host, "watch.sh", lines, "upstream: conflicting edit")
+
+    result, _ = apply(host)
+    assert result.returncode != 0
+    assert f"{host['first'].name} no longer applies" in result.stdout
+    assert git(host["checkout"], "rev-parse", "HEAD") == before
+    assert git(host["checkout"], "status", "--porcelain") == ""
+
+
+def test_an_unknown_local_commit_is_still_refused(host):
+    assert apply(host)[0].returncode == 0
+    commit(host["checkout"], "mine.txt", ["local work"], "local: unpushed")
+    before = git(host["checkout"], "rev-parse", "HEAD")
+    push_upstream(host, "other.sh", ["echo new"], "upstream: unrelated")
+
+    result, _ = apply(host)
+    assert result.returncode != 0
+    assert "not one of the patches" in result.stdout
+    assert git(host["checkout"], "rev-parse", "HEAD") == before
+    assert (host["checkout"] / "mine.txt").exists()

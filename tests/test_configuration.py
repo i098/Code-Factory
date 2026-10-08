@@ -321,6 +321,7 @@ def _verify_firstmate(tmp_path, origin, configured):
         )
     )
     variables = {
+        "code_factory_repo": str(ROOT),
         "factory_account_ready": True,
         "factory_become_target": False,
         "factory_user_env": {},
@@ -328,6 +329,8 @@ def _verify_firstmate(tmp_path, origin, configured):
         "factory_user_units": str(tmp_path),
         "factory_docker_group_users": [],
         "factory_firstmate_dir": str(checkout),
+        # No patches: the expected head is origin/main itself.
+        "factory_firstmate_patch_dir": str(tmp_path),
         "factory_firstmate_target": head,
         "factory_cfg": {
             "user": "coder",

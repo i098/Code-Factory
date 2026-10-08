@@ -1,0 +1,317 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Code Factory <noreply@example.invalid>
+Date: Thu, 8 Oct 2026 07:46:33 +0000
+Subject: [PATCH 2/2] fix(watch): end the idle wait within a second for a
+ captain inbox note
+
+The watcher surfaced a queued inbox note only at the top of its next cycle,
+so a note waited up to FM_POLL in event_wait_or_sleep. The blind poll sleep
+now runs in 1 s slices and the herdr event wait reads its stream in 1 s
+slices; each quiet slice stats the wake queue and ends the wait as soon as an
+unsurfaced inbox:<id> row appears.
+---
+ bin/backends/herdr.sh          | 28 ++++++++++++++--
+ bin/fm-inbox.sh                |  5 +--
+ bin/fm-watch.sh                | 59 +++++++++++++++++++++++++++-------
+ tests/fm-backend-herdr.test.sh | 29 ++++++++++++++++-
+ tests/fm-watch-triage.test.sh  | 25 ++++++++++++--
+ 5 files changed, 125 insertions(+), 21 deletions(-)
+
+diff --git a/bin/backends/herdr.sh b/bin/backends/herdr.sh
+index f3cbe53f..f10396e2 100644
+--- a/bin/backends/herdr.sh
++++ b/bin/backends/herdr.sh
+@@ -3975,7 +3975,9 @@ fm_backend_herdr_clear_transition() {  # <state_dir> <window>
+ # actionable edge - the caller has effectively already slept and just continues)
+ # and 2 when the event path is unusable (not capable, socket unresolved, reader
+ # failed to run/subscribe - the caller sleeps the budget itself, the fail-closed
+-# backstop). See the header block above for the full contract.
++# backstop). When FM_EVENT_WAIT_INTERRUPT names a command, the stream is read in
++# 1 s slices and each quiet slice runs it; success stops the reader and returns
++# 1 early. See the header block above for the full contract.
+ fm_backend_herdr_wait_transition() {  # <session> <timeout_secs> <state_dir> <pane_window...>
+   local session=$1 timeout=$2 state=$3
+   shift 3
+@@ -4009,7 +4011,7 @@ fm_backend_herdr_wait_transition() {  # <session> <timeout_secs> <state_dir> <pa
+   done < <(fm_backend_herdr_event_reader_cmd)
+   [ "${#reader[@]}" -gt 0 ] || return 2
+ 
+-  local fifo_dir fifo reader_pid line ws status agent raw record hit rc=1 reader_rc=0
++  local fifo_dir fifo reader_pid line ws status agent raw record hit rc=1 reader_rc=0 read_rc started interrupted=0
+   fifo_dir=$(mktemp -d "${TMPDIR:-/tmp}/fm-herdr-eventwait.XXXXXX") || return 2
+   fifo="$fifo_dir/events"
+   if ! mkfifo "$fifo" 2>/dev/null; then
+@@ -4056,7 +4058,26 @@ fm_backend_herdr_wait_transition() {  # <session> <timeout_secs> <state_dir> <pa
+   # with `cut`, NOT `IFS=$'\t' read`: a tab is IFS-whitespace, so `read` would
+   # collapse an empty middle field (e.g. an absent workspace_id) and shift the
+   # status into the wrong column. `cut` preserves empty fields.
+-  while [ "$rc" -eq 1 ] && IFS= read -r line <&9; do
++  while [ "$rc" -eq 1 ]; do
++    if [ -z "${FM_EVENT_WAIT_INTERRUPT:-}" ]; then
++      IFS= read -r line <&9 || break
++    else
++      started=$SECONDS
++      read_rc=0
++      IFS= read -r -t 1 line <&9 || read_rc=$?
++      if [ "$read_rc" -ne 0 ]; then
++        # Bash 4+ reports a timeout above 128; Bash 3.2 returns 1 for both a
++        # timeout and EOF, but EOF returns within the same second. An EOF that
++        # straddles a second boundary only costs one more slice.
++        [ "$read_rc" -gt 128 ] || [ "$SECONDS" -ne "$started" ] || break
++        if "$FM_EVENT_WAIT_INTERRUPT"; then
++          interrupted=1
++          kill "$reader_pid" 2>/dev/null || true
++          break
++        fi
++        continue
++      fi
++    fi
+     [ -n "$line" ] || continue
+     pane_id=$(printf '%s' "$line" | cut -f1)
+     ws=$(printf '%s' "$line" | cut -f2)
+@@ -4083,6 +4104,7 @@ fm_backend_herdr_wait_transition() {  # <session> <timeout_secs> <state_dir> <pa
+   wait "$reader_pid" 2>/dev/null || reader_rc=$?
+   exec 9<&-
+   rm -rf "$fifo_dir" 2>/dev/null || true
++  [ "$interrupted" -eq 1 ] && return 1
+   [ "$rc" -eq 0 ] && return 0
+   [ "$rc" -eq 2 ] && return 2
+   [ "$reader_rc" -eq 0 ] && return 1
+diff --git a/bin/fm-inbox.sh b/bin/fm-inbox.sh
+index 7799366d..5195a8df 100755
+--- a/bin/fm-inbox.sh
++++ b/bin/fm-inbox.sh
+@@ -6,7 +6,8 @@
+ #
+ #   note    Queue an idea for firstmate while firstmate is mid-turn and cannot
+ #           answer. Writes a durable record and appends ONE `check` wake, so the
+-#           note survives a crash and wakes firstmate on the watcher's next cycle.
++#           note survives a crash and wakes firstmate within about 1 second
++#           (bin/fm-watch.sh event_wait_or_sleep ends its idle wait for it).
+ #           `announce` may append that same wake for an already-saved note.
+ #           These two are the only subcommands that touch firstmate's wake queue.
+ #   say     Same as `note`, but the body comes from spoken audio on stdin.
+@@ -321,7 +322,7 @@ sys.stdout.write("\n")
+ PY
+ }
+ 
+-# Append exactly one wake; bin/fm-watch.sh surfaces it to firstmate on its next cycle.
++# Append exactly one wake; bin/fm-watch.sh surfaces it to firstmate within about 1 second.
+ # Failure to wake is NOT allowed to lose the note: the record is already on
+ # disk, so we report the wake failure and still exit non-zero loudly.
+ #
+diff --git a/bin/fm-watch.sh b/bin/fm-watch.sh
+index e60a0f33..e3c4481b 100755
+--- a/bin/fm-watch.sh
++++ b/bin/fm-watch.sh
+@@ -2300,17 +2300,51 @@ heartbeat_scan_finds_actionable() {
+   return "$found"
+ }
+ 
++# queued_inbox_pending: true when the wake queue holds an inbox:<id> check row
++# that surface_queued_checks has not surfaced yet. It rescans only when the
++# queue's stat signature moved since its last call, so a quiet slice costs one
++# stat. The baseline starts empty, so the first call after watcher start also
++# catches a note filed while the cycle body ran.
++_queue_wait_sig=
++queued_inbox_pending() {
++  local sig key
++  sig=$(fm_wake_signal_sig "$FM_WAKE_QUEUE") || sig=
++  [ "$sig" != "$_queue_wait_sig" ] || return 1
++  _queue_wait_sig=$sig
++  [ -s "$FM_WAKE_QUEUE" ] || return 1
++  while IFS= read -r key; do
++    case "$key" in inbox:*) ;; *) continue ;; esac
++    [ -e "$(queued_surfaced_marker "$key")" ] || return 0
++  done < <(fm_wake_queued_keys_locked check)
++  return 1
++}
++
++# queue_wait_sleep <secs>: the blind poll sleep, taken in 1 s slices that end
++# early on queued_inbox_pending. A non-integer budget (tests only) sleeps blind.
++queue_wait_sleep() {
++  local left=$1
++  case "$left" in ''|*[!0-9]*) sleep "$left"; return ;; esac
++  while [ "$left" -gt 0 ]; do
++    queued_inbox_pending && return
++    sleep 1
++    left=$((left - 1))
++  done
++}
++
+ # event_wait_or_sleep: the terminal wait of each supervision cycle. For a home
+ # with push-capable windows (herdr), it replaces the blind `sleep POLL` with a
+ # bounded wait on the backend's native transition stream, so a crew going
+ # `blocked` wakes the supervisor sub-second instead of after the stale-pane
+ # wedge timer. For every other home - no push-capable window, backend not
+-# capable, or the event path proven unreliable this process - it sleeps POLL,
+-# byte-for-byte today's behavior. The poll loop above still runs every cycle, so
+-# this only ever SHORTENS latency; it can never drop an escalation (the poll
+-# loop is the permanent fail-closed backstop). This preserves the single live
+-# supervision cycle: the reader is a short-lived subprocess of THIS watcher, not
+-# a second watcher, so every guard/beacon/arm/turn-end mechanism is unchanged.
++# capable, or the event path proven unreliable this process - it sleeps POLL.
++# Both waits also end within about 1 s when a captain inbox note lands on the
++# wake queue (queued_inbox_pending), so the next cycle's surface_queued_checks
++# wakes firstmate at once instead of up to POLL later. The poll loop above still
++# runs every cycle, so this only ever SHORTENS latency; it can never drop an
++# escalation (the poll loop is the permanent fail-closed backstop). This
++# preserves the single live supervision cycle: the reader is a short-lived
++# subprocess of THIS watcher, not a second watcher, so every
++# guard/beacon/arm/turn-end mechanism is unchanged.
+ event_wait_or_sleep() {
+   local w b session first_backend="" first_session="" rec rc
+   local windows=()
+@@ -2334,7 +2368,7 @@ event_wait_or_sleep() {
+   done < <(recorded_windows)
+ 
+   if [ "${#windows[@]}" -eq 0 ]; then
+-    sleep "$POLL"
++    queue_wait_sleep "$POLL"
+     return
+   fi
+ 
+@@ -2350,11 +2384,11 @@ event_wait_or_sleep() {
+     _event_cap_fails=0
+   fi
+   if [ "$_event_cap_ok" != 1 ]; then
+-    sleep "$POLL"
++    queue_wait_sleep "$POLL"
+     return
+   fi
+ 
+-  rec=$(FM_BACKEND_EVENTS_CAPABILITY_CONFIRMED=1 fm_backend_wait_transition "$first_backend" "$first_session" "$POLL" "$STATE" "${windows[@]}")
++  rec=$(FM_EVENT_WAIT_INTERRUPT=queued_inbox_pending FM_BACKEND_EVENTS_CAPABILITY_CONFIRMED=1 fm_backend_wait_transition "$first_backend" "$first_session" "$POLL" "$STATE" "${windows[@]}")
+   rc=$?
+   case "$rc" in
+     0)
+@@ -2367,11 +2401,12 @@ event_wait_or_sleep() {
+       # pure polling for the rest of this watcher process.
+       _event_cap_fails=$((_event_cap_fails + 1))
+       [ "$_event_cap_fails" -ge "$EVENT_CAP_FAIL_MAX" ] && _event_cap_ok=0
+-      sleep "$POLL"
++      queue_wait_sleep "$POLL"
+       ;;
+     *)
+-      # 1: a clean full-budget wait with no actionable edge - the reader already
+-      # blocked ~POLL, so just continue; the next cycle re-scans.
++      # 1: a clean wait with no actionable edge - the reader blocked ~POLL or
++      # stopped early for a queued inbox note - so just continue; the next
++      # cycle re-scans and surfaces it.
+       _event_cap_fails=0
+       ;;
+   esac
+diff --git a/tests/fm-backend-herdr.test.sh b/tests/fm-backend-herdr.test.sh
+index 755989c7..3d805969 100755
+--- a/tests/fm-backend-herdr.test.sh
++++ b/tests/fm-backend-herdr.test.sh
+@@ -5559,7 +5559,8 @@ SH
+ # the socket, streams the TAB-separated lines in $FM_FAKE_READER_LINES to stdout
+ # (one projected event per line: pane_id\tworkspace_id\tagent_status\tagent),
+ # then exits $FM_FAKE_READER_EXIT (default 0). A non-zero exit with no lines
+-# models a connect/subscribe failure.
++# models a connect/subscribe failure. $FM_FAKE_READER_HOLD instead keeps the
++# stream open and quiet for that many seconds, then exits 0.
+ make_fake_reader() {  # <dir> -> echoes reader path
+   local dir=$1 path="$1/fake-reader.sh"
+   cat > "$path" <<'SH'
+@@ -5573,6 +5574,7 @@ printf '%s\n' "${FM_FAKE_READER_ACK:-@subscribed}"
+ if [ -n "${FM_FAKE_READER_LINES:-}" ] && [ -f "$FM_FAKE_READER_LINES" ]; then
+   cat "$FM_FAKE_READER_LINES"
+ fi
++[ -z "${FM_FAKE_READER_HOLD:-}" ] || exec sleep "$FM_FAKE_READER_HOLD"
+ exit "${FM_FAKE_READER_EXIT:-0}"
+ SH
+   chmod +x "$path"
+@@ -5812,6 +5814,30 @@ test_wait_transition_clean_timeout_returns_1() {
+   pass "fm_backend_herdr_wait_transition: stock macOS Bash clean timeout closes fd 9 and returns 1"
+ }
+ 
++# A captain inbox note must not wait out a long quiet event budget: the caller's
++# interrupt command ends the wait early as a clean timeout, and the reader is
++# stopped rather than counted as an event-path failure.
++test_wait_transition_interrupt_ends_quiet_wait_early() {
++  local dir state agent temp fb reader lines result rc fd_open start elapsed
++  dir="$TMP_ROOT/wt-interrupt"; state="$dir/state"; agent="$dir/agents"; temp="$dir/temp"; mkdir -p "$state" "$agent" "$temp"
++  fb=$(make_herdr_eventfake "$dir")
++  set_fake_agent "$agent" "wG:pQ" idle
++  reader=$(make_fake_reader "$dir"); lines="$dir/lines"; : > "$lines"
++  ( sleep 1; : > "$dir/kick" ) &
++  start=$(date +%s)
++  result=$(PATH="$fb:$PATH" TMPDIR="$temp" FM_BACKEND_HERDR_EVENTS_FORCE=1 FM_FAKE_SESSION_NAME=sess FM_FAKE_SOCKET="$dir/x.sock" FM_FAKE_AGENT_DIR="$agent" \
++    FM_BACKEND_HERDR_EVENT_READER="$reader" FM_FAKE_READER_LINES="$lines" FM_FAKE_READER_HOLD=30 KICK="$dir/kick" \
++    /bin/bash -c '. "$0/bin/backends/herdr.sh"; kicked() { [ -e "$KICK" ]; }; FM_EVENT_WAIT_INTERRUPT=kicked fm_backend_herdr_wait_transition sess 30 "$1" sess:wG:pQ; rc=$?; [ -e /dev/fd/9 ] && fd_open=yes || fd_open=no; printf "%s %s\n" "$rc" "$fd_open"' "$ROOT" "$state")
++  elapsed=$(( $(date +%s) - start ))
++  wait
++  rc=${result%% *}; fd_open=${result#* }
++  [ "$rc" = 1 ] || fail "an interrupted quiet wait must return 1 (clean), got $rc"
++  [ "$elapsed" -le 5 ] || fail "an interrupted quiet wait must end within a few seconds, took ${elapsed}s"
++  [ "$fd_open" = no ] || fail "an interrupted wait must close fixed fd 9"
++  [ -z "$(find "$temp" -mindepth 1 -print -quit)" ] || fail "an interrupted wait must remove its private FIFO directory"
++  pass "fm_backend_herdr_wait_transition: an interrupt command ends a quiet wait early as a clean timeout"
++}
++
+ # shellcheck source=bin/fm-backend.sh
+ . "$ROOT/bin/fm-backend.sh"
+ 
+@@ -6044,3 +6070,4 @@ test_wait_transition_stream_absorb_clears_then_timeout
+ test_wait_transition_reader_failure_returns_2
+ test_wait_transition_bad_ack_returns_2_and_cleans_up
+ test_wait_transition_clean_timeout_returns_1
++test_wait_transition_interrupt_ends_quiet_wait_early
+diff --git a/tests/fm-watch-triage.test.sh b/tests/fm-watch-triage.test.sh
+index 2b606ded..6fe8f78d 100755
+--- a/tests/fm-watch-triage.test.sh
++++ b/tests/fm-watch-triage.test.sh
+@@ -5795,12 +5795,12 @@ seed_captured_procevent_result() {  # <dir>
+ 
+ # The watcher, scoped by FM_HOME rather than FM_STATE_OVERRIDE, so the
+ # per-cycle reconcile it launches resolves the same home's state.
+-procevent_watch_bg() {  # <dir> <out>
+-  local dir=$1 out=$2
++procevent_watch_bg() {  # <dir> <out> [poll]
++  local dir=$1 out=$2 poll=${3:-0.2}
+   dir=$(cd "$dir" && pwd -P) || return 1
+   PATH="$dir/fakebin:$PATH" FM_HOME="$dir" FM_PROCEVENT_CLAIM_ROOT="$dir/claims" \
+     FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh" \
+-    FM_POLL=0.2 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
++    FM_POLL="$poll" FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
+ }
+ 
+ test_procevent_captured_result_surfaces_proactively() {
+@@ -5920,6 +5920,24 @@ test_inbox_note_wakes_idle_watcher() {
+   pass "a captain inbox note wakes an idle watcher once"
+ }
+ 
++# The idle wait must not hold a note for the poll budget: with a 60 s poll the
++# note still wakes the watcher within a few seconds.
++test_inbox_note_ends_long_idle_wait() {
++  local dir state out pid i=0
++  dir=$(make_case inbox-note-long-poll); state="$dir/state"; out="$dir/watch.out"
++  procevent_watch_bg "$dir" "$out" 60
++  pid=$!
++  while [ ! -e "$state/.last-watcher-beat" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
++  [ -e "$state/.last-watcher-beat" ] || fail "the watcher never reached its idle wait: $(cat "$out")"
++  sleep 2
++  kill -0 "$pid" 2>/dev/null || fail "the watcher left its idle wait without a note: $(cat "$out")"
++  FM_HOME="$dir" FM_STATE_OVERRIDE="$state" "$ROOT/bin/fm-inbox.sh" note "answer me now" >/dev/null 2>&1 \
++    || fail "fm-inbox.sh note failed"
++  wait_for_exit "$pid" 50 || fail "a note did not end a 60 s idle wait within 5 s"
++  grep -F "answer me now" "$out" >/dev/null || fail "the early wake did not name the note: $(cat "$out")"
++  pass "a captain inbox note ends a long idle wait within seconds"
++}
++
+ # The reason line is the headline firstmate reads before the payload. Every
+ # procevent:* key used to surface as "process-event result captured", which
+ # presents a source that is collecting NOTHING as a healthy capture - the exact
+@@ -6765,6 +6783,7 @@ test_procevent_surface_serializes_with_drain
+ test_procevent_surface_crash_boundaries
+ test_procevent_marker_failure_exits_and_replays
+ test_inbox_note_wakes_idle_watcher
++test_inbox_note_ends_long_idle_wait
+ test_heartbeat_no_change_absorbed
+ test_heartbeat_backstop_surfaces_unsurfaced_status
+ test_heartbeat_backstop_surfaces_a_masked_status
+-- 
+2.53.0
+

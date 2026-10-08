@@ -67,7 +67,27 @@ Every host that starts services (`start_services: true`); the container worker i
 
 `firstmate` profile.
 
-- `git clone` of `factory.firstmate.url` (upstream `https://github.com/kunchenguid/firstmate.git` by default), tracking `origin/main`, never pinned. Every apply fetches and fast-forwards `main` (`ansible/tasks/firstmate.yml`).
+- `git clone` of `factory.firstmate.url` (upstream `https://github.com/kunchenguid/firstmate.git` by default), tracking `origin/main`, never pinned. Every apply fetches `origin/main` and puts `main` at that revision plus the patch layer below (`ansible/tasks/firstmate.yml`).
+
+### Firstmate patch layer
+
+`patches/firstmate/` holds fixes that upstream Firstmate does not have yet. Apply builds one local commit per patch on top of `origin/main`, in file-name order. Each commit takes its author, date, and message from the patch file, so an unchanged host gets the same commits again and the apply changes nothing.
+
+| Patch | What it does |
+| --- | --- |
+| `0001-watch-wake-on-queued-inbox-note.patch` | The watcher wakes Firstmate on its next cycle when an inbox note is queued. Without it, the note waits for an unrelated wake, which can take hours. |
+| `0002-watch-end-idle-wait-for-inbox-note.patch` | The watcher ends its idle wait within about 1 s when an inbox note arrives, instead of up to the full poll interval. Together, the two make a text from the iMessage bridge wake Firstmate in about 2 s. |
+
+How apply handles each case:
+
+- Upstream moved: apply builds the layer again on the new `origin/main`. It applies each patch three-way, so upstream edits near a patch do not break it.
+- Upstream already has a patch's change: apply prints `skipped, upstream already has it: <file>` and makes no commit for it.
+- A patch no longer applies: the play stops and names the patch. The checkout stays as it was. Update the patch for the new upstream code, or drop it.
+- Local commits: a commit on `main` that is not upstream must be one of the patches (same `git patch-id` as the patch applied to the same parent). Apply refuses any other local commit, and a dirty tree or another branch, and never resets, stashes, or cleans.
+
+Verification requires `main` to be exactly `origin/main` plus the patch layer.
+
+To drop a patch once upstream has it, wait until apply reports it as skipped on each host, then delete the file in a pull request. If you delete it earlier, a host whose `main` still has that patch's commit refuses the commit as unknown. On such a host, make sure that `git log origin/main..main` shows only patch commits, run `git checkout -B main origin/main` in the checkout, and apply again.
 
 ## Container images
 
