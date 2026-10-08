@@ -8,7 +8,7 @@ import pytest
 
 SCRIPT = Path(__file__).parents[1] / "dia-debug" / "dia-debug"
 STUBS = {
-    "lsappinfo": 'echo \'"pid"=4242\'',
+    "lsappinfo": "echo '\"pid\"=4242'",
     "ps": 'case "$2" in command=) echo "$CMD" ;; etime=) echo "$ETIME" ;; esac',
     "kill": '[ "$1" = -0 ] && exit 1; echo "kill $*" >> "$LOG"',
     "open": 'echo "open $*" >> "$LOG"',
@@ -27,11 +27,18 @@ def run(tmp_path):
     log = tmp_path / "log"
 
     def go(cmd, etime, *args):
-        env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", TMPDIR=str(tmp_path),
-                   LOG=str(log), CMD=cmd, ETIME=etime)
+        env = dict(
+            os.environ,
+            PATH=f"{bin_dir}:{os.environ['PATH']}",
+            TMPDIR=str(tmp_path),
+            LOG=str(log),
+            CMD=cmd,
+            ETIME=etime,
+        )
         # kill is a bash builtin; turn it off so the PATH stub answers.
-        subprocess.run(["bash", "-c", 'enable -n kill; . "$0" "$@"', str(SCRIPT), *args],
-                       env=env, check=True)
+        subprocess.run(
+            ["bash", "-c", 'enable -n kill; . "$0" "$@"', str(SCRIPT), *args], env=env, check=True
+        )
         calls = log.read_text().splitlines() if log.exists() else []
         log.unlink(missing_ok=True)
         return calls
@@ -43,12 +50,15 @@ def test_syntax():
     subprocess.run(["bash", "-n", str(SCRIPT)], check=True)
 
 
-@pytest.mark.parametrize("cmd,etime", [
-    (PLAIN + " --remote-debugging-port=9222", "00:05"),
-    (PLAIN, "01:30"),
-    (PLAIN, "01:00:05"),
-    (PLAIN, "2-03:00:00"),
-])
+@pytest.mark.parametrize(
+    "cmd,etime",
+    [
+        (PLAIN + " --remote-debugging-port=9222", "00:05"),
+        (PLAIN, "01:30"),
+        (PLAIN, "01:00:05"),
+        (PLAIN, "2-03:00:00"),
+    ],
+)
 def test_no_action(run, cmd, etime):
     assert run(cmd, etime) == []
 
