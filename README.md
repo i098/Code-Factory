@@ -90,7 +90,7 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 | [CI pool](docs/ci-pool.md) | Self-hosted GitHub Actions slots: one job per fresh container, sized from half of the host's CPU and memory |
 | [Architecture](docs/architecture.md) | Why Ansible, host and container boundary, Docker worker, CI |
 | [Migration and recovery](docs/recovery.md) | New-device sequence, desktop access, troubleshooting, upgrades |
-| [Security](docs/security.md) | What is never exported, how to handle credentials, and remote access, including SSH between the host and a Mac |
+| [Security](docs/security.md) | What is never exported, how to handle credentials, and remote access, including SSH between the host and a Mac and prompt-free Dia remote debugging on the Mac |
 | [Shared credentials](docs/secrets.md) | `super.env` in Cloudflare Secrets Store: push, fetch on a new host, revoke |
 | [Google Workspace CLI](docs/google-workspace.md) | `gws`: one OAuth client in testing mode, sign-in for several Google accounts, and carrying each login to a headless host |
 | [Agent host move](docs/agent-host-move.md) | Moving the agents to a new host: what to copy by hand, parity checks, cutover |
