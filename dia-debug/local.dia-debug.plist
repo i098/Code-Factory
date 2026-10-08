@@ -2,9 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>local.browser-debug</string>
+  <key>Label</key><string>local.dia-debug</string>
   <key>ProgramArguments</key>
-  <array><string>/bin/bash</string><string>-c</string><string>exec "$HOME/.local/bin/browser-debug"</string></array>
+  <array><string>/bin/bash</string><string>-c</string><string>exec "$HOME/.local/bin/dia-debug"</string></array>
   <key>RunAtLoad</key><true/>
   <key>StartInterval</key><integer>15</integer>
 </dict>

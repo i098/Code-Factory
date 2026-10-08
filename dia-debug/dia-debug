@@ -1,16 +1,15 @@
 #!/bin/bash
-# Keep a Chromium browser on the Mac running with a local CDP port, so CDP
-# connections need no "Allow remote debugging?" prompt. Run every 15 s by launchd.
-# Change BUNDLE and APP for another non-Google Chromium build (Brave, Arc, Chromium).
-BUNDLE=${BROWSER_BUNDLE:-company.thebrowser.dia}
-APP=${BROWSER_APP:-Dia}
-PORT=${BROWSER_DEBUG_PORT:-9222}
+# Keep Dia running with a local CDP port, so CDP connections need no
+# "Allow remote debugging?" prompt. Run every 15 s by launchd.
+BUNDLE=company.thebrowser.dia
+PORT=9222
 FLAG=--remote-debugging-port=$PORT
-pid=$(pgrep -xo "$APP") || exit 0
+pid=$(lsappinfo info -only pid -app "$BUNDLE" | tr -dc 0-9)
+[ -n "$pid" ] || exit 0
 case " $(ps -o command= -p "$pid") " in *" $FLAG "*) exit 0 ;; esac
 if [ "$1" != --now ]; then
   # Relaunch only a browser that just started (Dock, link, login, self-update), once per pid.
-  mark=${TMPDIR:-/tmp}/browser-debug.$pid
+  mark=${TMPDIR:-/tmp}/dia-debug.$pid
   [ -e "$mark" ] && exit 0
   t=$(ps -o etime= -p "$pid" | tr -d ' ')
   case $t in *-*|*:*:*) exit 0 ;; esac

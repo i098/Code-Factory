@@ -74,18 +74,18 @@ The line holds only a public key. Do not put the private key `~/.ssh/id_ed25519_
 
 ##### Optional: browser remote debugging without a prompt
 
-With remote debugging turned on in `chrome://inspect`, a Chromium browser shows an "Allow remote debugging?" prompt for each new CDP connection. Only a person can click it. A browser started with `--remote-debugging-port` serves CDP on 127.0.0.1 with no prompt. This works for non-Google Chromium builds, such as Dia, Brave, Arc, Chrome Canary, and Chromium. Google Chrome refuses the flag on its default profile.
+With remote debugging turned on in `chrome://inspect`, a Chromium browser shows an "Allow remote debugging?" prompt for each new CDP connection. Only a person can click it. A browser started with `--remote-debugging-port` serves CDP on 127.0.0.1 with no prompt. Dia, a non-Google Chromium browser, allows the flag on its main profile.
 
-[`mac-browser-debug/browser-debug`](../mac-browser-debug/browser-debug) runs every 15 seconds from a user LaunchAgent. When the browser runs without the flag and started less than 90 seconds ago (from the Dock, a link, login, or a self-update), the script quits it with SIGTERM and opens it again with the flag. SIGTERM is Chromium's graceful quit, so the browser restores the session. The script tries one time per browser process, so it never takes away a window that is in use. `browser-debug --now` relaunches the browser at any age. The defaults are Dia and port 9222. For another browser, change `BUNDLE` and `APP` at the top of the script.
+[`dia-debug/dia-debug`](../dia-debug/dia-debug) runs every 15 seconds from a user LaunchAgent. When the browser runs without the flag and started less than 90 seconds ago (from the Dock, a link, login, or a self-update), the script quits it with SIGTERM and opens it again with the flag. SIGTERM is Chromium's graceful quit, so the browser restores the session. The script tries one time per browser process, so it never takes away a window that is in use. `dia-debug --now` relaunches the browser at any age. Another non-Google Chromium browser works after you change `BUNDLE` at the top of the script.
 
 To install, run this on the Mac from a copy of this repository:
 
 ```bash
 mkdir -p ~/.local/bin ~/Library/LaunchAgents
-cp mac-browser-debug/browser-debug ~/.local/bin/
-cp mac-browser-debug/local.browser-debug.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.browser-debug.plist
-~/.local/bin/browser-debug --now
+cp dia-debug/dia-debug ~/.local/bin/
+cp dia-debug/local.dia-debug.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.dia-debug.plist
+~/.local/bin/dia-debug --now
 ```
 
 To verify, run `curl -s http://127.0.0.1:9222/json/version` on the Mac. On the host, run `ssh -N -L 19222:127.0.0.1:9222 mac`. Then connect to the `webSocketDebuggerUrl` from `curl -s http://127.0.0.1:19222/json/version`, with port 9222 changed to 19222.
@@ -93,8 +93,8 @@ To verify, run `curl -s http://127.0.0.1:9222/json/version` on the Mac. On the h
 To remove, run this on the Mac, then quit and open the browser again:
 
 ```bash
-launchctl bootout gui/$(id -u)/local.browser-debug
-rm ~/.local/bin/browser-debug ~/Library/LaunchAgents/local.browser-debug.plist
+launchctl bootout gui/$(id -u)/local.dia-debug
+rm ~/.local/bin/dia-debug ~/Library/LaunchAgents/local.dia-debug.plist
 ```
 
 Risk: any local process on the Mac can control the signed-in browser without a prompt. The port is bound to 127.0.0.1 only.

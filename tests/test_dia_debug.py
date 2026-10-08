@@ -1,4 +1,4 @@
-"""mac-browser-debug/browser-debug: when it relaunches the browser with the CDP port flag."""
+"""dia-debug/dia-debug: when it relaunches the browser with the CDP port flag."""
 
 import os
 import subprocess
@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).parents[1] / "mac-browser-debug" / "browser-debug"
+SCRIPT = Path(__file__).parents[1] / "dia-debug" / "dia-debug"
 STUBS = {
-    "pgrep": 'echo 4242',
+    "lsappinfo": 'echo \'"pid"=4242\'',
     "ps": 'case "$2" in command=) echo "$CMD" ;; etime=) echo "$ETIME" ;; esac',
     "kill": '[ "$1" = -0 ] && exit 1; echo "kill $*" >> "$LOG"',
     "open": 'echo "open $*" >> "$LOG"',
