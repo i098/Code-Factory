@@ -38,9 +38,9 @@ const app = await Spectrum({
 });
 // Spectrum has no public accessor for the line's Advanced iMessage client, which owns Find My locations;
 // this reads its internal platform map (spectrum-ts 12.10). Recheck after a spectrum-ts upgrade.
-const platforms = Reflect.get(Reflect.get(app, "__internal") as object, "platforms") as Map<string, { client: { client: AdvancedIMessage }[] }>;
-const raw = platforms.get("imessage")?.client[0]?.client;
-if (!raw) throw new Error("fm-imessage: no Advanced iMessage client in spectrum-ts internals; recheck after an upgrade");
+const internals = Reflect.get(app, "__internal") as { platforms?: Map<string, { client?: { client?: AdvancedIMessage }[] }> } | undefined;
+const raw = internals?.platforms?.get?.("imessage")?.client?.[0]?.client;
+if (!raw) console.warn("fm-imessage: no Advanced iMessage client in spectrum-ts internals; GET /location is off until the bridge is updated for this spectrum-ts");
 let latest: Message | undefined;
 const saved = Bun.file(LATEST_FILE);
 if (await saved.exists()) {
@@ -59,6 +59,7 @@ Bun.serve({
     if (!localCommand(req.headers, PORT)) return new Response("forbidden\n", { status: 403 });
     const path = new URL(req.url).pathname;
     if (req.method === "GET" && path === "/location") {
+      if (!raw) return new Response("no location: the location client is unavailable after a spectrum-ts upgrade; the bridge needs an update\n", { status: 503 });
       try {
         return Response.json(await raw.locations.get(OWNER));
       } catch (e) {
