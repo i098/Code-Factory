@@ -369,6 +369,69 @@ console.log(JSON.stringify({{ turns: calls.map((c) => c.length), sizes, LIMIT, T
     assert result["retry"].startswith("Too long: your line is 2000 bytes, over the 512-byte limit.")
 
 
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_desk_call_stays_under_the_ceiling():
+    """A desk prompt with huge status and texts, plus every zoom result, never passes CEILING bytes."""
+    result = bun(f"""
+import {{ deskInput }} from {DESK};
+import {{ Budget, CEILING, LIMIT_REACHED, OVERHEAD, ZOOM_MAX, ZOOM_RESERVE }} from {MEMORY};
+const system = "s".repeat(3000), view = "v".repeat(64000);
+const {{ prompt, spent }} = deskInput(system, view, "q".repeat(500000), "HEAD" + "m".repeat(1000000) + "TAIL");
+const budget = new Budget(spent);
+const results = [], requests = [spent];
+for (let k = 0; k < 100; k++) {{
+  const r = budget.take("ZOOMHEAD" + "z".repeat(100000) + "ZOOMTAIL");
+  if (r === undefined) break;
+  results.push(r);
+  requests.push(budget.spent);
+}}
+console.log(JSON.stringify({{
+  first: spent, own: OVERHEAD + Buffer.byteLength(system + prompt), keepsEnds: prompt.includes("HEAD") && prompt.includes("TAIL"),
+  maxRequest: Math.max(...requests), zoomSizes: results.map((r) => Buffer.byteLength(r)), zoomEnds: results[0].startsWith("ZOOMHEAD") && results[0].endsWith("ZOOMTAIL"),
+  refused: results.includes(LIMIT_REACHED), CEILING, ZOOM_MAX, ZOOM_RESERVE,
+}}));
+""")
+    assert result["first"] == result["own"] <= result["CEILING"] - result["ZOOM_RESERVE"]
+    assert result["keepsEnds"] and result["zoomEnds"]
+    assert result["maxRequest"] <= result["CEILING"]
+    assert all(size <= result["ZOOM_MAX"] for size in result["zoomSizes"])
+    assert result["refused"]
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_compaction_stays_under_the_ceiling(tmp_path):
+    """One huge message is clipped head and tail, and retries stop before a request passes CEILING bytes."""
+    result = bun(f"""
+import {{ CEILING, LIMIT, Memory, OVERHEAD }} from {MEMORY};
+const requests = [], firsts = [];
+const chat = (system) => {{
+  let sent = Buffer.byteLength(system) + OVERHEAD;
+  return {{
+    async say(text) {{
+      sent += Buffer.byteLength(text);
+      requests.push(sent);
+      if (requests.length === 1) firsts.push(text);
+      const reply = "r".repeat(3000); // a model that never fits
+      sent += Buffer.byteLength(reply);
+      return reply;
+    }},
+    end() {{}},
+  }};
+}};
+const m = new Memory({json.dumps(str(tmp_path))}, chat);
+m.append("owner", "HEAD" + "m".repeat(1000000) + "TAIL");
+while (m.pending) await Bun.sleep(0);
+console.log(JSON.stringify({{
+  requests, CEILING, keepsEnds: firsts[0].includes("owner: HEAD") && firsts[0].includes("TAIL\\n</input>"),
+  size: m.nodes.get("0:0").size, LIMIT,
+}}));
+""")
+    assert len(result["requests"]) >= 2
+    assert max(result["requests"]) <= result["CEILING"]
+    assert result["keepsEnds"]
+    assert result["size"] <= result["LIMIT"]
+
+
 @pytest.mark.parametrize("args", [("hello",), ("--reply", "1", "hi"), ("--typing",), ("--react", "👍")])
 def test_send_commands_carry_the_local_header(tmp_path, args):
     result, calls = send(tmp_path, *args)

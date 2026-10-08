@@ -1,6 +1,6 @@
 // Pure decisions of the iMessage bridge (bridge.ts), kept free of spectrum-ts so tests run without it.
 import type { Message } from "spectrum-ts";
-import { UNBUILT } from "./memory.ts";
+import { CEILING, clip, OVERHEAD, STATUS_MAX, UNBUILT, ZOOM_RESERVE } from "./memory.ts";
 
 // The front desk's system prompt. The owner's name and the model names come from config, never from this text.
 export function deskPrompt(owner: string, deskModel: string, supervisorModel: string): string {
@@ -25,6 +25,17 @@ lines cover one message, older ones more. A message not summarized yet shows as 
 Its latest word on a thing is the truth. Whenever you need a fact, find its latest mention in <chat> and zoom until
 you have it whole, before you answer or say you don't know: zoom(id, n) opens line id+n into the two lines under it,
 and zoom(id, 1) gives the message whole.`;
+}
+
+// One desk call's input: the view, the fleet status (clipped to STATUS_MAX) and his latest messages (clipped to
+// what is left), so the system prompt and the input stay ZOOM_RESERVE under CEILING. `spent` is the call's size
+// in bytes so far, for the zoom tool's budget.
+export function deskInput(system: string, view: string, status: string, latest: string): { prompt: string; spent: number } {
+  const head = `<chat>\n${view}\n</chat>\n\nFleet status (durable records, may lag):\n${clip(status, STATUS_MAX)}\n\nLatest messages, after the chat:\n`;
+  const tail = "\n\nDecide your response to his latest texts.";
+  const room = CEILING - OVERHEAD - ZOOM_RESERVE - Buffer.byteLength(system + head + tail);
+  const prompt = head + clip(latest, room) + tail;
+  return { prompt, spent: OVERHEAD + Buffer.byteLength(system + prompt) };
 }
 
 // The tapback emoji when the desk's whole answer is REACT:<emoji>, else undefined (send the answer as text).

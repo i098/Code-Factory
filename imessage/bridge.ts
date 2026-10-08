@@ -15,7 +15,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import type { AdvancedIMessage } from "@photon-ai/advanced-imessage/grpc";
 import { Spectrum, type Message } from "spectrum-ts";
 import { imessage } from "spectrum-ts/providers/imessage";
-import { type Attachment, bubbles, describe, DeskTiming, deskPrompt, isSkip, localCommand, parseReact, typingPause } from "./desk.ts";
+import { type Attachment, bubbles, describe, DeskTiming, deskInput, deskPrompt, isSkip, localCommand, parseReact, typingPause } from "./desk.ts";
 import { type Chat, Memory } from "./memory.ts";
 
 const env = process.env;
@@ -147,14 +147,13 @@ async function runDesk(current: () => boolean) {
   const inbox = Bun.spawn([INBOX, "status"], { cwd: FM_HOME, env: { ...env, FM_HOME }, stdout: "pipe", stderr: "ignore" });
   const status = await new Response(inbox.stdout).text();
   if (!current()) return target.space.stopTyping();
-  // The view of the chat before his burst, then the per-turn state, then his burst whole.
+  // The view of the chat before his burst, then the per-turn state, then his burst, all under the ceiling.
   const from = burstFrom ?? memory.msgs.length;
-  const prompt = `<chat>\n${memory.render(from)}\n</chat>\n\nFleet status (durable records, may lag):\n${status}\n\n` +
-    `Latest messages, after the chat:\n${memory.msgs.slice(from).map((m) => `${m.kind}: ${m.text}`).join("\n")}\n\nDecide your response to his latest texts.`;
+  const { prompt, spent } = deskInput(DESK_PROMPT, memory.render(from), status, memory.msgs.slice(from).map((m) => `${m.kind}: ${m.text}`).join("\n"));
   const proc = Bun.spawn(
     ["omp", "-p", "--no-extensions", "-e", `${import.meta.dir}/zoom.ts`, "--no-tools", "--no-skills", "--no-rules", "--no-session",
       "--thinking=off", "--model", DESK_MODEL, "--system-prompt", DESK_PROMPT],
-    { cwd: DESK_DIR, env: { ...env, FM_DESK_MEMORY: MEMORY_DIR }, stdin: new Blob([prompt]), stdout: "pipe", stderr: "ignore", timeout: 45_000 },
+    { cwd: DESK_DIR, env: { ...env, FM_DESK_MEMORY: MEMORY_DIR, FM_DESK_SPENT: String(spent) }, stdin: new Blob([prompt]), stdout: "pipe", stderr: "ignore", timeout: 45_000 },
   );
   deskRun = proc;
   const drafted = (await new Response(proc.stdout).text()).replace(/^Working\.\.\.\s*/m, "").trim();

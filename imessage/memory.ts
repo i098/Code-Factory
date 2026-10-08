@@ -18,6 +18,16 @@ export const CONTEXT_MAX = 16_000; // the view a compaction reads, merged furthe
 export const WORKERS = 3; // compaction calls at once
 export const TRIES = 5; // calls per compaction when the line comes back too long
 export const UNBUILT = "(not summarized yet: zoom it)";
+// Haiku's price rises past 100k input tokens. No desk or compaction request sends more than CEILING bytes, about
+// 60k tokens counted as bytes / 3, a count that overstates tokens for text.
+export const CEILING = 180_000;
+export const OVERHEAD = 4_000; // the runner's own framing and tool schema in each request
+export const CALL_OVERHEAD = 500; // one tool call or retry turn's framing
+export const ZOOM_MAX = 16_000; // bytes per zoom result
+export const ZOOM_RESERVE = 2 * ZOOM_MAX; // room a desk prompt keeps for zooms
+export const STATUS_MAX = 16_000; // the fleet status in a desk prompt
+export const RETRY_RESERVE = 8_000; // room a compaction prompt keeps for its retries
+export const LIMIT_REACHED = "context limit reached: answer from what you have, no more zooms";
 
 export type Kind = "owner" | "supervisor" | "desk";
 export type Msg = { i: number; kind: Kind; text: string; size: number; date: string };
@@ -34,6 +44,35 @@ const name = (x: Line) => `${first(x)}+${2 ** x[0]}`;
 // The first n bytes of s, without a broken character at the end.
 const cut = (s: string, n: number) => Buffer.from(s).subarray(0, n).toString().replace(/\uFFFD+$/, "");
 const RULER = "-".repeat(LIMIT);
+
+// One head-and-tail cut, like the gist's clipped tool output: text in at most max bytes.
+export function clip(text: string, max: number): string {
+  const size = bytes(text);
+  if (size <= max) return text;
+  const mark = `\n[... ${size} bytes, clipped to the head and tail ...]\n`;
+  const half = Math.floor((max - bytes(mark)) / 2);
+  if (half <= 0) return cut(text, Math.max(0, max));
+  const tail = Buffer.from(text).subarray(size - half).toString().replace(/^\uFFFD+/, "");
+  return cut(text, half) + mark + tail;
+}
+
+// The running input of one desk call, in bytes: each zoom result is clipped to ZOOM_MAX and counted. A result
+// that would pass CEILING is refused; when even the refusal would pass it, take() returns undefined and the
+// call must end.
+export class Budget {
+  constructor(public spent: number) {}
+
+  take(text: string): string | undefined {
+    const result = clip(text, ZOOM_MAX);
+    if (this.spent + CALL_OVERHEAD + bytes(result) <= CEILING) {
+      this.spent += CALL_OVERHEAD + bytes(result);
+      return result;
+    }
+    if (this.spent + CALL_OVERHEAD + bytes(LIMIT_REACHED) > CEILING) return undefined;
+    this.spent += CALL_OVERHEAD + bytes(LIMIT_REACHED);
+    return LIMIT_REACHED;
+  }
+}
 
 // Merge the most due sibling pairs until the view's size is at most target or no pair's parent is built.
 // due = (T - last) / 2^l: how long ago the pair ended, in its own line size; the oldest wins a tie.
@@ -227,10 +266,7 @@ export class Memory {
       if (bytes(text) > LIMIT) {
         text = await this.compact(i, `Compaction: compress message ${i} into one line of at most ${LIMIT} bytes
 (about 70 words), the length of this ruler:
-${RULER}
-<input>
-${text}
-</input>`);
+${RULER}`, text);
       }
     } else {
       const a: Line = [l - 1, 2 * i];
@@ -242,11 +278,7 @@ ${text}
 ${LIMIT} bytes (about 70 words), the length of this ruler:
 ${RULER}
 <chat> may hold their messages, ${first(x)} to ${last(x)}, in more detail: take details
-of them from there too.
-<input>
-${ta.replace(/\s*\n\s*/g, " ")}
-${tb.replace(/\s*\n\s*/g, " ")}
-</input>`);
+of them from there too.`, `${ta.replace(/\s*\n\s*/g, " ")}\n${tb.replace(/\s*\n\s*/g, " ")}`);
       }
     }
     const node: Node = { l, i, text, size: bytes(text) };
@@ -256,23 +288,34 @@ ${tb.replace(/\s*\n\s*/g, " ")}
   }
 
   // One compaction call: the context view (built lines for messages before `end`, merged down to CONTEXT_MAX),
-  // then the task. A line over LIMIT gets up to TRIES calls in one conversation; the shortest is kept, cut to LIMIT.
-  private async compact(end: number, task: string): Promise<string> {
+  // then the task and its input. A line over LIMIT gets up to TRIES calls in one conversation; the shortest is
+  // kept, cut to LIMIT. No request's input passes CEILING: the input is clipped to leave RETRY_RESERVE, and a
+  // retry that would pass it is not sent.
+  private async compact(end: number, task: string, input: string): Promise<string> {
     const context: Line[] = [];
     for (const x of this.view) {
       if (last(x) >= end || !this.nodes.has(key(x))) break;
       context.push(x);
     }
     shrink(context, end, CONTEXT_MAX, (x) => bytes(render(this.nodes, x)) + 1, (x) => this.nodes.has(key(x)));
+    const head = `<chat>\n${context.map((x) => render(this.nodes, x)).join("\n")}\n</chat>\n${task}\n<input>\n`;
+    const tail = "\n</input>";
+    const prompt = head + clip(input, CEILING - OVERHEAD - RETRY_RESERVE - bytes(COMPACT_PROMPT) - bytes(head) - bytes(tail)) + tail;
+    let spent = OVERHEAD + bytes(COMPACT_PROMPT) + bytes(prompt);
     const chat = this.chat(COMPACT_PROMPT);
     try {
-      let line = (await chat.say(`<chat>\n${context.map((x) => render(this.nodes, x)).join("\n")}\n</chat>\n${task}`)).trim();
+      let reply = await chat.say(prompt);
+      let line = reply.trim();
       let best = line;
       for (let n = 1; n < TRIES && bytes(line) > LIMIT; n++) {
-        line = (await chat.say(`Too long: your line is ${bytes(line)} bytes, over the ${LIMIT}-byte limit. Write
+        const retry = `Too long: your line is ${bytes(line)} bytes, over the ${LIMIT}-byte limit. Write
 the whole line again for the same <input>, cutting just enough of the
 least valuable items to fit before this cut:
-${cut(line, LIMIT)}| ← LIMIT`)).trim();
+${cut(line, LIMIT)}| ← LIMIT`;
+        spent += bytes(reply) + CALL_OVERHEAD + bytes(retry);
+        if (spent > CEILING) break;
+        reply = await chat.say(retry);
+        line = reply.trim();
         if (bytes(line) < bytes(best)) best = line;
       }
       if (!best) throw new Error("compaction: empty line");
