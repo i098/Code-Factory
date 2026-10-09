@@ -1,8 +1,8 @@
 // Cloudflare Workers static assets for the crewship.si landing page.
-// There is no Worker script: Cloudflare serves the files in public/ as they are,
-// so this file and README.md stay out of the site.
+// There is no Worker script: Cloudflare serves dist/ as it is. Run harbor/build.py first;
+// it copies public/ to dist/ and fills in the points of interest.
 {
   "name": "crewship",
   "compatibility_date": "2026-10-09",
-  "assets": { "directory": "./public" }
+  "assets": { "directory": "./dist" }
 }

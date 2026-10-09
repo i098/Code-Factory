@@ -11,44 +11,32 @@
 <script type="module" src="harbor.js"></script>
 </head>
 <body>
-<a class="skip" href="#manifest">Skip to the feature list</a>
+<div id="page" class="page">
 <header class="top">
   <h1>Crewship</h1>
   <p class="tagline">Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, the omp agent fleet, and the Concord and slk chat clients, provisioned by Ansible from a checksum-verified toolchain.</p>
   <nav aria-label="Project links">
-    <a href="https://github.com/i098/Crewship">GitHub</a>
-    <a href="https://github.com/i098/Crewship/releases">Releases</a>
-    <a href="https://github.com/i098/Crewship#quick-start">Install</a>
+    <a target="_blank" rel="noopener" href="https://github.com/i098/Crewship">GitHub</a>
+    <a target="_blank" rel="noopener" href="https://github.com/i098/Crewship/releases">Releases</a>
+    <a target="_blank" rel="noopener" href="https://github.com/i098/Crewship#quick-start">Install</a>
   </nav>
 </header>
 <main>
-  <section id="stage" class="stage" hidden tabindex="0" role="application" aria-roledescription="3D harbor" aria-label="The ship at the dock. The list of features after this scene has the same content." aria-describedby="help">
-    <canvas id="scene" aria-hidden="true"></canvas>
-    <div id="card" class="card"></div>
-    <div id="pad" class="pad" aria-hidden="true"><span></span></div>
-  </section>
-  <p id="help" class="help" hidden><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys walk and turn, <kbd>R</kbd> and <kbd>F</kbd> look up and down, or click the scene and look with the mouse. <kbd>Enter</kbd> opens what you look at. On a phone, the pad walks and a drag looks around.</p>
   <section id="manifest" class="manifest" aria-labelledby="manifest-title">
     <h2 id="manifest-title">Ship's manifest</h2>
     <ul>
-      <li data-spot="gangway"><a href="https://github.com/i098/Crewship#quick-start">Quick start</a><p>The gangway. Clone the repository on Ubuntu 24.04 or 26.04, run <code>./onboard.sh</code>, then <code>./ship.sh dock</code>, <code>inspect</code>, <code>chart</code> and <code>launch</code>.</p></li>
-      <li data-spot="helm"><a href="https://github.com/i098/Crewship/blob/main/docs/configuration.md#commands">The ship.sh commands</a><p>The helm. <code>dock</code> writes <code>.local/host.yml</code>, <code>inspect</code> checks it, <code>chart</code> runs the playbook in check mode, <code>launch</code> is the only step that changes the host, and <code>survey</code> checks the result.</p></li>
-      <li data-spot="mast"><a href="https://github.com/i098/Crewship/blob/main/docs/omp.md">The omp agent fleet</a><p>The mast. omp is the agent harness Crewship installs: sign-in, model roles, fallbacks and the advisor.</p></li>
-      <li data-spot="nest"><a href="https://github.com/i098/Crewship/blob/main/docs/herdr.md">Herdr sidebar</a><p>The crow's nest. The Spaces and Agents sidebar layouts show every workspace and agent, fed by a reporter timer and an omp extension.</p></li>
-      <li data-spot="sail"><a href="https://github.com/i098/Crewship/blob/main/docs/architecture.md#seeded-firstmate-and-omp-configuration">Firstmate</a><p>The sail. The <code>firstmate</code> profile installs the Firstmate orchestrator and seeds its crew dispatch and omp overlays from this repository.</p></li>
-      <li data-spot="hold"><a href="https://github.com/i098/Crewship/blob/main/docs/dependencies.md">Dependencies</a><p>The cargo hold. Every tool tracks its latest release and is verified against the checksum its publisher posts.</p></li>
-      <li data-spot="cabin"><a href="https://github.com/i098/Crewship/blob/main/docs/security.md">Security</a><p>The cabin. What is never exported, how to handle credentials, and remote access.</p></li>
-      <li data-spot="lantern"><a href="https://github.com/i098/Crewship/blob/main/docs/fleet-guards.md">Fleet guards</a><p>The bow lantern. Shared Supabase, Docker guard, dev-server reaper, storage guard, spawn memory floor and the browser ladder keep a fleet host out of swap exhaustion.</p></li>
-      <li data-spot="containers"><a href="https://github.com/i098/Crewship/blob/main/docs/ci-pool.md">CI pool</a><p>The containers on the quay. Self-hosted GitHub Actions slots: one job per fresh container, sized from half of the host's CPU and memory.</p></li>
-      <li data-spot="antenna"><a href="https://github.com/i098/Crewship/blob/main/docs/chat.md">Chat clients</a><p>The radio mast. The Concord (Discord) and slk (Slack) terminal clients, each in its own Herdr tab.</p></li>
-      <li data-spot="sign"><a href="https://github.com/i098/Crewship">Crewship on GitHub</a><p>The sign on the dock. The source, the docs and the issues.</p></li>
-      <li data-spot="office"><a href="https://github.com/i098/Crewship/releases">Releases</a><p>The harbor office. Tagged releases, with the notes from the changelog.</p></li>
-      <li data-spot="lighthouse"><a href="https://github.com/i098/Crewship/blob/main/docs/architecture.md">Architecture</a><p>The lighthouse. Why Ansible, the host and container boundary, the Docker worker, and CI.</p></li>
+<!-- points: harbor/build.py fills this list from README.md and CHANGELOG.md -->
     </ul>
   </section>
 </main>
 <footer class="foot">
-  <p>Crewship is built in the open at <a href="https://github.com/i098/Crewship">github.com/i098/Crewship</a>. This page draws every frame as text, in your browser.</p>
+  <p>Crewship is built in the open at <a target="_blank" rel="noopener" href="https://github.com/i098/Crewship">github.com/i098/Crewship</a>. This page draws every frame as text, in your browser.</p>
 </footer>
+</div>
+<section id="stage" class="stage" hidden tabindex="0" role="application" aria-roledescription="3D harbor" aria-label="The ship at the dock, a walkable 3D scene. The feature list before it has the same content.">
+  <canvas id="scene" aria-hidden="true"></canvas>
+  <div id="card" class="card"></div>
+  <div id="pad" class="pad" aria-hidden="true"><span></span></div>
+</section>
 </body>
 </html>

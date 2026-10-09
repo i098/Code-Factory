@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How this is built: Crewship harbor</title>
+<meta name="theme-color" content="#0a0f1c">
+<link rel="stylesheet" href="harbor.css">
+</head>
+<body class="how">
+<pre aria-hidden="true">
+        |>
+       _|_            how this is built
+  ____/___\____     ~~~~~~~~~~~~~~~~~~~~~
+  \  o  o  o  /   .:-=+#  one ray per character
+~~~\_________/~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+</pre>
+<h1>How this harbor is built</h1>
+<ul>
+  <li><b>Renderer.</b> Every frame casts one ray per character cell from your eye. The world is a list of convex solids, each a set of planes, plus the water plane; the ship's solids live in their own frame that bobs and rolls at the dock. The nearest hit picks the cell.</li>
+  <li><b>Characters.</b> Light and how squarely a face turns to you pick a glyph from the ramp <code> .:-=+#</code>. Floors stay sparse, water ripples in <code>~ - .</code>, and an edge glyph (<code>| - / \ _</code>) is drawn wherever one surface meets a farther one, so shapes read as outlines.</li>
+  <li><b>Frame loop.</b> <code>requestAnimationFrame</code> moves you, rocks the ship and redraws the grid on a canvas, one fill per run of one colour. The grid is sized to the screen; on a slow phone the glyphs grow so there are fewer cells. With reduced motion the scene stands still and redraws only when you move.</li>
+  <li><b>Controls.</b> WASD or arrows walk and turn, R and F look up and down, the mouse looks around, Enter opens what you point at. On a phone the pad walks and a drag looks. The label floats beside what you point at, with a leader line in text.</li>
+  <li><b>Mini map.</b> M picks a point on the text map in the corner, M again fills the screen with it; arrows choose, Enter jumps there. On a phone, tap a point.</li>
+  <li><b>Content.</b> <code>harbor/build.py</code> builds the points of interest from the README's Docs table and the changelog, so the page follows Crewship as it changes.</li>
+  <li><b>Deploy.</b> <code>harbor/</code> is plain HTML, CSS and JavaScript with no dependencies. A GitHub Actions workflow builds it and deploys it to Cloudflare Workers static assets on every push to <code>main</code> and on each release; nothing in <code>harbor/</code> ever reaches a Crewship host or image.</li>
+</ul>
+<p><a href="https://github.com/i098/Crewship/tree/main/harbor" target="_blank" rel="noopener">The source on GitHub</a> &middot; <a href="./">Back to the harbor</a></p>
+</body>
+</html>

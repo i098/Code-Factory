@@ -5,7 +5,10 @@ const stage = document.getElementById("stage");
 const canvas = document.getElementById("scene");
 const ctx = canvas.getContext("2d");
 const card = document.getElementById("card");
-stage.hidden = document.getElementById("help").hidden = false; // shown only when this script runs
+// With JavaScript the scene fills the screen and the plain page stays for screen readers only.
+stage.hidden = false;
+document.getElementById("page").classList.add("sr-only");
+stage.focus({ preventScroll: true });
 const pad = document.getElementById("pad");
 const knob = pad.firstElementChild;
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -59,11 +62,22 @@ function disc(list, cx, cy, z0, z1, r, mat, o) {
   return solid(list, pl, [cx - r * 1.09, cy - r * 1.09, z0, cx + r * 1.09, cy + r * 1.09, z1], mat, o);
 }
 
+// Rope or spar from a to b: a box of half-width r aligned with the segment.
+function beam(list, a, b, mat, o = {}, r = 0.03) {
+  const unit = (p) => { const l = Math.hypot(...p); return p.map((c) => c / l); };
+  const cross = (p, q) => [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]];
+  const u = unit(b.map((c, i) => c - a[i]));
+  const v = unit(cross(u, Math.abs(u[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])), w = cross(u, v);
+  const side = (n, s) => [...n.map((c) => c * s), ...a.map((c, i) => c + n[i] * s * r)];
+  const planes = [[...u.map((c) => -c), ...a], [...u, ...b], side(v, 1), side(v, -1), side(w, 1), side(w, -1)];
+  const bb = [...a.map((c, i) => Math.min(c, b[i]) - r), ...a.map((c, i) => Math.max(c, b[i]) + r)];
+  return solid(list, planes, bb, mat, { solid: false, ...o });
+}
 // A 3x5 pixel font for the painted signs.
 const FONT = { A: "010101111101101", B: "110101110101110", C: "011100100100011", E: "111100110100111",
   H: "101101111101101", I: "111010010010111", O: "010101101101010", P: "110101110100100",
   R: "110101110101101", S: "011100010001110", W: "101101101111101" };
-// Paints `text` on the face whose outward normal is -z, inside the rectangle [u0,u1] x [v0,v1].
+// Paints `text` inside the rectangle [u0,u1] x [v0,v1] of a face, u running left to right as seen from the front.
 function painted(text, u0, u1, v0, v1) {
   const cols = text.length * 4 - 1;
   const px = Math.min((u1 - u0) / cols, (v1 - v0) / 5);
@@ -91,11 +105,6 @@ for (const z of [-4, 9]) {
   box(world, 6.4, 1.2, z, 6.56, 4.2, z + 0.16, "t");
   box(world, 6.24, 4.2, z - 0.14, 6.72, 4.65, z + 0.3, "l");
 }
-const signText = painted("CREWSHIP", 3.95, 6.65, 2.45, 3.45);
-box(world, 4.1, 1.2, 12.55, 4.25, 2.5, 12.7, "o", { spot: "sign" });
-box(world, 6.35, 1.2, 12.55, 6.5, 2.5, 12.7, "o", { spot: "sign" });
-box(world, 3.85, 2.35, 12.5, 6.75, 3.55, 12.62, "o", { spot: "sign",
-  tex: (x, y, z, nx, ny, nz) => (nz < -0.5 && signText(x, y) ? "l" : null) });
 const ribs = (x, y, z, nx, ny, nz) => (Math.sin((Math.abs(nz) > 0.5 ? x : z) * 10) > 0.45 ? "-" : null);
 box(world, 9, 1.2, 16, 15, 3.8, 18.5, "r", { spot: "containers", tex: ribs });
 box(world, 9.4, 3.8, 16.2, 15.4, 6.4, 18.7, "b", { spot: "containers", tex: ribs });
@@ -127,12 +136,52 @@ for (let i = 0; i < 16; i++) {
     (nz < -0.5 && (y % 2.2) > 1 && (x % 2) > 0.9 && hash(Math.floor(x / 2), Math.floor(y / 2.2)) < 0.3 ? "l" : null) });
 }
 
+// Harbor detail, kept to the edges so the walk stays clear: cargo, rope, boats, rocks, palms, lamps.
+for (const [x, z, h] of [[6.2, -9.5, 0.8], [6.2, -8.6, 0.8], [6.25, -9.1, 1.6], [12, 20.5, 0.9], [13, 20.6, 0.9], [12.5, 20.5, 1.8]]) {
+  box(world, x, h - 0.8 + 1.2, z, x + 0.75, h + 1.2, z + 0.75, "o", { tex: (x, y, z, nx, ny, nz) => (Math.abs(nx) + Math.abs(nz) > 0.5 && ((x + z + y) * 4 + 99) % 1 < 0.15 ? "-" : null) });
+}
+for (const [x, z] of [[6.5, 0.6], [6.5, 1.3], [5.9, 0.9], [6.5, 10.8], [15.5, 20.5], [16.2, 20.4]]) {
+  column(world, x, z, 0.3, 0.27, 1.2, 2.1, "o", { spot: "barrels", tex: (x, y) => (Math.abs(y - 1.42) < 0.06 || Math.abs(y - 1.88) < 0.06 ? "-" : null) });
+}
+for (const [x, z] of [[3.6, -4.6], [3.6, 6.4], [6.4, -13]]) column(world, x, z, 0.38, 0.38, 1.2, 1.36, "s", { solid: false });
+function boat(cx, z0, w, len, mat, spot = null) {
+  const z1 = z0 + len, zb = z1 - w, top = 0.45;
+  solid(world, [[0, 1, 0, 0, top, 0], [0, -1, 0, 0, -0.3, 0], [0, 0, -1, 0, 0, z0], [1, -0.4, 0, cx + w / 2, top, 0],
+    [-1, -0.4, 0, cx - w / 2, top, 0], [w, 0, w / 2, cx + w / 2, 0, zb], [-w, 0, w / 2, cx - w / 2, 0, zb]],
+  [cx - w / 2, -0.3, z0, cx + w / 2, top, z1], mat, { spot, solid: false, tex: (x, y) => (y > 0.25 && y < 0.35 ? "s" : null) });
+}
+boat(-8, 9.5, 1.3, 3.6, "r", "lifeboat");
+boat(-11.5, 8.6, 1.2, 3.2, "b", "tender");
+boat(9.5, 7, 1.4, 4, "o");
+for (let z = -32; z < 12; z += 5.5) column(world, -26.6, z + hash(z, 4) * 2, 0.9 + hash(z, 5) * 0.5, 0.35, 0.2, 1.3 + hash(z, 6) * 0.8, "t");
+for (const [x, z] of [[21, 24], [-16, 19], [-30, 2]]) {
+  column(world, x, z, 0.28, 0.16, z > 10 ? 1.2 : 1, 7, "o");
+  for (let a = 0; a < 6; a++) beam(world, [x, 7, z], [x + 2.6 * Math.cos(a * 1.05), 5.6, z + 2.6 * Math.sin(a * 1.05)], "g");
+}
+for (const x of [-4, 12]) {
+  box(world, x, 1.2, 14.4, x + 0.16, 4.2, 14.56, "t");
+  box(world, x - 0.16, 4.2, 14.26, x + 0.32, 4.65, 14.7, "l");
+}
+// A mailbox by the office and a notice board on the quay that leads to how this page is built.
+box(world, -0.55, 1.2, 19.9, -0.45, 2.2, 20, "t", { spot: "mailbox" });
+box(world, -0.8, 2.2, 19.7, -0.2, 2.7, 20.2, "r", { spot: "mailbox" });
+const howText = painted("HOW", -9.45, -8.15, 2.45, 3.25); // faces north, so left to right runs toward -x
+for (const x of [8.1, 9.35]) box(world, x, 1.2, 14.62, x + 0.15, 2.4, 14.75, "o", { spot: "how" });
+box(world, 7.95, 2.35, 14.5, 9.65, 3.35, 14.62, "o", { spot: "how", tex: (x, y, z, nx, ny, nz) => (nz > 0.5 ? (howText(-x, y) ? "l" : "-") : null) });
+
 // Ship, in its own frame: hull, rails, cabin, helm, mast, sail, crow's nest, hatch, lantern.
 const k = 1 / 3.2;
 solid(ship, [[0, 1, 0, 0, DECK, 0], [0, -1, 0, 0, -1.2, 0], [0, 0, -1, 0, 0, -12],
   [1, -k, 0, 0.7, DECK, 0], [-1, -k, 0, -3.7, DECK, 0], [4, 0, 2.2, 0.7, 0, 6], [-4, 0, 2.2, -3.7, 0, 6]],
 [-3.7, -1.2, -12, 0.7, DECK, 10], "o", { solid: false,
   tex: (x, y, z, nx, ny) => (ny > 0.5 ? seam(x) : y > 1.3 && y < 1.6 ? "s" : null) });
+// Low bulwarks along the deck edge, open at the gangway; the deck's walkable area keeps you aboard.
+for (const [x0, x1, z0, z1] of [[-3.7, -3.55, -12, 6], [0.55, 0.7, -12, -2], [0.55, 0.7, -0.4, 6], [-3.7, 0.7, -12, -11.85]]) {
+  box(ship, x0, DECK, z0, x1, 2.5, z1, "o", { solid: false });
+}
+// The ship's name on a board on the starboard bow, facing the dock.
+const nameText = painted("CREWSHIP", 0.2, 6, 0.75, 1.8);
+box(ship, 0.6, 0.7, 0.1, 0.74, 1.85, 6, "o", { spot: "sign", tex: (x, y, z, nx) => (nx > 0.5 ? (nameText(z, y) ? "l" : "-") : null) });
 box(ship, -3.3, DECK, -11.6, 0.1, 4.3, -8.2, "s", { spot: "cabin", tex: (x, y, z, nx, ny, nz) => {
   if (nz < 0.5) return null;
   if (x > -1.9 && x < -1.1 && y < 3.8) return "o";
@@ -146,8 +195,11 @@ disc(ship, SX, 3.3, -6.85, -6.72, 0.62, "o", { spot: "helm", tex: (x, y) => {
 } });
 column(ship, SX, -1, 0.22, 0.17, DECK, 14.6, "o", { spot: "mast" });
 box(ship, -5.2, 11.2, -1.1, 2.2, 11.4, -0.9, "o", { spot: "mast" });
-box(ship, -5, 5.6, -1.1, 2, 5.76, -0.9, "o", { spot: "mast" });
-box(ship, -4.9, 5.8, -0.76, 1.9, 11.15, -0.66, "s", { spot: "sail", tex: (x, y) => ((y % 1.1) < 0.09 ? "-" : null) });
+// Docked, so the sail is furled on the yard; the shrouds and stays make the rig read as a ship.
+box(ship, -4.9, 11.4, -1.25, 1.9, 11.85, -0.75, "s", { tex: (x) => ((x + 9) % 0.8 < 0.1 ? "-" : null) });
+for (const x of [-3.6, 0.6]) beam(ship, [SX, 12.3, -1], [x, 2.5, 1.5], "o");
+beam(ship, [SX, 14.2, -1], [SX, 2.3, 13], "o");
+beam(ship, [SX, 14.2, -1], [SX, 4.55, -11.6], "o");
 column(ship, SX, -1, 0.9, 0.95, 12.3, 13.2, "o", { spot: "nest", tex: (x, y) => (y < 12.5 ? "-" : null) });
 box(ship, SX, 14.4, -1.03, SX + 1.2, 15.05, -0.97, "r");
 box(ship, -2.7, DECK, 2.4, -0.3, 2.55, 4.8, "o", { spot: "hold",
@@ -156,6 +208,12 @@ box(ship, -3.3, DECK, 5, -2.5, 2.8, 5.8, "o", { spot: "hold" });
 box(ship, SX - 0.08, DECK, 7.2, SX + 0.08, 3.3, 7.36, "o", { spot: "lantern" });
 box(ship, SX - 0.22, 3.3, 7.07, SX + 0.22, 3.75, 7.5, "l", { spot: "lantern" });
 box(ship, SX - 0.08, 2.2, 9.5, SX + 0.08, 2.35, 13, "o");
+// A spyglass on the cabin roof, the ship's bell at the bow, a strongbox on the port deck.
+beam(ship, [-2.8, 4.55, -10.6], [-2.8, 5.3, -10.6], "o", { spot: "spyglass" }, 0.05);
+beam(ship, [-3.1, 5.2, -11.2], [-2.3, 5.55, -9.9], "t", { spot: "spyglass" }, 0.1);
+box(ship, -2.95, DECK, 6, -2.8, 3.6, 6.15, "o", { spot: "bell" });
+column(ship, -2.87, 6.07, 0.3, 0.12, 2.85, 3.45, "r", { spot: "bell" });
+box(ship, -3.35, DECK, 0.3, -2.85, 2.5, 0.9, "t", { spot: "strongbox", tex: (x, y) => (Math.abs(y - 2.3) < 0.05 ? "-" : null) });
 
 // The gangway hinges between the rocking deck and the dock, so its planes are rebuilt per frame.
 const gangway = solid(world, [[0, 1, 0, 0, 0, 0], [0, -1, 0, 0, 0, 0], [1, 0, 0, 3.1, 0, 0],
@@ -196,7 +254,7 @@ function blocked(x, z, fy) {
   return false;
 }
 
-const me = { x: -0.3, z: -7.6, yaw: 0.42, pitch: 0.1 };
+const me = { x: 0, z: -7.4, yaw: 0.2, pitch: 0.03 };
 const keys = new Set();
 const stick = { x: 0, y: 0 };
 let moved = false;
@@ -232,24 +290,27 @@ function trace(list, ox, oy, oz, dx, dy, dz) {
   }
 }
 
-const RAMP = " .:-=+*#%@";
-const RANGE = { lighthouse: 400, nest: 30, office: 40, antenna: 50, containers: 40, sail: 20 };
+const RAMP = " .:-=+#";
+const RANGE = { lighthouse: 400, nest: 30, office: 40, antenna: 50, containers: 40, lifeboat: 25, tender: 25 };
 const L = [-0.35, 0.8, -0.48];
 const MOON = (() => { const v = [0.2, 0.3, 0.93], l = Math.hypot(...v); return v.map((c) => c / l); })();
+// Objects whose feature is not in the page's list are scenery.
+for (const s of [...world, ...ship]) if (s.spot && !spots[s.spot]) s.spot = null;
 const anchors = {};
 for (const [list, lift] of [[world, 0], [ship, 1]]) {
   for (const s of list) {
     if (!s.spot) continue;
-    const b = s.bb, a = (anchors[s.spot] ||= { x: 0, y: 0, z: 0, n: 0, ship: lift });
+    const b = s.bb, a = (anchors[s.spot] ||= { x: 0, y: 0, z: 0, n: 0, r: 0, ship: lift });
     a.x += (b[0] + b[3]) / 2; a.y += (b[1] + b[4]) / 2; a.z += (b[2] + b[5]) / 2; a.n++;
+    a.r = Math.max(a.r, (b[3] - b[0]) / 2, (b[5] - b[2]) / 2, (b[4] - b[1]) / 3);
   }
 }
 for (const a of Object.values(anchors)) { a.x /= a.n; a.y /= a.n; a.z /= a.n; }
 
 let cols = 0, rows = 0, cellW = 8, cellH = 13, scale = 1, target = null, padX = 0, padY = 0;
 const MONO = getComputedStyle(document.documentElement).getPropertyValue("--mono");
-const COLORS = { "": "#5c6a88", k: "#e9eefb", w: "#3f78b8", m: "#a9c8f0", o: "#b98a58", s: "#e9dfc4",
-  t: "#8b95aa", l: "#ffd479", r: "#d9675a", b: "#5aa0d9", f: "#3a4562", h: "#7ee0c3" };
+const COLORS = { "": "#5c6a88", k: "#e9eefb", w: "#3f78b8", d: "#22406a", m: "#a9c8f0", o: "#dba66b", s: "#efe6cf",
+  t: "#a3adc2", l: "#ffd479", r: "#e0705f", b: "#62a8e0", f: "#3a4562", h: "#7ee0c3", g: "#6fbf73" };
 function measure() {
   const dpr = devicePixelRatio || 1, w = stage.clientWidth, h = stage.clientHeight;
   canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
@@ -272,7 +333,7 @@ function render() {
   const aspect = (cols * cellW) / (rows * cellH), tanV = 0.62, tanH = tanV * aspect;
   const cy = Math.cos(me.yaw), sy = Math.sin(me.yaw), cp = Math.cos(me.pitch), sp = Math.sin(me.pitch);
   const fx = sy * cp, fy = sp, fz = cy * cp, rx = cy, rz = -sy, ux = -sp * sy, uy = cp, uz = -sp * cy;
-  cam.x = me.x; cam.y = me.eye; cam.z = me.z;
+  Object.assign(cam, { x: me.x, y: me.eye, z: me.z, f: [fx, fy, fz], r: [rx, 0, rz], u: [ux, uy, uz], tanH, tanV });
   // Camera origin in the ship frame (rotate by -roll about the ship's long axis, after the bob).
   cam.lx = rc * (me.x - SX) + rs * (me.eye - bob) + SX; cam.ly = -rs * (me.x - SX) + rc * (me.eye - bob);
   for (let j = 0, c = 0; j < rows; j++) {
@@ -283,12 +344,152 @@ function render() {
       cast(c, (i + j) & 1, dx / n, dy / n, dz / n);
     }
   }
+  gulls();
   const mid = (rows >> 1) * cols + (cols >> 1);
-  const spot = SP[mid];
-  let aimed = spot && D[mid] < (RANGE[spot] || 12) ? spot : null;
-  aimed = moved ? aimed || nearby() : null;
-  show(aimed);
+  const spot = SP[mid], looked = spot && D[mid] < (RANGE[spot] || 12);
+  show(moved ? jumped || (looked ? spot : nearby()) : null);
+  // The label floats by what you look at (the crosshair) or, when you walk up to it, by its centre.
+  label(looked && spot === target ? [cols >> 1, rows >> 1] : target && project(anchors[target]));
+  minimap();
   draw(mid);
+}
+
+// A few gulls circle over the harbor, drawn only where they are against the sky.
+function gulls() {
+  for (let g = 0; g < 5; g++) {
+    const a = T * 0.22 + g * 1.3, r = 10 + g * 4;
+    const p = project({ x: Math.cos(a) * r - 4, y: 13 + g * 1.6 + Math.sin(T + g), z: 6 + Math.sin(a) * r });
+    const c = p && p[0] >= 0 && p[0] < cols && p[1] >= 0 && p[1] < rows ? p[1] * cols + p[0] : -1;
+    if (c >= 0 && ID[c] === 0) { G[c] = "v"; C[c] = "k"; }
+  }
+}
+
+// Screen cell of an anchor (possibly off screen), or null when it is behind you.
+function project(a) {
+  const p = [a.x - cam.x, a.y + (a.ship ? bob : 0) - cam.y, a.z - cam.z];
+  const dot = (v) => v[0] * p[0] + v[1] * p[1] + v[2] * p[2], z = dot(cam.f);
+  if (z < 0.3) return null;
+  return [Math.round(((dot(cam.r) / z / cam.tanH + 1) / 2) * cols), Math.round(((1 - dot(cam.u) / z / cam.tanV) / 2) * rows)];
+}
+
+// Places the label up and to the side of the object, inside the screen, with a leader line drawn in text.
+const LINE = new Map();
+function label(at) {
+  LINE.clear();
+  if (!target || !at) { card.style.transform = ""; return; }
+  at = [Math.max(0, Math.min(cols - 1, at[0])), Math.max(0, Math.min(rows - 1, at[1]))];
+  const W = stage.clientWidth, H = stage.clientHeight, w = card.offsetWidth, h = card.offsetHeight;
+  const px = padX + (at[0] + 0.5) * cellW, py = padY + (at[1] + 0.5) * cellH, gap = 56;
+  let left = px + gap + w > W - 8 ? px - gap - w : px + gap, top = py - gap - h < 8 ? py + gap : py - gap - h;
+  left = Math.max(8, Math.min(W - w - 8, left)); top = Math.max(8, Math.min(H - h - 8, top));
+  // Keep clear of the mini map in the top right corner.
+  const mapLeft = mapBox ? padX + mapBox.oi * cellW - 8 : W, mapBottom = mapBox ? padY + (mapBox.oj + mapBox.h) * cellH + 8 : 0;
+  if (mapMode !== 2 && left + w > mapLeft && top < mapBottom) {
+    if (mapBottom + h < H - 8) top = mapBottom; else left = Math.max(8, mapLeft - w);
+  }
+  card.style.transform = `translate(${left}px, ${top}px)`;
+  // Leader from the object to the nearest point of the label's edge, one glyph per cell.
+  const ex = Math.max(left, Math.min(left + w, px)), ey = Math.max(top, Math.min(top + h, py));
+  let i = at[0], j = at[1];
+  const i1 = Math.round((ex - padX) / cellW - 0.5), j1 = Math.round((ey - padY) / cellH - 0.5);
+  const di = Math.abs(i1 - i), dj = Math.abs(j1 - j), si = Math.sign(i1 - i), sj = Math.sign(j1 - j);
+  LINE.set(j * cols + i, "*");
+  for (let err = di - dj, n = Math.max(di, dj); n > 1; n--) {
+    const e2 = 2 * err, mi = e2 > -dj, mj = e2 < di;
+    if (mi) { err -= dj; i += si; }
+    if (mj) { err += di; j += sj; }
+    LINE.set(j * cols + i, mi && mj ? (si === sj ? "\\" : "/") : mi ? "-" : "|");
+  }
+}
+
+// ---- Mini map: the island in text, every point of interest, and you; M picks, M again fills the screen.
+const ORDER = Object.keys(spots);
+const WORLD = { x0: -46, x1: 24, z0: -36, z1: 30 };
+const MAPCELLS = new Map();
+let mapMode = 0, pick = 0, jumped = null, mapBox = null; // mapMode: 0 idle, 1 picking, 2 full screen
+function minimap() {
+  MAPCELLS.clear();
+  const full = mapMode === 2, w = full ? cols - 2 : Math.min(30, cols - 2), h = full ? rows - 2 : Math.min(15, rows - 2);
+  mapBox = { oi: full ? 1 : cols - w - 1, oj: 1, w, h, iw: w - 2, ih: h - 3 };
+  mapFrame();
+  mapTerrain();
+  mapMarks();
+}
+// Puts a glyph at (i, j) of the map box, frame included.
+const mapPut = (i, j, ch, cls) => MAPCELLS.set((mapBox.oj + j) * cols + mapBox.oi + i, [ch, cls]);
+function mapFrame() {
+  const { w, h, iw } = mapBox, full = mapMode === 2;
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) mapPut(i, j, j === 0 || j === h - 1 ? "-" : i === 0 || i === w - 1 ? "|" : " ", "t");
+  const tip = mapMode ? `< ${spots[ORDER[pick]].title} > Enter` : touchFirst.matches ? "tap: map" : "M: map";
+  [...(full ? tip + "   M or Esc closes" : tip).slice(0, iw)].forEach((ch, i) => mapPut(i + 1, h - 2, ch, "h"));
+  if (touchFirst.matches) mapPut(w - 2, 0, full ? "x" : "+", "h");
+}
+// Water, land and the ship's deck, sampled from the walkable areas.
+function mapTerrain() {
+  for (let j = 0; j < mapBox.ih; j++) {
+    for (let i = 0; i < mapBox.iw; i++) {
+      const [x, z] = fromMap(i + 0.5, j + 0.5), f = FLOORS.findIndex(([x0, x1, z0, z1]) => x >= x0 && x < x1 && z >= z0 && z < z1);
+      if (f < 0) mapPut(i + 1, j + 1, (i + j) % 5 ? " " : "~", "d");
+      else mapPut(i + 1, j + 1, f === 0 ? "#" : ".", f === 0 ? "o" : "t");
+    }
+  }
+}
+// Points of interest (the pick in the highlight colour) and you, pointing the way you face.
+function mapMarks() {
+  const inside = ([i, j]) => i >= 0 && i < mapBox.iw && j >= 0 && j < mapBox.ih;
+  ORDER.forEach((id, n) => {
+    const p = toMap(anchors[id].x, anchors[id].z), picked = mapMode && n === pick;
+    if (inside(p)) mapPut(p[0] + 1, p[1] + 1, picked ? "@" : "*", picked ? "h" : "l");
+  });
+  const p = toMap(me.x, me.z);
+  if (inside(p)) mapPut(p[0] + 1, p[1] + 1, "^>v<"[Math.round(((me.yaw % 6.283) + 6.283) / 1.5708) % 4], "k");
+}
+const toMap = (x, z) => [Math.floor(((x - WORLD.x0) / (WORLD.x1 - WORLD.x0)) * mapBox.iw), Math.floor(((WORLD.z1 - z) / (WORLD.z1 - WORLD.z0)) * mapBox.ih)];
+const fromMap = (i, j) => [WORLD.x0 + (i / mapBox.iw) * (WORLD.x1 - WORLD.x0), WORLD.z1 - (j / mapBox.ih) * (WORLD.z1 - WORLD.z0)];
+// A free spot 2.5 to 8 m from an object, on the same level (deck or land), to stand and look at it from.
+function standFor(a) {
+  for (const r of [2.5, 4, 6, 8, 12, 16].filter((r) => r >= Math.min(a.r * 2.5, a.ship ? 6 : 16))) {
+    for (let k = 0; k < 8; k++) {
+      const x = a.x + r * Math.sin(k * 0.785), z = a.z - r * Math.cos(k * 0.785), fy = floorAt(x, z);
+      if (fy !== null && (fy > 1.6) === !!a.ship && !blocked(x, z, fy)) return [x, z];
+    }
+  }
+  return [me.x, me.z];
+}
+// Jumps next to a point of interest and faces it; its label shows until you move.
+function go(id) {
+  const a = anchors[id], [x, z] = standFor(a);
+  me.x = x; me.z = z; me.eye = floorAt(x, z) + 1.6;
+  me.yaw = Math.atan2(a.x - x, a.z - z);
+  me.pitch = Math.max(-1.1, Math.min(1.1, Math.atan2(a.y + (a.ship ? bob : 0) - me.eye, Math.hypot(a.x - x, a.z - z))));
+  jumped = id; moved = true; mapMode = 0; dirty = true;
+}
+// M picks on the map, M again fills the screen, M or Escape closes; arrows choose, Enter goes.
+function mapKey(e) {
+  if (e.code === "KeyM") mapMode = (mapMode + 1) % 3;
+  else if (!mapMode) return false;
+  else if (e.key === "Escape") mapMode = 0;
+  else if (e.key === "Enter") go(ORDER[pick]);
+  else if (/^Arrow/.test(e.key)) pick = (pick + (/Right|Down/.test(e.key) ? 1 : ORDER.length - 1)) % ORDER.length;
+  else return false;
+  moved = true; // using the map folds the intro away
+  return true;
+}
+// A tap on the map: the corner mark resizes it, the caption jumps to the pick, elsewhere picks the nearest point.
+function tapMap(cx, cy) {
+  const b = mapBox, i = b && Math.floor((cx - padX) / cellW) - b.oi, j = b && Math.floor((cy - padY) / cellH) - b.oj;
+  if (!b || i < 0 || j < 0 || i >= b.w || j >= b.h) return false;
+  if (j === 0) mapMode = mapMode === 2 ? 0 : 2;
+  else if (j >= b.h - 2) go(ORDER[pick]);
+  else {
+    const d = (id) => { const [pi, pj] = toMap(anchors[id].x, anchors[id].z); return Math.hypot(pi - i + 1, (pj - j + 1) * 2); };
+    const near = ORDER.map((id, n) => [d(id), n]).sort((p, q) => p[0] - q[0]).filter((p, _, all) => p[0] <= all[0][0] + 0.01);
+    const k = near.findIndex(([, n]) => n === pick);
+    pick = near[(k + 1) % near.length][1];
+    if (mapMode === 0) mapMode = 1;
+  }
+  dirty = true;
+  return true;
 }
 
 // One ray: the nearest of the solids, the water and the sky decides the cell.
@@ -310,7 +511,7 @@ function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
   const nx = onShip ? rc * lnx - rs * lny : lnx, ny = onShip ? rs * lnx + rc * lny : lny;
   const px = onShip ? cam.lx + ldx * t : cam.x + dx * t, py = onShip ? cam.ly + ldy * t : cam.y + dy * t;
   const tex = s.tex && s.tex(px, py, cam.z + dz * t, lnx, lny, nz);
-  const mat = tex && tex !== "-" ? tex : s.mat, dim = tex === "-" ? 0.45 : 1;
+  const mat = tex && tex !== "-" ? tex : s.mat, dim = (tex === "-" ? 0.45 : 1) * (s.dim || 1);
   let ch;
   if (mat === "l") {
     const flash = s === beacon ? Math.cos(T * 2.2 + Math.atan2(dx, dz) * 2) > 0.3 : s !== antennaLamp || Math.sin(T * 3) > 0;
@@ -321,18 +522,22 @@ function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
   } else {
     const lit = Math.max(0, nx * L[0] + ny * L[1] + nz * L[2]), face = Math.max(0, -(nx * dx + ny * dy + nz * dz));
     const b = (0.12 + 0.45 * lit + 0.38 * face) * dim * (0.3 + 0.7 * Math.exp(-t * 0.012));
-    ch = RAMP[Math.max(1, Math.min(9, (b * 10) | 0))];
+    ch = RAMP[Math.max(1, Math.min(RAMP.length - 1, (b * RAMP.length) | 0))];
   }
   // Floors get a negative id: they outline what stands on them but draw no edges themselves.
-  put(c, ch, s.spot && s.spot === target ? "h" : mat, (ny > 0.7 ? -1 : 1) * (s.id * 16 + (k >> 2)), t);
+  put(c, ch, mat, (ny > 0.7 ? -1 : 1) * (s.id * 16 + (k >> 2)), t);
   SP[c] = s.spot;
 }
 function shadeWater(c, t, dx, dy, dz) {
   const wx = cam.x + dx * t, wz = cam.z + dz * t;
   const w = Math.sin(0.55 * wx + 1.2 * T) + 0.7 * Math.sin(0.8 * wz - 0.9 * T + 0.4 * wx) + 0.3 * Math.sin(1.9 * wx - 1.5 * wz + 2.3 * T);
-  const v = ((w + 2) / 4) * (0.35 + 0.65 * Math.exp(-t * 0.025));
-  if (dx * MOON[0] - dy * MOON[1] + dz * MOON[2] > 0.97 && w > 0.1) put(c, w > 0.8 ? "=" : "~", "m", -1, t);
-  else put(c, v > 0.6 ? "~" : v > 0.44 ? "-" : v > 0.3 ? "." : " ", "w", -1, t);
+  // Near water ripples; far water fades to a few dark dots so the ship and dock stand out.
+  const v = ((w + 2) / 4) * Math.exp(-t * 0.035);
+  // Waves break white along the quay front and the breakwater.
+  const shore = (wz > 12.6 && wz < 14) || (wx > -26 && wx < -24.6 && wz < 14);
+  if (shore && Math.sin(wx * 1.7 + wz * 1.3 + T * 2.6) > 0.1) put(c, w > 0.3 ? "~" : "-", "k", -1, t);
+  else if (dx * MOON[0] - dy * MOON[1] + dz * MOON[2] > 0.97 && w > 0.1) put(c, w > 0.8 ? "=" : "~", "m", -1, t);
+  else put(c, v > 0.55 ? "~" : v > 0.38 ? "-" : v > 0.22 ? "." : " ", t < 25 ? "w" : "d", -1, t);
 }
 function shadeSky(c, dx, dy, dz) {
   const m = dx * MOON[0] + dy * MOON[1] + dz * MOON[2], el = Math.asin(dy);
@@ -345,15 +550,20 @@ function put(c, ch, cls, id, depth) { G[c] = ch; C[c] = cls; ID[c] = id; D[c] = 
 
 // Is neighbour n (inside the grid) another surface at least `min` away?
 const beyond = (n, inside, id, min) => inside && ID[n] !== id && D[n] >= min;
+const slope = (l, r, u, w) => ((l || r) && (u || w) ? ((u && r) || (w && l) ? "\\" : "/") : l || r ? "|" : u ? "-" : w ? "_" : null);
 // Outline glyph where a solid or face meets something farther away, else null.
 function edge(c, i, j) {
   const id = ID[c], d = D[c];
   if (id <= 0 || d >= 70) return null;
   // Neighbours left and up must be farther, right and down at least as far, so each seam draws once.
-  const l = beyond(c - 1, i > 0, id, d * 1.03), r = beyond(c + 1, i < cols - 1, id, d * 0.97);
-  const u = beyond(c - cols, j > 0, id, d * 1.03), w = beyond(c + cols, j < rows - 1, id, d * 0.97);
-  if ((l || r) && (u || w)) return (u && r) || (w && l) ? "\\" : "/";
-  return l || r ? "|" : u ? "-" : w ? "_" : null;
+  return slope(beyond(c - 1, i > 0, id, d * 1.03), beyond(c + 1, i < cols - 1, id, d * 0.97),
+    beyond(c - cols, j > 0, id, d * 1.03), beyond(c + cols, j < rows - 1, id, d * 0.97));
+}
+// Silhouette glyph of the object you point at: its cells next to any cell that is not part of it.
+function outline(c, i, j) {
+  if (!target || SP[c] !== target) return null;
+  const off = (n, inside) => !inside || SP[n] !== target;
+  return slope(off(c - 1, i > 0), off(c + 1, i < cols - 1), off(c - cols, j > 0), off(c + cols, j < rows - 1));
 }
 // Draws each row as runs of one colour.
 function draw(mid) {
@@ -363,9 +573,10 @@ function draw(mid) {
     let run = "", cur = C[j * cols], from = 0;
     for (let i = 0; i < cols; i++) {
       const c = j * cols + i, aim = c === mid;
-      const cls = aim ? (target ? "h" : "k") : C[c];
+      const map = MAPCELLS.get(c), mark = map ? map[0] : aim ? "+" : LINE.get(c) || outline(c, i, j);
+      const cls = map ? map[1] : aim ? (target ? "h" : "k") : mark ? "h" : C[c];
       if (cls !== cur) { paint(run, cur, from, j); run = ""; cur = cls; from = i; }
-      run += aim ? "+" : edge(c, i, j) || G[c];
+      run += mark || edge(c, i, j) || G[c];
     }
     paint(run, cur, from, j);
   }
@@ -389,21 +600,27 @@ function show(id) {
   if (key === shown) return;
   shown = key;
   target = id;
+  card.classList.toggle("intro", !id);
   if (!id) {
-    card.innerHTML = moved ? "" : "<h3>You are on the deck</h3><p>The ship is docked and ready to sail. Walk around to find what Crewship sets up.</p>" +
-      `<p class="hint">${touchFirst.matches ? "The pad walks, a drag looks around." : "WASD or arrow keys to walk, click the scene to look with the mouse."}</p>`;
+    // The intro folds away on the first step, tap or click; its text and links come from the page header.
+    const hint = touchFirst.matches ? "The pad walks, a drag looks around, the map in the corner jumps to any point."
+      : "WASD or arrows walk, R and F look up and down, the mouse looks around, Enter opens what you point at, M opens the map.";
+    card.innerHTML = moved ? "" : `<h3>${document.querySelector(".top h1").textContent}</h3>` +
+      `<p>${document.querySelector(".tagline").textContent}</p><p class="hint">${hint}</p>` +
+      `<p class="links">${document.querySelector(".top nav").innerHTML}</p>`;
     return;
   }
   const s = spots[id];
-  card.innerHTML = `<h3>${s.title}</h3><p>${s.body}</p><p class="hint"><a href="${s.href}">Open: ${s.title} \u2192</a>` +
-    `${touchFirst.matches ? "" : " &middot; Enter or click opens it"}</p>`;
+  card.innerHTML = `<h3>${s.title}</h3><p>${s.body}</p><p class="hint"><a target="_blank" rel="noopener" href="${s.href}">Open: ${s.title} \u2192</a>` +
+    `${touchFirst.matches ? " &middot; tap to open" : " &middot; Enter opens it"}</p>`;
 }
 
 // ---- Input -------------------------------------------------------------------------------
 const KEYS = { KeyW: "f", ArrowUp: "f", KeyS: "b", ArrowDown: "b", KeyA: "l", KeyD: "r", ArrowLeft: "tl", ArrowRight: "tr",
   KeyR: "u", KeyF: "d" };
-const open = () => { if (target) location.href = spots[target].href; };
+const open = () => { if (target) window.open(spots[target].href, "_blank", "noopener"); };
 stage.addEventListener("keydown", (e) => {
+  if (mapKey(e)) { e.preventDefault(); dirty = true; return; }
   if (e.key === "Enter" && target && !e.target.closest("a")) { e.preventDefault(); open(); return; }
   const k = KEYS[e.code];
   if (!k || e.altKey || e.ctrlKey || e.metaKey) return;
@@ -415,14 +632,15 @@ stage.addEventListener("blur", () => keys.clear());
 const look = (dx, dy, k) => {
   me.yaw += dx * k;
   me.pitch = Math.max(-1.2, Math.min(1.2, me.pitch - dy * k));
-  moved = true;
+  moved = true; jumped = null;
   dirty = true;
 };
+// A click only starts mouse look; Enter opens what you point at. On a phone a tap on the label opens it.
 canvas.addEventListener("click", () => {
-  if (document.pointerLockElement === stage) open();
-  else if (!touchFirst.matches && stage.requestPointerLock) stage.requestPointerLock();
+  if (!touchFirst.matches && stage.requestPointerLock) stage.requestPointerLock();
   stage.focus({ preventScroll: true });
 });
+card.addEventListener("click", (e) => { if (touchFirst.matches && !e.target.closest("a")) open(); });
 document.addEventListener("mousemove", (e) => {
   if (document.pointerLockElement === stage) look(e.movementX, e.movementY, 0.0022);
 });
@@ -435,8 +653,11 @@ function steer(e) {
   stick.x = x; stick.y = -y;
   knob.style.transform = `translate(${x * half * 0.6}px, ${y * half * 0.6}px)`;
 }
+// The intro card folds away on the first tap or click, as it does on the first step.
+stage.addEventListener("pointerdown", (e) => { if (!e.target.closest(".card")) { moved = true; dirty = true; } });
 stage.addEventListener("pointerdown", (e) => {
-  if (e.pointerType === "mouse" || e.target.closest(".card")) return;
+  if (e.target.closest(".card") || tapMap(e.clientX, e.clientY)) return;
+  if (e.pointerType === "mouse") return;
   if (pad.contains(e.target)) {
     padId = e.pointerId; steer(e);
   } else { lookId = e.pointerId; lastX = e.clientX; lastY = e.clientY; }
@@ -460,18 +681,18 @@ function step(dt) {
   const fwd = (keys.has("f") ? 1 : 0) - (keys.has("b") ? 1 : 0) + stick.y;
   const side = (keys.has("r") ? 1 : 0) - (keys.has("l") ? 1 : 0) + stick.x;
   if (!turn && !tilt && !fwd && !side) return false;
-  moved = true;
+  moved = true; jumped = null;
   me.yaw += turn * 1.9 * dt;
   me.pitch = Math.max(-1.2, Math.min(1.2, me.pitch + tilt * 1.2 * dt));
   const c = Math.cos(me.yaw), s = Math.sin(me.yaw), v = 3.4 * dt;
   const here = floorAt(me.x, me.z);
-  const go = (x, z) => {
+  const walk = (x, z) => {
     const fy = floorAt(x, z);
     if (fy === null || Math.abs(fy - here) > 0.6 || blocked(x, z, fy)) return;
     me.x = x; me.z = z;
   };
-  go(me.x + (s * fwd + c * side) * v, me.z);
-  go(me.x, me.z + (c * fwd - s * side) * v);
+  walk(me.x + (s * fwd + c * side) * v, me.z);
+  walk(me.x, me.z + (c * fwd - s * side) * v);
   return true;
 }
 
