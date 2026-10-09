@@ -370,10 +370,6 @@
                 "stopped_hours": {
                   "type": "integer",
                   "minimum": 1
-                },
-                "running_hours": {
-                  "type": "integer",
-                  "minimum": 1
                 }
               }
             }

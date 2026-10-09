@@ -21,6 +21,7 @@ OLD = [
     "flotilla-docker-guard.service",
     "flotilla-storage-guard.service",
     "flotilla-storage-guard.timer",
+    "flotilla-shared-supabase-check.timer",
     "flotilla-worktree-env-seed.path",
 ]
 
@@ -42,7 +43,7 @@ def home(tmp_path):
     return home
 
 
-def apply(home, *flags):
+def apply(home, *flags, start_services=False):
     playbook = home.parent / "units.yml"
     # Like site.yml, the playbook directory carries templates/.
     if not (home.parent / "templates").exists():
@@ -68,7 +69,8 @@ def apply(home, *flags):
         "ansible_become": False,
         "code_factory_repo": str(ROOT),
         "factory_group": grp.getgrgid(os.getgid()).gr_name,
-        "factory": {"user": getpass.getuser(), "home": str(home), "start_services": False},
+        "factory_become_target": False,
+        "factory": {"user": getpass.getuser(), "home": str(home), "start_services": start_services},
     }
     result = subprocess.run(
         [Path(sys.executable).parent / "ansible-playbook", "-i", "localhost,", str(playbook),
@@ -102,3 +104,23 @@ def test_an_upgraded_host_ends_with_only_the_crewship_units_and_a_second_apply_c
     assert (doctor / "docker-guard.log").read_text() == "kept\n"
     assert apply(home) == 0
     assert names(home) == installed
+
+
+def test_retiring_the_old_units_never_stops_the_shared_supabase_stack(home):
+    bin_dir = home / ".local/bin"
+    bin_dir.mkdir(parents=True)
+    calls = home / "systemctl.calls"
+    stub = bin_dir / "systemctl"
+    stub.write_text(
+        f'#!/bin/sh\necho "$*" >> {calls}\n'
+        'case "$*" in *" show "*) printf "LoadState=loaded\\nActiveState=active\\nSubState=running\\n" ;; esac\n'
+    )
+    stub.chmod(0o755)
+
+    apply(home, start_services=True)
+
+    log = calls.read_text().splitlines()
+    stops = [line.split()[-1] for line in log if " stop " in f" {line} "]
+    assert "flotilla-shared-supabase.service" not in stops
+    assert stops.index("flotilla-shared-supabase-check.timer") < stops.index("flotilla-docker-guard.service")
+    assert "--user reset-failed flotilla-shared-supabase.service" in log

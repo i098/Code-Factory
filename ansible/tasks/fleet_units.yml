@@ -2,8 +2,12 @@
 # The fleet guards' user units (factory_fleet_units). Older releases installed
 # the same units as flotilla-*: every apply stops any that remain, deletes their
 # files and enablement links, and deletes the old Docker guard's allowlist.
-# A host without them changes nothing. With start_services false nothing is
-# stopped or started; files are still converged.
+# flotilla-shared-supabase.service is never stopped: its ExecStop runs
+# `supabase stop`, and the shared stack must keep running through the rename.
+# Its file is deleted instead and crewship-shared-supabase.service adopts the
+# running stack (check.sh is idempotent). A host without the old units changes
+# nothing. With start_services false nothing is stopped or started; files are
+# still converged.
 
 - name: Ensure the user unit directories
   ansible.builtin.file:
@@ -28,7 +32,7 @@
   changed_when: false
   check_mode: false
 
-- name: Stop the retired flotilla units
+- name: Stop the retired flotilla timers and paths
   ansible.builtin.systemd_service:
     scope: user
     name: "{{ item.item }}"
@@ -36,7 +40,20 @@
   become: "{{ factory_become_target | bool }}"
   become_user: "{{ factory_cfg.user }}"
   environment: "{{ factory_user_systemd_env }}"
-  loop: "{{ factory_fleet_retired.results | selectattr('stat.exists') | list }}"
+  loop: "{{ factory_fleet_retired.results | selectattr('stat.exists') | selectattr('item', 'match', '.*\\.(timer|path)$') | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: factory_manage_services | bool
+
+- name: Stop the other retired flotilla units
+  ansible.builtin.systemd_service:
+    scope: user
+    name: "{{ item.item }}"
+    state: stopped
+  become: "{{ factory_become_target | bool }}"
+  become_user: "{{ factory_cfg.user }}"
+  environment: "{{ factory_user_systemd_env }}"
+  loop: "{{ factory_fleet_retired.results | selectattr('stat.exists') | rejectattr('item', 'match', '.*\\.(timer|path)$') | rejectattr('item', 'equalto', 'flotilla-shared-supabase.service') | list }}"
   loop_control:
     label: "{{ item.item }}"
   when: factory_manage_services | bool
@@ -51,6 +68,29 @@
   loop_control:
     label: "{{ item[1] }}{{ item[0] }}"
   notify: reload user systemd
+
+- name: Reload user systemd after deleting the retired units
+  ansible.builtin.systemd_service:
+    scope: user
+    daemon_reload: true
+  become: "{{ factory_become_target | bool }}"
+  become_user: "{{ factory_cfg.user }}"
+  environment: "{{ factory_user_systemd_env }}"
+  when:
+    - factory_manage_services | bool
+    - factory_fleet_retired.results | selectattr('stat.exists') | list | length > 0
+
+- name: Clear the retired shared Supabase unit's state
+  ansible.builtin.command:
+    argv: [systemctl, --user, reset-failed, flotilla-shared-supabase.service]
+  become: "{{ factory_become_target | bool }}"
+  become_user: "{{ factory_cfg.user }}"
+  environment: "{{ factory_user_systemd_env }}"
+  changed_when: false
+  failed_when: false
+  when:
+    - factory_manage_services | bool
+    - factory_fleet_retired.results | selectattr('stat.exists') | selectattr('item', 'equalto', 'flotilla-shared-supabase.service') | list | length > 0
 
 - name: Delete the retired Docker guard allowlist
   ansible.builtin.file:

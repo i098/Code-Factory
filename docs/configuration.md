@@ -56,7 +56,6 @@ factory:
     fixture_archive: ""   # Path to DB volume tarball for fresh hosts
     docker_guard:
       stopped_hours: 24   # Remove a stopped container this long after it exits
-      running_hours: 48   # Report a running container this old that nothing claims
   firstmate:
     url: https://github.com/kunchenguid/firstmate.git
     # checklist:          # Optional; set only in .local/host.yml
