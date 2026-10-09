@@ -312,9 +312,9 @@ box(world, -25, 1.45, 15.62, -6.3, 1.53, 15.7, "o");
 const howText = painted("HOW", 7.4, 8.7, 2.45, 3.25);
 for (const x of [7.35, 8.6]) box(world, x, 1.2, 16.72, x + 0.15, 2.4, 16.85, "o", { spot: "how" });
 box(world, 7.2, 2.35, 16.6, 8.9, 3.35, 16.72, "o", { spot: "how", tex: (x, y, z, nx, ny, nz) => (nz < -0.5 ? (howText(x, y) ? "l" : "-") : null) });
-const docsText = painted("DOCS", 11, 14.4, 2.45, 3.25);
-for (const x of [10.95, 14.25]) box(world, x, 1.2, 16.72, x + 0.15, 2.4, 16.85, "o", { spot: "docsboard" });
-box(world, 10.8, 2.35, 16.6, 14.6, 3.35, 16.72, "o", { spot: "docsboard", tex: (x, y, z, nx, ny, nz) => (nz < -0.5 ? (docsText(x, y) ? "l" : "-") : null) });
+const docsText = painted("DOCS", -1.9, 0.3, 2.45, 3.25);
+for (const x of [-1.95, 0.25]) box(world, x, 1.2, 16.72, x + 0.15, 2.4, 16.85, "o", { spot: "docsboard" });
+box(world, -2.1, 2.35, 16.6, 0.5, 3.35, 16.72, "o", { spot: "docsboard", tex: (x, y, z, nx, ny, nz) => (nz < -0.5 ? (docsText(x, y) ? "l" : "-") : null) });
 
 // Ship, in its own frame: hull, rails, cabin, helm, mast, sail, crow's nest, hatch, lantern.
 const k = 1 / 3.2;

@@ -67,3 +67,4 @@ def test_harbor_never_reaches_an_image_or_a_host():
     from_checkout = [s[len("REPO") :].strip("/") for s in sources if s.startswith("REPO")]
     assert from_checkout, "no playbook source resolved to the checkout"
     assert "" not in from_checkout
+    assert [s for s in from_checkout if s == "harbor" or s.startswith("harbor/")] == []
