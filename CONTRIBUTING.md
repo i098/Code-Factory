@@ -20,7 +20,7 @@ Every task is idempotent; a second unchanged `launch` reports `changed=0`.
 
 Every task is check-mode safe: `chart` (Ansible `--check`) previews without mutating.
 
-Nothing is pinned: every tool tracks its latest release, resolved once per apply and verified by the checksum its publisher posts; what each source is verified against, and the omp marketplace plugin exception, are in [Dependencies](docs/dependencies.md). Only the repository's own Python environment (`uv.lock`) stays locked, and CI pins each GitHub Action to the commit SHA of its latest release, kept current by Dependabot.
+Nothing is pinned: every tool tracks its latest release, resolved once per apply and verified by the checksum its publisher posts; what each source is verified against, and the omp marketplace plugin exception, are in [Dependencies](docs/dependencies.md). Only the repository's own development environments (`uv.lock`, `crewboard/Cargo.lock`) stay locked, and CI pins each GitHub Action to the commit SHA of its latest release, kept current by Dependabot.
 
 No unconditional restarts, daemon-reloads, or bare commands.
 

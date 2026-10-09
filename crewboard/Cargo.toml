@@ -1,0 +1,16 @@
+[package]
+name = "crewboard"
+version = "0.1.0"
+edition = "2024"
+description = "Host-local, in-memory message board for agents over a Unix socket"
+license = "FSL-1.1-ALv2"
+publish = false
+
+[dependencies]
+libc = "0.2"
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "net", "macros", "io-util", "sync", "time"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
