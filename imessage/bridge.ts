@@ -66,8 +66,8 @@ if (!raw) console.warn("fm-imessage: no Advanced iMessage client in spectrum-ts 
 // A message by its conversation and message ids, which outlive a restart.
 type Ref = { space: string; id: string };
 // One outbox item for his text `id`: a tapback, or bubbles (`done` of them sent so far), the first one threaded to
-// his text `reply` when set.
-type Out = Ref & { react?: string; bubbles?: string[]; done?: number; reply?: string };
+// his text `reply` when set. `kind` is whose memory line it makes (Firstmate's unless "desk").
+type Out = Ref & { react?: string; bubbles?: string[]; done?: number; reply?: string; kind?: Kind };
 let latest: Message | undefined;
 let latestRef: Ref | undefined; // the ids of `latest`, kept even when it cannot be fetched after a restart
 const saved = Bun.file(LATEST_FILE);
@@ -143,27 +143,32 @@ async function find(ref: Ref): Promise<Message> {
 }
 
 // Delivers one outbox item: the tapback, or each bubble not sent yet, saving the progress after each bubble so a
-// retry or a restart never sends a bubble twice.
+// retry or a restart sends at most the one bubble in flight again (delivery is at least once). A reply target that
+// is gone sends the first bubble unthreaded.
 async function deliver(o: Out, save: (o: Out) => void) {
-  const to = await find(o);
+  const kind = o.kind ?? "supervisor";
   if (o.react) {
-    await to.react(o.react);
-    remember("supervisor", `tapback ${o.react} on his last text`);
+    await (await find(o)).react(o.react);
+    remember(kind, `tapback ${o.react} on his last text`);
     return;
   }
+  const space = await imessage(app).space.get(o.space);
   const parts = o.bubbles ?? [];
-  const thread = o.reply && !o.done ? await find({ space: o.space, id: o.reply }) : undefined;
+  const thread = o.reply && !o.done ? await find({ space: o.space, id: o.reply }).catch((e) => {
+    if (transient(e)) throw e;
+    console.error(`fm-imessage: reply target ${o.reply} gone, sending unthreaded: ${brief(e)}`);
+  }) : undefined;
   for (let i = o.done ?? 0; i < parts.length; i++) {
     if (i > 0) {
-      typing(to.space, true);
+      typing(space, true);
       await Bun.sleep(typingPause(parts[i]));
     }
-    typing(to.space, false);
+    typing(space, false);
     if (i === 0 && thread) await thread.reply(parts[i]);
-    else await to.space.send(parts[i]);
+    else await space.send(parts[i]);
     save({ ...o, done: i + 1 });
   }
-  remember("supervisor", parts.join("\n\n"));
+  remember(kind, parts.join("\n\n"));
 }
 
 // A memory error never stops a send, a tapback or the inbox note: it is logged.
@@ -201,9 +206,9 @@ async function runDesk(current: () => boolean) {
   burstFrom = undefined;
   const skip = !ok || isSkip(drafted); // a failed desk stays quiet; Firstmate still has the note
   const tapback = skip ? undefined : parseReact(drafted);
-  if (tapback) await target.react(tapback);
-  else if (!skip) await target.space.send(drafted);
-  if (!skip) remember("desk", tapback ? `tapback ${tapback} on his last text` : drafted);
+  const ref = { space: target.space.id, id: target.id };
+  if (tapback) outbox.add({ ...ref, react: tapback, kind: "desk" });
+  else if (!skip) outbox.add({ ...ref, bubbles: [drafted], kind: "desk" });
   const outcome = !ok ? "skip (desk failed)" : skip ? "skip" : tapback ? `react ${tapback}` : drafted.replace(/\s+/g, " ");
   appendFileSync(DESK_LOG, `${new Date().toISOString()} ${target.id} ${outcome}\n`, { mode: 0o600 });
 }
@@ -256,7 +261,9 @@ function fileNote(requestId: string, text: string): boolean {
 async function fetchAgain(ref: Ref) {
   const { text, failed } = await noteText(await find(ref));
   if (failed !== undefined) throw failed;
-  if (text !== undefined && !fileNote(`photon-${ref.id}-saved`, `(an earlier attachment is saved now) ${text}`)) throw new Error("the inbox note failed");
+  if (text !== undefined && !fileNote(`photon-${ref.id}-saved`, `(an earlier attachment is saved now) ${text}`)) {
+    throw Object.assign(new Error("the inbox note failed"), { retry: true });
+  }
 }
 
 async function handle(message: Message) {
@@ -265,7 +272,7 @@ async function handle(message: Message) {
   if (text === undefined) return;
   // Hand the text to Firstmate first, so the wake never waits on the desk model.
   if (!fileNote(`photon-${message.id}`, text)) {
-    await message.reply("firstmate did not get that, send it again");
+    outbox.add({ space: message.space.id, id: message.id, bubbles: ["firstmate did not get that, send it again"], reply: message.id });
     return;
   }
   if (failed !== undefined) {

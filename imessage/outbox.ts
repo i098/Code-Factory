@@ -2,13 +2,18 @@
 // again. Kept free of spectrum-ts so tests run without it.
 import { closeSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, unlinkSync, writeSync } from "node:fs";
 
-// The code of a transient upstream failure, which a later try may pass: gRPC UNAVAILABLE (code 14, which Photon's
-// HTTP client also gives for HTTP 502 and 503) or an HTTP 502 or 503. Undefined for any other error.
+// The code of a transient failure, which a later try may pass: gRPC UNAVAILABLE (code 14, which Photon's HTTP
+// client also gives for HTTP 502 and 503), an HTTP 502 or 503, a timeout, a dropped connection, or an error marked
+// `retry`. Undefined for any other error, which a later try cannot fix.
 export function transient(e: unknown): string | undefined {
   for (let x: unknown = e; x instanceof Object; x = Reflect.get(x, "cause")) {
     const status = Reflect.get(x, "status");
     if (Reflect.get(x, "grpcCode") === 14 || Reflect.get(x, "code") === 14 || /\bUNAVAILABLE\b/.test(String(Reflect.get(x, "message")))) return "UNAVAILABLE";
     if (status === 502 || status === 503) return `HTTP ${status}`;
+    if (Reflect.get(x, "retry") === true) return "RETRY";
+    if (/^(TimeoutError|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ConnectionRefused|ConnectionClosed)$/.test(`${Reflect.get(x, "name")}`) ||
+      /^(ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ConnectionRefused|ConnectionClosed)$/.test(`${Reflect.get(x, "code")}`) ||
+      Reflect.get(x, "grpcCode") === 4 || /\b(DEADLINE_EXCEEDED|timed out)\b/i.test(String(Reflect.get(x, "message")))) return "TIMEOUT";
   }
 }
 
@@ -20,9 +25,11 @@ export function brief(e: unknown): string {
 
 // A durable FIFO queue in `dir`: one JSON file per item, named by a rising sequence number and written atomically
 // (fsync, then rename), so an item survives a crash or a restart once add() returns. One loop delivers the oldest
-// item; when it fails, the loop logs one line, waits one backoff step (at most 60 × `retryMs`) and tries the same
-// item again, so the order holds and nothing is dropped. Deleting an item's file drops it by hand. `deliver` may
-// save progress (the bubbles already sent) with `save`. The constructor starts on the items already queued.
+// item. A transient failure makes the loop log one line, wait one backoff step (at most 60 × `retryMs`) and try the
+// same item again, so the order holds. Any other failure (or a file that does not parse) moves the item to
+// `${dir}-dead/`, logs one line and goes on with the next item, so one bad item never blocks the queue. Deleting an
+// item's file drops it by hand. `deliver` may save progress (the bubbles already sent) with `save`. The constructor
+// starts on the items already queued.
 export class Queue<T> {
   private next: number;
   private busy = false;
@@ -69,6 +76,19 @@ export class Queue<T> {
     }
   }
 
+  private bury(seq: number, e: unknown): boolean {
+    try {
+      const dead = `${this.dir}-dead`;
+      mkdirSync(dead, { recursive: true, mode: 0o700 });
+      renameSync(this.file(seq), `${dead}/${Date.now()}-${seq}.json`);
+      console.error(`fm-imessage: ${this.name} ${seq} cannot be delivered, moved to ${dead}/: ${brief(e)}`);
+      return true;
+    } catch (x) {
+      console.error(`fm-imessage: ${this.name} ${seq} could not be moved to the dead-letter folder: ${brief(x)}`);
+      return false;
+    }
+  }
+
   private async drain() {
     if (this.busy) return;
     this.busy = true;
@@ -81,6 +101,7 @@ export class Queue<T> {
           await this.deliver(JSON.parse(readFileSync(this.file(seq), "utf8")), (item) => this.write(seq, item));
           unlinkSync(this.file(seq));
         } catch (e) {
+          if (!transient(e) && this.bury(seq, e)) continue;
           // Capped exponential backoff with jitter, so retries spread out.
           const wait = Math.min(60 * this.retryMs, this.retryMs * 2 ** attempt++) * (0.5 + Math.random() / 2);
           console.error(`fm-imessage: ${this.name} ${seq} failed (try ${attempt}), next try in ${(wait / 1000).toFixed(1)} s: ${brief(e)}`);

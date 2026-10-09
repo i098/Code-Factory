@@ -522,6 +522,52 @@ console.log(JSON.stringify({{ codes: cases.map((e) => transient(e) ?? null), lin
     assert result["line"] == "UNAVAILABLE: first"
 
 
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_timeouts_and_dropped_connections_are_transient():
+    result = bun(f"""
+import {{ transient }} from {OUTBOX};
+const err = (message, extra) => Object.assign(new Error(message), extra);
+const cases = [
+  Object.assign(new Error("The operation timed out"), {{ name: "TimeoutError" }}),
+  err("read ECONNRESET", {{ code: "ECONNRESET" }}),
+  err("deadline", {{ grpcCode: 4 }}),
+  err("the inbox note failed", {{ retry: true }}),
+  err("message m1 not found"),
+];
+console.log(JSON.stringify(cases.map((e) => transient(e) ?? null)));
+""")
+    assert result == ["TIMEOUT", "TIMEOUT", "TIMEOUT", "RETRY", None]
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_queue_moves_items_that_cannot_pass_to_the_dead_letter_folder(tmp_path):
+    """A transient failure retries the same item in order; any other failure or a corrupt file never blocks the rest."""
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    (queue / "1.json").write_text('{"v":"bad"}')
+    (queue / "2.json").write_text("{not json")
+    (queue / "3.json").write_text('{"v":"flaky"}')
+    (queue / "4.json").write_text('{"v":"ok"}')
+    result = bun(f"""
+import {{ readdirSync }} from "node:fs";
+import {{ Queue }} from {OUTBOX};
+const done = [], tries = {{}};
+const q = new Queue({json.dumps(str(queue))}, "item", async (item) => {{
+  tries[item.v] = (tries[item.v] ?? 0) + 1;
+  if (item.v === "bad") throw new Error("message m1 not found");
+  if (item.v === "flaky" && tries.flaky < 3) throw Object.assign(new Error("down"), {{ grpcCode: 14 }});
+  done.push(item.v);
+}}, 5);
+const end = Date.now() + 10000;
+while (done.length < 2 && Date.now() < end) await Bun.sleep(10);
+console.log(JSON.stringify({{ done, tries, left: readdirSync({json.dumps(str(queue))}), dead: readdirSync({json.dumps(str(queue) + "-dead")}).length }}));
+process.exit(0);
+""")
+    assert result["done"] == ["flaky", "ok"]
+    assert result["tries"] == {"bad": 1, "flaky": 3, "ok": 1}
+    assert result["left"] == [] and result["dead"] == 2
+
+
 # A fake spectrum-ts for bridge.ts. Its state is in FAKE_DIR, so it outlives a bridge restart: `down` holds how
 # many more upstream calls fail with UNAVAILABLE, typing always fails while `typing-down` exists, `inbound/` holds
 # the owner's messages for the bridge to receive, `calls` logs every call, and `sent` logs each delivered message.
@@ -599,7 +645,10 @@ def test_bridge_rides_out_an_upstream_outage(tmp_path):
     (fake / "down").write_text("0")
     (fake / "typing-down").touch()
     notes = tmp_path / "notes"
-    stubs = {"omp": "cat >/dev/null; echo SKIP", "fm-inbox": f'printf "%s\\n" "$*" >> {notes}'}
+    stubs = {
+        "omp": f'cat >/dev/null; [ -e {fake / "desk-on"} ] && echo "desk ok" || echo SKIP',
+        "fm-inbox": f'printf "%s\\n" "$*" >> {notes}',
+    }
     for name, body in stubs.items():
         (bin_dir / name).write_text(f"#!/bin/bash\n{body}\n")
         (bin_dir / name).chmod(0o755)
@@ -656,12 +705,20 @@ def test_bridge_rides_out_an_upstream_outage(tmp_path):
         assert len(list((state / "downloads").glob("*.json"))) == 1
         bridge = start(2)
         cli("four")
+        (fake / "desk-on").touch()
+        inbound("m3", text="ping")
+        inbound("m4", text="ping again")  # nobody answers, so the desk writes a late ack into the queue
+        wait_for(lambda: len(list((state / "outbox").glob("*.json"))) == 5, "the desk item in the outbox")
         (fake / "down").write_text("3")  # three more failures, then the upstream recovers
-        wait_for(lambda: len(text(fake / "sent").splitlines()) == 5 and "photon-m2-saved" in text(notes), "recovery")
+        wait_for(lambda: len(text(fake / "sent").splitlines()) == 6 and "photon-m2-saved" in text(notes), "recovery")
+        (fake / "messages" / "m3.json").unlink()  # the text that a threaded send points to is gone
+        cli("--reply", "2", "five")
+        wait_for(lambda: len(text(fake / "sent").splitlines()) == 7, "the unthreaded send")
     finally:
         bridge.terminate()
         bridge.wait(10)
-    assert text(fake / "sent").splitlines() == ["send one", "send two", "react m1 👍", "reply m1 three", "send four"]
+    sent = ["send one", "send two", "react m1 👍", "reply m1 three", "send four", "send desk ok", "send five"]
+    assert text(fake / "sent").splitlines() == sent
     assert "typing UNAVAILABLE" in text(fake / "calls")
     saved = state / "attachments/m2-photo.jpg"
     assert saved.read_text() == "JPEG"

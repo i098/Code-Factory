@@ -26,14 +26,14 @@ The service ignores texts from all other senders. It saves attachments in `~/.lo
 
 The Photon service can be unavailable for minutes. It then answers `UNAVAILABLE` (gRPC) or HTTP 502 or 503. The service keeps every message through such an outage. The code is `imessage/outbox.ts`.
 
-- **The outbox.** Each send and tapback goes to `~/.local/state/fm-imessage/outbox/` first, as one file. The service writes the file to a temporary name, syncs it to disk, and renames it. The file name is a sequence number that only goes up. The service answers `fm-imessage` only after the file is on disk.
-- **Delivery.** One loop sends the oldest file, then deletes it. If a send fails, the loop tries the same file again after a wait: 1 second, then 2, 4, and so on, up to 60 seconds, each with random jitter. Thus the order stays the same and no message is lost. After each bubble of a message, the service records the bubbles that it sent, so a retry or a restart never sends a bubble twice.
+- **The outbox.** Each send and tapback goes to `~/.local/state/fm-imessage/outbox/` first, as one file. This covers the answers of Firstmate, the desk's text and tapback, and the "firstmate did not get that" reply, so they all keep one order. The service writes the file to a temporary name, syncs it to disk, and renames it. The file name is a sequence number that only goes up. The service answers `fm-imessage` only after the file is on disk. A desk message that waited out an outage is still sent, late.
+- **Delivery.** One loop sends the oldest file, then deletes it. If a send fails with a transient error (`UNAVAILABLE`, HTTP 502 or 503, a timeout, or a dropped connection), the loop tries the same file again after a wait: 1 second, then 2, 4, and so on, up to 60 seconds, each with random jitter. Thus the order stays the same and no message is lost. After each bubble of a message, the service records the bubbles that it sent. Delivery is at least once: if the upstream accepts a send but the answer fails, or the service stops between a send and the record, that one bubble can arrive twice. If the text that a send threads to is gone, the service sends it without the thread.
 - **Downloads.** If an attachment download fails, the note says that the attachment could not be saved yet. The service records the message id in `~/.local/state/fm-imessage/downloads/` and tries the download again with the same waits. When the download works, the service files a second note with the saved path.
 - **Restarts.** The outbox and the downloads are on disk, so they survive a restart of the service. At start, the service continues with the files that it finds.
 - **Typing.** Typing bubbles are best effort. A typing error is logged and never fails or delays a send.
 - **Logs.** Each failed try writes one log line with the operation and the code, for example `outbox item 3 failed (try 4), next try in 6.2 s: UNAVAILABLE: ...`. A transient error never writes a stack trace.
 
-A message that always fails, for example a send that the line refuses, stays first in the outbox and stops the messages after it. The log shows it on each try. To drop it, delete its file from the outbox directory. `FM_IMESSAGE_RETRY_MS` sets the first wait in milliseconds (default 1000); the longest wait is 60 times that value.
+An item that fails with any other error (for example a message that is not found, an expired attachment, or a file that does not parse) cannot pass on a later try. The service moves its file to `~/.local/state/fm-imessage/outbox-dead/` (for a download: `downloads-dead/`), writes one log line, and goes on with the next item. Nothing is dropped without a trace, and nothing blocks the queue. To send or fetch it again, move the file back to the queue directory under a new sequence number. To drop an item by hand, delete its file. `FM_IMESSAGE_RETRY_MS` sets the first wait in milliseconds (default 1000); the longest wait is 60 times that value.
 
 ## Desk memory
 
@@ -108,7 +108,7 @@ If a spectrum-ts upgrade changes the internals that the service reads to reach t
 
 ## Plain messages and the shared line
 
-A send is a plain message into the conversation of the owner's latest text. Measured on the free shared line: plain sends into the owner's own conversation work, while a conversation that the service opened itself was refused ("Target not allowed for this project"). If the line refuses a send, the send stays in the outbox and the service logs each try (see [Upstream outages](#upstream-outages)). Threading happens only with `--reply N`. Typing bubbles and tapbacks also go to his latest text. Before the owner sends the first text, the commands fail with HTTP 503.
+A send is a plain message into the conversation of the owner's latest text. Measured on the free shared line: plain sends into the owner's own conversation work, while a conversation that the service opened itself was refused ("Target not allowed for this project"). A refusal is not a transient error, so the service moves that send to the dead-letter folder and logs one line (see [Upstream outages](#upstream-outages)). Threading happens only with `--reply N`. Typing bubbles and tapbacks also go to his latest text. Before the owner sends the first text, the commands fail with HTTP 503.
 
 ## Location is personal data
 
