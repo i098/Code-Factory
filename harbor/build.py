@@ -7,6 +7,7 @@ follows Crewship as it changes. Standard library only: python3 harbor/build.py
 import html
 import re
 import shutil
+import sys
 from pathlib import Path
 
 HARBOR = Path(__file__).resolve().parent
@@ -14,7 +15,7 @@ ROOT = HARBOR.parent
 REPO = "https://github.com/i098/Crewship"
 MARK = "<!-- points: harbor/build.py fills this list from README.md and CHANGELOG.md -->"
 
-# Each README Docs row -> the object in the scene that shows it (tests/test_harbor_build.py checks).
+# Each README Docs row -> the object in the scene that shows it. Rows not listed here go on the docs board.
 SCENE = {
     "docs/configuration.md": ("helm", "The helm"),
     "docs/dependencies.md": ("hold", "The cargo hold"),
@@ -56,10 +57,16 @@ def first_sentence(markdown_section):
 
 def points(readme, changelog):
     """(spot, title, href, body HTML) for every point of interest."""
-    rows = [
-        (SCENE[link][0], title, f"{REPO}/blob/main/{link}", f"{SCENE[link][1]}. {inline(desc)}")
-        for title, link, desc in features(readme)
-    ]
+    rows, extra = [], []
+    for title, link, desc in features(readme):
+        href = f"{REPO}/blob/main/{link}"
+        if link in SCENE:
+            rows.append((SCENE[link][0], title, href, f"{SCENE[link][1]}. {inline(desc)}"))
+        else:
+            print(f"harbor: no scene object for {link}; listing it on the docs board", file=sys.stderr)
+            extra.append(f'<a target="_blank" rel="noopener" href="{href}">{html.escape(title)}</a>: {inline(desc, 60)}')
+    if extra:
+        rows.append(("docsboard", "More docs", f"{REPO}#docs", "The docs board. More pages: " + "; ".join(extra)))
     version = re.search(r"^## \[(\d[^\]]*)\]", changelog, re.M).group(1)
     unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
     news = [re.sub(r"\s*\(\[#\d+\].*$", "", item) for item in re.findall(r"^- (.+)$", unreleased, re.M)[:3]]

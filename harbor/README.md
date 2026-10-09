@@ -6,7 +6,7 @@ It is plain HTML, CSS and JavaScript in `public/`, with no dependencies. Nothing
 
 ## Content from the repository
 
-`build.py` (Python standard library) copies `public/` to `dist/` and fills the points of interest: one per row of the README's Docs table, plus the quick start, the repository, the latest release with the next changes from `CHANGELOG.md`, and how.html. A new Docs row needs an object in the scene, mapped in `build.py`'s `SCENE`; `tests/test_harbor_build.py` fails until it has one.
+`build.py` (Python standard library) copies `public/` to `dist/` and fills the points of interest: one per row of the README's Docs table, plus the quick start, the repository, the latest release with the next changes from `CHANGELOG.md`, and how.html. A Docs row with an object in the scene (mapped in `build.py`'s `SCENE`) opens on that object. A row with no mapping never blocks the build: it prints a warning and is listed, with its link, on the docs board by the containers, which shows on the mini map like the other points. Add an object and a `SCENE` entry to give the row its own place.
 
 ## Preview
 

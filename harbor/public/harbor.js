@@ -81,7 +81,7 @@ function beam(list, a, b, mat, o = {}, r = 0.03) {
   return solid(list, planes, bb, mat, { solid: false, thin: true, ...o });
 }
 // A 3x5 pixel font for the painted signs.
-const FONT = { A: "010101111101101", B: "110101110101110", C: "011100100100011", E: "111100110100111",
+const FONT = { A: "010101111101101", B: "110101110101110", C: "011100100100011", D: "110101101101110", E: "111100110100111",
   H: "101101111101101", I: "111010010010111", O: "010101101101010", P: "110101110100100",
   R: "110101110101101", S: "011100010001110", W: "101101101111101" };
 // Paints `text` inside the rectangle [u0,u1] x [v0,v1] of a face, u running left to right as seen from the front.
@@ -312,6 +312,9 @@ box(world, -25, 1.45, 15.62, -6.3, 1.53, 15.7, "o");
 const howText = painted("HOW", 7.4, 8.7, 2.45, 3.25);
 for (const x of [7.35, 8.6]) box(world, x, 1.2, 16.72, x + 0.15, 2.4, 16.85, "o", { spot: "how" });
 box(world, 7.2, 2.35, 16.6, 8.9, 3.35, 16.72, "o", { spot: "how", tex: (x, y, z, nx, ny, nz) => (nz < -0.5 ? (howText(x, y) ? "l" : "-") : null) });
+const docsText = painted("DOCS", 11, 14.4, 2.45, 3.25);
+for (const x of [10.95, 14.25]) box(world, x, 1.2, 16.72, x + 0.15, 2.4, 16.85, "o", { spot: "docsboard" });
+box(world, 10.8, 2.35, 16.6, 14.6, 3.35, 16.72, "o", { spot: "docsboard", tex: (x, y, z, nx, ny, nz) => (nz < -0.5 ? (docsText(x, y) ? "l" : "-") : null) });
 
 // Ship, in its own frame: hull, rails, cabin, helm, mast, sail, crow's nest, hatch, lantern.
 const k = 1 / 3.2;

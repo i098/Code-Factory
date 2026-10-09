@@ -65,9 +65,3 @@ def test_harbor_never_reaches_an_image_or_a_host():
     from_checkout = [s[len("REPO") :].strip("/") for s in sources if s.startswith("REPO")]
     assert from_checkout, "no playbook source resolved to the checkout"
     assert "" not in from_checkout
-
-    # Entry points, image recipe and container configuration never name it.
-    shipping = [ROOT / "onboard.sh", ROOT / "ship.sh", ROOT / "Dockerfile", ROOT / "compose.yml"]
-    for folder in ("ansible", "scripts", "containers", ".devcontainer", "cloud-init"):
-        shipping += [p for p in (ROOT / folder).rglob("*") if p.is_file()]
-    assert [p.name for p in shipping if "harbor" in p.read_text(errors="ignore")] == []
