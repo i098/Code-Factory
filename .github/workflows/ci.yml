@@ -85,6 +85,35 @@ jobs:
       - name: Validate container configuration
         run: ./ship.sh inspect --config containers/factory.container.yml
 
+  # crewboard/ is a Rust crate; its Cargo.lock stays locked like uv.lock.
+  # Rust tracks its latest stable release through the runner's rustup.
+  crewboard:
+    name: crewboard rust checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: crewboard
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install latest stable Rust
+        run: rustup toolchain install stable --profile minimal --component clippy && rustup default stable
+
+      - name: Build
+        run: cargo build --locked
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
   # The repository's own quality gate (docs/omp.md#quality-gate): the same
   # blocking rule the omp extension applies at turn end, against the committed
   # .sentrux/baseline.json, plus fallow audit on the changed files as a warning.
