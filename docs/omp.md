@@ -15,6 +15,7 @@ With the `agents` profile on, `./ship.sh launch`:
 7. Sets up omp as the no-mistakes pipeline agent. See [no-mistakes pipeline agent](#no-mistakes-pipeline-agent).
 8. Installs the skills in [`skills/`](../skills/) for omp and Claude Code. See [Skills](#skills).
 9. Installs [`config/AGENTS.md`](../config/AGENTS.md) as the global instructions of Claude Code, omp and Codex. See [Global instructions](#global-instructions).
+10. Installs the omp rules in [`rules/`](../rules/) to omp's global rules folder. See [Rules](#rules).
 
 Both copies are first-write-only. If a file already exists, the recipe leaves it alone, so an account's own settings and provider configuration are never overwritten. The one exception is the two status line keys the [status line icons](#status-line-icons) need, which every apply ensures. See [Updating an existing host](#updating-an-existing-host).
 
@@ -158,6 +159,17 @@ Crewship keeps skills, not personal notes, in `skills/`. `CLAUDE.md` and `AGENTS
 Every apply copies each skill to `~/.omp/agent/skills/<name>/` and `~/.claude/skills/<name>/` with [`scripts/skills.py`](../scripts/skills.py). A private skill wins over a public skill with the same name. The installer records the names it installed in `~/.local/share/code-factory/skills.json`. It rewrites only those skills, and removes one when its source leaves `skills/`. A skill directory that the manifest does not list belongs to the operator: the installer never replaces or removes it and reports it under `skipped`. An unchanged apply changes nothing.
 
 To fill `skills/private/` on every host from one private source, set `skills.private_source` in `.local/host.yml` ([The host config](configuration.md#the-host-config)). It is an absolute local directory or a git URL (`https://`, `ssh://`, `file://` or `user@host:path`), with an optional `skills.private_ref` that applies only to a git URL; validation rejects it beside a local directory. Each skill in the source is a top-level `<name>/SKILL.md`. Before the install, apply fetches a git source into `~/.cache/code-factory/private-skills/` and copies its skills into `skills/private/`. A git fetch signs in with the account's own git or GitHub login (for example `gh auth setup-git`), never with the config file, so the schema rejects an `https://` URL that holds a user name or token. The same manifest, under `skills/private`, records the filled skills: a skill that leaves the source leaves `skills/private/`, and a private skill put there by hand is never replaced. Without the setting, apply fetches nothing. Removing the setting and applying removes the skills an earlier fill added, from `skills/private/` and from both install folders, and leaves private skills put there by hand.
+
+## Rules
+
+Crewship ships general omp rules, including Time Traveling Stream Rules (TTSR), in `rules/`. Each rule is one Markdown file in omp's rule format: YAML frontmatter (`description`, and `alwaysApply`, or a TTSR `condition` and `scope`) and a body.
+
+- `rules/public/<name>.md`: rules that ship with Crewship. Keep them general: no paths, host names, user names, emails, accounts, or project names. `tests/test_skills.py` scans them for these markers.
+- `rules/private/<name>.md`: rules that stay on the host. Git ignores this folder except its README, and Docker builds leave it out.
+
+Every apply copies each rule to `~/.omp/agent/rules/<name>.md` with the skills installer, [`scripts/skills.py`](../scripts/skills.py). A private rule wins over a public rule with the same name. The installer records the rules it installed in the same manifest as the skills, and treats them the same way: it rewrites or removes only those rules, a rule file that the manifest does not list belongs to the operator, and an unchanged apply changes nothing.
+
+The same `skills.private_source` fills `rules/private/` from the `rules/` folder of that source (`rules/<name>.md`), with the same manifest rules under `rules/private`: a rule that leaves the source leaves `rules/private/` and `~/.omp/agent/rules/`, and a private rule put there by hand is never replaced.
 
 ## Global instructions
 
