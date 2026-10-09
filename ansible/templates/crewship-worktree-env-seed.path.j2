@@ -9,7 +9,7 @@ Description=Fleet worktree env seed - trigger on swarms-platform pool changes (C
 {% for pool in factory_cfg.fleet.worktree_pools %}
 PathChanged={{ factory_cfg.home }}/{{ pool }}
 {% endfor %}
-Unit=flotilla-worktree-env-seed.service
+Unit=crewship-worktree-env-seed.service
 
 [Install]
 WantedBy=default.target

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # supabase shim (fleet) - this box runs ONE shared Supabase stack.
 # ~/oss-fleet/shared-supabase/README.md. Lifecycle and schema subcommands are
-# refused here; `npx supabase` inside a worktree bypasses this shim, but the
-# Docker event guard removes any second stack on creation regardless.
+# refused here; `npx supabase` inside a worktree bypasses this shim, and the
+# Firstmate tool-call guard blocks `supabase start` itself.
 case "${1:-}" in
   status|--version|-v|help|--help|-h|"")
     exec "$HOME/oss-fleet/shared-supabase/node_modules/.bin/supabase" --workdir "$HOME/oss-fleet/shared-supabase" "$@"

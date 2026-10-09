@@ -2,7 +2,7 @@
 # The ONE shared local Supabase stack (project {{ factory_shared_supabase_project }}).
 # check.sh is idempotent: `supabase start` on the existing volumes, then the
 # DDL guard, then the env template every worktree receives. Started at login;
-# flotilla-shared-supabase-check.timer re-runs it every 5 minutes.
+# crewship-shared-supabase-check.timer re-runs it every 5 minutes.
 # Docs: {{ factory_shared_supabase_dir }}/README.md
 
 [Unit]

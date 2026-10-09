@@ -5,9 +5,9 @@
 #   * ~/oss-fleet/shared-supabase - the stack's project dir: the latest
 #     Supabase CLI from the npm registry, config.toml,
 #     check.sh keeper (idempotent start + DDL guard + env template), guard.sql.
-#   * ~/oss-fleet/doctor/docker-guard.sh - `docker events` watcher that removes
-#     any Supabase CLI project other than the shared one on creation and alerts
-#     on bare Postgres containers. Allowlist is first-write (operator-owned).
+#   * ~/oss-fleet/doctor/docker-guard.sh - every hour, removes stopped
+#     containers older than factory.fleet.docker_guard.stopped_hours and
+#     reports unclaimed running ones; never volumes, images or kept containers.
 #   * ~/oss-fleet/doctor/worktree-env-seed.sh - installs the stack's env file
 #     as .env.local in every swarms worktree, plus a `node` wrapper in each
 #     pool slot that caps the lane heap; path unit + timer + login.
@@ -49,9 +49,6 @@
     - "{{ factory_shared_supabase_dir }}"
     - "{{ factory_shared_supabase_dir }}/supabase"
     - "{{ factory_local_bin }}"
-    - "{{ factory_user_units }}"
-    - "{{ factory_user_units }}/default.target.wants"
-    - "{{ factory_user_units }}/timers.target.wants"
 
 # --- scripts and static files (repository-owned, always converged) -----------
 
@@ -76,7 +73,6 @@
     - { src: bin/supabase, dest: "{{ factory_local_bin }}/supabase", mode: "0755" }
   loop_control:
     label: "{{ item.dest }}"
-  notify: restart fleet docker guard
 
 # The Supabase config carries the project id; container names derive from it.
 - name: Render the shared stack's Supabase configuration
@@ -89,45 +85,6 @@
     group: "{{ factory_group }}"
     mode: "0644"
   become: true
-
-# The allowlist is operator-owned after the first write: it names the shared
-# project and whatever bare Postgres containers the operator chose to tolerate.
-- name: Check for an existing docker-guard allowlist
-  ansible.builtin.stat:
-    path: "{{ factory_fleet_doctor_dir }}/docker-guard-allow.txt"
-    get_checksum: false
-  become: true
-  register: factory_fleet_allow_stat
-  changed_when: false
-  check_mode: false
-
-- name: Seed the docker-guard allowlist once
-  ansible.builtin.copy:
-    content: |
-      # docker-guard allowlist. One entry per line.
-      #   project:<id>  Supabase CLI project permitted to run (com.supabase.cli.project label)
-      #   <glob>        container-name glob whose bare Postgres-family image is tolerated
-      project:{{ factory_shared_supabase_project }}
-    dest: "{{ factory_fleet_doctor_dir }}/docker-guard-allow.txt"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
-    mode: "0644"
-  become: true
-  when: not (factory_fleet_allow_stat.stat.exists | default(false))
-
-- name: Assert the allowlist admits the shared project
-  ansible.builtin.assert:
-    that:
-      - >-
-        not (factory_fleet_allow_stat.stat.exists | default(false))
-        or (lookup('ansible.builtin.file', factory_fleet_doctor_dir ~ '/docker-guard-allow.txt', errors='ignore') | default('', true))
-           is search('(?m)^project:' ~ (factory_shared_supabase_project | regex_escape) ~ '$')
-    fail_msg: >-
-      {{ factory_fleet_doctor_dir }}/docker-guard-allow.txt does not list
-      project:{{ factory_shared_supabase_project }}; the guard would remove the
-      shared stack itself. Add the line and re-run.
-    quiet: true
-  when: not ansible_check_mode
 
 # --- latest Supabase CLI ------------------------------------------------------
 
@@ -269,56 +226,3 @@
       become_user: "{{ factory_cfg.user }}"
       environment: "{{ factory_user_env }}"
       changed_when: true
-
-# --- systemd units -------------------------------------------------------------
-
-- name: Render the fleet units
-  ansible.builtin.template:
-    src: "{{ item }}.j2"
-    dest: "{{ factory_user_units }}/{{ item }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
-    mode: "0644"
-  become: true
-  loop: "{{ factory_fleet_units }}"
-  notify:
-    - reload user systemd
-    - restart fleet docker guard
-    - restart fleet timers
-
-- name: Statically enable the fleet units
-  ansible.builtin.file:
-    src: "{{ factory_user_units }}/{{ item.unit }}"
-    dest: "{{ factory_user_units }}/{{ item.wants }}/{{ item.unit }}"
-    state: link
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
-    force: true
-    follow: false
-  become: true
-  loop: "{{ factory_fleet_enabled_units }}"
-  loop_control:
-    label: "{{ item.unit }}"
-
-- name: Enable and start the fleet units
-  ansible.builtin.systemd_service:
-    scope: user
-    name: "{{ item.unit }}"
-    enabled: true
-    state: started
-  become: "{{ factory_become_target | bool }}"
-  become_user: "{{ factory_cfg.user }}"
-  environment: "{{ factory_user_systemd_env }}"
-  loop: "{{ factory_fleet_enabled_units }}"
-  loop_control:
-    label: "{{ item.unit }}"
-  when: factory_manage_services | bool
-
-- name: Report the deferred fleet start
-  ansible.builtin.debug:
-    msg: >-
-      start_services is false: fleet units are written and statically enabled
-      but not started here. On a real host flotilla-shared-supabase.service
-      brings the stack up at login and generates
-      {{ factory_shared_supabase_dir }}/swarms-platform.env.local.
-  when: not (factory_manage_services | bool)

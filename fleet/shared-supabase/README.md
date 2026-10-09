@@ -25,23 +25,19 @@ close that.
 
 - `check.sh` - keeps the stack up (idempotent `supabase start` on the existing
   volumes) and re-applies `guard.sql`. Run at login by
-  `flotilla-shared-supabase.service`, every 5 min by
-  `flotilla-shared-supabase-check.timer`. Log: `check.log`.
+  `crewship-shared-supabase.service`, every 5 min by
+  `crewship-shared-supabase-check.timer`. Log: `check.log`.
 - `guard.sql` - event triggers reject DDL/DROP from every role except the
   Supabase service roles; `postgres`/`dashboard_user` default to read-only
   transactions. App traffic (anon/authenticated/service_role) is unaffected.
-- `~/oss-fleet/doctor/docker-guard.sh` (`flotilla-docker-guard.service`) -
-  watches `docker events`; any Supabase CLI project other than the shared one
-  is removed the instant it is created; bare Postgres containers are alerted.
-  Allowlist: `doctor/docker-guard-allow.txt`.
-- `~/oss-fleet/doctor/worktree-env-seed.sh` (`flotilla-worktree-env-seed.*`) -
+- `~/oss-fleet/doctor/worktree-env-seed.sh` (`crewship-worktree-env-seed.*`) -
   installs `<project>.env.local` as `.env.local` in the project worktrees
   matched by the pool glob and checkout path fixed in that script, on changes
   to the pools the path unit watches (`factory.fleet.worktree_pools`), every
   2 min, and at login. Files lacking the
   `# fleet-shared-supabase` marker are replaced (backup kept alongside).
 - `~/.local/bin/supabase` - shim; refuses lifecycle subcommands with a pointer
-  here. (`npx supabase` bypasses it; the docker guard does not.)
+  here. (`npx supabase` bypasses it; the Firstmate tool-call guard does not.)
 - `/etc/docker/daemon.json` - `init: true` so containers reap their children
   (Supabase studio/pg_meta pile up zombies without an init) and
   `live-restore: true` so dockerd restarts do not take containers down.
@@ -49,12 +45,12 @@ close that.
 ## Operating
 
 ```
-systemctl --user status flotilla-shared-supabase flotilla-docker-guard
+systemctl --user status crewship-shared-supabase crewship-shared-supabase-check.timer
 cd ~/oss-fleet/shared-supabase && ./node_modules/.bin/supabase status
-tail ~/oss-fleet/doctor/docker-guard.log ~/oss-fleet/shared-supabase/check.log
+tail ~/oss-fleet/shared-supabase/check.log
 ```
 
-Stopping on purpose: `systemctl --user stop flotilla-shared-supabase-check.timer`
+Stopping on purpose: `systemctl --user stop crewship-shared-supabase-check.timer`
 then `./node_modules/.bin/supabase stop` (volumes are kept). Do NOT `--no-backup`
 unless you mean to lose the fixture.
 

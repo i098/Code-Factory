@@ -80,7 +80,6 @@
                  factory_shared_supabase_dir ~ '/supabase/config.toml',
                  factory_shared_supabase_cli,
                  factory_fleet_doctor_dir ~ '/docker-guard.sh',
-                 factory_fleet_doctor_dir ~ '/docker-guard-allow.txt',
                  factory_fleet_doctor_dir ~ '/worktree-env-seed.sh',
                  factory_fleet_doctor_dir ~ '/storage-guard.sh',
                  factory_fleet_doctor_dir ~ '/devtools-bridge-reaper.sh',
