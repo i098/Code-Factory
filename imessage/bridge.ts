@@ -18,7 +18,7 @@ import { Spectrum, type Message } from "spectrum-ts";
 import { imessage } from "spectrum-ts/providers/imessage";
 import { type Attachment, bubbles, describe, DeskTiming, deskInput, deskPrompt, isSkip, localCommand, parseReact, typingPause } from "./desk.ts";
 import { type Chat, type Kind, Memory } from "./memory.ts";
-import { brief, Queue, transient } from "./outbox.ts";
+import { brief, permanent, Queue, transient } from "./outbox.ts";
 
 const env = process.env;
 const need = (name: string) => env[name] || (() => { throw new Error(`fm-imessage: ${name} is not set`); })();
@@ -66,8 +66,8 @@ if (!raw) console.warn("fm-imessage: no Advanced iMessage client in spectrum-ts 
 // A message by its conversation and message ids, which outlive a restart.
 type Ref = { space: string; id: string };
 // One outbox item for his text `id`: a tapback, or bubbles (`done` of them sent so far), the first one threaded to
-// his text `reply` when set. `kind` is whose memory line it makes (Firstmate's unless "desk").
-type Out = Ref & { react?: string; bubbles?: string[]; done?: number; reply?: string; kind?: Kind };
+// his text `reply` when set. `kind` is whose memory line it makes (Firstmate's unless "desk"); `silent` makes none.
+type Out = Ref & { react?: string; bubbles?: string[]; done?: number; reply?: string; kind?: Kind; silent?: boolean };
 let latest: Message | undefined;
 let latestRef: Ref | undefined; // the ids of `latest`, kept even when it cannot be fetched after a restart
 const saved = Bun.file(LATEST_FILE);
@@ -155,7 +155,7 @@ async function deliver(o: Out, save: (o: Out) => void) {
   const space = await imessage(app).space.get(o.space);
   const parts = o.bubbles ?? [];
   const thread = o.reply && !o.done ? await find({ space: o.space, id: o.reply }).catch((e) => {
-    if (transient(e)) throw e;
+    if (!permanent(e)) throw e;
     console.error(`fm-imessage: reply target ${o.reply} gone, sending unthreaded: ${brief(e)}`);
   }) : undefined;
   for (let i = o.done ?? 0; i < parts.length; i++) {
@@ -168,7 +168,7 @@ async function deliver(o: Out, save: (o: Out) => void) {
     else await space.send(parts[i]);
     save({ ...o, done: i + 1 });
   }
-  remember(kind, parts.join("\n\n"));
+  if (!o.silent) remember(kind, parts.join("\n\n"));
 }
 
 // A memory error never stops a send, a tapback or the inbox note: it is logged.
@@ -262,7 +262,7 @@ async function fetchAgain(ref: Ref) {
   const { text, failed } = await noteText(await find(ref));
   if (failed !== undefined) throw failed;
   if (text !== undefined && !fileNote(`photon-${ref.id}-saved`, `(an earlier attachment is saved now) ${text}`)) {
-    throw Object.assign(new Error("the inbox note failed"), { retry: true });
+    throw new Error("the inbox note failed");
   }
 }
 
@@ -272,7 +272,7 @@ async function handle(message: Message) {
   if (text === undefined) return;
   // Hand the text to Firstmate first, so the wake never waits on the desk model.
   if (!fileNote(`photon-${message.id}`, text)) {
-    outbox.add({ space: message.space.id, id: message.id, bubbles: ["firstmate did not get that, send it again"], reply: message.id });
+    outbox.add({ space: message.space.id, id: message.id, bubbles: ["firstmate did not get that, send it again"], reply: message.id, silent: true });
     return;
   }
   if (failed !== undefined) {

@@ -501,76 +501,83 @@ OUTBOX = json.dumps(str(ROOT / "imessage/outbox.ts"))
 
 
 @pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
-def test_transient_upstream_errors():
-    """gRPC UNAVAILABLE in its two shapes, HTTP 502 and 503, and a wrapped cause are transient; others are not."""
+def test_upstream_errors_are_classified():
+    """Outage errors are transient and labelled; only an item that is provably bad is permanent; the rest retry."""
     result = bun(f"""
-import {{ brief, transient }} from {OUTBOX};
+import {{ brief, permanent, transient }} from {OUTBOX};
 const err = (message, extra) => Object.assign(new Error(message), extra);
+const codes = ["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "ENOTFOUND", "ENETUNREACH", "EHOSTUNREACH", "EPIPE"];
 const cases = [
   err("/photon.imessage.v1.MessageService/Send UNAVAILABLE: [upstream] Service temporarily unavailable. Please retry.", {{ code: 14 }}),
   err("[upstream] Service temporarily unavailable. Please retry.", {{ grpcCode: 14 }}),
   err("Bad Gateway", {{ status: 502 }}),
   err("Service Unavailable", {{ status: 503 }}),
+  err("Gateway Timeout", {{ status: 504 }}),
   err("send failed", {{ cause: err("down", {{ grpcCode: 14 }}) }}),
-  err("Target not allowed for this project", {{ grpcCode: 7 }}),
+  Object.assign(new Error("The operation timed out"), {{ name: "TimeoutError" }}),
+  ...codes.map((code) => err(`connect ${{code}}`, {{ code }})),
+  err("deadline", {{ grpcCode: 4 }}),
+  err("fetch failed", {{ cause: err("socket hang up") }}),
+  err("The socket connection was closed unexpectedly"),
+  err("bad request", {{ code: "UND_ERR_INVALID_ARG" }}),
   err("Internal Server Error", {{ status: 500 }}),
+  err("Too Many Requests", {{ status: 429 }}),
+  err("internal", {{ grpcCode: 13 }}),
+  err("resource exhausted", {{ grpcCode: 8 }}),
+  err("Target not allowed for this project", {{ grpcCode: 7 }}),
+  err("something odd"),
   "unavailable",
+  err("message m1 not found"),
+  err("send failed", {{ cause: err("x", {{ status: 404 }}) }}),
+  err("Gone", {{ status: 410 }}),
+  err("The attachment has expired"),
+  err("bad argument", {{ grpcCode: 3 }}),
+  err("Unprocessable", {{ status: 422 }}),
+  err("token expired", {{ status: 401 }}),
+  err("unreadable", {{ permanent: true }}),
+  err("message m1 not found", {{ status: 503 }}),
 ];
-console.log(JSON.stringify({{ codes: cases.map((e) => transient(e) ?? null), line: brief(err("first\\nsecond", {{ grpcCode: 14 }})) }}));
+console.log(JSON.stringify({{
+  codes: cases.map((e) => transient(e) ?? null),
+  permanent: cases.map(permanent),
+  line: brief(err("first\\nsecond", {{ grpcCode: 14 }})),
+}}));
 """)
-    assert result["codes"] == ["UNAVAILABLE", "UNAVAILABLE", "HTTP 502", "HTTP 503", "UNAVAILABLE", None, None, None]
+    outage = ["UNAVAILABLE", "UNAVAILABLE", "HTTP 502", "HTTP 503", "HTTP 504", "UNAVAILABLE"] + ["TIMEOUT"] * 12
+    assert result["codes"] == outage + [None] * 16 + ["HTTP 503"]
+    assert result["permanent"] == [False] * 26 + [True] * 6 + [False] + [True] + [False]
     assert result["line"] == "UNAVAILABLE: first"
 
 
 @pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
-def test_timeouts_and_dropped_connections_are_transient():
-    result = bun(f"""
-import {{ transient }} from {OUTBOX};
-const err = (message, extra) => Object.assign(new Error(message), extra);
-const codes = ["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "ENOTFOUND", "ENETUNREACH", "EHOSTUNREACH", "EPIPE"];
-const cases = [
-  Object.assign(new Error("The operation timed out"), {{ name: "TimeoutError" }}),
-  ...codes.map((code) => err(`connect ${{code}}`, {{ code }})),
-  err("deadline", {{ grpcCode: 4 }}),
-  err("Gateway Timeout", {{ status: 504 }}),
-  err("fetch failed", {{ cause: err("socket hang up") }}),
-  err("The socket connection was closed unexpectedly"),
-  err("the inbox note failed", {{ retry: true }}),
-  err("message m1 not found"),
-  err("Target not allowed for this project", {{ grpcCode: 7 }}),
-  new SyntaxError("JSON Parse error: Unexpected identifier"),
-];
-console.log(JSON.stringify(cases.map((e) => transient(e) ?? null)));
-""")
-    assert result == ["TIMEOUT"] * 9 + ["TIMEOUT", "HTTP 504", "TIMEOUT", "TIMEOUT", "RETRY", None, None, None]
-
-
-@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
-def test_queue_moves_items_that_cannot_pass_to_the_dead_letter_folder(tmp_path):
-    """A transient failure retries the same item in order; any other failure or a corrupt file never blocks the rest."""
+def test_queue_moves_only_provably_bad_items_to_the_dead_letter_folder(tmp_path):
+    """Outage and unknown errors retry the same item in order; a bad item or a corrupt file never blocks the rest."""
     queue = tmp_path / "queue"
     queue.mkdir()
-    (queue / "1.json").write_text('{"v":"bad"}')
-    (queue / "2.json").write_text("{not json")
-    (queue / "3.json").write_text('{"v":"flaky"}')
-    (queue / "4.json").write_text('{"v":"ok"}')
+    for n, text in enumerate(['{"v":"bad"}', "{not json", '{"v":"flaky"}', '{"v":"odd"}', '{"v":"denied"}', '{"v":"ok"}'], 1):
+        (queue / f"{n}.json").write_text(text)
     result = bun(f"""
 import {{ readdirSync }} from "node:fs";
 import {{ Queue }} from {OUTBOX};
 const done = [], tries = {{}};
+const fail = {{
+  bad: () => new Error("message m1 not found"),
+  flaky: () => Object.assign(new Error("down"), {{ grpcCode: 14 }}),
+  odd: () => Object.assign(new Error("Internal Server Error"), {{ status: 500 }}),
+  denied: () => Object.assign(new Error("permission denied"), {{ grpcCode: 7 }}),
+}};
 const q = new Queue({json.dumps(str(queue))}, "item", async (item) => {{
   tries[item.v] = (tries[item.v] ?? 0) + 1;
-  if (item.v === "bad") throw new Error("message m1 not found");
-  if (item.v === "flaky" && tries.flaky < 3) throw Object.assign(new Error("down"), {{ grpcCode: 14 }});
+  if (item.v in fail && (item.v === "bad" || tries[item.v] < 3)) throw fail[item.v]();
   done.push(item.v);
 }}, 5);
 const end = Date.now() + 10000;
-while (done.length < 2 && Date.now() < end) await Bun.sleep(10);
+while (done.length < 4 && Date.now() < end) await Bun.sleep(10);
 console.log(JSON.stringify({{ done, tries, left: readdirSync({json.dumps(str(queue))}), dead: readdirSync({json.dumps(str(queue) + "-dead")}).length }}));
 process.exit(0);
 """)
-    assert result["done"] == ["flaky", "ok"]
-    assert result["tries"] == {"bad": 1, "flaky": 3, "ok": 1}
+    assert result["done"] == ["flaky", "odd", "denied", "ok"]
+    assert result["tries"] == {"bad": 1, "flaky": 3, "odd": 3, "denied": 3, "ok": 1}
     assert result["left"] == [] and result["dead"] == 2
 
 
@@ -601,7 +608,7 @@ function space(id) {
     startTyping: typing,
     stopTyping: typing,
     async send(text) { call("send"); sent(`send ${text}`); },
-    async getMessage(mid) { call("getMessage"); return load(mid); },
+    async getMessage(mid) { call("getMessage"); return existsSync(`${dir}/messages/${mid}.json`) ? load(mid) : undefined; },
   };
 }
 function message(m) {
