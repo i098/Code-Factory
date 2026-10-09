@@ -702,7 +702,8 @@ function label(at) {
 }
 
 // ---- Mini map: the island in text, every point of interest, and you; M picks, M again fills the screen.
-const ORDER = Object.keys(spots);
+const ORDER = Object.keys(spots).filter((id) => anchors[id]);
+if (ORDER.length < Object.keys(spots).length) console.warn("harbor: no scene object for", Object.keys(spots).filter((id) => !anchors[id]).join(", "));
 const WORLD = { x0: -62, x1: 48, z0: -44, z1: 56 };
 const MAPCELLS = new Map();
 let mapMode = 0, pick = 0, jumped = null, mapBox = null; // mapMode: 0 idle, 1 picking, 2 full screen
