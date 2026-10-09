@@ -404,7 +404,8 @@ check_no_baked_credentials() {
     local p
     for p in \
         "${HOME}/.ssh" "${HOME}/.netrc" "${HOME}/.aws" "${HOME}/.config/gh" \
-        "${HOME}/.config/omp/auth.json" "${HOME}/.claude" "${HOME}/.codex" \
+        "${HOME}/.config/omp/auth.json" "${HOME}/.claude/.credentials.json" \
+        "${HOME}/.codex/auth.json" \
         "${CF_ROOT}/.env" "${CF_ROOT}/.local/secrets"; do
         [ ! -e "${p}" ] || fail "credential-bearing path baked into the image: ${p}"
     done
