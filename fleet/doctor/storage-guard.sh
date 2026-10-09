@@ -2,7 +2,7 @@
 # storage-guard.sh - watch disk use the way mem-guardian watches memory.
 #
 # Why: on 2026-09-23 the host's root filesystem reached 95% used (9.8 GB free)
-# and nothing alerted. docker-guard acts only on container creation,
+# and nothing alerted. docker-guard acts only on containers,
 # mem-guardian only on memory and swap, Firstmate's orphan sweep only on aged
 # litter; none of them measures disk. Docker held 45 GB of images (22 GB
 # reclaimable). Hours later /var/log/syslog grew to 39 GB at ~17 MB/s from one
@@ -37,7 +37,7 @@
 # --dry-run prints the measurement, the tier, what each CRIT step would free
 # and the alert a real run would send, and writes nothing: no state, log,
 # COMMS.md line or alert.
-# Runs every 5 minutes from flotilla-storage-guard.timer.
+# Runs every 5 minutes from crewship-storage-guard.timer.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 LOG=$HERE/storage-guard.log

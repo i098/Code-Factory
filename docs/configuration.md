@@ -54,6 +54,9 @@ factory:
   fleet:
     supabase_project_id: <project-id>   # The shared Supabase project id; the default is set in config/default.yml
     fixture_archive: ""   # Path to DB volume tarball for fresh hosts
+    docker_guard:
+      stopped_hours: 24   # Remove a stopped container this long after it exits
+      running_hours: 48   # Report a running container this old that nothing claims
   firstmate:
     url: https://github.com/kunchenguid/firstmate.git
     # checklist:          # Optional; set only in .local/host.yml
@@ -102,7 +105,7 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 | `development` | on | Rust toolchain (stable), build essentials. |
 | `firstmate` | on | Firstmate clone tracking upstream `main`, plus seeded Firstmate config: crew dispatch, crew and secondmate harness, the crew omp overlay (crew advisor, see [omp configuration](omp.md#advisor)), Herdr backend selection, startup memory budget, the spawn memory floor, presentation spaces off, and the turn-end pane-churn flag (see [Seeded Firstmate and OMP configuration](architecture.md#seeded-firstmate-and-omp-configuration)). |
 | `docker` | on | Docker engine and Compose v2, with daemon defaults `init` (reaps orphaned children) and `live-restore`. Group membership is opt-in through the Ansible variable `factory_docker_group_users`. |
-| `fleet_guards` | off | Shared Supabase stack, Docker event guard, dev-server reaper, devtools-bridge reaper, storage guard, env seeder. See [Fleet guards](fleet-guards.md). |
+| `fleet_guards` | off | Shared Supabase stack, Docker guard, dev-server reaper, devtools-bridge reaper, storage guard, env seeder. See [Fleet guards](fleet-guards.md). |
 | `fleet_browsers` | off | The [browser ladder](fleet-guards.md#browser-ladder): the always-on Obscura CDP tier on `127.0.0.1:9222`, the on-demand `chrome` and `vnc` tiers with the `vnc` tier's TigerVNC and noVNC packages, the cookie sync and gc timers, and the ladder environment in shell profiles and the Herdr unit. `fleet_guards` provisions the same ladder, so a `fleet_guards` host needs no change. Needs no other profile; the ladder needs `iproute2` (`ss`) from the base image, which only `desktop` installs. |
 | `chat` | on | The latest [Concord](https://github.com/chojs23/concord) (Discord) and [slk](https://github.com/gammons/slk) (Slack) terminal clients, their shared libraries, and a first-write config for each. Logins stay manual. See [Chat clients](chat.md). |
 | `tailscale` | off | Tailscale daemon only. Authentication is manual; see [Security](security.md#remote-access). |

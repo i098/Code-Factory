@@ -119,8 +119,15 @@
         - factory_cfg.ci_pool is defined
       tags: [ci_pool]
 
-    - name: Fleet guards - one shared Supabase stack, Docker event guard, worktree env seeding
+    - name: Fleet guards - one shared Supabase stack, Docker guard, worktree env seeding
       ansible.builtin.import_tasks: tasks/fleet_guards.yml
+      when:
+        - factory_account_ready | bool
+        - factory_cfg.profiles.fleet_guards | bool
+      tags: [fleet]
+
+    - name: Fleet guard units - retire the flotilla units, render and start the crewship ones
+      ansible.builtin.import_tasks: tasks/fleet_units.yml
       when:
         - factory_account_ready | bool
         - factory_cfg.profiles.fleet_guards | bool
@@ -217,17 +224,6 @@
       when: factory_manage_services | bool
       listen: restart docker
 
-    - name: Restart the fleet Docker guard
-      ansible.builtin.systemd_service:
-        scope: user
-        name: flotilla-docker-guard.service
-        state: restarted
-      become: "{{ factory_become_target | bool }}"
-      become_user: "{{ factory_cfg.user }}"
-      environment: "{{ factory_user_systemd_env }}"
-      when: factory_manage_services | bool
-      listen: restart fleet docker guard
-
     - name: Restart the iMessage bridge
       ansible.builtin.systemd_service:
         scope: user
@@ -289,12 +285,13 @@
       become_user: "{{ factory_cfg.user }}"
       environment: "{{ factory_user_systemd_env }}"
       loop:
-        - flotilla-shared-supabase-check.timer
-        - flotilla-worktree-env-seed.timer
-        - flotilla-worktree-env-seed.path
-        - flotilla-dev-server-reaper.timer
-        - flotilla-storage-guard.timer
-        - flotilla-devtools-bridge-reaper.timer
+        - crewship-shared-supabase-check.timer
+        - crewship-docker-guard.timer
+        - crewship-worktree-env-seed.timer
+        - crewship-worktree-env-seed.path
+        - crewship-dev-server-reaper.timer
+        - crewship-storage-guard.timer
+        - crewship-devtools-bridge-reaper.timer
       when: factory_manage_services | bool
       listen: restart fleet timers
 

@@ -52,16 +52,18 @@ Idle chrome-devtools-axi bridges come on top: each holds about 2 GB until
 
 ### Provisioned by this recipe
 
-| Pruner | Profile | Runs | Removes |
+The Setting column names the profile that installs each pruner and what tunes it: a key under `factory` in `.local/host.yml`, an Ansible variable, or a script default.
+
+| Pruner | Removes | Runs | Setting |
 | --- | --- | --- | --- |
-| `chrome-autoprune.timer` → `chrome-autoprune.py --apply` | `agents` (`browser_prune.enabled`) | every `poll_seconds` (300 s) | AXI bridge browser processes idle past `idle_seconds` (7200 s). It never touches headed, attached or persistent-profile browsers. |
-| `fleet-browser-gc.timer` | `fleet_browsers` or `fleet_guards` | every 5 min | Stops browser ladder tiers 2 and 3 (`chrome`, `vnc`) after 30 idle minutes with no CDP client (`FLEET_BROWSER_IDLE_MIN`). |
-| `flotilla-dev-server-reaper.timer` → `dev-server-reaper.sh` | `fleet_guards` | every 2 min | `next dev` / `next-server` / `tsc --noEmit` trees whose lane is done, paused, blocked or failed, has no agent, or has been idle 30 min or more (`REAPER_IDLE_MIN`). |
-| `flotilla-storage-guard.timer` → `storage-guard.sh` | `fleet_guards` | every 5 min | At CRIT (92%): build cache, dangling images, unused images older than `factory_storage_guard_image_age_hours`. Never volumes, containers, repositories, logs or home content. |
-| `flotilla-devtools-bridge-reaper.timer` → `devtools-bridge-reaper.sh` | `fleet_guards` | every 10 min | Attached chrome-devtools-axi bridges (`CHROME_DEVTOOLS_AXI_BROWSER_URL` set) whose process tree used no CPU and whose session state files did not change for 60 min (`REAPER_IDLE_MIN`); never any other bridge. |
-| `flotilla-docker-guard.service` → `docker-guard.sh` | `fleet_guards` | on every container create | Supabase CLI project containers other than the shared stack. Bare Postgres containers are only logged. |
-| Docker `init: true` (`/etc/docker/daemon.json`) | `docker` | continuously | Zombie processes inside every container (docker-init as PID 1). |
-| Firstmate `bin/fm-orphan-sweep.sh` | `firstmate` (ships with the checkout) | on Firstmate's wake drain, at most hourly | Dead per-task desktops, leaked treehouse worktrees, disowned browser, ssh-agent, caddy and websockify processes, and `/tmp` scratch older than two days. It refuses anything a live mate owns. |
-| Firstmate `bin/fm-herdr-session-cleanup.sh` | `firstmate` | on every locked session start | Idle restored-shell Herdr presentation panes and their journals. Never a workspace or a pane with an agent. |
-| Firstmate `bin/fm-fleet-sync.sh` (`prune_gone_branches`) | `firstmate` | on session start, in bootstrap's network stage | Local project branches whose upstream is gone; never the checked-out branch or one with a worktree. `FM_FLEET_PRUNE=0` disables it. |
-| Firstmate `bin/fm-remote-job-reap-orphans.sh` | `firstmate` | on every `fm-teardown.sh` | Remote-job worker processes whose Firstmate code root was deleted. |
+| Docker guard (`crewship-docker-guard.timer`) | Stopped containers 24 h after they exit. Running containers 48 h old are reported, never removed. Never a container with the `crewship.keep` label or a restart policy, a volume or an image. | every hour | `fleet.docker_guard.stopped_hours`, `fleet.docker_guard.running_hours`; profile `fleet_guards` |
+| Storage guard (`crewship-storage-guard.timer`) | At 92% disk use: Docker build cache, dangling images, and unused images created more than 168 h ago. Never volumes, containers, repositories, logs or home content. | every 5 min | `factory_storage_guard_*` in `ansible/group_vars/all.yml`; profile `fleet_guards` |
+| Dev-server reaper (`crewship-dev-server-reaper.timer`) | `next dev`, `next-server` and `tsc --noEmit` trees whose lane is done, paused, blocked or failed, has no agent, or is idle for 30 min or more. | every 2 min | `REAPER_IDLE_MIN` (30) in the script; profile `fleet_guards` |
+| Devtools-bridge reaper (`crewship-devtools-bridge-reaper.timer`) | Attached chrome-devtools-axi bridges whose process tree used no CPU and whose session state did not change for 60 min. Never any other bridge. | every 10 min | `REAPER_IDLE_MIN` (60) in the script; profile `fleet_guards` |
+| Browser autoprune (`chrome-autoprune.timer`) | AXI bridge browser processes idle for 2 h. Never headed, attached or persistent-profile browsers. | every 5 min | `browser_prune.enabled`, `browser_prune.idle_seconds` (7200), `browser_prune.poll_seconds` (300); profile `agents` |
+| Browser ladder gc (`fleet-browser-gc.timer`) | Browser ladder tiers 2 and 3 (`chrome`, `vnc`) after 30 idle minutes with no CDP client. | every 5 min | `FLEET_BROWSER_IDLE_MIN` (30); profile `fleet_browsers` or `fleet_guards` |
+| Docker init (`/etc/docker/daemon.json`) | Zombie processes inside every container (docker-init runs as PID 1). | continuously | `docker.init`; profile `docker` |
+| Firstmate orphan sweep (`bin/fm-orphan-sweep.sh`) | Dead per-task desktops, leaked treehouse worktrees, disowned browser, ssh-agent, caddy and websockify processes, and `/tmp` scratch older than two days. Never anything a live mate owns. | on Firstmate's wake drain, at most hourly | profile `firstmate` |
+| Firstmate Herdr cleanup (`bin/fm-herdr-session-cleanup.sh`) | Idle restored-shell Herdr presentation panes and their journals. Never a workspace or a pane with an agent. | on every locked session start | profile `firstmate` |
+| Firstmate branch prune (`bin/fm-fleet-sync.sh`) | Local project branches whose upstream is gone. Never the checked-out branch or one with a worktree. | on session start | `FM_FLEET_PRUNE=0` turns it off; profile `firstmate` |
+| Firstmate remote-job reaper (`bin/fm-remote-job-reap-orphans.sh`) | Remote-job worker processes whose Firstmate code root was deleted. | on every `fm-teardown.sh` | profile `firstmate` |

@@ -24,14 +24,14 @@ Sizing per lane count and the full list of pruners are in
 | Path (under the account home) | Purpose |
 | --- | --- |
 | `oss-fleet/shared-supabase/` | The ONE stack: the latest Supabase CLI (`npm install` of the registry's latest `supabase`), `supabase/config.toml` with `factory.fleet.supabase_project_id`, `check.sh` keeper, `guard.sql`, `README.md`. `check.sh` also generates the project's `<project>.env.local` from the running stack. |
-| `oss-fleet/doctor/docker-guard.sh` | `docker events` watcher. A container carrying `com.supabase.cli.project` other than an allowlisted project is removed on creation; bare Postgres-family images are logged and alerted, not killed (other projects may own them). `docker-guard-allow.txt` is written once and then operator-owned. |
+| `oss-fleet/doctor/docker-guard.sh` | Every hour: removes stopped containers that agents left behind and reports long-running ones that nothing claims. See [Docker guard](#docker-guard). |
 | `oss-fleet/doctor/worktree-env-seed.sh` | Installs the env file as `.env.local` in the project worktrees matched by the pool glob and Firstmate checkout path fixed in `fleet/doctor/worktree-env-seed.sh`; `factory.fleet.worktree_pools` only sets which pool directories the systemd path unit watches to trigger it. Files without the `# fleet-shared-supabase` marker are replaced with a backup left beside them. For each pool worktree it also seeds a `node` wrapper in `<pool slot>/node_modules/.bin`, above the checkout, that runs the managed `node` with `--max-old-space-size=2048` (`FLEET_NODE_HEAP_MB`). See the heap cap row below. |
 | `oss-fleet/doctor/dev-server-reaper.sh` | Every 2 minutes: kills `next dev`/`next-server`/`tsc --noEmit` trees in treehouse worktrees whose lane last reported `done:`/`paused:`/`blocked:`/`failed:`, has no agent process, or whose agent transcript is idle >= 30 min (`REAPER_IDLE_MIN`). A dev server is 3-4 GB and restarts in 10 s; idle ones from finished lanes are what filled swap. One `next dev` per branch is inherent - Next compiles the whole app per process - so the fix is lifetime, not sharing. |
 | `oss-fleet/doctor/storage-guard.sh` | Every 5 minutes: use% of the filesystems holding `/`, `/var/log`, the home and Docker's data root. WARN (85%) alerts once per episode, CRIT (92%) prunes only regenerable Docker data, and a fill rate projecting the disk full within 6 hours alerts even below WARN. See [Storage guard](#storage-guard). |
 | `oss-fleet/doctor/devtools-bridge-reaper.sh` | Every 10 minutes: stops attached chrome-devtools-axi bridges (`CHROME_DEVTOOLS_AXI_BROWSER_URL` set) whose process tree used no CPU and whose session state files did not change for 60 min (`REAPER_IDLE_MIN`). See [Devtools-bridge reaper](#devtools-bridge-reaper). |
 | Lane node heap cap | `bun run dev`, `bun run tsc` and the other scripts a lane runs through bun, npm or npx put every ancestor directory's `node_modules/.bin` on `PATH`, existing or not, so the seeded `node` wrapper in the pool slot directory above the checkout caps the dev server and type-check at a 2048 MB heap: a runaway `next dev`/`tsc` fails fast with a heap error the agent sees instead of swapping the host. The wrapper is written when the worktree appears, before the first `bun install`, so a fresh lane's first dev server is capped, and it lives outside the checkout, so `rm -rf node_modules` does not remove it. A `node` bin that a dependency puts in the worktree's own `node_modules/.bin` comes first on `PATH` and is left alone. The cap is deliberately not in the `.profile` managed block, the Herdr unit or `BUN_OPTIONS`, which carry only `CHROME_DEVTOOLS_AXI_MCP_PATH`: a process-wide `NODE_OPTIONS` would also cap the chrome-devtools-axi bridge (about 2 GB idle), `chrome-devtools-mcp` and `acpx`, and `--env-file` would switch off bun's own `.env`, `.env.<NODE_ENV>` and `.env.local` autoload. bun does not pass those files, `.npmrc` or `bunfig.toml` settings to a script's node child, which is why the wrapper is the seeded mechanism. |
-| `.local/bin/supabase` | Shim: `status`/`--version` pass through; every lifecycle or schema subcommand is refused with the reason. `npx supabase` bypasses it, which is why the Docker guard exists. |
-| `.config/systemd/user/flotilla-*.{service,timer,path}` | Login start + 5-minute keeper for the stack; the guard as a restart-always service; the seeder on pool changes, every 2 minutes and at login. |
+| `.local/bin/supabase` | Shim: `status`/`--version` pass through; every lifecycle or schema subcommand is refused with the reason. `npx supabase` bypasses it; the Firstmate tool-call guard below blocks it. |
+| `.config/systemd/user/crewship-*.{service,timer,path}` | Login start + 5-minute keeper for the stack; the seeder on pool changes, every 2 minutes and at login; a timer for each reaper and guard. Apply stops and deletes the same units under their old `flotilla-*` names. |
 | `/etc/docker/daemon.json` | `init: true` and `live-restore: true` merged in (tasks/docker.yml, any profile with docker). |
 | Firstmate `config/spawn-memory-floor-mb` | `8000`: `bin/fm-spawn.sh` refuses a fresh spawn while host `MemAvailable` is below it. Free swap is not counted - "there is swap left" is the thrash state. |
 
@@ -45,8 +45,8 @@ The Firstmate checkout, tracking `main` of `factory.firstmate.url`, carries the
 last layer: a per-project guard extension, a tool-call seatbelt
 loaded by every omp crewmate that blocks `supabase start|stop|db reset|migration`,
 `docker run ... postgres`, `psql` against the stack and edits to the shared
-containers, with the reason attached - so the agent learns why before the
-Docker guard has to act.
+containers, with the reason attached - so the agent learns why before it
+starts a second stack.
 
 ## The fixture
 
@@ -68,11 +68,11 @@ test users and marketplace content only; keep them out of this repository.
 
 ## Storage guard
 
-Nothing else alerts on a filling disk: docker-guard acts on container creation,
+Nothing else alerts on a filling disk: docker-guard acts on containers,
 Firstmate's orphan sweep on aged litter. Docker images, build cache, or one
 looping process writing to `/var/log` can take `/` to 100%.
 
-`flotilla-storage-guard.timer` runs `storage-guard.sh` every 5 minutes. It
+`crewship-storage-guard.timer` runs `storage-guard.sh` every 5 minutes. It
 measures the filesystems holding `/`, `/var/log`, the home and Docker's data
 root (`docker info`), each filesystem once. Thresholds are the
 `factory_storage_guard_*` variables in `ansible/group_vars/all.yml`.
@@ -96,6 +96,24 @@ the process writing it. `storage-guard.sh --dry-run` prints the measurement,
 the tier, what each CRIT step would free and the alert a real run would send,
 and changes nothing. `tests/test_storage_guard.py` drives the tiers against
 stubbed `df`, `du` and `docker`.
+
+## Docker guard
+
+Agents start containers for tests, databases and previews and seldom remove
+them. `crewship-docker-guard.timer` runs `docker-guard.sh` every hour:
+
+| Container | Action |
+| --- | --- |
+| Stopped (exited, created or dead) for `factory.fleet.docker_guard.stopped_hours` (24) or more, counted from its exit, or from its creation when it never ran | Removed with a plain `docker rm`: its volumes stay, and a container that started again since the check is refused. |
+| Running for `factory.fleet.docker_guard.running_hours` (48) or more | Reported, never stopped or removed: one log line, one `COMMS.md` line and one `notify-master.sh` alert per container. It is reported again only after it stops qualifying and then qualifies again. |
+| Claimed: label `crewship.keep` (any value), or a restart policy other than `no` | Never removed or reported. |
+
+The guard never touches volumes, images or networks. The shared Supabase stack
+is claimed: the Supabase CLI starts its containers with the `unless-stopped`
+restart policy. To keep any other container, start it with
+`--label crewship.keep` or `--restart unless-stopped`.
+`docker-guard.sh --dry-run` prints each verdict and changes nothing.
+`tests/test_docker_guard.py` drives the rules against a stubbed `docker`.
 
 ## Browser ladder
 
@@ -227,7 +245,7 @@ fleet host because the browser ladder exports `CHROME_DEVTOOLS_AXI_BROWSER_URL`;
 this reaper stops only those attached bridges and skips every other one, so a
 headed or persistent-profile Chrome is never killed.
 
-`flotilla-devtools-bridge-reaper.timer` runs `devtools-bridge-reaper.sh` every
+`crewship-devtools-bridge-reaper.timer` runs `devtools-bridge-reaper.sh` every
 10 minutes. Each run records the CPU ticks of every attached bridge's whole
 process tree; a tree that moved, or a session whose `bridge.pid` or
 `snapshot-generation` changed, counts as busy, and a bridge seen for the first
@@ -245,14 +263,12 @@ tree.
 ## Operating
 
 ```
-systemctl --user status flotilla-shared-supabase flotilla-docker-guard flotilla-worktree-env-seed.path
-systemctl --user status flotilla-storage-guard.timer flotilla-devtools-bridge-reaper.timer
+systemctl --user status crewship-shared-supabase crewship-worktree-env-seed.path
+systemctl --user status crewship-docker-guard.timer crewship-storage-guard.timer crewship-devtools-bridge-reaper.timer
+~/oss-fleet/doctor/docker-guard.sh --dry-run
 ~/oss-fleet/doctor/storage-guard.sh --dry-run
 ~/oss-fleet/doctor/devtools-bridge-reaper.sh --dry-run
 ~/oss-fleet/shared-supabase/node_modules/.bin/supabase status --workdir ~/oss-fleet/shared-supabase
 tail ~/oss-fleet/doctor/docker-guard.log ~/oss-fleet/shared-supabase/check.log ~/oss-fleet/doctor/worktree-env-seed.log
 tail ~/oss-fleet/doctor/storage-guard.log ~/oss-fleet/doctor/devtools-bridge-reaper.log
 ```
-
-Tolerating a bare Postgres container someone else owns: add its name (glob)
-to `docker-guard-allow.txt`; the guard re-reads the file on every event.
