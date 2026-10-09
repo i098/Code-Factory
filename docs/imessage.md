@@ -22,6 +22,19 @@ The desk's system prompt is `deskPrompt` in `imessage/desk.ts`. The owner's name
 
 The service ignores texts from all other senders. It saves attachments in `~/.local/state/fm-imessage/attachments/` for Firstmate to open. That directory is private to the account (mode `0700`). The service also keeps the owner's latest text in `~/.local/state/fm-imessage/latest`, so replies still work after a restart.
 
+## Upstream outages
+
+The Photon service can be unavailable for minutes. It then answers `UNAVAILABLE` (gRPC) or HTTP 502 or 503. The service keeps every message through such an outage. The code is `imessage/outbox.ts`.
+
+- **The outbox.** Each send and tapback goes to `~/.local/state/fm-imessage/outbox/` first, as one file. The service writes the file to a temporary name, syncs it to disk, and renames it. The file name is a sequence number that only goes up. The service answers `fm-imessage` only after the file is on disk.
+- **Delivery.** One loop sends the oldest file, then deletes it. If a send fails, the loop tries the same file again after a wait: 1 second, then 2, 4, and so on, up to 60 seconds, each with random jitter. Thus the order stays the same and no message is lost. After each bubble of a message, the service records the bubbles that it sent, so a retry or a restart never sends a bubble twice.
+- **Downloads.** If an attachment download fails, the note says that the attachment could not be saved yet. The service records the message id in `~/.local/state/fm-imessage/downloads/` and tries the download again with the same waits. When the download works, the service files a second note with the saved path.
+- **Restarts.** The outbox and the downloads are on disk, so they survive a restart of the service. At start, the service continues with the files that it finds.
+- **Typing.** Typing bubbles are best effort. A typing error is logged and never fails or delays a send.
+- **Logs.** Each failed try writes one log line with the operation and the code, for example `outbox item 3 failed (try 4), next try in 6.2 s: UNAVAILABLE: ...`. A transient error never writes a stack trace.
+
+A message that always fails, for example a send that the line refuses, stays first in the outbox and stops the messages after it. The log shows it on each try. To drop it, delete its file from the outbox directory. `FM_IMESSAGE_RETRY_MS` sets the first wait in milliseconds (default 1000); the longest wait is 60 times that value.
+
 ## Desk memory
 
 The desk remembers the whole conversation, after the design in [UniiChat: one chat that never ends](https://gist.github.com/VictorTaelin/91837951a5ce5b38f341ec1ba1df6449). The code is `imessage/memory.ts`.
@@ -82,20 +95,20 @@ To turn it off, remove the block, then run `systemctl --user disable --now fm-im
 
 | Command | What it does |
 | --- | --- |
-| `fm-imessage 'text'` | Sends the text to the owner. Without an argument, it reads the text from stdin. Paragraphs that a blank line separates become separate chat bubbles. The lines of one paragraph, for example a list or a schedule, stay in one bubble. Before each bubble after the first, the typing bubble shows for 400 ms plus 25 ms for each character, 2.5 seconds at most. |
-| `fm-imessage --reply N 'text'` | Sends the text, but threads the first bubble as a reply to the owner's Nth most recent text (1 is the latest). The service keeps at most 10 texts, and only those received since it started. If the Nth text is not kept, nothing is sent and the command exits non-zero. Use it only when the answer is about a text a few bubbles up. Any other value of N sends nothing and exits with code 2. |
-| `fm-imessage --typing` | Shows the typing bubble. The next send removes it. |
-| `fm-imessage --react '👍'` | Adds a tapback to the owner's latest text. |
-| `fm-imessage --help` | Shows the usage. It sends nothing. |
+| `fm-imessage 'text'` | Queues the text for the owner. Without an argument, it reads the text from stdin. Paragraphs that a blank line separates become separate chat bubbles. The lines of one paragraph, for example a list or a schedule, stay in one bubble. Before each bubble after the first, the typing bubble shows for 400 ms plus 25 ms for each character, 2.5 seconds at most. |
+| `fm-imessage --reply N 'text'` | Queues the text, but threads the first bubble as a reply to the owner's Nth most recent text (1 is the latest). The command picks the text when it runs, and the queued message keeps the id of that text. Thus the reply goes to the same text if he sends more before the delivery, or if the service restarts. The service keeps at most 10 texts, and only those received since it started. If the Nth text is not kept, nothing is queued and the command exits non-zero. Use it only when the answer is about a text a few bubbles up. Any other value of N queues nothing and exits with code 2. |
+| `fm-imessage --typing` | Shows the typing bubble, best effort. The next send removes it. A typing error is only logged, so the command exits 0. |
+| `fm-imessage --react '👍'` | Queues a tapback in the outbox, in order with the sends. The tapback goes on the text that was his latest when the command ran. |
+| `fm-imessage --help` | Shows the usage. It queues nothing. |
 | `fm-location` | Prints the location that the owner shares with the line in Find My, as JSON. |
 
 If a spectrum-ts upgrade changes the internals that the service reads to reach the location client, the service logs one warning at start and keeps running. Only `fm-location` then fails, with HTTP 503, until the bridge is updated.
 
-`fm-imessage` exits non-zero when it sends nothing. An unknown option sends nothing and exits with code 2.
+`fm-imessage` exits 0 only when the message is on disk in the outbox, and prints that it is queued. It exits non-zero when it queues nothing. An unknown option queues nothing and exits with code 2.
 
 ## Plain messages and the shared line
 
-A send is a plain message into the conversation of the owner's latest text. Measured on the free shared line: plain sends into the owner's own conversation work, while a conversation that the service opened itself was refused ("Target not allowed for this project"). If the line refuses a send, the service answers `/send` with HTTP 502 and the error, and logs it, so `fm-imessage` exits non-zero. Threading happens only with `--reply N`. Typing bubbles and tapbacks also go to his latest text. Before the owner sends the first text, the commands fail with HTTP 503.
+A send is a plain message into the conversation of the owner's latest text. Measured on the free shared line: plain sends into the owner's own conversation work, while a conversation that the service opened itself was refused ("Target not allowed for this project"). If the line refuses a send, the send stays in the outbox and the service logs each try (see [Upstream outages](#upstream-outages)). Threading happens only with `--reply N`. Typing bubbles and tapbacks also go to his latest text. Before the owner sends the first text, the commands fail with HTTP 503.
 
 ## Location is personal data
 

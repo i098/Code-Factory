@@ -72,7 +72,7 @@ export type Attachment = Extract<Content, { type: "attachment" }>;
 // What Firstmate should read for one inbound message, or undefined for pure signals (tapbacks, typing, read
 // receipts, unsends, chat changes). Threaded replies, edits, effects and grouped messages are unwrapped, so
 // nothing he writes is dropped, and an unknown kind still becomes a note. `save` writes an attachment and
-// returns its path.
+// returns its path; when it throws, the note says so, and the caller logs the error and retries the download.
 export async function describe(c: Content, id: string, save: (c: Attachment, id: string) => Promise<string>): Promise<string | undefined> {
   const kind: string = c.type; // kept for the default case, where TypeScript narrows c to never
   switch (c.type) {
@@ -85,9 +85,8 @@ export async function describe(c: Content, id: string, save: (c: Attachment, id:
     case "attachment":
       try {
         return `(sent an attachment, saved for Firstmate at ${await save(c, id)})`;
-      } catch (e) {
-        console.error("fm-imessage: could not save an attachment:", e);
-        return "(sent an attachment that could not be saved)";
+      } catch {
+        return "(sent an attachment that could not be saved yet; the bridge retries the download and files this note again with the path)";
       }
     case "reply": {
       const inner = await describe(c.content, id, save);
