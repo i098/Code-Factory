@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- README screenshot of a finished host, captured from demo repositories ([#35](https://github.com/i098/Code-Factory/issues/35)).
+
 ## [0.1.0] - 2026-10-09
 
 ### Added
