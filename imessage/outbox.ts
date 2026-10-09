@@ -2,18 +2,21 @@
 // again. Kept free of spectrum-ts so tests run without it.
 import { closeSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, unlinkSync, writeSync } from "node:fs";
 
+const NETWORK = /^(TimeoutError|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|ENETUNREACH|EHOSTUNREACH|EPIPE|ConnectionRefused|ConnectionClosed|FailedToOpenSocket|UND_ERR_\w+)$/;
+
 // The code of a transient failure, which a later try may pass: gRPC UNAVAILABLE (code 14, which Photon's HTTP
-// client also gives for HTTP 502 and 503), an HTTP 502 or 503, a timeout, a dropped connection, or an error marked
-// `retry`. Undefined for any other error, which a later try cannot fix.
+// client also gives for HTTP 502 and 503), an HTTP 502, 503 or 504, a timeout (gRPC DEADLINE_EXCEEDED, code 4), a
+// network failure with no response, or an error marked `retry`. Undefined for any other error, which a later try
+// cannot fix.
 export function transient(e: unknown): string | undefined {
   for (let x: unknown = e; x instanceof Object; x = Reflect.get(x, "cause")) {
     const status = Reflect.get(x, "status");
-    if (Reflect.get(x, "grpcCode") === 14 || Reflect.get(x, "code") === 14 || /\bUNAVAILABLE\b/.test(String(Reflect.get(x, "message")))) return "UNAVAILABLE";
-    if (status === 502 || status === 503) return `HTTP ${status}`;
+    const message = String(Reflect.get(x, "message"));
+    if (Reflect.get(x, "grpcCode") === 14 || Reflect.get(x, "code") === 14 || /\bUNAVAILABLE\b/.test(message)) return "UNAVAILABLE";
+    if (status === 502 || status === 503 || status === 504) return `HTTP ${status}`;
     if (Reflect.get(x, "retry") === true) return "RETRY";
-    if (/^(TimeoutError|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ConnectionRefused|ConnectionClosed)$/.test(`${Reflect.get(x, "name")}`) ||
-      /^(ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ConnectionRefused|ConnectionClosed)$/.test(`${Reflect.get(x, "code")}`) ||
-      Reflect.get(x, "grpcCode") === 4 || /\b(DEADLINE_EXCEEDED|timed out)\b/i.test(String(Reflect.get(x, "message")))) return "TIMEOUT";
+    if (NETWORK.test(`${Reflect.get(x, "name")}`) || NETWORK.test(`${Reflect.get(x, "code")}`) || Reflect.get(x, "grpcCode") === 4 ||
+      Reflect.get(x, "code") === 4 || /\b(DEADLINE_EXCEEDED|timed out)\b|fetch failed|Unable to connect|connection (was )?closed/i.test(message)) return "TIMEOUT";
   }
 }
 

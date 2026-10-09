@@ -527,16 +527,22 @@ def test_timeouts_and_dropped_connections_are_transient():
     result = bun(f"""
 import {{ transient }} from {OUTBOX};
 const err = (message, extra) => Object.assign(new Error(message), extra);
+const codes = ["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "ENOTFOUND", "ENETUNREACH", "EHOSTUNREACH", "EPIPE"];
 const cases = [
   Object.assign(new Error("The operation timed out"), {{ name: "TimeoutError" }}),
-  err("read ECONNRESET", {{ code: "ECONNRESET" }}),
+  ...codes.map((code) => err(`connect ${{code}}`, {{ code }})),
   err("deadline", {{ grpcCode: 4 }}),
+  err("Gateway Timeout", {{ status: 504 }}),
+  err("fetch failed", {{ cause: err("socket hang up") }}),
+  err("The socket connection was closed unexpectedly"),
   err("the inbox note failed", {{ retry: true }}),
   err("message m1 not found"),
+  err("Target not allowed for this project", {{ grpcCode: 7 }}),
+  new SyntaxError("JSON Parse error: Unexpected identifier"),
 ];
 console.log(JSON.stringify(cases.map((e) => transient(e) ?? null)));
 """)
-    assert result == ["TIMEOUT", "TIMEOUT", "TIMEOUT", "RETRY", None]
+    assert result == ["TIMEOUT"] * 9 + ["TIMEOUT", "HTTP 504", "TIMEOUT", "TIMEOUT", "RETRY", None, None, None]
 
 
 @pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
