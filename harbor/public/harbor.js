@@ -41,7 +41,8 @@ function box(list, x0, y0, z0, x1, y1, z1, mat, o) {
   return solid(list, [[1, 0, 0, x1, 0, 0], [-1, 0, 0, x0, 0, 0], [0, 1, 0, 0, y1, 0],
     [0, -1, 0, 0, y0, 0], [0, 0, 1, 0, 0, z1], [0, 0, -1, 0, 0, z0]], [x0, y0, z0, x1, y1, z1], mat, o);
 }
-// Eight-sided column around a vertical axis, optionally tapered from r0 at y0 to r1 at y1.
+// A round column around a vertical axis, tapered from r0 at y0 to r1 at y1: masts, barrels, trunks, the lighthouse.
+// Rays hit the true cone (smooth normals); the eight planes only serve the walking test and the culling box.
 function column(list, cx, cz, r0, r1, y0, y1, mat, o) {
   const pl = [[0, 1, 0, 0, y1, 0], [0, -1, 0, 0, y0, 0]];
   const slope = (r0 - r1) / (y1 - y0);
@@ -49,8 +50,8 @@ function column(list, cx, cz, r0, r1, y0, y1, mat, o) {
     const a = (i + 0.5) * Math.PI / 4, c = Math.cos(a), s = Math.sin(a);
     pl.push([c, slope, s, cx + c * r0, y0, cz + s * r0]);
   }
-  const r = r0 * 1.09;
-  return solid(list, pl, [cx - r, y0, cz - r, cx + r, y1, cz + r], mat, o);
+  const r = Math.max(r0, r1) * 1.09, b = (r1 - r0) / (y1 - y0);
+  return solid(list, pl, [cx - r, y0, cz - r, cx + r, y1, cz + r], mat, { cone: [cx, cz, r0 - b * y0, b, y0, y1, r0, r1], ...o });
 }
 // Eight-sided disc facing along z (the helm wheel).
 function disc(list, cx, cy, z0, z1, r, mat, o) {
@@ -136,7 +137,7 @@ box(world, -46, -2, -36, -26, 1, 14, "t", { solid: false, tex: ground });
 function sand(x, y, z, nx, ny) {
   if (ny < 0.5) return null;
   const wash = 0.12 + 0.08 * Math.sin(T * 0.9 + x * 0.3);
-  if (y < wash) return "k~";
+  if (y < wash) return hash(Math.floor(x * 3), Math.floor(z * 3 + T)) < 0.4 ? "k:" : "n:";
   if (y < wash + 0.25) return hash(Math.floor(x * 2), Math.floor(z * 2)) < 0.06 ? "w~" : "n:";
   return hash(Math.floor(x * 3), Math.floor(z * 3)) < 0.5 ? "y." : "y,";
 }
@@ -198,11 +199,30 @@ for (const [x, z] of [[6.5, 0.6], [6.5, 1.3], [5.9, 0.9], [6.5, 10.8], [15.5, 21
   column(world, x, z, 0.3, 0.27, 1.2, 2.1, "o", { spot: "barrels", tex: (x, y) => (Math.abs(y - 1.42) < 0.06 || Math.abs(y - 1.88) < 0.06 ? "-" : null) });
 }
 for (const [x, z] of [[3.6, -4.6], [3.6, 6.4], [6.4, -13]]) column(world, x, z, 0.38, 0.38, 1.2, 1.36, "s", { solid: false });
+// Small boats ride the waves: each frame their planes are lifted and tilted to the sea surface under them.
+const boats = [];
 function boat(cx, z0, w, len, mat, spot = null) {
   const z1 = z0 + len, zb = z1 - w, top = 0.45;
-  solid(world, [[0, 1, 0, 0, top, 0], [0, -1, 0, 0, -0.3, 0], [0, 0, -1, 0, 0, z0], [1, -0.4, 0, cx + w / 2, top, 0],
+  const s = solid(world, [[0, 1, 0, 0, top, 0], [0, -1, 0, 0, -0.3, 0], [0, 0, -1, 0, 0, z0], [1, -0.4, 0, cx + w / 2, top, 0],
     [-1, -0.4, 0, cx - w / 2, top, 0], [w, 0, w / 2, cx + w / 2, 0, zb], [-w, 0, w / 2, cx - w / 2, 0, zb]],
-  [cx - w / 2, -0.3, z0, cx + w / 2, top, z1], mat, { spot, solid: false, tex: (x, y) => (y > 0.25 && y < 0.35 ? "s" : null) });
+  [cx - w / 2 - 0.5, -0.8, z0 - 0.3, cx + w / 2 + 0.5, top + 0.5, z1 + 0.3], mat, { spot, solid: false, tex: (x, y) => (y - s.dy > 0.25 && y - s.dy < 0.35 ? "s" : null) });
+  Object.assign(s, { base: Float64Array.from(s.P), c: [cx, 0, (z0 + z1) / 2], dy: 0 });
+  boats.push(s);
+}
+function floatBoats() {
+  for (const s of boats) {
+    const [cx, , cz] = s.c;
+    s.dy = seaHeight(cx, cz) * 0.9;
+    seaNormal(cx, cz);
+    const az = -Math.atan2(seaN[0], seaN[1]) * 0.8, ax = Math.atan2(seaN[2], seaN[1]) * 0.8;
+    const cz1 = Math.cos(az), sz1 = Math.sin(az), cx1 = Math.cos(ax), sx1 = Math.sin(ax);
+    for (let i = 0; i < s.P.length; i += 4) {
+      const n0 = s.base[i], n1 = s.base[i + 1], n2 = s.base[i + 2], off = s.base[i + 3] - (n0 * cx + n2 * cz);
+      // Tilt the normal: about z (roll), then about x (pitch).
+      const r0 = cz1 * n0 - sz1 * n1, r1 = sz1 * n0 + cz1 * n1, q1 = cx1 * r1 - sx1 * n2, q2 = sx1 * r1 + cx1 * n2;
+      s.P[i] = r0; s.P[i + 1] = q1; s.P[i + 2] = q2; s.P[i + 3] = off + r0 * cx + q1 * s.dy + q2 * cz;
+    }
+  }
 }
 boat(-8, 3.6, 1.3, 3.6, "r", "lifeboat");
 boat(-11.5, 3, 1.2, 3.2, "b", "tender");
@@ -333,6 +353,7 @@ let moved = false;
 
 // ---- Ray casting -------------------------------------------------------------------------
 let hitT, hitS, hitK;
+const hitN = [0, 1, 0], entryN = [0, 1, 0];
 // Entry distance of the ray into a bounding box, or Infinity when it misses.
 function boxEntry(b, ox, oy, oz, ix, iy, iz) {
   let a = (b[0] - ox) * ix, c = (b[3] - ox) * ix;
@@ -355,12 +376,36 @@ function entry(P, ox, oy, oz, dx, dy, dz) {
   }
   return tn <= tf && tn > 1e-3 ? tn : Infinity;
 }
+// Ray against a round column: the side of the cone or one of its caps. Sets entryK (-1 side, -2 top,
+// -3 bottom) and entryN (the normal).
+function coneEntry(cone, ox, oy, oz, dx, dy, dz) {
+  const cx = cone[0], cz = cone[1], a = cone[2], b = cone[3], y0 = cone[4], y1 = cone[5], r0 = cone[6], r1 = cone[7];
+  const X = ox - cx, Z = oz - cz, R = a + b * oy, bd = b * dy;
+  const A = dx * dx + dz * dz - bd * bd, B = 2 * (X * dx + Z * dz - R * bd), C = X * X + Z * Z - R * R, disc = B * B - 4 * A * C;
+  let best = Infinity;
+  if (disc >= 0 && Math.abs(A) > 1e-9) {
+    const sq = Math.sqrt(disc);
+    for (let n = 0; n < 2; n++) {
+      const t = (-B + (n ? sq : -sq)) / (2 * A), y = oy + t * dy;
+      if (t > 1e-3 && t < best && y >= y0 && y <= y1 && R + t * bd >= 0) {
+        const nx = X + t * dx, nz = Z + t * dz, ny = -b * (a + b * y), l = Math.sqrt(nx * nx + ny * ny + nz * nz);
+        best = t; entryK = -1; entryN[0] = nx / l; entryN[1] = ny / l; entryN[2] = nz / l;
+      }
+    }
+  }
+  for (let n = 0; n < 2 && dy !== 0; n++) {
+    const yc = n ? y0 : y1, rr = n ? r0 : r1, t = (yc - oy) / dy, x = X + t * dx, z = Z + t * dz;
+    if (t > 1e-3 && t < best && x * x + z * z <= rr * rr) { best = t; entryK = n ? -3 : -2; entryN[0] = 0; entryN[1] = n ? -1 : 1; entryN[2] = 0; }
+  }
+  return best;
+}
+const hit = (s, ox, oy, oz, dx, dy, dz) => (s.cone ? coneEntry(s.cone, ox, oy, oz, dx, dy, dz) : entry(s.P, ox, oy, oz, dx, dy, dz));
 function trace(list, col, ox, oy, oz, dx, dy, dz) {
   const ix = 1 / dx, iy = 1 / dy, iz = 1 / dz;
   for (const s of list) {
     if (col < s.i0 || col > s.i1 || boxEntry(s.bb, ox, oy, oz, ix, iy, iz) > hitT) continue;
-    const t = entry(s.P, ox, oy, oz, dx, dy, dz);
-    if (t < hitT) { hitT = t; hitK = entryK; hitS = s; }
+    const t = hit(s, ox, oy, oz, dx, dy, dz);
+    if (t < hitT) { hitT = t; hitK = entryK; hitS = s; if (entryK < 0) { hitN[0] = entryN[0]; hitN[1] = entryN[1]; hitN[2] = entryN[2]; } }
   }
 }
 
@@ -429,7 +474,7 @@ function shadowed(L, ox, oy, oz, dx, dy, dz, dist) {
     [ox, oy, dx, dy] = [rc * x + rs * y + SX, -rs * x + rc * y, rc * dx + rs * dy, -rs * dx + rc * dy];
   }
   const ix = 1 / dx, iy = 1 / dy, iz = 1 / dz;
-  for (const s of L.near) if (boxEntry(s.bb, ox, oy, oz, ix, iy, iz) < dist && entry(s.P, ox, oy, oz, dx, dy, dz) < dist) return true;
+  for (const s of L.near) if (boxEntry(s.bb, ox, oy, oz, ix, iy, iz) < dist && hit(s, ox, oy, oz, dx, dy, dz) < dist) return true;
   return false;
 }
 // Brightness of the sweeping beam where it falls on the ground at (x, z).
@@ -440,7 +485,8 @@ function beamOn(x, z) {
   return ahead > 0 && off < 0.07 ? 0.8 * (1 - off / 0.07) * (1 - d / BEAM.reach) : 0;
 }
 
-const RAMP = " .:-=+#";
+// Seventy shades from empty to dense, so light reads as gradients rather than steps.
+const RAMP = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
 const RANGE = { lighthouse: 400, nest: 30, office: 40, antenna: 50, containers: 40, lifeboat: 25, tender: 25 };
 const MOON = (() => { const v = [0.2, 0.3, 0.93], l = Math.hypot(...v); return v.map((c) => c / l); })();
 // Objects whose feature is not in the page's list are scenery.
@@ -464,12 +510,17 @@ const BASE = { "": "#5c6a88", k: "#e9eefb", w: "#3f78b8", d: "#22406a", m: "#a9c
 const mix = (a, b, f) => "#" + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - f) + parseInt(b.slice(i, i + 2), 16) * f).toString(16).padStart(2, "0")).join("");
 const COLORS = {};
 for (const [k, c] of Object.entries(BASE)) {
-  Object.assign(COLORS, { [k]: c, [k + "0"]: mix(c, "#060a14", 0.62), [k + "1"]: mix(c, "#060a14", 0.3), [k + "2"]: c, [k + "w"]: mix(c, "#ffd479", 0.45) });
+  Object.assign(COLORS, { [k]: c, [k + "w"]: mix(c, "#ffd479", 0.45) });
+  // Eight levels from near black to full colour (and a little past it for the brightest), plus warm ones.
+  for (let i = 0; i < 8; i++) {
+    const lv = i < 7 ? mix("#060a14", c, Math.min(1, 0.12 + (i + 1) * 0.15)) : mix(c, "#ffffff", 0.25);
+    Object.assign(COLORS, { [k + i]: lv, [k + "w" + i]: mix(lv, "#ffd479", 0.45) });
+  }
 }
 function measure() {
   const dpr = devicePixelRatio || 1, w = stage.clientWidth, h = stage.clientHeight;
   canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
-  const px = Math.max(8, Math.min(14, innerWidth * 0.0095)) * scale;
+  const px = Math.max(6.5, Math.min(11, innerWidth * 0.0068)) * scale;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.font = `${px}px ${MONO}`;
   ctx.textBaseline = "top";
@@ -491,7 +542,7 @@ function render() {
   Object.assign(cam, { x: me.x, y: me.eye, z: me.z, f: [fx, fy, fz], r: [rx, 0, rz], u: [ux, uy, uz], tanH, tanV });
   // Camera origin in the ship frame (rotate by -roll about the ship's long axis, after the bob).
   cam.lx = rc * (me.x - SX) + rs * (me.eye - bob) + SX; cam.ly = -rs * (me.x - SX) + rc * (me.eye - bob);
-  cull(world, false); cull(ship, true); mirrors();
+  cull(world, false); cull(ship, true);
   for (let j = 0, c = 0; j < rows; j++) {
     const v = (1 - (2 * j + 1) / rows) * tanV;
     rowWorld = world.filter((s) => s.j0 <= j && j <= s.j1); rowShip = ship.filter((s) => s.j0 <= j && j <= s.j1);
@@ -733,74 +784,112 @@ function tapMap(cx, cy) {
   return true;
 }
 
-// One ray: the nearest of the solids, the water and the sky decides the cell.
+// One ray: the nearest of the solids, the moving sea surface and the sky decides the cell.
 function cast(c, i, odd, dx, dy, dz) {
   hitT = Infinity; hitS = null;
   trace(rowWorld, i, cam.x, cam.y, cam.z, dx, dy, dz);
   const wS = hitS;
   const ldx = rc * dx + rs * dy, ldy = -rs * dx + rc * dy;
   trace(rowShip, i, cam.lx, cam.ly, cam.z, ldx, ldy, dz);
-  const tw = dy < 0 ? -cam.y / dy : Infinity;
+  const tw = seaHit(dx, dy, dz, hitT);
   SP[c] = null;
   if (hitS && hitT < tw) shadeSolid(c, odd, hitS !== wS, dx, dy, dz, ldx, ldy);
   else if (tw < Infinity) shadeWater(c, tw, dx, dy, dz);
   else shadeSky(c, dx, dy, dz);
 }
+// Brightness changes the ground textures ask for: kerbs and flowers brighter, joints, ruts and wet sand darker.
+const GRAIN = { _: 1.35, "=": 1.3, "*": 1.5, "~": 1.25, "+": 1.1, "-": 1.1, ".": 1, ",": 0.85, ":": 0.7, ";": 0.8, '"': 0.9, "'": 0.95, "`": 0.9, " ": 1 };
 function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
   const s = hitS, P = s.P, k = hitK, t = hitT;
-  const lnx = P[k], lny = P[k + 1], nz = P[k + 2];
+  const lnx = k >= 0 ? P[k] : hitN[0], lny = k >= 0 ? P[k + 1] : hitN[1], nz = k >= 0 ? P[k + 2] : hitN[2];
   const nx = onShip ? rc * lnx - rs * lny : lnx, ny = onShip ? rs * lnx + rc * lny : lny;
-  const px = onShip ? cam.lx + ldx * t : cam.x + dx * t, py = onShip ? cam.ly + ldy * t : cam.y + dy * t;
-  const tex = s.tex && s.tex(px, py, cam.z + dz * t, lnx, lny, nz);
-  const mat = tex && tex !== "-" ? tex[0] : s.mat, dim = (tex === "-" ? 0.45 : 1) * (s.dim || 1);
+  const px = onShip ? cam.lx + ldx * t : cam.x + dx * t, py = onShip ? cam.ly + ldy * t : cam.y + dy * t, pz = cam.z + dz * t;
+  const tex = s.tex && s.tex(px, py, pz, lnx, lny, nz);
+  const mat = tex && tex !== "-" ? tex[0] : s.mat, grain = tex && tex.length === 2 ? GRAIN[tex[1]] || 1 : 1;
+  const dim = (tex === "-" ? 0.55 : 1) * (s.dim || 1) * grain;
   let ch, cls = mat;
   if (mat === "l") {
     const flash = s === beacon ? Math.cos(T * 2.2 + Math.atan2(dx, dz) * 2) > 0.3 : s !== antennaLamp || Math.sin(T * 3) > 0;
-    ch = flash ? "@" : "o";
+    ch = flash ? "@" : "o"; cls = "l7";
   } else {
     const wx = onShip ? SX + rc * (px - SX) - rs * py : px, wy = onShip ? rs * (px - SX) + rc * py + bob : py;
-    const [lit, warm] = lightAt(wx, wy, cam.z + dz * t, nx, ny, nz), face = Math.max(0, -(nx * dx + ny * dy + nz * dz));
-    const b = lit * dim * (0.75 + 0.25 * face);
+    const [lit, warm] = lightAt(wx, wy, pz, nx, ny, nz);
+    // Contact shadow: walls darken toward the ground they stand on.
+    const ao = ny > 0.7 ? 1 : Math.min(1, 0.55 + 0.5 * (wy - (onShip ? bob + DECK : floorAt(wx, pz) ?? 0)));
+    const fog = Math.exp(-t * 0.016), b = (lit * dim * ao * (0.8 + 0.2 * Math.max(0, -(nx * dx + ny * dy + nz * dz)))) * fog + 0.02 * (1 - fog);
     cls = mat + tier(b, warm);
-    // Floors stay sparse so that what stands on them reads first; in the dark they nearly vanish.
-    if (ny > 0.7) ch = b < 0.09 ? (odd ? " " : ".") : tex && tex.length === 2 ? tex[1] : dim < 1 ? ":" : odd ? " " : ",";
-    else ch = RAMP[Math.max(1, Math.min(RAMP.length - 1, (b * 9) | 0))];
+    ch = glyph(b, odd);
   }
   // Floors get a negative id: they outline what stands on them but draw no edges themselves.
-  put(c, ch, cls, (ny > 0.7 ? -1 : 1) * (s.id * 16 + (k >> 2)), t);
+  put(c, ch, cls, (ny > 0.7 ? -1 : 1) * (s.id * 16 + (k >= 0 ? k >> 2 : 12 - k)), t);
   SP[c] = s.spot;
 }
-// Colour tier for a brightness: dark, dim, bright, or warm when lamplight dominates.
-const tier = (b, warm) => (b < 0.18 ? "0" : warm > 0.55 && b > 0.3 ? "w" : b < 0.45 ? "1" : "2");
+// Glyph for a brightness from the long ramp; the darkest cells thin out to a dither.
+const glyph = (b, odd) => (b < 0.035 ? (odd ? " " : b > 0.02 ? "." : " ") : RAMP[Math.min(RAMP.length - 1, 1 + Math.floor(b * (RAMP.length - 2)))]);
+// Colour level (0 to 7) for a brightness, warmed when lamplight dominates.
+const tier = (b, warm) => (warm > 0.55 && b > 0.2 ? "w" : "") + Math.min(7, Math.floor(b * 9));
 // How close water at (x, z) is to a beach, from 0 (deep) to 1 (the waterline).
 function shallows(x, z) {
   const north = z < 10 && (x < -6 || x > 8) ? 1 - (10 - z) / 5 : 0, east = z < 12 && x > -22.7 && x < -14 ? 1 - (x + 22.7) / 5 : 0;
   return Math.max(0, north, east);
 }
+
+// ---- The sea: a height field of summed travelling waves (amplitude, direction, wave number, speed, phase),
+// ray marched per cell, with analytic normals for Fresnel reflection, moon and lamp highlights, and foam.
+const WAVES = new Float64Array([0.17, 0.8, 0.6, 0.7, 2.6, 0, 0.11, -0.3, 0.95, 1.14, 3.3, 1.7, 0.07, 0.95, -0.3, 1.96, 4.4, 4.1, 0.035, 0.2, 0.98, 3.5, 5.8, 2.3]);
+const SEA = 0.17 + 0.11 + 0.07 + 0.035;
+const seaN = [0, 1, 0];
+function seaHeight(x, z) {
+  let h = 0;
+  for (let i = 0; i < 24; i += 6) h += WAVES[i] * Math.sin(WAVES[i + 3] * (WAVES[i + 1] * x + WAVES[i + 2] * z) - WAVES[i + 4] * T + WAVES[i + 5]);
+  return h * (1 - 0.6 * shallows(x, z));
+}
+function seaNormal(x, z) {
+  let hx = 0, hz = 0;
+  for (let i = 0; i < 24; i += 6) {
+    const c = WAVES[i] * WAVES[i + 3] * Math.cos(WAVES[i + 3] * (WAVES[i + 1] * x + WAVES[i + 2] * z) - WAVES[i + 4] * T + WAVES[i + 5]);
+    hx += c * WAVES[i + 1]; hz += c * WAVES[i + 2];
+  }
+  const l = Math.sqrt(hx * hx + 1 + hz * hz);
+  seaN[0] = -hx / l; seaN[1] = 1 / l; seaN[2] = -hz / l;
+}
+// Distance along the ray to the sea surface, or Infinity if a solid at `limit` comes first.
+function seaHit(dx, dy, dz, limit) {
+  if (dy > -1e-4) return Infinity;
+  const t0 = Math.max(0, (SEA - cam.y) / dy), t1 = Math.min(limit, (-SEA - cam.y) / dy, 400);
+  if (t0 >= t1) return Infinity;
+  if (t0 > 60) { const t = -cam.y / dy; return t < limit ? t : Infinity; } // far out the surface is flat enough
+  const n = 14, step = (t1 - t0) / n;
+  let a = t0;
+  for (let i = 1; i <= n; i++) {
+    let b = t0 + i * step;
+    if (cam.y + b * dy < seaHeight(cam.x + b * dx, cam.z + b * dz)) {
+      for (let k = 0; k < 4; k++) { const m = (a + b) / 2; if (cam.y + m * dy < seaHeight(cam.x + m * dx, cam.z + m * dz)) b = m; else a = m; }
+      return b;
+    }
+    a = b;
+  }
+  return Infinity;
+}
 function shadeWater(c, t, dx, dy, dz) {
-  const wx = cam.x + dx * t, wz = cam.z + dz * t;
-  const w = Math.sin(0.55 * wx + 1.2 * T) + 0.7 * Math.sin(0.8 * wz - 0.9 * T + 0.4 * wx) + 0.3 * Math.sin(1.9 * wx - 1.5 * wz + 2.3 * T);
-  const near = shallows(wx, wz), glint = reflection(dx, dy, dz, wz);
-  // Moonlit ripples near you and in the lighter shallows; deep water fades into the dark.
-  const v = ((w + 2) / 4) * (0.25 + 0.75 * Math.exp(-t * 0.035)) * (0.7 + 0.6 * near);
-  if (near > 0.82 && Math.sin(wx * 1.3 + T * 1.8) > 0.2 - near * 0.4) put(c, w > 0.2 ? "~" : "-", "k1", -1, t);
-  else if (glint) put(c, w > 0.4 ? "=" : "~", glint, -1, t);
-  else if (beamOn(wx, wz) > 0.15 && w > 0) put(c, "~", "k1", -1, t);
-  else if (dx * MOON[0] - dy * MOON[1] + dz * MOON[2] > 0.97 && w > 0.1) put(c, w > 0.8 ? "=" : "~", "m", -1, t);
-  else put(c, v > 0.55 ? "~" : v > 0.38 ? "-" : v > 0.22 ? "." : " ", near > 0.2 ? "w" : t < 25 ? "w1" : "d", -1, t);
-}
-// Lamps mirrored in the water: a narrow streak below each light, wobbling with the waves. Colour class or null.
-let MIRRORS = [];
-function mirrors() {
-  MIRRORS = LIGHTS.map((L) => {
-    const mx = L.wx - cam.x, my = -L.wy - cam.y, mz = L.wz - cam.z, d = Math.sqrt(mx * mx + my * my + mz * mz);
-    return [Math.atan2(mx, mz), Math.asin(my / d), d < 40 ? "l" : "l1"];
-  });
-}
-function reflection(dx, dy, dz, wz) {
-  const az = Math.atan2(dx, dz), el = Math.asin(dy), wobble = 0.005 + 0.01 * Math.abs(Math.sin(wz * 2.7 + T * 2));
-  for (const [maz, mel, cls] of MIRRORS) if (Math.abs(az - maz) < wobble && el > mel - 0.12 && el < mel + 0.02) return cls;
-  return null;
+  const x = cam.x + dx * t, z = cam.z + dz * t, h = seaHeight(x, z), near = shallows(x, z);
+  seaNormal(x, z);
+  const [nx, ny, nz] = seaN, dn = dx * nx + dy * ny + dz * nz, rx = dx - 2 * dn * nx, ry = dy - 2 * dn * ny, rz = dz - 2 * dn * nz;
+  const fresnel = 0.04 + 0.96 * Math.pow(1 - Math.min(1, -dn), 5);
+  const moonSpec = Math.pow(Math.max(0, rx * MOON[0] + ry * MOON[1] + rz * MOON[2]), 90) * 1.4;
+  let lampSpec = 0;
+  for (const L of LIGHTS) {
+    const lx = L.wx - x, ly = L.wy - h, lz = L.wz - z, d2 = lx * lx + ly * ly + lz * lz;
+    if (d2 > 3600) continue;
+    const d = Math.sqrt(d2), s = (rx * lx + ry * ly + rz * lz) / d;
+    if (s > 0.985) lampSpec += L.i * Math.pow(s, 300) * 1.4 / (1 + d2 * 0.006);
+  }
+  // Foam on the highest crests, and a broken line of it where the waves wash onto the beaches.
+  const foam = Math.max(0, (h - SEA * 0.7) / (SEA * 0.3)) * 0.6 + (near > 0.9 && Math.sin(x * 1.3 + z + T * 1.8) > 0.55 ? 0.5 : 0);
+  const body = (0.03 + 0.12 * Math.max(0, nx * MOON[0] + ny * MOON[1] + nz * MOON[2])) * (1 + near);
+  const fog = Math.exp(-t * 0.014), lum = ((body * (1 - fresnel) + 0.03 * fresnel + moonSpec + lampSpec + foam * 0.35 + beamOn(x, z) * 0.6) * fog) + 0.015 * (1 - fog);
+  const mat = foam > 0.4 ? "k" : lampSpec > moonSpec && lampSpec > 0.1 ? "l" : moonSpec > 0.1 ? "m" : near > 0.2 ? "w" : "d";
+  put(c, glyph(lum, (c ^ Math.floor(t)) & 1), mat + tier(lum, 0), -1, t);
 }
 // How close a sky ray passes to the lighthouse beam, as a glow from 0 to 1.
 function beamGlow(dx, dy, dz) {
@@ -816,7 +905,7 @@ function shadeSky(c, dx, dy, dz) {
   const r = hash(Math.floor(Math.atan2(dx, dz) * 150), Math.floor(el * 150)) * 2.5;
   if (m > 0.9988) put(c, m > 0.99935 ? "@" : "o", "k", 0, Infinity);
   else if (el > 0.04 && r < 0.03) put(c, r < 0.006 ? "*" : ".", "k", 0, Infinity);
-  else if (beamGlow(dx, dy, dz) > 0.15) put(c, beamGlow(dx, dy, dz) > 0.5 ? "=" : "-", "l1", 0, Infinity);
+  else if (beamGlow(dx, dy, dz) > 0.15) put(c, glyph(beamGlow(dx, dy, dz) * 0.8, 0), "l" + Math.min(7, 2 + Math.floor(beamGlow(dx, dy, dz) * 6)), 0, Infinity);
   else put(c, el < 0.035 ? "." : " ", "f", 0, Infinity);
 }
 function put(c, ch, cls, id, depth) { G[c] = ch; C[c] = cls; ID[c] = id; D[c] = depth; }
@@ -971,7 +1060,7 @@ function step(dt) {
 }
 
 // ---- Loop --------------------------------------------------------------------------------
-let last = performance.now(), dirty = true, visible = true, slow = 0;
+let last = performance.now(), dirty = true, visible = true, slow = 0, fast = 0;
 new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(stage);
 new ResizeObserver(() => { measure(); dirty = true; }).observe(stage);
 reduced.addEventListener("change", () => { dirty = true; });
@@ -980,23 +1069,29 @@ function frame(now) {
   last = now;
   const still = reduced.matches;
   if (!still) T += dt;
-  bob = still ? 0 : 0.24 * Math.sin(T * 1.2);
-  roll = still ? 0 : 0.028 * Math.sin(T * 0.8 + 1);
+  // The ship rides the swell too, gently: it is heavy, so half the wave height and a slow roll.
+  if (still) { bob = 0; roll = 0; } else { seaNormal(SX, -2); bob = 0.5 * seaHeight(SX, -2) + 0.08 * Math.sin(T * 0.7); roll = -0.35 * Math.atan2(seaN[0], seaN[1]); }
   rc = Math.cos(roll); rs = Math.sin(roll);
   const walked = step(dt);
   if (visible && cols && (walked || dirty || !still)) {
     dirty = false;
     setGangway();
     moveLights();
+    floatBoats();
     me.eye = floorAt(me.x, me.z) + 1.6;
     const t0 = performance.now();
     render();
-    slow = performance.now() - t0 > 20 ? slow + 1 : 0;
-    // Keep phones smooth: drop the shadow rays first, then grow the glyphs (fewer cells) while frames take too long.
-    if (slow > 20 && (shadows || scale < 1.8)) {
+    const ms = performance.now() - t0;
+    slow = ms > 20 ? slow + 1 : 0;
+    fast = ms < 9 ? fast + 1 : 0;
+    // Adaptive resolution: when frames run long drop the shadow rays, then grow the glyphs (fewer cells);
+    // when they run short for a while, shrink the glyphs again (more cells), down to the finest grid.
+    if (slow > 20 && (shadows || scale < 2.2)) {
       if (shadows) shadows = false;
       else { scale *= 1.15; measure(); }
       slow = 0;
+    } else if (fast > 90 && scale > 1) {
+      scale = Math.max(1, scale / 1.1); measure(); fast = 0;
     }
   }
   requestAnimationFrame(frame);
