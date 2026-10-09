@@ -14,6 +14,7 @@ With the `agents` profile on, `./ship.sh launch`:
 6. Installs the extension `~/.omp/agent/extensions/code-factory-quality-gate.ts` from [`config/omp-quality-gate.ts`](../config/omp-quality-gate.ts), the sentrux and fallow check at the end of every agent turn. Every apply rewrites it. See [Quality gate](#quality-gate).
 7. Sets up omp as the no-mistakes pipeline agent. See [no-mistakes pipeline agent](#no-mistakes-pipeline-agent).
 8. Installs the skills in [`skills/`](../skills/) for omp and Claude Code. See [Skills](#skills).
+9. Installs [`config/AGENTS.md`](../config/AGENTS.md) as the global instructions of Claude Code, omp and Codex. See [Global instructions](#global-instructions).
 
 Both copies are first-write-only. If a file already exists, the recipe leaves it alone, so an account's own settings and provider configuration are never overwritten. The one exception is the two status line keys the [status line icons](#status-line-icons) need, which every apply ensures. See [Updating an existing host](#updating-an-existing-host).
 
@@ -155,6 +156,12 @@ Crewship keeps skills, not personal notes, in `skills/`. `CLAUDE.md` and `AGENTS
 - `skills/private/<name>/SKILL.md`: skills that stay on the host. Git ignores this folder except its README, and Docker builds leave it out.
 
 Every apply copies each skill to `~/.omp/agent/skills/<name>/` and `~/.claude/skills/<name>/` with [`scripts/skills.py`](../scripts/skills.py). A private skill wins over a public skill with the same name. The installer records the names it installed in `~/.local/share/code-factory/skills.json`. It rewrites only those skills, and removes one when its source leaves `skills/`. A skill directory that the manifest does not list belongs to the operator: the installer never replaces or removes it and reports it under `skipped`. An unchanged apply changes nothing.
+
+## Global instructions
+
+[`config/AGENTS.md`](../config/AGENTS.md) holds generic working rules and nothing personal: it points each agent at the skills. Every apply writes it to `~/.claude/CLAUDE.md` (Claude Code), `~/.omp/agent/AGENTS.md` (omp) and `~/.codex/AGENTS.md` (Codex) with [`scripts/instructions.py`](../scripts/instructions.py). When `~/.claude/RTK.md` exists, the Claude Code copy also gets the `@RTK.md` import.
+
+The installer records the SHA-256 of each file it wrote in `~/.local/share/code-factory/instructions.json`. If a file on the host matches neither that record nor the new text, the user changed it: the installer moves it to `<file>.<UTC time>.bak` in the same folder before it writes, and the apply prints the backup paths. An unchanged apply changes nothing.
 
 ## Updating an existing host
 
