@@ -57,7 +57,6 @@ type BBMessage = {
 export class BlueBubbles implements AsyncIterable<Bubble> {
   private opts: typeof DEFAULTS;
   private health = new Map<Relay, { ok: boolean; at: number }>();
-  private unsure = new Map<string, number>(); // client GUID -> start of a send that may have gone out
   private seen = new Map<string, number>(); // message GUID -> its date, oldest first
   private seenFile: string;
   private appended = 0;
@@ -150,28 +149,25 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
   }
 
   // Send one text into a chat, as a threaded reply when `replyTo` is a message GUID. `guid` is the client GUID
-  // (BlueBubbles tempGuid): a retry that passes the same one is checked against the relays first when an earlier
-  // try may have gone out, so it is never sent twice.
+  // (BlueBubbles tempGuid). A later relay in one call sends only after no relay shows the text as sent; a retry of
+  // a failed call is the bridge's to check first (`sent`), because the outbox item keeps what may have gone out.
   async send(chat: string, text: string, replyTo?: string, guid?: string) {
-    const id = guid ?? crypto.randomUUID();
-    const started = this.unsure.get(id) ?? Date.now();
-    let maybeSent = this.unsure.has(id);
+    const started = Date.now();
+    let maybeSent = false;
     let last: unknown = new RelayError("no relay is reachable", false, 503);
     for (const r of await this.healthy()) {
       try {
-        if (!maybeSent || !(await this.wentOut(chat, text, started))) {
+        if (!maybeSent || !(await this.sent(chat, text, started))) {
           await this.call(r, "POST", "message/text", undefined,
-            { chatGuid: chat, tempGuid: id, message: text, ...(replyTo ? { selectedMessageGuid: replyTo, partIndex: 0 } : {}) }, this.opts.sendMs);
+            { chatGuid: chat, tempGuid: guid ?? crypto.randomUUID(), message: text, ...(replyTo ? { selectedMessageGuid: replyTo, partIndex: 0 } : {}) }, this.opts.sendMs);
         }
-        this.unsure.delete(id);
         return;
       } catch (e) {
         if (!(e instanceof RelayError)) throw e;
-        last = e;
         maybeSent ||= e.maybeSent;
+        last = maybeSent && !e.maybeSent ? new RelayError(e.message, true, e.status, e.code) : e;
       }
     }
-    if (maybeSent && guid) this.unsure.set(guid, started);
     throw last;
   }
 
@@ -196,7 +192,7 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
   // True when a relay shows `text` as sent into `chat` since `since`. Throws when no relay can be asked, so the
   // caller does not send again unchecked. A sent text reaches the other Macs through iCloud, which can lag: a relay
   // that did not send it may not show it yet.
-  private async wentOut(chat: string, text: string, since: number): Promise<boolean> {
+  async sent(chat: string, text: string, since: number): Promise<boolean> {
     let asked = false;
     for (const r of await this.healthy()) {
       try {
@@ -267,7 +263,9 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
       throw new RelayError(`${this.name(r)}: HTTP ${res.status} ${detail}`.trim(), res.status >= 500, res.status);
     }
     if (binary) return Buffer.from(await res.arrayBuffer());
-    const json: unknown = await res.json();
+    const json: unknown = await res.json().catch(() => {
+      throw new RelayError(`${this.name(r)}: unreadable answer, HTTP ${res.status}`, true, res.status);
+    });
     return json && typeof json === "object" && "data" in json ? json.data : undefined;
   }
 

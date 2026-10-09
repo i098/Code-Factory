@@ -699,6 +699,7 @@ import {{ failover }} from {DESK};
 const a = relay(), bb = line([a]);
 const photon = {{ state: "down", sent: [], async send(t) {{
   if (this.state === "down") throw Object.assign(new Error("UNAVAILABLE: [upstream] Service temporarily unavailable. Please retry."), {{ code: 14 }});
+  if (this.state === "dropped") throw Object.assign(new Error("14 UNAVAILABLE: Connection dropped"), {{ code: 14 }});
   if (this.state === "unsure") throw new Error("DEADLINE_EXCEEDED: no answer");
   this.sent.push(t);
 }} }};
@@ -709,6 +710,8 @@ photon.state = "up";
 out.back = await failover(routes, "photon is back", (l) => lines.push(l));
 photon.state = "unsure";
 try {{ await failover(routes, "maybe sent", (l) => lines.push(l)); }} catch (e) {{ out.unsure = e.message; }}
+photon.state = "dropped";
+try {{ await failover(routes, "dropped", (l) => lines.push(l)); }} catch (e) {{ out.dropped = e.message; }}
 a.down(); photon.state = "up";
 out.relaysDown = await failover([routes[1], routes[0]], "relays down", (l) => lines.push(l)).catch((e) => e.message);
 done({{ ...out, photon: photon.sent, relay: a.sent.map((s) => s.message), lines }});
@@ -716,6 +719,7 @@ done({{ ...out, photon: photon.sent, relay: a.sent.map((s) => s.message), lines 
     assert result["down"] == "bluebubbles"
     assert result["back"] == "photon"
     assert result["unsure"].startswith("DEADLINE_EXCEEDED")
+    assert result["dropped"].endswith("Connection dropped")  # a bare UNAVAILABLE can follow a write: no fallback send
     assert result["relaysDown"] == "photon"  # BlueBubbles first, no relay reachable: Photon takes it
     assert result["photon"] == ["photon is back", "relays down"]
     assert result["relay"] == ["while photon is down"]
@@ -1098,18 +1102,31 @@ def test_bridge_files_his_edits_as_new_notes(tmp_path):
     ]
 
 
-# A fake BlueBubbles relay for a whole-bridge test: it logs each send to FAKE_DIR/relay-sent and serves the messages
-# in FAKE_DIR/relay/<guid>.json.
+# A fake BlueBubbles relay for a whole-bridge test: it logs each send to FAKE_DIR/relay-sent (a text as
+# "<chat> <text>", a tapback as "react <message> <name>") and serves the messages in FAKE_DIR/relay/<guid>.json. While
+# FAKE_DIR/relay-mode holds "garbled", a send is taken but the answer is unreadable and the sent-texts query fails; while
+# it holds "lost", the answer is unreadable and the send never arrived.
 FAKE_RELAY = """
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 const dir = process.env.FAKE_DIR;
+const mode = () => (existsSync(`${dir}/relay-mode`) ? readFileSync(`${dir}/relay-mode`, "utf8").trim() : "");
+const sentLines = () => (existsSync(`${dir}/relay-sent`) ? readFileSync(`${dir}/relay-sent`, "utf8").split("\\n").filter(Boolean) : []);
 const server = Bun.serve({ port: 0, async fetch(req) {
   const u = new URL(req.url), path = u.pathname.replace("/api/v1/", "");
   if (u.searchParams.get("password") !== "pw-test") return new Response("no", { status: 401 });
   if (path === "message/text") {
     const b = await req.json();
+    if (mode() === "lost") return new Response("garbled");
     appendFileSync(`${dir}/relay-sent`, `${b.chatGuid} ${b.message}\\n`);
+    return mode() === "garbled" ? new Response("garbled") : Response.json({ data: {} });
+  }
+  if (path === "message/react") {
+    const b = await req.json();
+    appendFileSync(`${dir}/relay-sent`, `react ${b.selectedMessageGuid} ${b.reaction}\\n`);
     return Response.json({ data: {} });
+  }
+  if (/^chat\\/[^/]+\\/message$/.test(path)) {
+    return mode() === "garbled" ? new Response("down", { status: 500 }) : Response.json({ data: sentLines().map((l) => ({ isFromMe: true, text: l.slice(l.indexOf(" ") + 1) })) });
   }
   const m = path.match(/^message\\/([^/]+)$/);
   if (m && existsSync(`${dir}/relay/${m[1]}.json`)) return Response.json({ data: JSON.parse(readFileSync(`${dir}/relay/${m[1]}.json`, "utf8")) });
@@ -1120,79 +1137,207 @@ writeFileSync(`${dir}/relay-port`, String(server.port));
 """
 
 
+def read_text(path):
+    return path.read_text() if path.exists() else ""
+
+
+class FallbackRig:
+    """The bridge on the photon and bluebubbles transports, over the fake spectrum-ts and a fake relay. It restarts."""
+
+    def __init__(self, tmp_path, **env):
+        self.app, self.fake, self.state, bin_dir = (tmp_path / d for d in ("app", "fake", "state", "bin"))
+        shutil.copytree(ROOT / "imessage", self.app, ignore=shutil.ignore_patterns("fm-*"))
+        pkg = self.app / "node_modules/spectrum-ts"
+        pkg.mkdir(parents=True)
+        exports = {".": "./index.js", "./providers/imessage": "./index.js"}
+        (pkg / "package.json").write_text(json.dumps({"name": "spectrum-ts", "type": "module", "exports": exports}))
+        (pkg / "index.js").write_text(FAKE_UPSTREAM)
+        for d in (self.fake / "inbound", self.fake / "messages", self.fake / "relay", bin_dir):
+            d.mkdir(parents=True)
+        (self.fake / "down").write_text("0")
+        self.notes = tmp_path / "notes"
+        for name, body in {"omp": "cat >/dev/null; echo SKIP", "fm-inbox": f'printf "%s\\n" "$*" >> {self.notes}'}.items():
+            (bin_dir / name).write_text(f"#!/bin/bash\n{body}\n")
+            (bin_dir / name).chmod(0o755)
+        ports = []
+        for _ in range(2):
+            with socket.socket() as s:
+                s.bind(("127.0.0.1", 0))
+                ports.append(s.getsockname()[1])
+        self.hook_port = ports[1]
+        self.env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "FAKE_DIR": str(self.fake)}
+        self.relay = subprocess.Popen(["bun", "-e", FAKE_RELAY], env=self.env)
+        wait_for(lambda: read_text(self.fake / "relay-port"), "the fake relay")
+        self.env |= {
+            "FM_HOME": str(tmp_path),
+            "FM_INBOX_CMD": str(bin_dir / "fm-inbox"),
+            "FM_IMESSAGE_OWNER": "+10000000000",
+            "FM_IMESSAGE_PORT": str(ports[0]),
+            "FM_IMESSAGE_RETRY_MS": "20",
+            "FM_IMESSAGE_TRANSPORTS": "photon bluebubbles",
+            "FM_BLUEBUBBLES_RELAYS": f"http://127.0.0.1:{read_text(self.fake / 'relay-port')},RELAY_PASSWORD",
+            "FM_BLUEBUBBLES_WEBHOOK": f"127.0.0.1:{ports[1]}",
+            "RELAY_PASSWORD": "pw-test",
+            "PHOTON_PROJECT_ID": "fake",
+            "PHOTON_PROJECT_SECRET": "fake",
+            "STATE_DIRECTORY": str(self.state),
+            **env,
+        }
+        self.out, self.err = tmp_path / "out", tmp_path / "err"
+        self.starts = 0
+        self.bridge = None
+
+    def start(self):
+        self.starts += 1
+        with self.out.open("a") as o, self.err.open("a") as e:
+            self.bridge = subprocess.Popen(["bun", "bridge.ts"], cwd=self.app, env=self.env, stdout=o, stderr=e)
+        wait_for(lambda: read_text(self.out).count("listening") == self.starts, "bridge start")
+
+    def stop(self):
+        if self.bridge:
+            self.bridge.terminate()
+            self.bridge.wait(10)
+            self.bridge = None
+
+    def close(self):
+        self.stop()
+        self.relay.terminate()
+        self.relay.wait(10)
+
+    def photon_down(self, down):
+        (self.fake / "down").write_text("1000000" if down else "0")
+
+    def relay_mode(self, mode):
+        (self.fake / "relay-mode").write_text(mode)
+
+    def cli(self, *args):
+        result = subprocess.run([str(SEND), *args], capture_output=True, text=True, env=self.env, timeout=30)
+        assert result.returncode == 0, result.stderr
+
+    def photon_text(self, mid, text):
+        record = {"id": mid, "space": "chat-1", "sender": "+10000000000", "text": text}
+        (self.fake / "inbound" / f"{mid}.json").write_text(json.dumps(record))
+        wait_for(lambda: f"photon-{mid} " in read_text(self.notes), f"the Photon note {mid}")
+
+    def relay_text(self, guid, text, at):
+        message = {"guid": guid, "text": text, "isFromMe": False, "dateCreated": at, "attachments": [],
+                   "handle": {"address": "+10000000000"}, "chats": [{"guid": "iMessage;-;+10000000000"}]}
+        (self.fake / "relay" / f"{guid}.json").write_text(json.dumps(message))
+        hook = json.dumps({"type": "new-message", "data": {"guid": guid}})
+        subprocess.run(["curl", "-sS", "-d", hook, f"http://127.0.0.1:{self.hook_port}/bluebubbles"], check=True, capture_output=True)
+        wait_for(lambda: f"bluebubbles-{guid} " in read_text(self.notes), f"the BlueBubbles note {guid}")
+
+    def outbox(self):
+        return [json.loads(p.read_text()) for p in sorted((self.state / "outbox").glob("*.json"))]
+
+
 @pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
 def test_bridge_falls_back_to_bluebubbles_and_back(tmp_path):
     """Photon down: queued bubbles go out on the BlueBubbles line. Photon back: Photon again. Both lines feed the inbox."""
-    app, fake, state, bin_dir = (tmp_path / d for d in ("app", "fake", "state", "bin"))
-    shutil.copytree(ROOT / "imessage", app, ignore=shutil.ignore_patterns("fm-*"))
-    pkg = app / "node_modules/spectrum-ts"
-    pkg.mkdir(parents=True)
-    exports = {".": "./index.js", "./providers/imessage": "./index.js"}
-    (pkg / "package.json").write_text(json.dumps({"name": "spectrum-ts", "type": "module", "exports": exports}))
-    (pkg / "index.js").write_text(FAKE_UPSTREAM)
-    for d in (fake / "inbound", fake / "messages", fake / "relay", bin_dir):
-        d.mkdir(parents=True)
-    (fake / "down").write_text("0")
-    notes = tmp_path / "notes"
-    for name, body in {"omp": "cat >/dev/null; echo SKIP", "fm-inbox": f'printf "%s\\n" "$*" >> {notes}'}.items():
-        (bin_dir / name).write_text(f"#!/bin/bash\n{body}\n")
-        (bin_dir / name).chmod(0o755)
-    ports = []
-    for _ in range(2):
-        with socket.socket() as s:
-            s.bind(("127.0.0.1", 0))
-            ports.append(s.getsockname()[1])
-    text = lambda p: p.read_text() if p.exists() else ""  # noqa: E731
-    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "FAKE_DIR": str(fake)}
-    relay = subprocess.Popen(["bun", "-e", FAKE_RELAY], env=env)
-    wait_for(lambda: text(fake / "relay-port"), "the fake relay")
-    env |= {
-        "FM_HOME": str(tmp_path),
-        "FM_INBOX_CMD": str(bin_dir / "fm-inbox"),
-        "FM_IMESSAGE_OWNER": "+10000000000",
-        "FM_IMESSAGE_PORT": str(ports[0]),
-        "FM_IMESSAGE_RETRY_MS": "20",
-        "FM_IMESSAGE_TRANSPORTS": "photon bluebubbles",
-        "FM_BLUEBUBBLES_RELAYS": f"http://127.0.0.1:{text(fake / 'relay-port')},RELAY_PASSWORD",
-        "FM_BLUEBUBBLES_WEBHOOK": f"127.0.0.1:{ports[1]}",
-        "RELAY_PASSWORD": "pw-test",
-        "PHOTON_PROJECT_ID": "fake",
-        "PHOTON_PROJECT_SECRET": "fake",
-        "STATE_DIRECTORY": str(state),
-    }
-    out, err = tmp_path / "out", tmp_path / "err"
-    with out.open("a") as o, err.open("a") as e:
-        bridge = subprocess.Popen(["bun", "bridge.ts"], cwd=app, env=env, stdout=o, stderr=e)
-
-    def cli(*args):
-        result = subprocess.run([str(SEND), *args], capture_output=True, text=True, env=env, timeout=30)
-        assert result.returncode == 0, result.stderr
-
+    rig = FallbackRig(tmp_path)
     try:
-        wait_for(lambda: "listening" in text(out), "bridge start")
-        record = {"id": "m1", "space": "chat-1", "sender": "+10000000000", "text": "you there"}
-        (fake / "inbound" / "m1.json").write_text(json.dumps(record))
-        wait_for(lambda: "photon-m1 " in text(notes), "the Photon note")
-        (fake / "down").write_text("1000000")  # Photon is down
-        cli("on the fallback")
-        wait_for(lambda: text(fake / "relay-sent"), "the fallback send")
-        (fake / "down").write_text("0")  # Photon is back
-        cli("on photon again")
-        wait_for(lambda: "send on photon again" in text(fake / "sent"), "the Photon send")
-        g1 = {"guid": "g1", "text": "from the icloud line", "isFromMe": False, "dateCreated": 1, "attachments": [],
-              "handle": {"address": "+10000000000"}, "chats": [{"guid": "iMessage;-;+10000000000"}]}
-        (fake / "relay" / "g1.json").write_text(json.dumps(g1))
-        hook = json.dumps({"type": "new-message", "data": {"guid": "g1"}})
+        rig.start()
+        rig.photon_text("m1", "you there")
+        rig.photon_down(True)
+        rig.cli("on the fallback")
+        wait_for(lambda: read_text(rig.fake / "relay-sent"), "the fallback send")
+        rig.photon_down(False)
+        rig.cli("on photon again")
+        wait_for(lambda: "send on photon again" in read_text(rig.fake / "sent"), "the Photon send")
         for _ in range(2):  # two relays, or one relay twice: one note
-            subprocess.run(["curl", "-sS", "-d", hook, f"http://127.0.0.1:{ports[1]}/bluebubbles"], check=True, capture_output=True)
-        wait_for(lambda: "bluebubbles-g1 " in text(notes), "the BlueBubbles note")
-        wait_for(lambda: not list((state / "outbox").glob("*.json")), "an empty outbox")
+            rig.relay_text("g1", "from the icloud line", 1)
+        wait_for(lambda: not rig.outbox(), "an empty outbox")
     finally:
-        bridge.terminate()
-        relay.terminate()
-        bridge.wait(10)
-        relay.wait(10)
-    assert text(fake / "relay-sent").splitlines() == ["iMessage;-;+10000000000 on the fallback"]
-    assert text(fake / "sent").splitlines() == ["send on photon again"]
-    assert text(notes).count("bluebubbles-g1 ") == 1
-    assert "photon could not send (" in text(err) and "on the bluebubbles fallback" in text(err)
+        rig.close()
+    assert read_text(rig.fake / "relay-sent").splitlines() == ["iMessage;-;+10000000000 on the fallback"]
+    assert read_text(rig.fake / "sent").splitlines() == ["send on photon again"]
+    assert read_text(rig.notes).count("bluebubbles-g1 ") == 1
+    assert "photon could not send (" in read_text(rig.err) and "on the bluebubbles fallback" in read_text(rig.err)
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_a_text_that_may_be_out_on_one_line_is_not_sent_on_another_after_a_restart(tmp_path):
+    """Photon is down, the relay takes the text but its answer is lost, then Photon is back: the text is not sent twice."""
+    rig = FallbackRig(tmp_path)
+    try:
+        rig.start()
+        rig.photon_text("m1", "you there")
+        rig.photon_down(True)
+        rig.relay_mode("garbled")
+        rig.cli("once only")
+        wait_for(lambda: read_text(rig.fake / "relay-sent"), "the relay send")
+        wait_for(lambda: rig.outbox() and rig.outbox()[0].get("maybe"), "the unsure state in the outbox item")
+        item = rig.outbox()[0]
+        assert item["maybe"] == {"bluebubbles": "iMessage;-;+10000000000"} and item["since"] > 0 and item["guid"]
+        rig.stop()
+        rig.photon_down(False)
+        rig.relay_mode("")
+        rig.start()
+        wait_for(lambda: not rig.outbox(), "the outbox to empty")
+    finally:
+        rig.close()
+    assert read_text(rig.fake / "relay-sent").splitlines() == ["iMessage;-;+10000000000 once only"]
+    assert read_text(rig.fake / "sent") == ""
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_a_text_the_check_proves_not_sent_goes_out_once_on_photon(tmp_path):
+    """The relay's answer is lost and the text never arrived: the retry's check says so, and Photon then sends it once."""
+    rig = FallbackRig(tmp_path)
+    try:
+        rig.start()
+        rig.photon_text("m1", "you there")
+        rig.photon_down(True)
+        rig.relay_mode("lost")
+        rig.cli("once only")
+        wait_for(lambda: rig.outbox() and rig.outbox()[0].get("maybe"), "the unsure state in the outbox item")
+        rig.photon_down(False)
+        wait_for(lambda: not rig.outbox(), "the outbox to empty")
+    finally:
+        rig.close()
+    assert read_text(rig.fake / "relay-sent") == ""
+    assert read_text(rig.fake / "sent").splitlines() == ["send once only"]
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_a_stuck_tapback_is_dropped_and_the_sends_behind_it_go_out(tmp_path):
+    """A tapback on a down transport moves to the dead-letter folder after its maximum age; later sends use the fallback."""
+    rig = FallbackRig(tmp_path, FM_IMESSAGE_REACT_MAX_MS="300")
+    try:
+        rig.start()
+        rig.photon_text("m1", "you there")
+        rig.photon_down(True)
+        rig.cli("--react", "👍")
+        rig.cli("behind the tapback")
+        wait_for(lambda: "behind the tapback" in read_text(rig.fake / "relay-sent"), "the send behind the tapback")
+        wait_for(lambda: not rig.outbox(), "an empty outbox")
+    finally:
+        rig.close()
+    dead = [json.loads(p.read_text()) for p in (rig.state / "outbox-dead").glob("*.json")]
+    assert [d["react"] for d in dead] == ["👍"]
+    assert "react" not in read_text(rig.fake / "sent")
+    assert len(re.findall(r"tapback 👍 older than", read_text(rig.err))) == 1
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_a_restart_targets_his_newest_text_on_any_transport(tmp_path):
+    """The tapback after a restart goes to the newest text, on the BlueBubbles line; an untimed latest file counts as oldest."""
+    rig = FallbackRig(tmp_path)
+    try:
+        rig.start()
+        rig.photon_text("m1", "on photon")
+        rig.relay_text("g1", "later, on the icloud line", 1)
+        wait_for(lambda: (rig.state / "latest-bluebubbles").exists(), "the BlueBubbles latest file")
+        assert len((rig.state / "latest").read_text().split()) == 3  # space, id, time
+        rig.stop()
+        (rig.state / "latest").write_text("chat-1\nm1\n")  # the format before the time was kept
+        rig.start()
+        rig.cli("--react", "❤️")
+        wait_for(lambda: "react g1 love" in read_text(rig.fake / "relay-sent"), "the tapback on the newest text")
+        rig.stop()
+        (rig.state / "latest-bluebubbles").unlink()  # only the untimed file is left: it is used
+        rig.start()
+        rig.cli("--react", "👍")
+        wait_for(lambda: "react m1 👍" in read_text(rig.fake / "sent"), "the tapback on the only text")
+    finally:
+        rig.close()
+    assert "react m1 ❤️" not in read_text(rig.fake / "sent")

@@ -82,14 +82,17 @@ export type LineMessage = Pick<Message, "id" | "content" | "direction"> & {
 // One way to send a bubble to the owner: a transport's name and its send.
 export type Route = { name: string; send(text: string): Promise<unknown> };
 
-// True when a failed send surely did not reach the line, so another transport may send it without a double:
-// a BlueBubbles call that never reached a relay, or a Photon (gRPC) UNAVAILABLE or refused connection. Any other
-// error, a timeout above all, may hide a sent text. outbox.ts `transient` is wider: it decides retries, not this.
+// True when a failed send surely did not reach the line, so another transport may send it without a double: a
+// BlueBubbles call that never reached a relay, a refused connection, or a Photon (gRPC) UNAVAILABLE that says the
+// request was not taken ("No connection established", or the gateway's own "Please retry"). A bare UNAVAILABLE can
+// follow a write, so it is not enough. Any other error, a timeout above all, may hide a sent text. outbox.ts
+// `transient` is wider: it decides retries, not this.
 export function notSent(e: unknown): boolean {
   if (!(e instanceof Error)) return false;
   if ("maybeSent" in e) return e.maybeSent === false;
   const code = "grpcCode" in e ? e.grpcCode : "code" in e ? e.code : undefined;
-  return code === 14 || code === "ECONNREFUSED" || code === "ConnectionRefused" || /\bUNAVAILABLE\b/.test(e.message);
+  if (code === "ECONNREFUSED" || code === "ConnectionRefused") return true;
+  return (code === 14 || /\bUNAVAILABLE\b/.test(e.message)) && /No connection established|Please retry/.test(e.message);
 }
 
 // Send `text` on the first route that takes it, in order. A failure that surely did not send moves on to the next
