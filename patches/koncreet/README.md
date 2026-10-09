@@ -1,0 +1,1 @@
+`ubuntu-26.04.patch` changes upstream [Koncreet](https://github.com/jimididit/koncreet) code, which is under the [MIT License](https://github.com/jimididit/koncreet/blob/main/LICENSE). The patch stays under that license, not the license of this repository.
