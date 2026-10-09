@@ -14,7 +14,8 @@
 #   * the PostgreSQL password is a file secret outside the source checkout
 #     (no baked default password and no password in this file or environment)
 #
-# Image digests verified 2026-09-15 against registry-1.docker.io:
+# Images come from mirror.gcr.io, Google's Docker Hub mirror, which has no
+# anonymous pull limit. Digests verified 2026-10-09 to match registry-1.docker.io:
 #   postgres:18-bookworm  sha256:1c59e2c3c818eaa0f0628f695b36e7c9e362d6b219b36a54a32df645cbd7e1af
 #                         (amd64 sha256:a10c981235b4f635e65df0cfb66a5598064628128505dbc6a3ed4ca303717521,
 #                          PG_VERSION=18.6-1.pgdg12+2, created 2026-08-25)
@@ -78,7 +79,7 @@ services:
   # ---------------------------------------------------------------------------
   postgres:
     profiles: ["data"]
-    image: postgres:18-bookworm@sha256:1c59e2c3c818eaa0f0628f695b36e7c9e362d6b219b36a54a32df645cbd7e1af
+    image: mirror.gcr.io/library/postgres:18-bookworm@sha256:1c59e2c3c818eaa0f0628f695b36e7c9e362d6b219b36a54a32df645cbd7e1af
     init: true
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-developer}
@@ -111,7 +112,7 @@ services:
 
   redis:
     profiles: ["data"]
-    image: redis:8-alpine@sha256:becdda6c7f4b3fb42e42fd7f120bbf5c54c4caaaf16f26da24e4563d2c1f0576
+    image: mirror.gcr.io/library/redis:8-alpine@sha256:becdda6c7f4b3fb42e42fd7f120bbf5c54c4caaaf16f26da24e4563d2c1f0576
     init: true
     command:
       - "redis-server"
