@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Generic global instructions in `config/AGENTS.md`, installed by the `agents` profile as `~/.claude/CLAUDE.md`, `~/.omp/agent/AGENTS.md` and `~/.codex/AGENTS.md`; a file changed on the host is moved to a timestamped backup first, and an unchanged apply changes nothing ([#86](https://github.com/i098/Crewship/issues/86)).
+- The release image push runs in the `ghcr` environment, so the repository's Deployments list shows each GHCR push next to the npm publish ([#102](https://github.com/i098/Crewship/issues/102)).
 
 ## [0.2.0] - 2026-10-09
 

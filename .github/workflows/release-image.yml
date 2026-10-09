@@ -4,7 +4,8 @@
 # ghcr.io/i098/crewship:X.Y.Z and :latest. The image's
 # org.opencontainers.image.source label links the package to this repository.
 # The build job runs installers with a read-only token and hands the image to
-# the push job as an artifact; only the push job holds packages: write.
+# the push job as an artifact; only the push job holds packages: write. The
+# push job runs in the `ghcr` environment, so Deployments lists each push.
 # A pull request that changes this file runs the build job alone.
 # The action pins match ci.yml where shared; .github/dependabot.yml moves them.
 name: release-image
@@ -61,6 +62,9 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    environment:
+      name: ghcr
+      url: https://github.com/i098/Crewship/pkgs/container/crewship
     permissions:
       packages: write
     steps:
