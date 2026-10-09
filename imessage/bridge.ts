@@ -273,7 +273,10 @@ async function sendBubble(o: Out, i: number, save: (o: Out) => void) {
   const maybe: Record<string, string> = {};
   for (const [name, space] of Object.entries(o.maybe ?? {})) {
     const line = lines.find((l) => l.name === name);
-    if (!line) continue;
+    if (!line) {
+      if (TRANSPORTS.includes(name)) maybe[name] = space;
+      continue;
+    }
     if (!line.sent) maybe[name] = space;
     else if (await line.sent(space, text, o.since ?? 0)) return;
   }

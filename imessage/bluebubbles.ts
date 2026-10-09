@@ -31,6 +31,7 @@ const DEFAULTS = {
   skewMs: 60_000, // clock difference allowed between this host and a relay when looking for a sent text
   seenMax: 1000, // message GUIDs kept for de-duplication
   catchUpMs: 60_000, // between catch-up queries
+  lookbackMs: 15 * 60_000, // how far back a catch-up query looks
 };
 
 // The tapbacks BlueBubbles can send, by emoji.
@@ -57,13 +58,12 @@ type BBMessage = {
 export class BlueBubbles implements AsyncIterable<Bubble> {
   private opts: typeof DEFAULTS;
   private health = new Map<Relay, { ok: boolean; at: number }>();
-  private seen = new Map<string, number>(); // message GUID -> its date, oldest first
+  private seen = new Set<string>(); // message GUIDs, oldest first
   private seenFile: string;
   private appended = 0;
   private queue: Bubble[] = [];
   private wake?: () => void;
   private chain = Promise.resolve();
-  private since: number;
 
   constructor(
     private relays: Relay[],
@@ -76,13 +76,11 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
     this.seenFile = `${dir}/bluebubbles-seen`;
     if (existsSync(this.seenFile)) {
       for (const line of readFileSync(this.seenFile, "utf8").split("\n")) {
-        const [guid, date] = line.split(" ");
-        if (guid) this.remember(guid, Number(date) || 0);
+        const guid = line.split(" ")[0]; // an older file has "guid date" lines
+        if (guid) this.remember(guid);
       }
       this.compactSeen();
     }
-    // Catch-up starts after the newest message seen, or a little before now on a first start.
-    this.since = this.seen.size ? Math.max(...this.seen.values()) : Date.now() - this.opts.skewMs;
   }
 
   // Start the catch-up queries: now, then every catchUpMs.
@@ -118,13 +116,11 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
   // Queue one message by GUID, once. `data` is the message when a query already read it.
   accept(guid: string, data?: BBMessage): Promise<void> {
     if (this.seen.has(guid)) return this.chain;
-    this.remember(guid, data?.dateCreated ?? 0);
+    this.remember(guid);
     this.chain = this.chain.then(async () => {
       try {
         const m = data ?? (await this.read(guid));
-        this.seen.set(guid, m.dateCreated ?? 0);
-        this.since = Math.max(this.since, m.dateCreated ?? 0);
-        appendFileSync(this.seenFile, `${guid} ${m.dateCreated ?? 0}\n`, { mode: 0o600 });
+        appendFileSync(this.seenFile, `${guid}\n`, { mode: 0o600 });
         if (++this.appended > this.opts.seenMax) this.compactSeen();
         const built = await this.build(m);
         if (built) this.push(built);
@@ -136,15 +132,19 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
     return this.chain;
   }
 
-  // Ask the first healthy relay for messages since the newest one seen, and accept each in order.
+  // Ask every reachable relay for the messages of the last lookbackMs and accept each in order. The seen-set skips what
+  // was filed already, so a message whose webhook was lost is found while it is still in the window.
   async catchUp() {
-    try {
-      const found = (await this.first((r) => this.call(r, "POST", "message/query", undefined,
-        { after: this.since, sort: "ASC", limit: 100, with: ["chats", "attachments"] }))) as BBMessage[];
-      for (const m of found) await this.accept(m.guid, m);
-    } catch (e) {
-      // An unreachable relay was already logged when it went down.
-      if (!(e instanceof RelayError && (e.code || e.status === 503))) this.log(`catch-up failed: ${e instanceof Error ? e.message : String(e)}`);
+    const after = Date.now() - this.opts.lookbackMs;
+    for (const r of await this.healthy()) {
+      try {
+        const found = (await this.call(r, "POST", "message/query", undefined,
+          { after, sort: "ASC", limit: 100, with: ["chats", "attachments"] })) as BBMessage[];
+        for (const m of found) await this.accept(m.guid, m);
+      } catch (e) {
+        // An unreachable relay was already logged when it went down.
+        if (!(e instanceof RelayError && (e.code || e.status === 503))) this.log(`catch-up failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
   }
 
@@ -277,16 +277,16 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
     throw new RelayError(`${this.name(r)}: ${why}`, code !== "ConnectionRefused", undefined, code);
   }
 
-  private remember(guid: string, date: number) {
-    this.seen.set(guid, date);
-    for (const old of this.seen.keys()) {
+  private remember(guid: string) {
+    this.seen.add(guid);
+    for (const old of this.seen) {
       if (this.seen.size <= this.opts.seenMax) break;
       this.seen.delete(old);
     }
   }
 
   private compactSeen() {
-    writeFileSync(this.seenFile, [...this.seen].map(([g, d]) => `${g} ${d}\n`).join(""), { mode: 0o600 });
+    writeFileSync(this.seenFile, [...this.seen].map((g) => `${g}\n`).join(""), { mode: 0o600 });
     this.appended = 0;
   }
 

@@ -602,6 +602,31 @@ done({{
 
 
 @pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_catch_up_files_a_message_whose_webhook_was_lost_once(tmp_path):
+    """A newer message arrives by webhook, an older one never does: a catch-up in the window files it, nothing twice."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(), b = relay();
+const now = Date.now();
+for (const r of [a, b]) {{
+  r.messages.set("old", text("old", "its webhook was lost", {{ dateCreated: now - 5 * 60_000 }}));
+  r.messages.set("new", text("new", "this one came by webhook", {{ dateCreated: now - 60_000 }}));
+  r.messages.set("stale", text("stale", "outside the window", {{ dateCreated: now - 30 * 60_000 }}));
+}}
+const dir = {json.dumps(str(tmp_path))};
+const bb = line([a, b], {{}}, dir);
+await hook(bb, "new"); await settle(bb, "new");
+await bb.catchUp(); await bb.catchUp(); await settle(bb, "old");
+const after = line([a, b], {{}}, dir);
+await after.catchUp(); await settle(after, "old");
+done({{ got: bb.got.map((m) => m.id), restarted: after.got.map((m) => m.id) }});
+""")
+    assert result["got"] == ["new", "old"]
+    assert result["restarted"] == []
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
 def test_bluebubbles_attachment_comes_from_the_relay_that_has_it():
     """A download tries every relay; its errors tell the bridge's download queue to retry or to give up."""
     result = bun(f"""
@@ -951,7 +976,10 @@ async function* lineEvents() {
   }
 }
 const line = { messages: { subscribeEvents: lineEvents } };
-export const Spectrum = async () => ({ messages: messages(), __internal: { platforms: new Map([["imessage", { client: [{ client: line }] }]]) } });
+export const Spectrum = async () => {
+  if (existsSync(`${dir}/spectrum-down`)) throw new Error("spectrum did not start");
+  return { messages: messages(), __internal: { platforms: new Map([["imessage", { client: [{ client: line }] }]]) } };
+};
 export const imessage = Object.assign(() => ({ space: { get: async (id) => space(id) } }), { config: () => ({}) });
 """
 
@@ -1279,6 +1307,27 @@ def test_a_text_that_may_be_out_on_one_line_is_not_sent_on_another_after_a_resta
     assert read_text(rig.fake / "relay-sent").splitlines() == ["iMessage;-;+10000000000 once only"]
     assert read_text(rig.fake / "sent") == ""
 
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_a_text_that_may_be_out_on_photon_waits_while_photon_does_not_start(tmp_path):
+    """The restart after an unsure Photon send finds Photon down: the bubble is not sent on BlueBubbles, and Photon sends it once later."""
+    rig = FallbackRig(tmp_path)
+    (rig.state / "outbox").mkdir(parents=True)
+    item = {"space": "chat-1", "id": "m1", "bubbles": ["pinned"], "guid": "g-1", "maybe": {"photon": "chat-1"}, "since": 1}
+    (rig.state / "outbox/1.json").write_text(json.dumps(item))
+    (rig.fake / "spectrum-down").touch()
+    try:
+        rig.start()
+        wait_for(lambda: "outbox item 1 failed (try 2)" in read_text(rig.err), "a retry while Photon is not running")
+        assert read_text(rig.fake / "relay-sent") == "" and rig.outbox()[0]["maybe"] == {"photon": "chat-1"}
+        rig.stop()
+        (rig.fake / "spectrum-down").unlink()
+        rig.start()
+        wait_for(lambda: not rig.outbox(), "the outbox to empty")
+    finally:
+        rig.close()
+    assert read_text(rig.fake / "relay-sent") == ""
+    assert read_text(rig.fake / "sent").splitlines() == ["send pinned"]
 
 @pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
 def test_a_text_the_check_proves_not_sent_goes_out_once_on_photon(tmp_path):
