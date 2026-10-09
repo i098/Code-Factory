@@ -30,7 +30,8 @@ Use a Linux host for the native recipe. macOS and other client devices can reach
 The Dockerfile's `worker` target is an isolated, non-root, devcontainer-style image built by the same recipe. It runs `./ship.sh launch --config containers/factory.container.yml`, which sets `start_services: false` and `enable_linger: false` and turns off the `docker`, `tailscale`, `desktop`, `firstmate`, and `chat` profiles and the browser pruner. The image carries the agent and development toolchain and the rendered agent configs, with no systemd services, linger, or Docker-in-Docker. The devcontainer, Compose, and CI use the same image.
 
 ```bash
-docker build --target worker --tag code-factory/worker .
+docker pull ghcr.io/i098/crewship:latest                 # released image (or :X.Y.Z), published on each release
+docker build --target worker --tag code-factory/worker .  # or build it here
 docker compose --profile worker up -d                    # worker only
 docker compose --profile worker --profile data up -d     # + example Postgres and Redis
 ```

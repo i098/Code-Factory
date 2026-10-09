@@ -1,0 +1,54 @@
+# Publishes the worker image to the GitHub Container Registry on each release.
+#
+# A published vX.Y.Z release builds the Dockerfile's worker target and pushes
+# ghcr.io/i098/crewship:X.Y.Z and :latest. The image's
+# org.opencontainers.image.source label links the package to this repository.
+# A pull request that changes this file runs the same build without the push.
+# The action pin matches ci.yml; .github/dependabot.yml moves it.
+name: release-image
+
+on:
+  release:
+    types: [published]
+  pull_request:
+    paths: [.github/workflows/release-image.yml]
+
+# The push is the only write; checkout of this public repository needs none.
+permissions:
+  packages: write
+
+jobs:
+  worker-image:
+    name: publish worker image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      IMAGE: ghcr.io/i098/crewship
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # A pull request checks the tag rule against a placeholder release tag.
+      - name: Build worker image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || 'v0.0.0' }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error title=release tag::$TAG is not vX.Y.Z"
+            exit 1
+          fi
+          docker build --secret id=github_token,env=GITHUB_TOKEN --target worker \
+            --tag "$IMAGE:${BASH_REMATCH[1]}" --tag "$IMAGE:latest" .
+
+      - name: Push to the GitHub Container Registry
+        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<<"$GITHUB_TOKEN"
+          docker push --all-tags "$IMAGE"
