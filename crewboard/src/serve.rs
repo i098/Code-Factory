@@ -119,27 +119,42 @@ fn answer(board: &Shared, pid: i32, req: &Value) -> String {
     format!("{reply}\n")
 }
 
-/// Streams replay then live messages until the client closes its end.
+/// A stalled write ends the connection after this long.
+const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
+
+async fn put(w: &mut OwnedWriteHalf, line: &str) -> io::Result<()> {
+    tokio::time::timeout(WRITE_TIMEOUT, w.write_all(line.as_bytes())).await.unwrap_or_else(|_| Err(io::ErrorKind::TimedOut.into()))
+}
+
+/// Streams replay then live messages until the client closes its end or falls behind.
 async fn stream_sub(mut r: BufReader<OwnedReadHalf>, mut w: OwnedWriteHalf, board: Shared, sub: Subscription) -> io::Result<()> {
     let (id, replay, mut rx) = sub;
+    let reader = tokio::spawn(async move {
+        let mut sink = [0u8; 256];
+        while matches!(r.read(&mut sink).await, Ok(n) if n > 0) {}
+    });
+    let stop_reader = reader.abort_handle();
     let shared = board.clone();
     let writer = tokio::spawn(async move {
         let _ = async {
             for line in replay {
-                w.write_all(line.as_bytes()).await?;
+                put(&mut w, &line).await?;
             }
             while let Some(line) = rx.recv().await {
-                w.write_all(line.as_bytes()).await?;
+                put(&mut w, &line).await?;
             }
             // The board drops the sender only when this subscriber's queue is full.
-            w.write_all(b"{\"error\":\"slow\"}\n").await?;
-            w.shutdown().await
+            // Every queued line is written by now, so the notice cannot split a line.
+            let _ = w.as_ref().try_write(b"{\"error\":\"slow\"}\n");
+            Ok::<(), io::Error>(())
         }
         .await;
         lock(&shared).unsubscribe(id);
+        // Dropping both halves closes the socket.
+        drop(w);
+        stop_reader.abort();
     });
-    let mut sink = [0u8; 256];
-    while matches!(r.read(&mut sink).await, Ok(n) if n > 0) {}
+    let _ = reader.await;
     writer.abort();
     lock(&board).unsubscribe(id);
     Ok(())

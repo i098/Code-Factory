@@ -142,3 +142,55 @@ fn two_clients_history_caps_and_restart() {
     drop(restarted);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+/// A subscriber that never reads is dropped and its connection closed, not kept with its queue.
+#[test]
+fn stalled_subscriber_is_closed() {
+    use std::io::Read;
+    use std::os::unix::net::UnixStream;
+
+    let dir: PathBuf = std::env::temp_dir().join(format!("crewboard-stall-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::DirBuilder::new().mode(0o700).create(&dir).unwrap();
+    let sock = dir.join("crewboard.sock");
+    let (sock, dir) = (sock.as_path(), dir.as_path());
+    let args = ["serve", "--socket", sock.to_str().unwrap(), "--cap-bytes", "8000000"];
+    let _daemon = Proc(cmd(sock, dir, &args).stderr(Stdio::null()).spawn().unwrap());
+    let start = Instant::now();
+    while !run(sock, dir, &["stat"]).status.success() {
+        assert!(start.elapsed() < Duration::from_secs(10), "daemon did not start");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+
+    let mut stalled = UnixStream::connect(sock).unwrap();
+    stalled.write_all(b"{\"op\":\"sub\",\"topics\":[\"*\"]}\n").unwrap();
+    while stat(sock, dir)["subs"] != 1 {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+
+    // Big lines fill the socket buffer, stall the writer, then fill the queue past 1024.
+    let mut publisher = UnixStream::connect(sock).unwrap();
+    let mut replies = BufReader::new(publisher.try_clone().unwrap());
+    let body = "x".repeat(60_000);
+    for _ in 0..1100 {
+        writeln!(publisher, "{{\"op\":\"pub\",\"topic\":\"t\",\"body\":\"{body}\"}}").unwrap();
+        let mut reply = String::new();
+        replies.read_line(&mut reply).unwrap();
+        assert!(reply.contains("\"ok\":true"), "{reply}");
+    }
+    let s = stat(sock, dir);
+    assert_eq!((&s["subs"], &s["dropped"]), (&0.into(), &1.into()));
+
+    // Once the write times out the daemon closes the socket, which frees the queued lines.
+    stalled.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+    let mut buf = vec![0u8; 1 << 16];
+    loop {
+        match stalled.read(&mut buf) {
+            Ok(0) => break,
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => break,
+            Err(e) => panic!("connection still open: {e}"),
+        }
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}

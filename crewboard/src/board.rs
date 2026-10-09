@@ -35,6 +35,8 @@ struct Topic {
     ring: VecDeque<Msg>,
     /// Highest seq evicted from this topic, for the gap marker.
     evicted: u64,
+    /// Seq of the latest publish, for dropping the least recently published topic.
+    last: u64,
 }
 
 struct Sub {
@@ -53,7 +55,7 @@ pub struct Board {
     seq: u64,
     bytes: usize,
     topics: HashMap<String, Topic>,
-    /// Highest evicted seq of topics dropped at the topic cap.
+    /// Highest seq of topics dropped at the topic cap.
     forgotten: u64,
     subs: Vec<Sub>,
     next_sub: u64,
@@ -97,15 +99,15 @@ impl Board {
             return Err("cap");
         }
         if !self.topics.contains_key(topic) && self.topics.len() >= MAX_TOPICS {
-            let Some(empty) = self.topics.iter().find(|(_, t)| t.ring.is_empty()).map(|(k, _)| k.clone()) else {
-                return Err("bad_topic");
-            };
-            let gone = self.topics.remove(&empty).expect("key found above");
-            self.forgotten = self.forgotten.max(gone.evicted);
+            let stale = self.topics.iter().min_by_key(|(_, t)| t.last).map(|(k, _)| k.clone()).expect("the topic cap is not zero");
+            let gone = self.topics.remove(&stale).expect("key found above");
+            self.bytes -= gone.ring.iter().map(|m| m.line.len()).sum::<usize>();
+            self.forgotten = self.forgotten.max(gone.last);
         }
         self.seq = seq;
         self.bytes += line.len();
         let t = self.topics.entry(topic.to_owned()).or_default();
+        t.last = seq;
         t.ring.push_back(Msg { seq, line: line.clone() });
         if t.ring.len() > self.limits.history {
             let old = t.ring.pop_front().expect("ring is not empty");
@@ -139,23 +141,25 @@ impl Board {
     }
 
     /// Registers a subscriber. With `since`, replays retained messages with a
-    /// higher seq, led by a gap marker when any of them were evicted.
+    /// higher seq, led by a gap marker when any of them were evicted. A `since`
+    /// beyond the board's seq means the board restarted: it is a gap and replays all.
     pub fn subscribe(&mut self, patterns: Vec<String>, since: Option<u64>) -> Result<Subscription, &'static str> {
         if patterns.is_empty() || !patterns.iter().all(|p| valid_pattern(p)) {
             return Err("bad_topic");
         }
         let mut replay = Vec::new();
         if let Some(since) = since {
+            let restarted = since > self.seq;
             let mut lost = self.forgotten;
             let mut msgs: Vec<&Msg> = Vec::new();
             for (name, t) in &self.topics {
                 if patterns.iter().any(|p| matches(p, name)) {
                     lost = lost.max(t.evicted);
-                    msgs.extend(t.ring.iter().filter(|m| m.seq > since));
+                    msgs.extend(t.ring.iter().filter(|m| restarted || m.seq > since));
                 }
             }
             msgs.sort_unstable_by_key(|m| m.seq);
-            if lost > since {
+            if restarted || lost > since {
                 let oldest = msgs.first().map_or(self.seq + 1, |m| m.seq);
                 replay.push(format!("{{\"gap\":true,\"oldest\":{oldest}}}\n").into());
             }
@@ -310,17 +314,39 @@ mod tests {
     }
 
     #[test]
-    fn topic_cap_drops_an_empty_topic() {
+    fn topic_cap_drops_the_least_recently_published_topic() {
         let mut b = board(1 << 20, 10);
         for i in 0..MAX_TOPICS {
             b.publish(&format!("t{i}"), None, 1, "x").unwrap();
         }
-        assert_eq!(b.publish("one-more", None, 1, "x"), Err("bad_topic"));
-        // A cap that holds one message empties every older topic.
-        b.limits.cap_bytes = 120;
+        // t0 is fresh again, so t1 is the stalest.
         b.publish("t0", None, 1, "x").unwrap();
         b.publish("one-more", None, 1, "x").unwrap();
         assert_eq!(b.stat()["topics"], json!(MAX_TOPICS));
+        assert!(b.history("t1", 10).is_empty());
+        assert_eq!(b.history("t0", 10).len(), 2);
+        assert_eq!(b.history("one-more", 10).len(), 1);
+        assert_eq!(b.publish("Bad", None, 1, "x"), Err("bad_topic"));
+        let kept: usize = b.topics().as_array().unwrap().iter().map(|t| b.history(t["topic"].as_str().unwrap(), 10).iter().map(|l| l.len()).sum::<usize>()).sum();
+        assert_eq!(b.stat()["bytes"], json!(kept));
+        // t1 held seq 2: a subscriber that saw seq 1 must be told about the loss.
+        let (_, replay, _rx) = b.subscribe(vec!["t0".into()], Some(1)).unwrap();
+        assert_eq!(&*replay[0], "{\"gap\":true,\"oldest\":1025}\n");
+        let (_, replay, _rx) = b.subscribe(vec!["t0".into()], Some(2)).unwrap();
+        assert_eq!(seqs(&replay), [json!(1025)]);
+    }
+
+    #[test]
+    fn since_beyond_seq_means_restart() {
+        let mut b = board(1 << 20, 10);
+        for body in ["1", "2", "3"] {
+            b.publish("t", None, 1, body).unwrap();
+        }
+        let (_, replay, _rx) = b.subscribe(vec!["t".into()], Some(100)).unwrap();
+        assert_eq!(&*replay[0], "{\"gap\":true,\"oldest\":1}\n");
+        assert_eq!(seqs(&replay[1..]), [json!(1), json!(2), json!(3)]);
+        let (_, replay, _rx) = b.subscribe(vec!["t".into()], Some(3)).unwrap();
+        assert!(replay.is_empty());
     }
 
     #[test]
