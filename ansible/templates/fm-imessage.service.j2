@@ -1,7 +1,8 @@
 {{ ansible_managed | comment }}
-# Two-way iMessage between the owner and Firstmate over a Photon Spectrum line
-# (docs/imessage.md). PHOTON_PROJECT_ID and PHOTON_PROJECT_SECRET come from the
-# host's secret store, ~/super.env, at start; no credential is in this unit.
+# Two-way iMessage between the owner and Firstmate over a Photon Spectrum line or
+# self-hosted BlueBubbles relays (docs/imessage.md). The Photon project id and
+# secret, or each relay's password, come from the host's secret store,
+# ~/super.env, at start; no credential is in this unit.
 
 [Unit]
 Description=iMessage bridge between the owner and Firstmate (Crewship managed)
@@ -16,6 +17,12 @@ Environment="FM_IMESSAGE_OWNER={{ factory_cfg.imessage.owner }}"
 Environment="FM_IMESSAGE_DESK_MODEL={{ factory_imessage_desk_model }}"
 Environment="FM_IMESSAGE_SUPERVISOR_MODEL={{ factory_imessage_supervisor_model }}"
 Environment="FM_IMESSAGE_OWNER_NAME={{ factory_imessage_owner_name }}"
+{% if factory_cfg.imessage.transport | default('photon') == 'bluebubbles' %}
+Environment="FM_IMESSAGE_TRANSPORT=bluebubbles"
+# Each relay is "url,VARIABLE": VARIABLE names its password in ~/super.env.
+Environment="FM_BLUEBUBBLES_RELAYS={% for relay in factory_cfg.imessage.bluebubbles.relays %}{{ relay.url }},{{ relay.password_env | default('BLUEBUBBLES_PASSWORD') }}{{ '' if loop.last else ' ' }}{% endfor %}"
+Environment="FM_BLUEBUBBLES_WEBHOOK={{ factory_cfg.imessage.bluebubbles.webhook_listen }}"
+{% endif %}
 EnvironmentFile=%h/super.env
 # ~/.local/state/fm-imessage: the latest text, attachments, the outbox, the downloads to retry, the desk's memory
 # and its empty cwd.

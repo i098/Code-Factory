@@ -250,11 +250,67 @@
             "supervisor_model": {
               "type": "string",
               "pattern": "^([A-Za-z0-9][A-Za-z0-9_./:-]*)?$"
+            },
+            "transport": {
+              "enum": [
+                "photon",
+                "bluebubbles"
+              ]
+            },
+            "bluebubbles": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "relays": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "pattern": "^https?://[^\\s,\"'\\\\?#%]+$"
+                      },
+                      "password_env": {
+                        "type": "string",
+                        "pattern": "^[A-Z_][A-Z0-9_]*$"
+                      }
+                    },
+                    "required": [
+                      "url"
+                    ]
+                  }
+                },
+                "webhook_listen": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9.-]+:[0-9]{1,5}$"
+                }
+              },
+              "required": [
+                "relays",
+                "webhook_listen"
+              ]
             }
           },
           "required": [
             "owner"
-          ]
+          ],
+          "if": {
+            "properties": {
+              "transport": {
+                "const": "bluebubbles"
+              }
+            },
+            "required": [
+              "transport"
+            ]
+          },
+          "then": {
+            "required": [
+              "bluebubbles"
+            ]
+          }
         },
         "github_board": {
           "type": "object",

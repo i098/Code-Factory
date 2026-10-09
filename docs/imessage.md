@@ -1,6 +1,6 @@
 # iMessage bridge
 
-The iMessage bridge lets the owner talk to Firstmate from a phone. It is a small Bun service, `fm-imessage.service`, that connects to the iMessage line of a [Photon Spectrum](https://photon.codes/docs/spectrum-ts) project. It is off by default.
+The iMessage bridge lets the owner talk to Firstmate from a phone. It is a small Bun service, `fm-imessage.service`, that uses one of two transports for the iMessage line: a [Photon Spectrum](https://photon.codes/docs/spectrum-ts) project (the default), or [self-hosted BlueBubbles relays](#use-self-hosted-bluebubbles-relays) on Macs that you control. It is off by default.
 
 ## What it does
 
@@ -14,7 +14,7 @@ For each message from the owner, the service does these steps:
 6. The desk acts like a person who texts, not like a bot. Its answer is one of three things, in this order of preference: `SKIP` (it sends nothing), `REACT:` and one emoji that it picks itself (a tapback on his latest text), or a short text. The text style is short, blunt, Gen Z, and lowercase. The desk never claims work that it cannot see, never promises a time, and never invents facts.
 7. Before it sends, the service checks again. If the owner sent a new text or Firstmate became active while the desk wrote, the service drops the draft. The next quiet period reads the whole conversation again.
 
-Photon reports no typing events from the owner, so only a new text starts the wait again.
+Neither transport reports typing events from the owner, so only a new text starts the wait again.
 
 When the owner edits a text, the service files a new note, `[edited] <new text> (was: <old text>)`, and the note wakes Firstmate like a new text. The service keeps his last 100 texts in memory for the old text. If it does not know the old text (for example, the text came before the last restart), the note says so. spectrum-ts does not pass edits on, so the service reads them from its own event stream on the line's client. An edit that the owner makes while that stream is down is lost.
 
@@ -65,6 +65,47 @@ A memory error never stops a send, a tapback, or the inbox note: the service log
    Edit `super.env` on the primary VPS, push it, and fetch it on the host, as [Shared credentials](secrets.md) describes. On a host without the shared store, add the lines to `~/super.env` directly and keep the file at mode `600`. A later fetch replaces that file.
 
 The unit reads `~/super.env` with `EnvironmentFile=` when it starts. The credentials never go into the repository, the unit, or `.local/host.yml`.
+
+## Use self-hosted BlueBubbles relays
+
+A relay is a Mac that runs [BlueBubbles server](https://bluebubbles.app) and is signed in to Messages. It costs nothing per month and does not depend on an outside messaging service. You can run the same Apple Account on several Macs: the bridge uses them as one line, in the order of the config.
+
+### Set up a relay
+
+1. Make an Apple Account for the line. An account with only an email address and no phone number works: the owner texts that email address, and `imessage.owner` stays his own phone number.
+2. On each Mac, sign in to Messages with that account, then install BlueBubbles server and follow its setup. Give it Full Disk Access and Accessibility permission.
+3. Enable the BlueBubbles Private API if you want typing bubbles, tapbacks, threaded replies, and read receipts. Plain texts and attachments work without it. The Private API needs System Integrity Protection partly off; read the BlueBubbles docs first.
+4. Set a long random server password, the same on every Mac or one for each. Do not use a proxy or tunnel service: limit the server port to the agent host with the Mac's firewall or your private network.
+5. In the server's API and Webhooks settings, add a webhook to `http://<webhook_listen>/bluebubbles` with the "New Messages" event.
+6. Make sure that the Mac does not sleep and that it signs in and opens BlueBubbles after a restart.
+
+Add each password to `~/super.env` as [Shared credentials](secrets.md) describes, for example `BLUEBUBBLES_PASSWORD=...`. The host config names the variable, never the password.
+
+### Switch the transport
+
+First [enable the bridge](#enable-it). Then add `transport` and the `bluebubbles` block to the `imessage` block in `.local/host.yml`, and run `./ship.sh launch`:
+
+```yaml
+    transport: bluebubbles
+    bluebubbles:
+      relays:                      # in failover order
+        - url: http://<relay-1>:1234
+        - url: http://<relay-2>:1234
+          password_env: RELAY_2_PASSWORD   # optional; the default is BLUEBUBBLES_PASSWORD
+      webhook_listen: <agent host address>:8766   # where the relays post their webhooks
+```
+
+`webhook_listen` must be an address that the relays reach and nothing else does, such as the agent host's address on your private network. To go back to Photon, remove `transport` and the `bluebubbles` block.
+
+### How the relay set behaves
+
+- **Health.** The bridge pings each relay with its password (3 second timeout) and keeps the result for 10 seconds. A relay that goes down or comes back is logged as one line.
+- **Sends.** A send, typing bubble, tapback, or read receipt goes to the first healthy relay, then to the next one if it fails. A typing error is logged and never fails a send. When all relays are down, the send fails with HTTP 502 and `fm-imessage` exits non-zero.
+- **No double sends.** Each send has a client GUID (BlueBubbles `tempGuid`). If a relay may have sent a text but did not answer (a timeout or a server error), the bridge asks the relays whether the text is in the chat before it tries the next relay. It looks for the same text from the line in the last minute or so. Two known limits: a text that reaches the other Macs through iCloud late can be sent twice, and a text identical to one sent in the same minute counts as sent.
+- **Inbound.** Every relay posts its webhook. A webhook carries only the message GUID that the bridge acts on: the bridge reads the message back from a relay with the password, so a forged webhook cannot inject text. The bridge keeps the last 1000 message GUIDs in `~/.local/state/fm-imessage/bluebubbles-seen`, so a message from several relays, or after a restart, is filed once. Each minute, and at start, it also asks a relay for messages that it missed, for example while the bridge restarted.
+- **Attachments.** The bridge downloads a file from whichever relay has it, and tries 5 times with backoff (1, 2, 4, and 8 seconds).
+- **Tapbacks.** BlueBubbles has six: ❤️ 👍 👎 😂 ‼️ ❓. `fm-imessage --react` with another emoji fails.
+- **Location.** `fm-location` works only with Photon.
 
 ## Enable it
 

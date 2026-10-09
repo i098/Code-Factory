@@ -69,6 +69,16 @@ export function typingPause(bubble: string): number {
 type Content = Message["content"];
 export type Attachment = Extract<Content, { type: "attachment" }>;
 
+// The part of an iMessage the bridge uses. A spectrum-ts Message (Photon) and a BlueBubbles message
+// (bluebubbles.ts) both have it, so the bridge runs on either transport.
+export type LineMessage = Pick<Message, "id" | "content" | "direction"> & {
+  sender?: { id: string };
+  space: { id: string; send(text: string): Promise<unknown>; startTyping(): Promise<void>; stopTyping(): Promise<void> };
+  react(emoji: string): Promise<unknown>;
+  reply(text: string): Promise<unknown>;
+  read(): Promise<unknown>;
+};
+
 // What Firstmate should read for one inbound message, or undefined for pure signals (tapbacks, typing, read
 // receipts, unsends, chat changes). Threaded replies, edits, effects and grouped messages are unwrapped, so
 // nothing he writes is dropped, and an unknown kind still becomes a note. `save` writes an attachment and

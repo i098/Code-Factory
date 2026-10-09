@@ -473,6 +473,281 @@ def test_location_carries_the_local_header(tmp_path):
     assert len(calls) == 1 and "-H X-Firstmate: 1" in calls[0] and calls[0].endswith("/location")
 
 
+BB = json.dumps(str(ROOT / "imessage/bluebubbles.ts"))
+
+# Fake BlueBubbles relays: local Bun servers with the API paths bluebubbles.ts calls, no network, no real
+# password. Relays share `icloud`, the texts the Apple Account sent, as Macs on one account do. A relay can go
+# down (connection refused), come back on its port, or take a send and never answer (`hang`).
+FAKE_BB = """
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+const icloud = [];
+function relay(password = "pw-test") {
+  const r = { password, calls: [], sent: [], messages: new Map(), files: new Map(), fail: {}, hang: false };
+  r.start = () => {
+    r.server = Bun.serve({ port: r.port ?? 0, async fetch(req) {
+      const u = new URL(req.url);
+      if (u.searchParams.get("password") !== r.password) return Response.json({ error: { message: "Unauthorized" } }, { status: 401 });
+      const path = u.pathname.replace("/api/v1/", "");
+      const body = req.method === "POST" ? await req.json().catch(() => null) : null;
+      r.calls.push(`${req.method} ${path}`);
+      const failing = Object.keys(r.fail).find((p) => path.startsWith(p) && r.fail[p]-- > 0);
+      if (failing) return Response.json({ error: { message: "Service temporarily unavailable" } }, { status: 500 });
+      if (path === "ping") return Response.json({ data: "pong" });
+      if (path === "message/text") {
+        r.sent.push(body);
+        icloud.push({ chat: body.chatGuid, text: body.message, at: Date.now() });
+        if (r.hang) return new Promise(() => {});
+        return Response.json({ data: { guid: `sent-${r.sent.length}`, tempGuid: body.tempGuid } });
+      }
+      if (path === "message/react") { r.sent.push(body); return Response.json({ data: {} }); }
+      if (path === "message/query") return Response.json({ data: [...r.messages.values()].filter((m) => m.dateCreated > body.after) });
+      let m = path.match(/^chat\\/([^/]+)\\/message$/);
+      if (m) return Response.json({ data: icloud.filter((s) => s.chat === decodeURIComponent(m[1]) && s.at > Number(u.searchParams.get("after"))).map((s) => ({ isFromMe: true, text: s.text })) });
+      if (/^chat\\/[^/]+\\/(typing|read)$/.test(path)) return Response.json({ data: null });
+      m = path.match(/^attachment\\/([^/]+)\\/download$/);
+      if (m) return r.files.has(m[1]) ? new Response(r.files.get(m[1])) : Response.json({ error: { message: "Attachment does not exist!" } }, { status: 404 });
+      m = path.match(/^message\\/([^/]+)$/);
+      if (m && r.messages.has(decodeURIComponent(m[1]))) return Response.json({ data: r.messages.get(decodeURIComponent(m[1])) });
+      return Response.json({ error: { message: "Message does not exist!" } }, { status: 404 });
+    } });
+    r.port = r.server.port;
+    r.url = `http://127.0.0.1:${r.port}`;
+  };
+  r.down = () => r.server.stop(true);
+  r.start();
+  return r;
+}
+const owner = "+15550000000", chat = `iMessage;-;${owner}`;
+const text = (guid, t, extra = {}) => ({ guid, text: t, isFromMe: false, dateCreated: Date.now(), handle: { address: owner }, chats: [{ guid: chat }], attachments: [], ...extra });
+const logs = [];
+function line(relays, opts = {}, dir = mkdtempSync(`${tmpdir()}/bb-`)) {
+  const bb = new BlueBubbles(relays.map((r) => ({ url: r.url, password: r.password })), dir,
+    { pingMs: 200, healthMs: 0, sendMs: 300, ...opts }, (l) => logs.push(l));
+  bb.got = [];
+  (async () => { for await (const m of bb) bb.got.push(m); })();
+  bb.dir = dir;
+  return bb;
+}
+const hook = (bb, guid, isFromMe = false) => bb.webhook(new Request("http://agent/bluebubbles", { method: "POST", body: JSON.stringify({ type: "new-message", data: { guid, isFromMe } }) }));
+// Wait until every message accepted so far is queued: accept() on a seen GUID returns the queue's tail.
+const settle = async (bb, guid) => { await bb.accept(guid); await Bun.sleep(5); };
+// Bun.serve keeps the process alive, so each script prints its result and exits.
+const done = (v) => { console.log(JSON.stringify(v)); process.exit(0); };
+"""
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_send_typing_tapback_and_reply():
+    """Sends carry a tempGuid, a reply threads to its message, tapbacks map to BlueBubbles names, typing never fails."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(), bb = line([a]);
+await bb.send(chat, "hello");
+await bb.send(chat, "that one", "his-guid");
+await bb.react(chat, "his-guid", "❤️");
+let odd = null;
+try {{ await bb.react(chat, "his-guid", "🦄"); }} catch (e) {{ odd = e.message; }}
+a.fail["chat/"] = 2;
+await bb.typing(chat, "POST"); await bb.typing(chat, "DELETE");
+await bb.send(chat, "after a typing error");
+done({{ sent: a.sent, calls: a.calls.filter((c) => c !== "GET ping"), odd, logs }});
+""")
+    plain, reply, tapback, after = result["sent"]
+    assert plain["chatGuid"] == "iMessage;-;+15550000000" and plain["message"] == "hello" and plain["tempGuid"]
+    assert "selectedMessageGuid" not in plain
+    assert reply["selectedMessageGuid"] == "his-guid" and reply["message"] == "that one"
+    assert tapback == {"chatGuid": plain["chatGuid"], "selectedMessageGuid": "his-guid", "reaction": "love", "partIndex": 0}
+    assert "🦄" in result["odd"] and "❤️" in result["odd"]
+    assert after["message"] == "after a typing error"
+    assert any(c.startswith("POST chat/") and c.endswith("/typing") for c in result["calls"])
+    assert any(c.startswith("DELETE chat/") for c in result["calls"])
+    assert [line for line in result["logs"] if line.startswith("typing failed")]
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_inbound_is_read_back_and_deduplicated(tmp_path):
+    """Webhooks from every relay become one message each; a forged GUID yields nothing; the seen-set survives a restart."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(), b = relay();
+for (const r of [a, b]) {{
+  r.messages.set("m1", text("m1", "ship it"));
+  r.messages.set("m2", text("m2", "this one", {{ threadOriginatorGuid: "m1" }}));
+}}
+const dir = {json.dumps(str(tmp_path))};
+const bb = line([a, b], {{}}, dir);
+await hook(bb, "m1"); await hook(bb, "m1"); await settle(bb, "m1");
+await hook(bb, "m2"); await settle(bb, "m2");
+await hook(bb, "forged"); await hook(bb, "mine", true); await settle(bb, "m1");
+const after = line([b, a], {{}}, dir);
+await hook(after, "m1"); await hook(after, "m2"); await settle(after, "m1");
+done({{
+  got: bb.got.map((m) => [m.id, m.direction, m.sender.id, m.space.id, m.content]),
+  restarted: after.got.length,
+  reads: a.calls.filter((c) => c === "GET message/m1").length + b.calls.filter((c) => c === "GET message/m1").length,
+  logs,
+}});
+""")
+    assert result["got"] == [
+        ["m1", "inbound", "+15550000000", "iMessage;-;+15550000000", {"type": "text", "text": "ship it"}],
+        ["m2", "inbound", "+15550000000", "iMessage;-;+15550000000",
+         {"type": "reply", "content": {"type": "text", "text": "this one"}, "target": {"content": {"type": "text", "text": "ship it"}}}],
+    ]
+    assert result["restarted"] == 0
+    assert result["reads"] == 2  # m1 itself once, and once as the thread target of m2
+    assert any(line.startswith("could not read message forged") for line in result["logs"])
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_attachment_comes_from_the_relay_that_has_it():
+    """A download tries every relay; its errors tell the bridge's download queue to retry or to give up."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ describe }} from {DESK};
+import {{ permanent, transient }} from {OUTBOX};
+{FAKE_BB}
+const a = relay(), b = relay();
+const pic = text("m3", "\\uFFFC", {{ attachments: [{{ guid: "at1", transferName: "pic one.png", mimeType: "image/png" }}] }});
+a.messages.set("m3", pic); b.messages.set("m3", pic);
+b.files.set("at1", "PNGDATA"); // only relay 2 has the file
+b.fail["attachment/"] = 1; // and it fails once first
+const bb = line([a, b]);
+await hook(bb, "m3"); await settle(bb, "m3");
+const save = async (c, id) => `${{id}}:${{c.name}}:${{(await c.read()).toString()}}`;
+const first = await describe(bb.got[0].content, bb.got[0].id, save);
+const again = await describe((await bb.message("m3")).content, "m3", save);
+b.files.delete("at1");
+const gone = await bb.download("at1").catch((e) => e);
+a.down(); b.down();
+const down = await bb.download("at1").catch((e) => e);
+done({{ first, again, gone: [gone.message, permanent(gone)], down: [down.message, transient(down) ?? null, permanent(down)] }});
+""")
+    assert result["first"].startswith("(sent an attachment that could not be saved yet")
+    assert result["again"] == "(sent an attachment, saved for Firstmate at m3:pic one.png:PNGDATA)"
+    assert result["gone"][0].startswith("relay 2") and result["gone"][1] is True  # moves to the dead-letter folder
+    assert result["down"] == ["no relay is reachable", "HTTP 503", False]  # the queue tries again later
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_fails_over_in_order_and_never_sends_twice():
+    """A down relay is skipped in config order; a send whose answer is lost is not repeated on the next relay."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(), b = relay(), c = relay();
+const bb = line([a, b, c]);
+a.down();
+await bb.send(chat, "one relay down");
+const downLogs = logs.filter((l) => l.startsWith("relay 1")).length;
+a.start(); b.hang = true;
+const ambiguous = line([b, c]);
+await ambiguous.send(chat, "answer lost");
+done({{
+  a: a.sent.map((s) => s.message), b: b.sent.map((s) => s.message), c: c.sent.map((s) => s.message), downLogs,
+  checked: [b, c].some((r) => r.calls.some((x) => x.startsWith("GET chat/"))), logs,
+}});
+""")
+    assert result["a"] == []
+    assert result["b"] == ["one relay down", "answer lost"]
+    assert result["c"] == []  # a relay showed the lost-answer send as sent, so it was not sent again
+    assert result["checked"]
+    assert result["downLogs"] == 1
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_outage_then_recovery():
+    """With every relay down a send fails visibly and inbound waits; after recovery both work, each message once."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(), b = relay();
+const bb = line([a, b]);
+a.down(); b.down();
+let failed = null;
+try {{ await bb.send(chat, "during the outage"); }} catch (e) {{ failed = e.message; }}
+await bb.catchUp();
+a.messages.set("m4", text("m4", "sent while the relays were down")); b.messages.set("m4", a.messages.get("m4"));
+b.start();
+await bb.send(chat, "after the outage");
+await bb.catchUp(); await hook(bb, "m4"); await settle(bb, "m4");
+a.start();
+await bb.catchUp(); await settle(bb, "m4");
+done({{
+  failed, b: b.sent.map((s) => s.message), got: bb.got.map((x) => x.content.text), logs,
+  secret: logs.some((l) => l.includes("pw-test")) || (failed ?? "").includes("pw-test"),
+}});
+""")
+    assert result["failed"] == "no relay is reachable"
+    assert result["b"] == ["after the outage"]
+    assert result["got"] == ["sent while the relays were down"]
+    assert not result["secret"]
+    down = [line for line in result["logs"] if " is down: " in line]
+    assert len(down) == 2 and all(line.endswith("connection refused") for line in down)
+    assert any(line.startswith("relay 2") and line.endswith("is back") for line in result["logs"])
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_transports_fail_over_to_bluebubbles_and_back():
+    """Photon down: the bubble goes to the BlueBubbles line. Photon back: Photon again. An unsure error: no second send."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ failover }} from {DESK};
+{FAKE_BB}
+const a = relay(), bb = line([a]);
+const photon = {{ state: "down", sent: [], async send(t) {{
+  if (this.state === "down") throw Object.assign(new Error("UNAVAILABLE: [upstream] Service temporarily unavailable. Please retry."), {{ code: 14 }});
+  if (this.state === "unsure") throw new Error("DEADLINE_EXCEEDED: no answer");
+  this.sent.push(t);
+}} }};
+const routes = [{{ name: "photon", send: (t) => photon.send(t) }}, {{ name: "bluebubbles", send: (t) => bb.send(chat, t) }}];
+const lines = [], out = {{}};
+out.down = await failover(routes, "while photon is down", (l) => lines.push(l));
+photon.state = "up";
+out.back = await failover(routes, "photon is back", (l) => lines.push(l));
+photon.state = "unsure";
+try {{ await failover(routes, "maybe sent", (l) => lines.push(l)); }} catch (e) {{ out.unsure = e.message; }}
+a.down(); photon.state = "up";
+out.relaysDown = await failover([routes[1], routes[0]], "relays down", (l) => lines.push(l)).catch((e) => e.message);
+done({{ ...out, photon: photon.sent, relay: a.sent.map((s) => s.message), lines }});
+""")
+    assert result["down"] == "bluebubbles"
+    assert result["back"] == "photon"
+    assert result["unsure"].startswith("DEADLINE_EXCEEDED")
+    assert result["relaysDown"] == "photon"  # BlueBubbles first, no relay reachable: Photon takes it
+    assert result["photon"] == ["photon is back", "relays down"]
+    assert result["relay"] == ["while photon is down"]
+    assert len(result["lines"]) == 2 and result["lines"][0].startswith("photon could not send (UNAVAILABLE")
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_inbound_from_both_transports_once_each():
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ inbound }} from {DESK};
+{FAKE_BB}
+const a = relay();
+a.messages.set("g-shared", text("g-shared", "both lines saw this"));
+a.messages.set("g-icloud", text("g-icloud", "only on the iCloud line"));
+const bb = line([a]);
+const photonQueue = [{{ id: "p-1", content: {{ type: "text", text: "on photon" }} }}, {{ id: "g-shared", content: {{ type: "text", text: "both lines saw this" }} }}];
+const photon = {{ name: "photon", messages: (async function* () {{ for (const m of photonQueue) {{ await Bun.sleep(20); yield m; }} }})() }};
+const blue = {{ name: "bluebubbles", messages: bb }};
+const got = [];
+(async () => {{ for await (const [l, m] of inbound([photon, blue])) got.push([l.name, m.id]); }})();
+await Bun.sleep(5);
+await hook(bb, "g-shared"); await hook(bb, "g-icloud"); await settle(bb, "g-icloud");
+await Bun.sleep(80);
+done({{ got }});
+""")
+    got = result["got"]
+    assert sorted(m for _, m in got) == ["g-icloud", "g-shared", "p-1"]
+    assert ["photon", "p-1"] in got and ["bluebubbles", "g-icloud"] in got
+
+
+
 def load_ship():
     spec = importlib.util.spec_from_file_location("ship_imessage", ROOT / "scripts/ship.py")
     module = importlib.util.module_from_spec(spec)
@@ -497,6 +772,33 @@ def test_config_rejects_a_bridge_it_cannot_run(change, error):
         load_ship().validate_config(document)
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda b: b.pop("relays"),
+        lambda b: b.update(relays=[]),
+        lambda b: b["relays"][0].update(url="http://a:1234,b"),
+        lambda b: b["relays"][0].update(url="http://a:1234/?password=x"),
+        lambda b: b["relays"][0].update(password_env="lower"),
+        lambda b: b.pop("webhook_listen"),
+        lambda b: b.clear(),
+    ],
+)
+def test_config_takes_a_bluebubbles_relay_set(change):
+    document = yaml.safe_load((ROOT / "config/default.yml").read_text())
+    relays = [{"url": "http://relay-a:1234"}, {"url": "https://relay-b/bb/", "password_env": "RELAY_B_PASSWORD"}]
+    document["factory"]["imessage"] = {
+        "owner": "+10000000000",
+        "transports": ["photon", "bluebubbles"],
+        "bluebubbles": {"relays": relays, "webhook_listen": "relay-net-address:8766"},
+    }
+    load_factory().validate_config(document)
+    bluebubbles = document["factory"]["imessage"]["bluebubbles"]
+    change(bluebubbles)
+    if not bluebubbles:
+        document["factory"]["imessage"].pop("bluebubbles")
+    with pytest.raises(ValueError, match="imessage"):
+        load_factory().validate_config(document)
 OUTBOX = json.dumps(str(ROOT / "imessage/outbox.ts"))
 
 
@@ -794,3 +1096,103 @@ def test_bridge_files_his_edits_as_new_notes(tmp_path):
         f"note --request-id photon-m1-edit-2 -- {head} [edited] member (was: adding a member)",
         f"note --request-id photon-m9-edit-5 -- {head} [edited] late (was: not known: the bridge did not see the text before the edit)",
     ]
+
+
+# A fake BlueBubbles relay for a whole-bridge test: it logs each send to FAKE_DIR/relay-sent and serves the messages
+# in FAKE_DIR/relay/<guid>.json.
+FAKE_RELAY = """
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+const dir = process.env.FAKE_DIR;
+const server = Bun.serve({ port: 0, async fetch(req) {
+  const u = new URL(req.url), path = u.pathname.replace("/api/v1/", "");
+  if (u.searchParams.get("password") !== "pw-test") return new Response("no", { status: 401 });
+  if (path === "message/text") {
+    const b = await req.json();
+    appendFileSync(`${dir}/relay-sent`, `${b.chatGuid} ${b.message}\\n`);
+    return Response.json({ data: {} });
+  }
+  const m = path.match(/^message\\/([^/]+)$/);
+  if (m && existsSync(`${dir}/relay/${m[1]}.json`)) return Response.json({ data: JSON.parse(readFileSync(`${dir}/relay/${m[1]}.json`, "utf8")) });
+  if (path === "message/query") return Response.json({ data: [] });
+  return Response.json({ data: null });
+} });
+writeFileSync(`${dir}/relay-port`, String(server.port));
+"""
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_bridge_falls_back_to_bluebubbles_and_back(tmp_path):
+    """Photon down: queued bubbles go out on the BlueBubbles line. Photon back: Photon again. Both lines feed the inbox."""
+    app, fake, state, bin_dir = (tmp_path / d for d in ("app", "fake", "state", "bin"))
+    shutil.copytree(ROOT / "imessage", app, ignore=shutil.ignore_patterns("fm-*"))
+    pkg = app / "node_modules/spectrum-ts"
+    pkg.mkdir(parents=True)
+    exports = {".": "./index.js", "./providers/imessage": "./index.js"}
+    (pkg / "package.json").write_text(json.dumps({"name": "spectrum-ts", "type": "module", "exports": exports}))
+    (pkg / "index.js").write_text(FAKE_UPSTREAM)
+    for d in (fake / "inbound", fake / "messages", fake / "relay", bin_dir):
+        d.mkdir(parents=True)
+    (fake / "down").write_text("0")
+    notes = tmp_path / "notes"
+    for name, body in {"omp": "cat >/dev/null; echo SKIP", "fm-inbox": f'printf "%s\\n" "$*" >> {notes}'}.items():
+        (bin_dir / name).write_text(f"#!/bin/bash\n{body}\n")
+        (bin_dir / name).chmod(0o755)
+    ports = []
+    for _ in range(2):
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            ports.append(s.getsockname()[1])
+    text = lambda p: p.read_text() if p.exists() else ""  # noqa: E731
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "FAKE_DIR": str(fake)}
+    relay = subprocess.Popen(["bun", "-e", FAKE_RELAY], env=env)
+    wait_for(lambda: text(fake / "relay-port"), "the fake relay")
+    env |= {
+        "FM_HOME": str(tmp_path),
+        "FM_INBOX_CMD": str(bin_dir / "fm-inbox"),
+        "FM_IMESSAGE_OWNER": "+10000000000",
+        "FM_IMESSAGE_PORT": str(ports[0]),
+        "FM_IMESSAGE_RETRY_MS": "20",
+        "FM_IMESSAGE_TRANSPORTS": "photon bluebubbles",
+        "FM_BLUEBUBBLES_RELAYS": f"http://127.0.0.1:{text(fake / 'relay-port')},RELAY_PASSWORD",
+        "FM_BLUEBUBBLES_WEBHOOK": f"127.0.0.1:{ports[1]}",
+        "RELAY_PASSWORD": "pw-test",
+        "PHOTON_PROJECT_ID": "fake",
+        "PHOTON_PROJECT_SECRET": "fake",
+        "STATE_DIRECTORY": str(state),
+    }
+    out, err = tmp_path / "out", tmp_path / "err"
+    with out.open("a") as o, err.open("a") as e:
+        bridge = subprocess.Popen(["bun", "bridge.ts"], cwd=app, env=env, stdout=o, stderr=e)
+
+    def cli(*args):
+        result = subprocess.run([str(SEND), *args], capture_output=True, text=True, env=env, timeout=30)
+        assert result.returncode == 0, result.stderr
+
+    try:
+        wait_for(lambda: "listening" in text(out), "bridge start")
+        record = {"id": "m1", "space": "chat-1", "sender": "+10000000000", "text": "you there"}
+        (fake / "inbound" / "m1.json").write_text(json.dumps(record))
+        wait_for(lambda: "photon-m1 " in text(notes), "the Photon note")
+        (fake / "down").write_text("1000000")  # Photon is down
+        cli("on the fallback")
+        wait_for(lambda: text(fake / "relay-sent"), "the fallback send")
+        (fake / "down").write_text("0")  # Photon is back
+        cli("on photon again")
+        wait_for(lambda: "send on photon again" in text(fake / "sent"), "the Photon send")
+        g1 = {"guid": "g1", "text": "from the icloud line", "isFromMe": False, "dateCreated": 1, "attachments": [],
+              "handle": {"address": "+10000000000"}, "chats": [{"guid": "iMessage;-;+10000000000"}]}
+        (fake / "relay" / "g1.json").write_text(json.dumps(g1))
+        hook = json.dumps({"type": "new-message", "data": {"guid": "g1"}})
+        for _ in range(2):  # two relays, or one relay twice: one note
+            subprocess.run(["curl", "-sS", "-d", hook, f"http://127.0.0.1:{ports[1]}/bluebubbles"], check=True, capture_output=True)
+        wait_for(lambda: "bluebubbles-g1 " in text(notes), "the BlueBubbles note")
+        wait_for(lambda: not list((state / "outbox").glob("*.json")), "an empty outbox")
+    finally:
+        bridge.terminate()
+        relay.terminate()
+        bridge.wait(10)
+        relay.wait(10)
+    assert text(fake / "relay-sent").splitlines() == ["iMessage;-;+10000000000 on the fallback"]
+    assert text(fake / "sent").splitlines() == ["send on photon again"]
+    assert text(notes).count("bluebubbles-g1 ") == 1
+    assert "photon could not send (" in text(err) and "on the bluebubbles fallback" in text(err)
