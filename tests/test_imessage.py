@@ -719,12 +719,15 @@ def test_bridge_rides_out_an_upstream_outage(tmp_path):
         assert len(list((state / "downloads").glob("*.json"))) == 1
         bridge = start(2)
         cli("four")
+        inbound("m5", name="gone.jpg", data="X")  # its download is queued behind m2, then the message disappears upstream
+        (fake / "messages" / "m5.json").unlink()
         (fake / "desk-on").touch()
         inbound("m3", text="ping")
         inbound("m4", text="ping again")  # nobody answers, so the desk writes a late ack into the queue
         wait_for(lambda: len(list((state / "outbox").glob("*.json"))) == 5, "the desk item in the outbox")
         (fake / "down").write_text("3")  # three more failures, then the upstream recovers
         wait_for(lambda: len(text(fake / "sent").splitlines()) == 6 and "photon-m2-saved" in text(notes), "recovery")
+        wait_for(lambda: "photon-m5-lost" in text(notes), "the note for the lost attachment")
         (fake / "messages" / "m3.json").unlink()  # the text that a threaded send points to is gone
         cli("--reply", "2", "five")
         wait_for(lambda: len(text(fake / "sent").splitlines()) == 7, "the unthreaded send")
@@ -738,5 +741,6 @@ def test_bridge_rides_out_an_upstream_outage(tmp_path):
     assert saved.read_text() == "JPEG"
     assert f"(an earlier attachment is saved now) (sent an attachment, saved for Firstmate at {saved})" in text(notes)
     assert list((state / "outbox").glob("*.json")) == [] and list((state / "downloads").glob("*.json")) == []
+    assert [json.loads(p.read_text()) for p in (state / "downloads-dead").glob("*.json")] == [{"space": "chat-1", "id": "m5"}]
     logs = text(err)
     assert "UNAVAILABLE" in logs and not re.search(r"^\s+at ", logs, re.M), logs
