@@ -85,6 +85,25 @@
   changed_when: (factory_skills_run.stdout_lines | last | from_json).changed | bool
   when: not ansible_check_mode
 
+# config/AGENTS.md as ~/.claude/CLAUDE.md, ~/.omp/agent/AGENTS.md and
+# ~/.codex/AGENTS.md (docs/omp.md#global-instructions). A file the user changed
+# since the last apply is moved to a timestamped .bak beside it first.
+- name: Install the global agent instructions
+  ansible.builtin.command:
+    argv: [python3, "{{ code_factory_repo }}/scripts/instructions.py", --home, "{{ factory_cfg.home }}"]
+  become: "{{ factory_become_target | bool }}"
+  become_user: "{{ factory_cfg.user }}"
+  register: factory_instructions_run
+  changed_when: (factory_instructions_run.stdout_lines | last | from_json).changed | bool
+  when: not ansible_check_mode
+
+- name: Report the global agent instructions backed up
+  ansible.builtin.debug:
+    msg: "Changed by hand, moved aside: {{ (factory_instructions_run.stdout_lines | last | from_json).backups | join(', ') }}"
+  when:
+    - not ansible_check_mode
+    - (factory_instructions_run.stdout_lines | last | from_json).backups | length > 0
+
 # The omp extension that feeds the Herdr agent sidebar layout ($who, the pull
 # request parts and the bare topic title; docs/herdr.md). Managed: every apply
 # rewrites it.
