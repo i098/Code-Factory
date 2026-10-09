@@ -80,6 +80,7 @@ type Line = {
   send(space: string, text: string, reply?: string, guid?: string): Promise<unknown>;
   sent?(space: string, text: string, since: number): Promise<boolean>; // whether a text went out since; throws when unknown
   react(ref: Ref, emoji: string): Promise<unknown>;
+  markSeen?(id: string): void; // the bridge has handled message `id`; a transport that keeps its own seen-set stores it
   home?: string;
   latest?: Ref;
 };
@@ -104,6 +105,7 @@ for (const name of TRANSPORTS) {
       find: (ref) => bb.message(ref.id),
       send: (space, text, reply, guid) => bb.send(space, text, reply, guid),
       sent: (space, text, since) => bb.sent(space, text, since),
+      markSeen: (id) => bb.markSeen(id),
       react: (ref, emoji) => bb.react(ref.space, ref.id, emoji),
       home: `iMessage;-;${OWNER}`,
     });
@@ -474,10 +476,15 @@ if (raw) void watchEdits(raw);
 
 // Every transport's messages, each message once even when two transports report it.
 for await (const [line, message] of inbound(lines)) {
-  if (message.direction === "outbound") continue;
-  if (message.sender?.id !== OWNER) {
-    console.log(`fm-imessage: ignored a ${line.name} message from ${message.sender?.id ?? "unknown"}`);
+  if (message.direction === "outbound") {
+    line.markSeen?.(message.id);
     continue;
   }
-  await handle(line, message).catch(log("failed to handle a message"));
+  if (message.sender?.id !== OWNER) {
+    console.log(`fm-imessage: ignored a ${line.name} message from ${message.sender?.id ?? "unknown"}`);
+    line.markSeen?.(message.id);
+    continue;
+  }
+  const handled = await handle(line, message).then(() => true, (e) => void log("failed to handle a message")(e));
+  if (handled) line.markSeen?.(message.id);
 }

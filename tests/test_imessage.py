@@ -529,7 +529,7 @@ function line(relays, opts = {}, dir = mkdtempSync(`${tmpdir()}/bb-`)) {
   const bb = new BlueBubbles(relays.map((r) => ({ url: r.url, password: r.password })), dir,
     { pingMs: 200, healthMs: 0, sendMs: 300, ...opts }, (l) => logs.push(l));
   bb.got = [];
-  (async () => { for await (const m of bb) bb.got.push(m); })();
+  (async () => { for await (const m of bb) { bb.got.push(m); if (bb.ack !== false) bb.markSeen(m.id); } })();
   bb.dir = dir;
   return bb;
 }
@@ -629,6 +629,47 @@ done({{ got: bb.got.map((m) => m.id), restarted: after.got.map((m) => m.id) }});
     assert result["got"] == ["new", "old"]
     assert result["restarted"] == []
 
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_a_message_is_kept_as_seen_only_after_the_bridge_handled_it(tmp_path):
+    """A bridge that exits before it files the note gets the message again from the catch-up, once; after the note, never."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay();
+a.messages.set("m1", text("m1", "filed once", {{ dateCreated: Date.now() - 60_000 }}));
+const dir = {json.dumps(str(tmp_path))};
+const crashed = line([a], {{}}, dir); crashed.ack = false;
+await crashed.catchUp(); await settle(crashed, "m1");
+const restarted = line([a], {{}}, dir);
+await restarted.catchUp(); await restarted.catchUp(); await settle(restarted, "m1");
+const later = line([a], {{}}, dir);
+await later.catchUp(); await settle(later, "m1");
+done({{ crashed: crashed.got.map((m) => m.id), restarted: restarted.got.map((m) => m.id), later: later.got.map((m) => m.id) }});
+""")
+    assert result == {"crashed": ["m1"], "restarted": ["m1"], "later": []}
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_the_inbound_download_is_short_and_the_queue_keeps_the_long_one():
+    """A slow attachment does not hold the inbound loop for downloadMs: its first read fails at callMs, the queue's read works."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ transient }} from {OUTBOX};
+{FAKE_BB}
+const a = relay();
+a.files.set("at1", "PNGDATA"); a.slow = 600;
+a.messages.set("m3", text("m3", "\\uFFFC", {{ attachments: [{{ guid: "at1", transferName: "pic.png", mimeType: "image/png" }}] }}));
+const bb = line([a], {{ callMs: 200, downloadMs: 5000 }});
+await hook(bb, "m3"); await settle(bb, "m3");
+const started = Date.now();
+const inline = await bb.got[0].content.read().catch((e) => e);
+const inlineMs = Date.now() - started;
+const queued = (await (await bb.message("m3")).content.read()).toString();
+done({{ inline: transient(inline) ?? null, inlineMs, queued }});
+""")
+    assert result["inline"] == "TIMEOUT" and result["inlineMs"] < 2000
+    assert result["queued"] == "PNGDATA"
 
 @pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
 def test_bluebubbles_attachment_comes_from_the_relay_that_has_it():

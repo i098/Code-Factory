@@ -60,7 +60,8 @@ type BBMessage = {
 export class BlueBubbles implements AsyncIterable<Bubble> {
   private opts: typeof DEFAULTS;
   private health = new Map<Relay, { ok: boolean; at: number }>();
-  private seen = new Set<string>(); // message GUIDs, oldest first
+  private seen = new Set<string>(); // message GUIDs handled by the bridge, oldest first, kept on disk
+  private pending = new Set<string>(); // message GUIDs queued for the bridge and not handled yet
   private seenFile: string;
   private appended = 0;
   private queue: Bubble[] = [];
@@ -110,28 +111,42 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
 
   // One message read whole (content and attachments) from the first relay that has it.
   async message(guid: string): Promise<Bubble> {
-    const built = await this.build(await this.read(guid));
+    const built = await this.build(await this.read(guid), this.opts.downloadMs);
     if (!built) throw Object.assign(new Error(`message ${guid} has nothing to show`), { permanent: true });
     return built;
   }
 
-  // Queue one message by GUID, once. `data` is the message when a query already read it.
+  // Queue one message by GUID, once. `data` is the message when a query already read it. The GUID is only pending here:
+  // it is kept on disk by markSeen, once the bridge has handled the message, so a crash before that lets the catch-up
+  // find the message again. The inbound loop reads an attachment with the short call bound; the download queue keeps the
+  // long one (message()).
   accept(guid: string, data?: BBMessage): Promise<void> {
-    if (this.seen.has(guid)) return this.chain;
-    this.remember(guid);
+    if (this.seen.has(guid) || this.pending.has(guid)) return this.chain;
+    this.pending.add(guid);
     this.chain = this.chain.then(async () => {
       try {
-        const m = data ?? (await this.read(guid));
-        appendFileSync(this.seenFile, `${guid}\n`, { mode: 0o600 });
-        if (++this.appended > this.opts.seenMax) this.compactSeen();
-        const built = await this.build(m);
+        const built = await this.build(data ?? (await this.read(guid)), this.opts.callMs);
         if (built) this.push(built);
+        else this.markSeen(guid);
       } catch (e) {
-        this.seen.delete(guid); // a later webhook or catch-up tries again
+        this.pending.delete(guid); // a later webhook or catch-up tries again
         this.log(`could not read message ${guid}: ${e instanceof Error ? e.message : String(e)}`);
       }
     });
     return this.chain;
+  }
+
+  // The bridge has handled the message (filed its note, or ignored it): keep its GUID on disk, so it is not queued again.
+  markSeen(guid: string) {
+    this.pending.delete(guid);
+    if (this.seen.has(guid)) return;
+    try {
+      this.remember(guid);
+      appendFileSync(this.seenFile, `${guid}\n`, { mode: 0o600 });
+      if (++this.appended > this.opts.seenMax) this.compactSeen();
+    } catch (e) {
+      this.log(`could not keep message ${guid} as seen: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   // Ask every reachable relay for the messages of the last lookbackMs and accept each in order. The seen-set skips what
@@ -182,8 +197,8 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
   }
 
   // Download an attachment from whichever relay has it. The bridge's download queue retries a failure.
-  async download(guid: string): Promise<Buffer> {
-    return (await this.first((r) => this.call(r, "GET", `attachment/${encodeURIComponent(guid)}/download`, { original: "true" }, undefined, this.opts.downloadMs, true))) as Buffer;
+  async download(guid: string, ms = this.opts.downloadMs): Promise<Buffer> {
+    return (await this.first((r) => this.call(r, "GET", `attachment/${encodeURIComponent(guid)}/download`, { original: "true" }, undefined, ms, true))) as Buffer;
   }
 
   // The relay's own record of a message (see BBMessage); the API has no schema to check it against.
@@ -311,7 +326,7 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
   }
 
   // The bridge's view of one BlueBubbles message, or undefined for one with nothing to show.
-  private async build(m: BBMessage): Promise<Bubble | undefined> {
+  private async build(m: BBMessage, downloadMs: number): Promise<Bubble | undefined> {
     const chat = m.chats?.[0]?.guid;
     if (!chat) return undefined;
     if (m.associatedMessageGuid) return this.wrap(m, chat, { type: "reaction" } as Content);
@@ -319,7 +334,7 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
     const text = (m.text ?? "").replace(/\uFFFC/g, "").trim();
     const parts: Content[] = [
       ...(text ? [{ type: "text", text } as Content] : []),
-      ...(m.attachments ?? []).map((a) => this.attachment(a)),
+      ...(m.attachments ?? []).map((a) => this.attachment(a, downloadMs)),
     ];
     if (!parts.length) return undefined;
     let content = parts.length === 1 ? parts[0]! : ({ type: "group", items: parts.map((c) => ({ content: c })) } as unknown as Content);
@@ -333,9 +348,9 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
     return this.wrap(m, chat, content);
   }
 
-  private attachment(a: BBAttachment): Content {
+  private attachment(a: BBAttachment, downloadMs: number): Content {
     const c = { type: "attachment", id: a.guid, name: a.transferName || "file", mimeType: a.mimeType || "application/octet-stream", size: a.totalBytes,
-      read: () => this.download(a.guid) };
+      read: () => this.download(a.guid, downloadMs) };
     return c as unknown as Content;
   }
 
