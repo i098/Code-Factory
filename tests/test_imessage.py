@@ -1,14 +1,18 @@
 """The iMessage bridge (docs/imessage.md): the send command's options and the service's pure decisions.
 
-No test talks to Photon: curl is a stand-in that records its arguments, and imessage/desk.ts holds
-the decisions bridge.ts makes, free of spectrum-ts.
+No test talks to Photon: curl is a stand-in that records its arguments, imessage/desk.ts holds
+the decisions bridge.ts makes, free of spectrum-ts, and the outage test runs bridge.ts against a
+fake spectrum-ts whose upstream returns UNAVAILABLE.
 """
 
 import importlib.util
 import json
 import os
+import re
 import shutil
+import socket
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -107,7 +111,7 @@ console.log(JSON.stringify(await Promise.all(contents.map(async (c) => (await de
     assert result == [
         "ship it",
         "(sent an attachment, saved for Firstmate at /att/m1-a.png)",
-        "(sent an attachment that could not be saved)",
+        "(sent an attachment that could not be saved yet; the bridge retries the download and files this note again with the path)",
         "(sent a contact: Ana)",
         "(sent a contact: no name)",
         'yes that one (replying in a thread to: "deploy tonight?")',
@@ -491,3 +495,252 @@ def test_config_rejects_a_bridge_it_cannot_run(change, error):
     change(document["factory"])
     with pytest.raises(ValueError, match=error):
         load_factory().validate_config(document)
+
+
+OUTBOX = json.dumps(str(ROOT / "imessage/outbox.ts"))
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_upstream_errors_are_classified():
+    """Outage errors are transient and labelled; only an item that is provably bad is permanent; the rest retry."""
+    result = bun(f"""
+import {{ brief, permanent, transient }} from {OUTBOX};
+const err = (message, extra) => Object.assign(new Error(message), extra);
+const codes = ["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "ENOTFOUND", "ENETUNREACH", "EHOSTUNREACH", "EPIPE"];
+const cases = [
+  err("/photon.imessage.v1.MessageService/Send UNAVAILABLE: [upstream] Service temporarily unavailable. Please retry.", {{ code: 14 }}),
+  err("[upstream] Service temporarily unavailable. Please retry.", {{ grpcCode: 14 }}),
+  err("Bad Gateway", {{ status: 502 }}),
+  err("Service Unavailable", {{ status: 503 }}),
+  err("Gateway Timeout", {{ status: 504 }}),
+  err("send failed", {{ cause: err("down", {{ grpcCode: 14 }}) }}),
+  Object.assign(new Error("The operation timed out"), {{ name: "TimeoutError" }}),
+  ...codes.map((code) => err(`connect ${{code}}`, {{ code }})),
+  err("deadline", {{ grpcCode: 4 }}),
+  err("fetch failed", {{ cause: err("socket hang up") }}),
+  err("The socket connection was closed unexpectedly"),
+  err("bad request", {{ code: "UND_ERR_INVALID_ARG" }}),
+  err("Internal Server Error", {{ status: 500 }}),
+  err("Too Many Requests", {{ status: 429 }}),
+  err("internal", {{ grpcCode: 13 }}),
+  err("resource exhausted", {{ grpcCode: 8 }}),
+  err("Target not allowed for this project", {{ grpcCode: 7 }}),
+  err("something odd"),
+  "unavailable",
+  err("message m1 not found"),
+  err("send failed", {{ cause: err("x", {{ status: 404 }}) }}),
+  err("Gone", {{ status: 410 }}),
+  err("The attachment has expired"),
+  err("bad argument", {{ grpcCode: 3 }}),
+  err("Unprocessable", {{ status: 422 }}),
+  err("token expired", {{ status: 401 }}),
+  err("unreadable", {{ permanent: true }}),
+  err("message m1 not found", {{ status: 503 }}),
+];
+console.log(JSON.stringify({{
+  codes: cases.map((e) => transient(e) ?? null),
+  permanent: cases.map(permanent),
+  line: brief(err("first\\nsecond", {{ grpcCode: 14 }})),
+}}));
+""")
+    outage = ["UNAVAILABLE", "UNAVAILABLE", "HTTP 502", "HTTP 503", "HTTP 504", "UNAVAILABLE"] + ["TIMEOUT"] * 12
+    assert result["codes"] == outage + [None] * 16 + ["HTTP 503"]
+    assert result["permanent"] == [False] * 26 + [True] * 6 + [False] + [True] + [False]
+    assert result["line"] == "UNAVAILABLE: first"
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_queue_moves_only_provably_bad_items_to_the_dead_letter_folder(tmp_path):
+    """Outage and unknown errors retry the same item in order; a bad item or a corrupt file never blocks the rest."""
+    queue = tmp_path / "queue"
+    queue.mkdir()
+    for n, text in enumerate(['{"v":"bad"}', "{not json", '{"v":"flaky"}', '{"v":"odd"}', '{"v":"denied"}', '{"v":"ok"}'], 1):
+        (queue / f"{n}.json").write_text(text)
+    result = bun(f"""
+import {{ readdirSync }} from "node:fs";
+import {{ Queue }} from {OUTBOX};
+const done = [], lost = [], tries = {{}};
+const fail = {{
+  bad: () => new Error("message m1 not found"),
+  flaky: () => Object.assign(new Error("down"), {{ grpcCode: 14 }}),
+  odd: () => Object.assign(new Error("Internal Server Error"), {{ status: 500 }}),
+  denied: () => Object.assign(new Error("permission denied"), {{ grpcCode: 7 }}),
+}};
+const q = new Queue({json.dumps(str(queue))}, "item", async (item) => {{
+  tries[item.v] = (tries[item.v] ?? 0) + 1;
+  if (item.v in fail && (item.v === "bad" || tries[item.v] < 3)) throw fail[item.v]();
+  done.push(item.v);
+}}, 5, (item) => lost.push(item));
+const end = Date.now() + 10000;
+while (done.length < 4 && Date.now() < end) await Bun.sleep(10);
+console.log(JSON.stringify({{ done, lost, tries, left: readdirSync({json.dumps(str(queue))}), dead: readdirSync({json.dumps(str(queue) + "-dead")}).length }}));
+process.exit(0);
+""")
+    assert result["done"] == ["flaky", "odd", "denied", "ok"]
+    assert result["tries"] == {"bad": 1, "flaky": 3, "odd": 3, "denied": 3, "ok": 1}
+    assert result["left"] == [] and result["dead"] == 2
+    assert result["lost"] == [{"v": "bad"}]  # told of the parsed item only, not of the corrupt file
+
+
+# A fake spectrum-ts for bridge.ts. Its state is in FAKE_DIR, so it outlives a bridge restart: `down` holds how
+# many more upstream calls fail with UNAVAILABLE, typing always fails while `typing-down` exists, `inbound/` holds
+# the owner's messages for the bridge to receive, `calls` logs every call, and `sent` logs each delivered message.
+FAKE_UPSTREAM = """
+import { appendFileSync, existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+const dir = process.env.FAKE_DIR;
+const unavailable = () => Object.assign(new Error("[upstream] Service temporarily unavailable. Please retry."), { name: "ConnectionError", grpcCode: 14 });
+function call(op) {
+  const left = Number(readFileSync(`${dir}/down`, "utf8"));
+  appendFileSync(`${dir}/calls`, `${op} ${left > 0 ? "UNAVAILABLE" : "ok"}\\n`);
+  if (left > 0) {
+    writeFileSync(`${dir}/down`, String(left - 1));
+    throw unavailable();
+  }
+}
+async function typing() {
+  appendFileSync(`${dir}/calls`, "typing UNAVAILABLE\\n");
+  if (existsSync(`${dir}/typing-down`)) throw unavailable();
+}
+const sent = (line) => appendFileSync(`${dir}/sent`, `${line}\\n`);
+const load = (id) => message(JSON.parse(readFileSync(`${dir}/messages/${id}.json`, "utf8")));
+function space(id) {
+  return {
+    id,
+    startTyping: typing,
+    stopTyping: typing,
+    async send(text) { call("send"); sent(`send ${text}`); },
+    async getMessage(mid) { call("getMessage"); return existsSync(`${dir}/messages/${mid}.json`) ? load(mid) : undefined; },
+  };
+}
+function message(m) {
+  return {
+    id: m.id, direction: "inbound", sender: { id: m.sender }, space: space(m.space),
+    content: m.name
+      ? { type: "attachment", name: m.name, async read() { call("download"); return new TextEncoder().encode(m.data); } }
+      : { type: "text", text: m.text },
+    async react(emoji) { call("react"); sent(`react ${m.id} ${emoji}`); },
+    async reply(text) { call("reply"); sent(`reply ${m.id} ${text}`); },
+    async read() {},
+  };
+}
+async function* messages() {
+  for (;;) {
+    for (const f of readdirSync(`${dir}/inbound`).sort()) {
+      renameSync(`${dir}/inbound/${f}`, `${dir}/messages/${f}`);
+      yield ["imessage", load(f.replace(/\\.json$/, ""))];
+    }
+    await Bun.sleep(20);
+  }
+}
+export const Spectrum = async () => ({ messages: messages() });
+export const imessage = Object.assign(() => ({ space: { get: async (id) => space(id) } }), { config: () => ({}) });
+"""
+
+
+def wait_for(check, what, timeout=30):
+    end = time.monotonic() + timeout
+    while not check():
+        assert time.monotonic() < end, f"timed out waiting for {what}"
+        time.sleep(0.05)
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_bridge_rides_out_an_upstream_outage(tmp_path):
+    """Sends, a tapback and an attachment outlive an UNAVAILABLE outage and a restart, then arrive in order."""
+    app, fake, state, bin_dir = (tmp_path / d for d in ("app", "fake", "state", "bin"))
+    shutil.copytree(ROOT / "imessage", app, ignore=shutil.ignore_patterns("fm-*"))
+    pkg = app / "node_modules/spectrum-ts"
+    pkg.mkdir(parents=True)
+    exports = {".": "./index.js", "./providers/imessage": "./index.js"}
+    (pkg / "package.json").write_text(json.dumps({"name": "spectrum-ts", "type": "module", "exports": exports}))
+    (pkg / "index.js").write_text(FAKE_UPSTREAM)
+    for d in (fake / "inbound", fake / "messages", bin_dir):
+        d.mkdir(parents=True)
+    (fake / "down").write_text("0")
+    (fake / "typing-down").touch()
+    notes = tmp_path / "notes"
+    stubs = {
+        "omp": f'cat >/dev/null; [ -e {fake / "desk-on"} ] && echo "desk ok" || echo SKIP',
+        "fm-inbox": f'printf "%s\\n" "$*" >> {notes}',
+    }
+    for name, body in stubs.items():
+        (bin_dir / name).write_text(f"#!/bin/bash\n{body}\n")
+        (bin_dir / name).chmod(0o755)
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "FAKE_DIR": str(fake),
+        "FM_HOME": str(tmp_path),
+        "FM_INBOX_CMD": str(bin_dir / "fm-inbox"),
+        "FM_IMESSAGE_OWNER": "+10000000000",
+        "FM_IMESSAGE_PORT": str(port),
+        "FM_IMESSAGE_RETRY_MS": "20",
+        "PHOTON_PROJECT_ID": "fake",
+        "PHOTON_PROJECT_SECRET": "fake",
+        "STATE_DIRECTORY": str(state),
+    }
+    out, err = tmp_path / "out", tmp_path / "err"
+    text = lambda p: p.read_text() if p.exists() else ""  # noqa: E731
+
+    def start(n):
+        with out.open("a") as o, err.open("a") as e:
+            bridge = subprocess.Popen(["bun", "bridge.ts"], cwd=app, env=env, stdout=o, stderr=e)
+        wait_for(lambda: text(out).count("listening") == n, f"bridge start {n}")
+        return bridge
+
+    def inbound(mid, **fields):
+        record = {"id": mid, "space": "chat-1", "sender": "+10000000000", **fields}
+        (fake / "inbound" / f"{mid}.json").write_text(json.dumps(record))
+        wait_for(lambda: f"photon-{mid} " in text(notes), f"the note for {mid}")
+
+    def cli(*args):
+        result = subprocess.run([str(SEND), *args], capture_output=True, text=True, env=env, timeout=30)
+        assert result.returncode == 0, result.stderr
+        return result.stdout
+
+    bridge = start(1)
+    try:
+        inbound("m1", text="you there")
+        (fake / "down").write_text("1000000")  # the outage begins
+        assert cli("one\n\ntwo").startswith("queued 2 bubble(s)")
+        assert cli("--react", "👍").startswith("queued tapback")
+        assert cli("--reply", "1", "three").startswith("queued 1 bubble(s)")
+        cli("--typing")
+        inbound("m2", name="photo.jpg", data="JPEG")
+        assert "could not be saved yet" in text(notes)
+        wait_for(lambda: "outbox item 1 failed (try 2)" in text(err), "an outbox retry")
+        wait_for(lambda: "attachment download 1 failed (try 2)" in text(err), "a download retry")
+        bridge.terminate()  # a restart in the middle of the outage
+        bridge.wait(10)
+        assert len(list((state / "outbox").glob("*.json"))) == 3
+        assert len(list((state / "downloads").glob("*.json"))) == 1
+        bridge = start(2)
+        cli("four")
+        inbound("m5", name="gone.jpg", data="X")  # its download is queued behind m2, then the message disappears upstream
+        (fake / "messages" / "m5.json").unlink()
+        (fake / "desk-on").touch()
+        inbound("m3", text="ping")
+        inbound("m4", text="ping again")  # nobody answers, so the desk writes a late ack into the queue
+        wait_for(lambda: len(list((state / "outbox").glob("*.json"))) == 5, "the desk item in the outbox")
+        (fake / "down").write_text("3")  # three more failures, then the upstream recovers
+        wait_for(lambda: len(text(fake / "sent").splitlines()) == 6 and "photon-m2-saved" in text(notes), "recovery")
+        wait_for(lambda: "photon-m5-lost" in text(notes), "the note for the lost attachment")
+        (fake / "messages" / "m3.json").unlink()  # the text that a threaded send points to is gone
+        cli("--reply", "2", "five")
+        wait_for(lambda: len(text(fake / "sent").splitlines()) == 7 and not list((state / "outbox").glob("*.json")), "the unthreaded send, delivered and dequeued")
+    finally:
+        bridge.terminate()
+        bridge.wait(10)
+    sent = ["send one", "send two", "react m1 👍", "reply m1 three", "send four", "send desk ok", "send five"]
+    assert text(fake / "sent").splitlines() == sent
+    assert "typing UNAVAILABLE" in text(fake / "calls")
+    saved = state / "attachments/m2-photo.jpg"
+    assert saved.read_text() == "JPEG"
+    assert f"(an earlier attachment is saved now) (sent an attachment, saved for Firstmate at {saved})" in text(notes)
+    assert list((state / "outbox").glob("*.json")) == [] and list((state / "downloads").glob("*.json")) == []
+    assert [json.loads(p.read_text()) for p in (state / "downloads-dead").glob("*.json")] == [{"space": "chat-1", "id": "m5"}]
+    logs = text(err)
+    assert "UNAVAILABLE" in logs and not re.search(r"^\s+at ", logs, re.M), logs
