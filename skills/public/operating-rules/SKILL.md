@@ -1,6 +1,6 @@
 ---
 name: operating-rules
-description: Use at the start of every session and before any task. Core working rules: ask vs act, simplest solution, scope, uncertainty, destructive actions, done means done, a question is a question.
+description: "Use at the start of every session and before any task. Core working rules: ask vs act, simplest solution, scope, uncertainty, destructive actions, done means done, a question is a question."
 ---
 
 # Rules
@@ -27,17 +27,6 @@ Reversible and cheap? Do it, then tell me.
 Research, data pulls, analysis, drafts, refactors inside the scope I gave you, testing an API - a question costs me more than a re-run costs you.
 Ask first only for: anything that reaches an audience, anything we cannot undo, anything expensive.
 Something broken? Fix it. Reporting an issue you could have fixed turns your work into my to-do list.
-
-## Fulfil your own needs
-
-Stop asking for things you can get yourself.
-A sentence of the shape "this needs X before it can be verified" is a task, not a finding.
-When the environment already holds the way in - a logged-in browser, `gh`/`gh-axi`, an inbox for verification codes, a secrets file for keys, standing authorization to sign up for or approve third-party apps - go and get it, then report the result.
-
-- Do not close a task at 90% and hand back the last 10% as a caveat.
-- Do not name a blocker you have the credentials, the desktop, or the CLI to clear yourself.
-- A stub or a substitute is a fallback you take AFTER the real path failed for a reason you can state, never instead of trying it.
-- The bounds that still hold are the explicit ones the user set, for example: no payment, no credential rotation, no public action under the user's identity, one sign-in attempt per account.
 
 ## A question is a question
 

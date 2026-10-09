@@ -1,6 +1,6 @@
 ---
 name: opus-speed
-description: Use when running as Opus 5. Wall-clock speed rules: parallelize, delegate by complexity to subagents, no idle waiting, no overlapping subagent scope.
+description: "Use when running as Opus 5. Wall-clock speed rules: parallelize, delegate by complexity to subagents, no idle waiting, no overlapping subagent scope."
 ---
 
 ## Speed (Opus 5 only)

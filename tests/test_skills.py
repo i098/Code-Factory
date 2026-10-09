@@ -2,6 +2,8 @@ import importlib.util
 import re
 from pathlib import Path
 
+import yaml
+
 SPEC = importlib.util.spec_from_file_location(
     "skills", Path(__file__).parents[1] / "scripts/skills.py"
 )
@@ -98,4 +100,5 @@ def test_public_skills_are_named_and_hold_no_private_details():
         hit = PRIVATE.search(text)
         assert not hit, f"{path.relative_to(public)}: {hit.group(0)!r}"
         if path.name == "SKILL.md":
-            assert f"\nname: {path.parent.name}\n" in text.split("---")[1], path
+            meta = yaml.safe_load(text.split("---")[1])
+            assert meta["name"] == path.parent.name, path
