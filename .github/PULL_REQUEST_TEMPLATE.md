@@ -20,6 +20,4 @@ Closes #
 - [ ] Lint clean (`uv run ruff check`).
 - [ ] Ansible syntax clean (`--syntax-check`).
 - [ ] Idempotent: `launch` → `launch` = `changed=0` on the second run.
-- [ ] One line under `## [Unreleased]` in `CHANGELOG.md`:
-
-<!-- Paste the changelog line here. -->
+- [ ] A changelog fragment, `changelog.d/<issue>.<type>.md` (not a `CHANGELOG.md` edit), or the `no changelog` label.

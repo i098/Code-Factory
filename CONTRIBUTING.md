@@ -95,7 +95,7 @@ Branch names are `type/short-description`, with a type from the list above, for 
 - Ansible syntax clean (`--syntax-check`).
 - Idempotent: `launch` → `launch` = `changed=0` on the second run.
 - Describe what changed and why in the PR body.
-- Add one line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
+- Add a changelog fragment, `changelog.d/<issue>.<type>.md`, and never edit [CHANGELOG.md](CHANGELOG.md) (see [Changelog and releases](#changelog-and-releases)). Fragments are separate files, so PRs that run at the same time do not conflict. CI fails a PR without a fragment, unless the PR has the `no changelog` label.
 - PRs merge with a merge commit; squash and rebase merging are off.
 
 Open an issue with the [bug report](.github/ISSUE_TEMPLATE/bug_report.yml) or the [feature request](.github/ISSUE_TEMPLATE/feature_request.yml) form. Ask questions in the [Discussions Q&A category](https://github.com/i098/Crewship/discussions/categories/q-a) ([SUPPORT.md](SUPPORT.md)).
@@ -104,7 +104,7 @@ Open an issue with the [bug report](.github/ISSUE_TEMPLATE/bug_report.yml) or th
 
 GitHub rulesets enforce these rules, with no bypass:
 
-- `main` changes only through a pull request. Before a merge, the checks `configuration and python checks`, `quality gate`, and `worker image behavior smoke` must pass, and the branch must be up to date with `main`. No approval is necessary.
+- `main` changes only through a pull request. Before a merge, the checks `configuration and python checks`, `quality gate`, and `worker image behavior smoke` must pass. No approval is necessary.
 - `main` cannot be force-pushed or deleted.
 - GitHub deletes the head branch after the merge.
 - A `v*` tag cannot be deleted or moved.
@@ -113,8 +113,14 @@ GitHub rulesets enforce these rules, with no bypass:
 
 [CHANGELOG.md](CHANGELOG.md) follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html). Releases are [GitHub releases](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository) on `vX.Y.Z` tags.
 
-1. Every PR adds one line under `## [Unreleased]`, in the section that fits: Added, Changed, Deprecated, Removed, Fixed, or Security.
-2. To cut a release, open a PR that moves those lines under a new `## [X.Y.Z] - YYYY-MM-DD` heading (ISO 8601 date), leaves `## [Unreleased]` empty, and updates the link references at the bottom of the file. Choose the number:
+1. Every PR adds one fragment file, `changelog.d/<issue>.<type>.md`, where `<issue>` is the number of the issue it resolves and `<type>` is the section that fits: `added`, `changed`, `deprecated`, `removed`, `fixed`, or `security`. The file holds one sentence, without the issue link; the release step adds the link. For example, `changelog.d/58.fixed.md`:
+
+   ```text
+   `scripts/stow-secrets.sh` no longer fails once `super.env` has more than 100 variables.
+   ```
+
+   A PR with nothing to note, for example a test-only change, gets the `no changelog` label instead.
+2. To cut a release, run `uv run towncrier build --version X.Y.Z` on a new branch and open a PR with the result. The command writes a new `## [X.Y.Z] - YYYY-MM-DD` section (today's ISO 8601 date) under `## [Unreleased]` in Keep a Changelog order and deletes the fragments it used; `uv run towncrier build --draft --version X.Y.Z` shows the section first and changes nothing. In the same PR, update the link references at the bottom of the file. Choose the number:
    - patch (`Z`): fixes only;
    - minor (`Y`): a new capability;
    - major (`X`): a breaking change to the host config or the host layout.
