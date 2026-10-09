@@ -103,7 +103,11 @@ def points(readme, changelog):
             f"Releases (v{version})",
             f"{REPO}/releases",
             f"The harbor office. The latest release is v{version}."
-            + (" Coming next: " + "; ".join(inline(item, 90) for item in news) + "." if news else ""),
+            + (
+                " Coming next: " + "; ".join(inline(item, 90) for item in news) + "."
+                if news
+                else ""
+            ),
         ),
         (
             "how",
