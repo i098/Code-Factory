@@ -84,6 +84,10 @@ factory:
     fixture_archive: ""
     worktree_pools:
       - .treehouse/swarms-platform-bcc5ea
+    # Docker guard: remove stopped containers this many hours after they
+    # exit; report running ones this old that nothing claims.
+    docker_guard:
+      stopped_hours: 24
   browsers:
     idle_timeout_min: 30
   firstmate:

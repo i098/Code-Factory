@@ -1,5 +1,5 @@
 {{ ansible_managed | comment }}
-# Triggered by flotilla-storage-guard.timer; not enabled on its own.
+# Triggered by crewship-storage-guard.timer; not enabled on its own.
 # Measures the filesystems holding /, /var/log, the home and Docker's data root:
 # alerts at WARN once per episode and early when the fill rate projects full,
 # prunes only regenerable Docker data (build cache, dangling images, unused

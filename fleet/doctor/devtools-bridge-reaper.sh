@@ -36,7 +36,7 @@
 # Usage: devtools-bridge-reaper.sh [--dry-run]
 #   --dry-run prints every attached bridge with its idle time and verdict, and
 #   changes nothing (no signal, no state write).
-# Runs every 10 minutes from flotilla-devtools-bridge-reaper.timer.
+# Runs every 10 minutes from crewship-devtools-bridge-reaper.timer.
 # Every reap: devtools-bridge-reaper.log here, one line in COMMS.md for the
 # orchestrator, notify-master.sh when present.
 set -u

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # check.sh - keep the ONE shared Supabase stack up and guarded. Idempotent.
 #
-# Runs at login (flotilla-shared-supabase.service) and every 5 minutes
-# (flotilla-shared-supabase-check.timer). `supabase start` on a running stack
+# Runs at login (crewship-shared-supabase.service) and every 5 minutes
+# (crewship-shared-supabase-check.timer). `supabase start` on a running stack
 # is a no-op; on a stopped one it recreates the missing containers from the
 # existing volumes (no migrations, no seed - the DB volume is the fixture).
 # After the stack is healthy the DDL guard is (re)applied, so a `db reset`

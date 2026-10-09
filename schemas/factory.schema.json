@@ -380,6 +380,16 @@
                 "pattern": "^[^/][^\\0]*$"
               },
               "minItems": 1
+            },
+            "docker_guard": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "stopped_hours": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
             }
           },
           "required": [
