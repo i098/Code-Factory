@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Behavior smoke for the Code Factory container worker image.
+# Behavior smoke for the Crewship container worker image.
 #
 # Host mode (default when run outside the image):
 #   tests/container-smoke.sh [--image REF] [--keep] [--only NAME,NAME]
@@ -16,7 +16,7 @@
 #   document, the user unit's ExecStart resolved and executed, a real headless
 #   `herdr server` brought up and shut down over its API socket, the repository
 #   CLI (validate, invalid-input rejection, init overwrite refusal), a second
-#   installer pass reporting changed=false and a second `./factory apply`
+#   installer pass reporting changed=false and a second `./ship.sh launch`
 #   reporting changed=0. No source-text assertions.
 #
 # Never used: --privileged, --pid=host, --network=host, the host Docker socket,
@@ -199,7 +199,7 @@ platform_tag() {
 }
 
 # Python that can read YAML: the image builds the repository virtualenv from the
-# locked dependencies during ./bootstrap.sh.
+# locked dependencies during ./onboard.sh.
 cf_python() {
     if [ -x "${CF_ROOT}/.venv/bin/python" ]; then
         "${CF_ROOT}/.venv/bin/python" "$@"
@@ -227,7 +227,7 @@ herdr_installed_bin() {
 # has since overtaken; that is an upgrade, not a repeat change.
 image_is_current() {
     local latest versions='map_values(.version? // .)'
-    latest=$(python3 "${CF_ROOT}/scripts/install_tools.py" \
+    latest=$(python3 "${CF_ROOT}/scripts/provisions.py" \
         --home "${HOME}" --tools herdr,node,bun,uv,btop,sentrux,fallow --npm --development --resolve) \
         || fail "could not resolve the latest releases"
     [ "$(jq -cS "${versions}" <<<"${latest}")" = "$(jq -cS "${versions}" "${RESOLVED_STAMP}")" ] \
@@ -295,8 +295,8 @@ check_profiles_disabled() {
 check_source_checkout() {
     [ -d "${CF_ROOT}" ] || fail "missing source checkout at ${CF_ROOT}"
     [ -f "${CF_ROOT}/pyproject.toml" ] || fail "missing ${CF_ROOT}/pyproject.toml"
-    [ -x "${CF_ROOT}/factory" ] || fail "missing executable ${CF_ROOT}/factory"
-    [ -x "${CF_ROOT}/bootstrap.sh" ] || fail "missing executable ${CF_ROOT}/bootstrap.sh"
+    [ -x "${CF_ROOT}/ship.sh" ] || fail "missing executable ${CF_ROOT}/ship.sh"
+    [ -x "${CF_ROOT}/onboard.sh" ] || fail "missing executable ${CF_ROOT}/onboard.sh"
     [ -f "${CF_CONFIG}" ] || fail "missing container configuration ${CF_CONFIG}"
     local owner
     owner=$(stat -c %U "${CF_ROOT}")
@@ -596,8 +596,8 @@ check_herdr_server_headless() {
 }
 
 check_factory_validate() {
-    ( cd "${CF_ROOT}" && ./factory validate --config "${CF_CONFIG}" ) || fail "./factory validate rejected the container configuration"
-    printf './factory validate --config %s accepted\n' "${CF_CONFIG}"
+    ( cd "${CF_ROOT}" && ./ship.sh inspect --config "${CF_CONFIG}" ) || fail "./ship.sh inspect rejected the container configuration"
+    printf './ship.sh inspect --config %s accepted\n' "${CF_CONFIG}"
 }
 
 check_factory_validate_rejects_invalid() {
@@ -612,11 +612,11 @@ factory:
   profiles:
     agents: "yes"
 YAML
-    if ( cd "${CF_ROOT}" && ./factory validate --config "${bad}" ) >/dev/null 2>&1; then
-        fail "./factory validate accepted a structurally invalid configuration"
+    if ( cd "${CF_ROOT}" && ./ship.sh inspect --config "${bad}" ) >/dev/null 2>&1; then
+        fail "./ship.sh inspect accepted a structurally invalid configuration"
     fi
     rm -f "${bad}"
-    printf './factory validate rejected an invalid document as expected\n'
+    printf './ship.sh inspect rejected an invalid document as expected\n'
 }
 
 check_factory_init_refuses_overwrite() {
@@ -638,28 +638,28 @@ check_factory_init_refuses_overwrite() {
         rm -f "${host_yml}"
     fi
 
-    ( cd "${CF_ROOT}" && ./factory init --container --user "${FACTORY_USER_EXPECTED}" --home "${FACTORY_HOME_EXPECTED}" ) \
-        || fail "./factory init --container failed"
-    [ -f "${host_yml}" ] || fail "./factory init did not write ${host_yml}"
+    ( cd "${CF_ROOT}" && ./ship.sh dock --container --user "${FACTORY_USER_EXPECTED}" --home "${FACTORY_HOME_EXPECTED}" ) \
+        || fail "./ship.sh dock --container failed"
+    [ -f "${host_yml}" ] || fail "./ship.sh dock did not write ${host_yml}"
 
-    if ( cd "${CF_ROOT}" && ./factory init --container --user "${FACTORY_USER_EXPECTED}" --home "${FACTORY_HOME_EXPECTED}" ) >/dev/null 2>&1; then
-        fail "./factory init overwrote an existing ${host_yml} without an explicit flag"
+    if ( cd "${CF_ROOT}" && ./ship.sh dock --container --user "${FACTORY_USER_EXPECTED}" --home "${FACTORY_HOME_EXPECTED}" ) >/dev/null 2>&1; then
+        fail "./ship.sh dock overwrote an existing ${host_yml} without an explicit flag"
     fi
 
     restore_host_yml
     trap - EXIT
-    printf './factory init wrote .local/host.yml once and refused to overwrite it\n'
+    printf './ship.sh dock wrote .local/host.yml once and refused to overwrite it\n'
 }
 
 check_installer_idempotent() {
     local out
-    out=$(python3 "${CF_ROOT}/scripts/install_tools.py" \
+    out=$(python3 "${CF_ROOT}/scripts/provisions.py" \
             --home "${HOME}" \
             --tools herdr,node,bun,uv,btop,sentrux,fallow \
             --resolved "$(cat "${RESOLVED_STAMP}")" \
             --npm --development 2>&1) || {
         printf '%s\n' "${out}" | tail -n 20
-        fail "scripts/install_tools.py re-run failed"
+        fail "scripts/provisions.py re-run failed"
     }
     printf '%s\n' "${out}" >"${SMOKE_TMP}/installer.out"
     python3 - "${SMOKE_TMP}/installer.out" <<'PY'
@@ -688,10 +688,10 @@ check_ansible_second_pass_idempotent() {
     local out rc
     rc=0
     image_is_current || return 0
-    out=$( cd "${CF_ROOT}" && timeout "${CF_SMOKE_APPLY_TIMEOUT:-1800}" ./factory apply --config "${CF_CONFIG}" 2>&1 ) || rc=$?
+    out=$( cd "${CF_ROOT}" && timeout "${CF_SMOKE_APPLY_TIMEOUT:-1800}" ./ship.sh launch --config "${CF_CONFIG}" 2>&1 ) || rc=$?
     if [ "${rc}" -ne 0 ]; then
         printf '%s\n' "${out}" | tail -n 40
-        fail "second ./factory apply exited ${rc}"
+        fail "second ./ship.sh launch exited ${rc}"
     fi
     printf '%s\n' "${out}" | awk '
         /PLAY RECAP/ { recap = 1; next }
@@ -707,7 +707,7 @@ check_ansible_second_pass_idempotent() {
             if (bad > 0) { print "second apply was not idempotent" > "/dev/stderr"; exit 1 }
             print "second apply idempotent across " hosts " host line(s)"
         }
-    ' || fail "second ./factory apply did not report changed=0/failed=0/unreachable=0"
+    ' || fail "second ./ship.sh launch did not report changed=0/failed=0/unreachable=0"
 }
 
 # The managed ~/.profile block is what a real interactive session gets, so it is
@@ -777,7 +777,7 @@ container_mode() {
     SMOKE_TMP=$(mktemp -d -t code-factory-smoke.XXXXXX)
     trap 'rm -rf "${SMOKE_TMP}"' EXIT
 
-    printf '== Code Factory container smoke (image role: %s)\n' "${CODE_FACTORY_IMAGE:-unknown}"
+    printf '== Crewship container smoke (image role: %s)\n' "${CODE_FACTORY_IMAGE:-unknown}"
     printf '== %s %s\n\n' "$(uname -s)" "$(uname -m)"
 
     run_check identity                     check_identity

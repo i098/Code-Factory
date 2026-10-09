@@ -18,7 +18,7 @@ Authenticate each CLI interactively under the account that will run it. Do not c
 
 Two exceptions move state between the operator's own hosts:
 
-- Shared fleet credentials in `super.env`: a new host fetches them from Cloudflare Secrets Store with `scripts/fetch-super-env.sh`. See [Shared credentials](secrets.md).
+- Shared fleet credentials in `super.env`: a new host fetches them from Cloudflare Secrets Store with `scripts/fetch-secrets.sh`. See [Shared credentials](secrets.md).
 - Each Firstmate home's `data/` and `config/`: they move host to host over SSH (`rsync -a`, owner-only), never through Git, a registry, or an image, and only for the cutover and rollback syncs of [Moving the agents to a new host](agent-host-move.md).
 
 Keep local credential files outside the checkout, in owner-only directories with mode `0700`; files should have mode `0600`. Services should use `EnvironmentFile=` or Docker secrets. Do not put tokens into shell command arguments or public URLs.
@@ -37,7 +37,7 @@ This export does not rewrite the current host's firewall, SSH policy, account me
 
 ### SSH to a Mac
 
-Agents can reach an operator Mac with `ssh mac`. They use it to open links in the operator's browser and to control Mac apps. Code Factory configures the host side. You configure the Mac side by hand, one time. Keep the Mac's name, address, and login out of this repository.
+Agents can reach an operator Mac with `ssh mac`. They use it to open links in the operator's browser and to control Mac apps. Crewship configures the host side. You configure the Mac side by hand, one time. Keep the Mac's name, address, and login out of this repository.
 
 #### Host side: what apply does
 
@@ -162,7 +162,7 @@ Every apply on a host that starts services (not the container worker image) inst
 
 Upstream supports Debian 12/13 and Ubuntu 22.04/24.04 only. `patches/koncreet/ubuntu-26.04.patch` adds Ubuntu 26.04: it opens the OS gate and doctor, and restores the last fallback Koncreet uses to find your SSH client address for the fail2ban whitelist: 26.04 keeps no utmp, so `who -m` prints nothing, and the patch asks logind instead. The same change is the `ubuntu-26.04` branch of the [undeemed/koncreet](https://github.com/undeemed/koncreet/tree/ubuntu-26.04) fork; regenerate the patch from there with `git diff main...ubuntu-26.04`. Apply layers the patch on each new release and prints which case it hit: applied; skipped because the release already supports 26.04; or skipped because it no longer applies, in which case Koncreet installs as released and refuses to run on 26.04 until the patch is refreshed. The patch never fails the apply.
 
-`/etc/koncreet.conf` makes the account that ran `./factory apply` the sudo user, installs the SSH keys it logs in with, and keeps SSH open (Koncreet always allows the ports sshd listens on). With the `tailscale` profile it also opens 41641/udp for Tailscale's direct connections. When apply ran as root, or as the factory account (which runs the agents and must not gain sudo), no sudo user is set: `user=` and `pubkey_file=` stay commented out until you fill in the operator's login. Apply never overwrites it; edit it there.
+`/etc/koncreet.conf` makes the account that ran `./ship.sh launch` the sudo user, installs the SSH keys it logs in with, and keeps SSH open (Koncreet always allows the ports sshd listens on). With the `tailscale` profile it also opens 41641/udp for Tailscale's direct connections. When apply ran as root, or as the factory account (which runs the agents and must not gain sudo), no sudo user is set: `user=` and `pubkey_file=` stay commented out until you fill in the operator's login. Apply never overwrites it; edit it there.
 
 Run it once, by hand, from an SSH session you keep open until the last step works:
 

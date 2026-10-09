@@ -37,7 +37,7 @@ rows = {{ factory_cfg.herdr.sidebar_agent_rows | trim }}
 rows = {{ factory_cfg.herdr.sidebar_space_rows | trim }}
 
 [update]
-# Controls the updater's own check behaviour only. `./factory apply` installs
+# Controls the updater's own check behaviour only. `./ship.sh launch` installs
 # the latest release itself; never run `herdr update` from provisioning.
 channel = "{{ factory_herdr_update_channel }}"
 

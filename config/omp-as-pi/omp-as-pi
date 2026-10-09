@@ -15,7 +15,7 @@
 # Fail closed: any argument outside the set the v1.85.3 pi adapter emits is
 # refused (exit 64) instead of guessed, the overlay is pinned by sha256, and the
 # omp binary is re-checked for every flag this script relies on whenever it
-# changes (Code-Factory upgrades omp to latest on every apply).
+# changes (Crewship upgrades omp to latest on every apply).
 #   omp-as-pi --omp-as-pi-check   run the preflight only and report
 set -euo pipefail
 

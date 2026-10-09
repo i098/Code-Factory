@@ -107,7 +107,7 @@
     factory_user_uid: "{{ (factory_uid_probe.stdout | trim) if factory_uid_probe.rc == 0 else '' }}"
     factory_group: "{{ (factory_gid_probe.stdout | trim) if factory_gid_probe.rc == 0 else factory_cfg.user }}"
     # False only in check mode on a host where the account does not exist yet:
-    # `./factory plan` then reports the account work and skips the file work it
+    # `./ship.sh chart` then reports the account work and skips the file work it
     # cannot preview, instead of failing on an unresolvable owner.
     factory_account_ready: "{{ factory_uid_probe.rc == 0 }}"
 
@@ -116,7 +116,7 @@
     msg: >-
       Account {{ factory_cfg.user }} does not exist yet. In check mode the
       per-account file, unit and toolchain steps cannot be previewed and are
-      skipped; `./factory apply` creates the account and runs them.
+      skipped; `./ship.sh launch` creates the account and runs them.
   when:
     - ansible_check_mode
     - not (factory_account_ready | bool)
@@ -211,7 +211,7 @@
   ansible.builtin.copy:
     dest: /etc/sysctl.d/60-agent-host.conf
     content: |
-      # Managed by Code Factory (docs/capacity.md).
+      # Managed by Crewship (docs/capacity.md).
       fs.inotify.max_user_instances = 8192
     owner: root
     group: root

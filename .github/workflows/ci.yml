@@ -1,15 +1,15 @@
-# Continuous integration for Code Factory.
+# Continuous integration for Crewship.
 #
 # Runs the repository's real interfaces: locked Python dependency sync, the
 # project's own lint/test commands, schema validation of both configuration
-# documents through `./factory validate`, and a full worker image build plus the
+# documents through `./ship.sh inspect`, and a full worker image build plus the
 # behavior smoke in tests/container-smoke.sh.
 #
 # Supply chain: least-privilege token, no write permissions anywhere, and every
 # third-party action pinned to the commit SHA of its latest release, with the
 # tag in a trailing comment (verified 2026-10-01 via the GitHub REST API).
 # .github/dependabot.yml moves the pins to each new release weekly.
-# uv and Bun are not pinned: like every ./factory apply, CI installs their
+# uv and Bun are not pinned: like every ./ship.sh launch, CI installs their
 # latest releases.
 name: ci
 
@@ -53,7 +53,7 @@ jobs:
       - name: Sync locked dependencies
         run: uv sync --locked --group dev
 
-      # Bun tracks its latest release, the same as every ./factory apply.
+      # Bun tracks its latest release, the same as every ./ship.sh launch.
       - name: Install latest Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -80,10 +80,10 @@ jobs:
         run: bash config/omp-as-pi/test.sh
 
       - name: Validate default configuration
-        run: ./factory validate --config config/default.yml
+        run: ./ship.sh inspect --config config/default.yml
 
       - name: Validate container configuration
-        run: ./factory validate --config containers/factory.container.yml
+        run: ./ship.sh inspect --config containers/factory.container.yml
 
   # The repository's own quality gate (docs/omp.md#quality-gate): the same
   # blocking rule the omp extension applies at turn end, against the committed
@@ -114,7 +114,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends libgtk-3-0t64
-          python3 scripts/install_tools.py --home "$HOME" --tools sentrux,fallow
+          python3 scripts/provisions.py --home "$HOME" --tools sentrux,fallow
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: sentrux gate

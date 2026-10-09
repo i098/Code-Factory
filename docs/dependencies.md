@@ -1,17 +1,17 @@
 # Dependencies
 
-Everything the recipe installs, grouped by where it comes from. Nothing is pinned: every `./factory apply` resolves each tool's newest release once and installs exactly that, so re-running apply upgrades an existing host. Every download is verified against the checksum its publisher posts for that exact release, and a release without one fails the apply instead of installing an unverified artifact (the optional Koncreet is skipped with a warning instead). The one exception is the three omp marketplace plugins (ponytail, i-have-adhd, caveman): no publisher checksums them. The installer records the releases it resolved in `~/.local/share/code-factory/resolved.json`, which the container smoke compares against; `ansible/tasks/verify.yml` also asserts that the herdr service and omp run the resolved releases. `./factory plan` installs none of this.
+Everything the recipe installs, grouped by where it comes from. Nothing is pinned: every `./ship.sh launch` resolves each tool's newest release once and installs exactly that, so re-running apply upgrades an existing host. Every download is verified against the checksum its publisher posts for that exact release, and a release without one fails the apply instead of installing an unverified artifact (the optional Koncreet is skipped with a warning instead). The one exception is the three omp marketplace plugins (ponytail, i-have-adhd, caveman): no publisher checksums them. The installer records the releases it resolved in `~/.local/share/code-factory/resolved.json`, which the container smoke compares against; `ansible/tasks/verify.yml` also asserts that the herdr service and omp run the resolved releases. `./ship.sh chart` installs none of this.
 
 ## Repository tooling
 
-`bootstrap.sh`, `pyproject.toml`, `uv.lock`
+`onboard.sh`, `pyproject.toml`, `uv.lock`
 
 - The latest uv (below), then `uv sync --locked`: ansible-core 2.21.4, jsonschema 4.26.0, PyYAML 6.0.3. `uv.lock` is this repository's own development environment, so it stays locked.
 - Dev group: pytest 9.0.2, ruff 0.16.3.
 
 ## Latest releases
 
-`scripts/install_tools.py`. Native tools are linked into `~/.local/bin`; npm tools are each installed with `npm install` into `~/.local/share/code-factory/<tool>/<version>` (npm checks the registry integrity) and linked from there. Superseded versions stay on disk.
+`scripts/provisions.py`. Native tools are linked into `~/.local/bin`; npm tools are each installed with `npm install` into `~/.local/share/code-factory/<tool>/<version>` (npm checks the registry integrity) and linked from there. Superseded versions stay on disk.
 
 - Always: herdr ([herdrdev/herdr](https://github.com/herdrdev/herdr/releases/latest)), bun ([oven-sh/bun](https://github.com/oven-sh/bun/releases/latest), the x64 `baseline` build), uv ([astral-sh/uv](https://github.com/astral-sh/uv/releases/latest)), btop ([aristocratos/btop](https://github.com/aristocratos/btop/releases/latest), the static musl build, linked as `btop-bin`; `btop` is the launcher in [btop](herdr.md#btop)), sentrux ([sentrux/sentrux](https://github.com/sentrux/sentrux/releases/latest), the binary plus the same release's `grammars-<platform>.tar.gz`, whose grammars are linked into `~/.sentrux/plugins/<language>/grammars/` so sentrux never downloads them itself, unverified, on first run), fallow ([fallow-rs/fallow](https://github.com/fallow-rs/fallow/releases/latest), the static musl binary `fallow-linux-<arch>-musl`, for the [quality gate](omp.md#quality-gate)), verified against the GitHub release-asset digest. A herdr upgrade rewrites and restarts `herdr.service`.
 - Always: node, the newest release in the [nodejs.org index](https://nodejs.org/dist/index.json) (not the LTS line), verified against that release's `SHASUMS256.txt`.
@@ -25,7 +25,7 @@ Everything the recipe installs, grouped by where it comes from. Nothing is pinne
 - `chat` profile: concord ([chojs23/concord](https://github.com/chojs23/concord/releases/latest), `concord-<arch>-unknown-linux-gnu.tar.xz`) and slk ([gammons/slk](https://github.com/gammons/slk/releases/latest), `slk_<version>_linux_<arch>.tar.gz`), verified against the GitHub release-asset digest. See [Chat clients](chat.md).
 - `development` profile: rustup-init, the version in rustup's [stable release](https://static.rust-lang.org/rustup/release-stable.toml), verified against the `.sha256` published beside it, installing the Rust `stable` toolchain (minimal profile + rustfmt + clippy). Every apply moves the toolchain to the newest stable.
 
-The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests an hour per IP (shared IPs such as CI runners exhaust it); a resolution makes one request per GitHub repository the host installs from, at most fourteen. Only the tools a run installs are resolved, so a source the host does not use cannot fail it. The lookups authenticate with `GITHUB_TOKEN` from the environment that runs `./factory apply` or `./bootstrap.sh`, else run unauthenticated; the token is sent to the GitHub API only. Container builds take the token as the optional BuildKit secret `github_token` (`docker build --secret id=github_token,env=GITHUB_TOKEN ...`), so it never lands in the image.
+The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests an hour per IP (shared IPs such as CI runners exhaust it); a resolution makes one request per GitHub repository the host installs from, at most fourteen. Only the tools a run installs are resolved, so a source the host does not use cannot fail it. The lookups authenticate with `GITHUB_TOKEN` from the environment that runs `./ship.sh launch` or `./onboard.sh`, else run unauthenticated; the token is sent to the GitHub API only. Container builds take the token as the optional BuildKit secret `github_token` (`docker build --secret id=github_token,env=GITHUB_TOKEN ...`), so it never lands in the image.
 
 ## Ubuntu packages
 
@@ -101,7 +101,7 @@ To update a patch, edit its file in a pull request. To drop a patch, delete its 
 
 The recipe never installs these. The base requirements (Ubuntu, sudo, Python, `git`, `gh`) are in the [Quick start](../README.md#quick-start). Notes on those:
 
-- `bootstrap.sh` refuses to run without Python 3.12+.
+- `onboard.sh` refuses to run without Python 3.12+.
 - The recipe installs the latest gh later, under `agents`; the Quick start needs an authenticated `gh` before that.
 
 Also needed, depending on profile:

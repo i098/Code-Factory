@@ -28,7 +28,7 @@ flowchart LR
            labels: [my-label]
    ```
 
-2. Run `./factory apply`. To change only the pool, without a full apply, use [Apply without the playbook](#apply-without-the-playbook).
+2. Run `./ship.sh launch`. To change only the pool, without a full apply, use [Apply without the playbook](#apply-without-the-playbook).
 3. In the repository's workflow, run the job on the pool:
 
    ```yaml
@@ -51,7 +51,7 @@ To remove a repository, delete its entry and apply again. Its idle slots stop an
 | `repos[].slots` | required | Slots for this repository: the most jobs it runs at one time. |
 | `repos[].labels` | required | Runner labels that the workflow's `runs-on` selects. |
 
-`./factory validate` refuses the pool without the `docker` profile, a `data_dir` with `..`, and two repositories that make the same unit name.
+`./ship.sh inspect` refuses the pool without the `docker` profile, a `data_dir` with `..`, and two repositories that make the same unit name.
 
 ## Pool size
 
@@ -121,6 +121,6 @@ echo '{"data_dir": "/mnt/data/ci", "repos": [{"repo": "owner/name", "slots": 2, 
 A self-hosted runner runs the code of the workflow that selects it. On a public repository, a pull request from a fork can change the workflow. The job-started hook ends such a job's container before any of its steps run. That is the first barrier; the trigger rule below is the second. The job container limits CPU, memory, and processes, and has no Docker socket, but it shares the host's network, and its caches stay for the next job of the same repository.
 
 - Opt in private repositories freely. For a public repository, select the pool only in workflows that outside contributors cannot start: `workflow_dispatch` and `push` to protected branches. Never use `pull_request` from forks.
-- This repository's `ci.yml` stays on GitHub-hosted runners. `ci-pool-smoke.yml` runs the same checks on the pool, and only `workflow_dispatch` starts it. It stays queued until `.local/host.yml` has the entry `{ repo: i098/Code-Factory, slots: N, labels: [code-factory] }` in `factory.ci_pool.repos`.
+- This repository's `ci.yml` stays on GitHub-hosted runners. `ci-pool-smoke.yml` runs the same checks on the pool, and only `workflow_dispatch` starts it. It stays queued until `.local/host.yml` has the entry `{ repo: i098/Crewship, slots: N, labels: [code-factory] }` in `factory.ci_pool.repos`.
 - Do not opt in a repository whose jobs need secrets that a fork pull request could reach.
 - A job can change the repository's caches (`<data_dir>/ci-pool/cache/<owner>-<name>/`), which later jobs of that repository read, including jobs on the default branch. Each JIT runner is registered to one repository only, so other repositories' jobs never run in its slots or read its caches.

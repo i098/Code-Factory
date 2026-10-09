@@ -470,7 +470,7 @@ def test_location_carries_the_local_header(tmp_path):
 
 
 def load_factory():
-    spec = importlib.util.spec_from_file_location("factory_imessage", ROOT / "scripts/factory.py")
+    spec = importlib.util.spec_from_file_location("factory_imessage", ROOT / "scripts/ship.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

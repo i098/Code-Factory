@@ -1,7 +1,7 @@
 # Factory configuration document for container builds.
 #
-# Validated by `./factory validate --config containers/factory.container.yml`
-# against schemas/factory.schema.json, then consumed by `./factory apply` during
+# Validated by `./ship.sh inspect --config containers/factory.container.yml`
+# against schemas/factory.schema.json, then consumed by `./ship.sh launch` during
 # the Dockerfile `worker` stage. It differs from config/default.yml only where a
 # container genuinely cannot host a native capability:
 #
@@ -22,7 +22,7 @@
 #                          process groups; it is native-only.
 #
 # profiles.agents and profiles.development stay true: the image installs the real
-# latest, checksum-verified agent and development toolchain through scripts/install_tools.py
+# latest, checksum-verified agent and development toolchain through scripts/provisions.py
 # (the three omp marketplace plugins are the one unverified exception).
 schema_version: 1
 factory:

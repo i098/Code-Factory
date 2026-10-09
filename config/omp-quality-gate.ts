@@ -1,4 +1,4 @@
-// Installed by Code Factory from config/omp-quality-gate.ts; `./factory apply`
+// Installed by Crewship from config/omp-quality-gate.ts; `./ship.sh launch`
 // overwrites it. The structural and code-health gate at the end of every
 // agent turn (docs/omp.md#quality-gate):
 //   - Blocking: in a git repository with .sentrux/baseline.json, a turn that

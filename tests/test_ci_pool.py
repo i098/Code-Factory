@@ -19,7 +19,7 @@ def load(name, path):
 
 
 pool_script = load("ci_pool", "maintenance/ci-pool.py")
-factory = load("factory_config_ci_pool", "scripts/factory.py")
+factory = load("factory_config_ci_pool", "scripts/ship.py")
 
 POOL = {"job_cpus": 4, "job_memory_gb": 8}
 

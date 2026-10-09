@@ -3,6 +3,6 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="$HOME/.local/bin:$PATH"
 if ! command -v uv >/dev/null 2>&1; then
-  exec "$ROOT/bootstrap.sh" "$@"
+  exec "$ROOT/onboard.sh" "$@"
 fi
-exec uv run --project "$ROOT" --locked python "$ROOT/scripts/factory.py" "$@"
+exec uv run --project "$ROOT" --locked python "$ROOT/scripts/ship.py" "$@"

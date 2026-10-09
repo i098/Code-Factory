@@ -1,4 +1,4 @@
-# Code Factory container worker.
+# Crewship container worker.
 #
 # This image is a repeatable, isolated, NON-ROOT worker and a provisioning smoke
 # surface. It is deliberately NOT a native host:
@@ -134,40 +134,41 @@ RUN set -eux; \
 USER ${FACTORY_USER}
 WORKDIR /opt/code-factory
 
-# Executable bits are part of the interface: ./bootstrap.sh, ./factory and the
+# Executable bits are part of the interface: ./onboard.sh, ./ship.sh and the
 # smoke script are invoked directly, including from a context that lost them.
-RUN set -eux; chmod +x bootstrap.sh factory tests/container-smoke.sh
+RUN set -eux; chmod +x onboard.sh ship.sh tests/container-smoke.sh
 
 # Latest uv bootstrap + locked Python dependencies (no provisioning yet). The
-# one uv lookup takes the same optional `github_token` secret as `apply`.
+# one uv lookup takes the same optional `github_token` secret as `launch`.
 RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
-    set -eux; ./bootstrap.sh
+    set -eux; ./onboard.sh
 
 # Schema validation through the repository's own validator.
-RUN set -eux; ./factory validate --config "${FACTORY_CONFIG}"
+RUN set -eux; ./ship.sh inspect --config "${FACTORY_CONFIG}"
 
 # A valid document is not automatically the right document: this guard parses it
 # and compares it with the live image account, then refuses any capability an
 # ordinary container cannot host.
 RUN set -eux; uv run --project . --locked python containers/assert-image-config.py "${FACTORY_CONFIG}"
 
-# The real convergence run. `apply` installs the latest, checksum-verified
+# The real convergence run. `launch` installs the latest, checksum-verified
 # agent and development toolchain (the three omp marketplace plugins are the one
-# unverified exception) through scripts/install_tools.py and renders
+# unverified exception) through scripts/provisions.py and renders
 # the user-scope files; start_services=false keeps it off systemd and linger.
 # The optional `github_token` BuildKit secret authenticates the latest-release
 # lookups (shared CI runner IPs exhaust the unauthenticated API budget). It is
-# exposed to the lookup steps only (bootstrap and this one), never as an ARG,
+# exposed to the lookup steps only (onboard.sh and this one), never as an ARG,
 # ENV, layer file or history entry; without it the lookup runs unauthenticated.
 RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
-    set -eux; ./factory apply --config "${FACTORY_CONFIG}"
+    set -eux; ./ship.sh launch --config "${FACTORY_CONFIG}"
 
 ENV CODE_FACTORY_IMAGE=worker \
     CODE_FACTORY_CONFIG=/opt/code-factory/${FACTORY_CONFIG}
 
 LABEL org.opencontainers.image.title="code-factory-worker" \
-      org.opencontainers.image.description="Isolated non-root Code Factory worker; no systemd, Tailscale or desktop." \
-      org.opencontainers.image.source="https://github.com/i098/Code-Factory" \
+      org.opencontainers.image.description="Isolated non-root Crewship worker; no systemd, Tailscale or desktop." \
+      org.opencontainers.image.source="https://github.com/i098/Crewship" \
+      org.opencontainers.image.licenses="FSL-1.1-ALv2" \
       org.opencontainers.image.base.name="docker.io/library/ubuntu:latest"
 
 WORKDIR ${FACTORY_WORKSPACE}
@@ -181,7 +182,7 @@ FROM worker AS smoke
 ENV CODE_FACTORY_IMAGE=smoke
 
 LABEL org.opencontainers.image.title="code-factory-smoke" \
-      org.opencontainers.image.description="Code Factory worker image running tests/container-smoke.sh."
+      org.opencontainers.image.description="Crewship worker image running tests/container-smoke.sh."
 
 WORKDIR /opt/code-factory
 CMD ["/opt/code-factory/tests/container-smoke.sh", "--in-container"]
