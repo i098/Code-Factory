@@ -1,4 +1,4 @@
-// Installed by Code Factory from config/herdr-sidebar.ts; `./factory apply`
+// Installed by Crewship from config/herdr-sidebar.ts; `./factory apply`
 // overwrites it. Feeds the Herdr Agents sidebar layout described in
 // docs/herdr.md:
 //   - terminal title: the bare session topic, without omp's "π" and spinner;

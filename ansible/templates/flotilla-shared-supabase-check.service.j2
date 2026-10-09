@@ -2,7 +2,7 @@
 # Triggered by flotilla-shared-supabase-check.timer; not enabled on its own.
 
 [Unit]
-Description=Fleet shared Supabase keeper tick - restart missing containers, re-apply guard (Code Factory managed)
+Description=Fleet shared Supabase keeper tick - restart missing containers, re-apply guard (Crewship managed)
 ConditionPathExists={{ factory_shared_supabase_dir }}/check.sh
 
 [Service]

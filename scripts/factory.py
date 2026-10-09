@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Code Factory configuration, provisioning, and non-mutating readiness checks."""
+"""Crewship configuration, provisioning, and non-mutating readiness checks."""
 
 import argparse
 import json
@@ -288,7 +288,7 @@ def questions(document):
                 f"Checklist {checklist['repo']}:{checklist['path']} is not readable; using {source}"
             )
     prompt = (
-        "Code Factory setup on this host is complete. Walk me through the new-host move "
+        "Crewship setup on this host is complete. Walk me through the new-host move "
         "decisions one question at a time, waiting for my answer before the next: which "
         "secondmate homes, services, tools and unpushed work to bring over from the old "
         f"host. Use {source} as the checklist."

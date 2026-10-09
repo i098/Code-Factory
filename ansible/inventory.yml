@@ -1,5 +1,5 @@
 ---
-# Code Factory provisions the machine it runs on. There is exactly one host.
+# Crewship provisions the machine it runs on. There is exactly one host.
 #
 # ansible_python_interpreter is pinned to the system interpreter on purpose:
 # ansible.builtin.apt imports python3-apt / python3-apt's apt_pkg, which only

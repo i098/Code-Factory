@@ -37,7 +37,7 @@ This export does not rewrite the current host's firewall, SSH policy, account me
 
 ### SSH to a Mac
 
-Agents can reach an operator Mac with `ssh mac`. They use it to open links in the operator's browser and to control Mac apps. Code Factory configures the host side. You configure the Mac side by hand, one time. Keep the Mac's name, address, and login out of this repository.
+Agents can reach an operator Mac with `ssh mac`. They use it to open links in the operator's browser and to control Mac apps. Crewship configures the host side. You configure the Mac side by hand, one time. Keep the Mac's name, address, and login out of this repository.
 
 #### Host side: what apply does
 

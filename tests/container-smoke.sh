@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Behavior smoke for the Code Factory container worker image.
+# Behavior smoke for the Crewship container worker image.
 #
 # Host mode (default when run outside the image):
 #   tests/container-smoke.sh [--image REF] [--keep] [--only NAME,NAME]
@@ -777,7 +777,7 @@ container_mode() {
     SMOKE_TMP=$(mktemp -d -t code-factory-smoke.XXXXXX)
     trap 'rm -rf "${SMOKE_TMP}"' EXIT
 
-    printf '== Code Factory container smoke (image role: %s)\n' "${CODE_FACTORY_IMAGE:-unknown}"
+    printf '== Crewship container smoke (image role: %s)\n' "${CODE_FACTORY_IMAGE:-unknown}"
     printf '== %s %s\n\n' "$(uname -s)" "$(uname -m)"
 
     run_check identity                     check_identity

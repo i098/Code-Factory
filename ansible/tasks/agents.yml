@@ -166,7 +166,7 @@
 - name: Point daemon-spawned omp at the overlay and pipelines at the data-disk caches
   ansible.builtin.copy:
     content: |
-      # Managed by Code Factory (docs/omp.md#no-mistakes-pipeline-agent).
+      # Managed by Crewship (docs/omp.md#no-mistakes-pipeline-agent).
       [Service]
       Environment="PI_CONFIG_FILES={{ factory_no_mistakes_omp_overlay }}"
       {% for key, value in factory_data_cache_env | dictsort %}
@@ -206,7 +206,7 @@
   failed_when: false
   check_mode: false
 
-# Only the two agent lists Code Factory writes are managed; any other agent
+# Only the two agent lists Crewship writes are managed; any other agent
 # choice is the operator's and stays.
 - name: Set the no-mistakes pipeline agent from the pi adapter check
   vars:

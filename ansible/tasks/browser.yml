@@ -19,7 +19,7 @@
     group: root
     mode: "0644"
     content: |
-      # Managed by Code Factory.
+      # Managed by Crewship.
       # The apt source is declared in /etc/apt/sources.list.d/google-chrome.sources,
       # so the package postinst must not add a second copy of it.
       repo_add_once=false

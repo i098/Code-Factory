@@ -1,8 +1,8 @@
-# Contributing to Code Factory
+# Contributing to Crewship
 
 ## How it works
 
-Code Factory is an Ansible playbook with a Python CLI wrapper (`scripts/factory.py`). The source of truth is:
+Crewship is an Ansible playbook with a Python CLI wrapper (`scripts/factory.py`). The source of truth is:
 
 - `config/default.yml` — ship defaults (every field the schema requires)
 - `schemas/factory.schema.json` — JSON Schema for the host config
