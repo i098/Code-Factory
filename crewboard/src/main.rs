@@ -131,11 +131,10 @@ fn serve(rest: &[String]) {
 }
 
 fn publish(rest: &[String]) {
-    let (topic, text) = match rest {
-        [t] => (t.as_str(), "-"),
-        [t, x] => (t.as_str(), x.as_str()),
-        _ => usage(),
-    };
+    let [topic, words @ ..] = rest else { usage() };
+    let words = words.strip_prefix(&["--".to_owned()]).unwrap_or(words);
+    let text = if words.is_empty() { "-".to_owned() } else { words.join(" ") };
+    let (topic, text) = (topic.as_str(), text.as_str());
     let body = if text == "-" {
         let mut s = String::new();
         io::stdin().read_to_string(&mut s).unwrap_or_else(|e| fail(&e.to_string()));

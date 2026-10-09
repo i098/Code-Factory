@@ -275,6 +275,11 @@ fn pub_text_with_dash_and_long_from() {
     let tail = stdout(&run(sock, dir, &["tail", "task/a", "--json"]));
     let bodies: Vec<String> = tail.lines().map(|l| serde_json::from_str::<Value>(l).unwrap()["body"].as_str().unwrap().to_owned()).collect();
     assert_eq!(bodies, ["- done", "--force retry", "-1 failing"]);
+    stdout(&run(sock, dir, &["pub", "task/a", "--", "- two", "words"]));
+    stdout(&run(sock, dir, &["pub", "task/a", "hello", "world"]));
+    let tail = stdout(&run(sock, dir, &["tail", "-n", "2", "task/a", "--json"]));
+    let bodies: Vec<String> = tail.lines().map(|l| serde_json::from_str::<Value>(l).unwrap()["body"].as_str().unwrap().to_owned()).collect();
+    assert_eq!(bodies, ["- two words", "hello world"]);
     assert_eq!(stdout(&run(sock, dir, &["tail", "-n", "1", "--", "task/a"])).lines().count(), 1);
 
     let o = cmd(sock, dir, &["pub", "task/a", "x"]).env("FM_TASK_ID", "f".repeat(65)).output().unwrap();
