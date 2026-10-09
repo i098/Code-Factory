@@ -53,6 +53,8 @@ A memory error never stops a send, a tapback, or the inbox note: the service log
 
 ## Set up the Photon project
 
+Skip this section when `transports` is `[bluebubbles]`.
+
 1. Sign in to the [Photon dashboard](https://app.photon.codes) and create a project with the iMessage provider. The free plan gives a shared line.
 2. In the project settings, copy the project ID and the project secret.
 3. Add them to the host's secret store, `~/super.env`, as these two lines:

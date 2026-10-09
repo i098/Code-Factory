@@ -92,7 +92,7 @@ factory_vnc_chrome_profile: "{{ factory_cfg.home }}/.vnc-chrome-profile"
 factory_mac_ssh_key: "{{ factory_cfg.home }}/.ssh/id_ed25519_mac"
 # iMessage bridge (factory.imessage, tasks/imessage.yml, docs/imessage.md).
 # The service runs from this copy of imessage/ with the latest spectrum-ts,
-# resolved once per run (factory_latest). Photon credentials stay in ~/super.env.
+# resolved once per run (factory_latest). Photon and relay credentials stay in ~/super.env.
 factory_imessage_dir: "{{ factory_share_dir }}/imessage"
 factory_imessage_desk_model: "{{ factory_cfg.imessage.desk_model | default('claude-haiku-5-5') }}"
 factory_imessage_supervisor_model: "{{ factory_cfg.imessage.supervisor_model | default('') }}"
