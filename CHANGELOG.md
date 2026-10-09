@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README: a centered header with a badge row and short links, a Why Crewship list, a collapsed Features list, a Get a machine part with sizing, a Sponsors section, and a star-history chart; `SECURITY.md`, `CODE_OF_CONDUCT.md`, and a 1280x640 social preview image ([#39](https://github.com/i098/Crewship/issues/39)).
 - `skills/public/` (committed) and `skills/private/` (git-ignored) skill folders, installed for omp and Claude Code by the `agents` profile; a private skill wins over a public one of the same name, and skills added by hand are never touched ([#56](https://github.com/i098/Crewship/issues/56)).
 - Each release publishes the worker container image to the GitHub Container Registry as `ghcr.io/i098/crewship:X.Y.Z` and `:latest`, so the repository page lists it under Packages ([#54](https://github.com/i098/Crewship/issues/54)).
+- README sponsor list: a daily `sponsors` workflow writes the GitHub Sponsors of i098 into the Sponsors section and opens one pull request when the list changes; while there are no sponsors, the "be the first" line stays ([#68](https://github.com/i098/Crewship/issues/68)).
 
 ### Changed
 
