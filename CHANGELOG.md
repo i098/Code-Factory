@@ -13,12 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Breaking:** renamed the entry points and scripts to nautical names. Update notes and scripts that use the old commands; the old names no longer exist ([#44](https://github.com/i098/Crewship/issues/44)):
-  - `bootstrap.sh` is now `onboard.sh`.
-  - `factory` is now `ship.sh`: `init` is `dock`, `validate` is `inspect`, `plan` is `chart`, `apply` is `launch`, and `doctor` is `survey`.
-  - `scripts/factory.py` is now `scripts/ship.py`, and `scripts/install_tools.py` is now `scripts/provisions.py`.
-  - `scripts/push-super-env.sh` and `scripts/fetch-super-env.sh` are now `scripts/stow-secrets.sh` and `scripts/fetch-secrets.sh`.
-- README title emoji is now 🚢 ([#44](https://github.com/i098/Crewship/issues/44)).
+- **Breaking:** renamed the entry points and scripts to nautical names, and the old names no longer exist: `bootstrap.sh` is `onboard.sh`; `factory` is `ship.sh`, with `init`, `validate`, `plan`, `apply`, `doctor` now `dock`, `inspect`, `chart`, `launch`, `survey`; `scripts/factory.py`, `install_tools.py`, `push-super-env.sh`, `fetch-super-env.sh` are now `ship.py`, `provisions.py`, `stow-secrets.sh`, `fetch-secrets.sh`. Update notes and scripts that use the old commands ([#44](https://github.com/i098/Crewship/issues/44)).
 - Renamed the project to Crewship; the repository is now i098/Crewship ([#38](https://github.com/i098/Crewship/issues/38)).
 - README screenshot now shows a real Herdr session with Firstmate, with the other project names and agent text changed to generic examples ([#35](https://github.com/i098/Crewship/issues/35)).
 

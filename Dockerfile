@@ -157,7 +157,7 @@ RUN set -eux; uv run --project . --locked python containers/assert-image-config.
 # the user-scope files; start_services=false keeps it off systemd and linger.
 # The optional `github_token` BuildKit secret authenticates the latest-release
 # lookups (shared CI runner IPs exhaust the unauthenticated API budget). It is
-# exposed to the lookup steps only (bootstrap and this one), never as an ARG,
+# exposed to the lookup steps only (onboard.sh and this one), never as an ARG,
 # ENV, layer file or history entry; without it the lookup runs unauthenticated.
 RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
     set -eux; ./ship.sh launch --config "${FACTORY_CONFIG}"
