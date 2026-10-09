@@ -1,0 +1,51 @@
+# Deploys harbor/, the crewship.si landing page, to Cloudflare Workers static assets.
+#
+# Each run is a GitHub deployment in the crewship.si environment; its URL is the
+# address wrangler reports (the custom domain once one is attached, else the
+# workers.dev address). The environment accepts only main and holds the deploy
+# token, which can edit the one crewship Worker. Never runs on pull requests.
+#
+# The action is pinned to the commit SHA of its latest release, with the tag in a
+# trailing comment (verified 2026-10-09 via the GitHub REST API). wrangler is not
+# pinned: like every ./ship.sh launch, it is the latest. It needs Node 22 or
+# later, which the ubuntu-24.04 runner image ships.
+name: harbor
+
+on:
+  push:
+    branches: [main]
+    paths: [harbor/**, .github/workflows/harbor.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harbor
+
+jobs:
+  deploy:
+    name: deploy crewship.si
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: crewship.si
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Deploy
+        id: deploy
+        working-directory: harbor
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler.ndjson
+        run: |
+          npx --yes wrangler@latest deploy
+          url=$(jq -r 'select(.type == "deploy") | .targets | (map(select(contains("workers.dev") | not)) + .)[0] | split(" ")[0]' "$WRANGLER_OUTPUT_FILE_PATH")
+          case $url in https://*) ;; *) url="https://$url" ;; esac
+          echo "url=$url" >> "$GITHUB_OUTPUT"

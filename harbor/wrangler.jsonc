@@ -1,0 +1,8 @@
+// Cloudflare Workers static assets for the crewship.si landing page.
+// There is no Worker script: Cloudflare serves the files in public/ as they are,
+// so this file and README.md stay out of the site.
+{
+  "name": "crewship",
+  "compatibility_date": "2026-10-09",
+  "assets": { "directory": "./public" }
+}
