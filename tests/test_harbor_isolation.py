@@ -16,7 +16,9 @@ def _docker_excludes(path, patterns):
     for raw in patterns:
         negate = raw.startswith("!")
         glob = raw[negate:].strip("/")
-        regex = re.escape(glob).replace(r"\*\*", ".*").replace(r"\*", "[^/]*").replace(r"\?", "[^/]")
+        regex = (
+            re.escape(glob).replace(r"\*\*", ".*").replace(r"\*", "[^/]*").replace(r"\?", "[^/]")
+        )
         if any(re.fullmatch(regex, "/".join(parts[:i])) for i in range(1, len(parts) + 1)):
             excluded = not negate
     return excluded

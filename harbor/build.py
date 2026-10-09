@@ -63,23 +63,56 @@ def points(readme, changelog):
         if link in SCENE:
             rows.append((SCENE[link][0], title, href, f"{SCENE[link][1]}. {inline(desc)}"))
         else:
-            print(f"harbor: no scene object for {link}; listing it on the docs board", file=sys.stderr)
-            extra.append(f'<a target="_blank" rel="noopener" href="{href}">{html.escape(title)}</a>: {inline(desc, 60)}')
+            print(
+                f"harbor: no scene object for {link}; listing it on the docs board", file=sys.stderr
+            )
+            extra.append(
+                f'<a target="_blank" rel="noopener" href="{href}">{html.escape(title)}</a>: {inline(desc, 60)}'
+            )
     if extra:
-        rows.append(("docsboard", "More docs", f"{REPO}#docs", "The docs board. More pages: " + "; ".join(extra)))
+        rows.append(
+            (
+                "docsboard",
+                "More docs",
+                f"{REPO}#docs",
+                "The docs board. More pages: " + "; ".join(extra),
+            )
+        )
     version = re.search(r"^## \[(\d[^\]]*)\]", changelog, re.M).group(1)
     unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
-    news = [re.sub(r"\s*\(\[#\d+\].*$", "", item) for item in re.findall(r"^- (.+)$", unreleased, re.M)[:3]]
+    news = [
+        re.sub(r"\s*\(\[#\d+\].*$", "", item)
+        for item in re.findall(r"^- (.+)$", unreleased, re.M)[:3]
+    ]
     intro = readme.split("\n\n", 2)[1]
     quick = readme.split("\n## Quick start\n", 1)[1]
     rows += [
-        ("gangway", "Quick start", f"{REPO}#quick-start", f"The gangway. {inline(first_sentence(quick))}"),
-        ("sign", "Crewship on GitHub", REPO, f"The name on the bow. {inline(first_sentence(intro))}"),
-        ("office", f"Releases (v{version})", f"{REPO}/releases",
-         f"The harbor office. The latest release is v{version}. Coming next: "
-         + "; ".join(inline(item, 90) for item in news) + "."),
-        ("how", "How this is built", "how.html",
-         "The notice board. How this harbor is drawn in text, how you move, and how it deploys."),
+        (
+            "gangway",
+            "Quick start",
+            f"{REPO}#quick-start",
+            f"The gangway. {inline(first_sentence(quick))}",
+        ),
+        (
+            "sign",
+            "Crewship on GitHub",
+            REPO,
+            f"The name on the bow. {inline(first_sentence(intro))}",
+        ),
+        (
+            "office",
+            f"Releases (v{version})",
+            f"{REPO}/releases",
+            f"The harbor office. The latest release is v{version}. Coming next: "
+            + "; ".join(inline(item, 90) for item in news)
+            + ".",
+        ),
+        (
+            "how",
+            "How this is built",
+            "how.html",
+            "The notice board. How this harbor is drawn in text, how you move, and how it deploys.",
+        ),
     ]
     return rows
 
