@@ -91,6 +91,22 @@ def test_no_private_source_fetches_nothing_and_leaves_private_alone(tmp_path, mo
     assert not (home / skills.CACHE).exists()
 
 
+def test_removing_private_source_removes_only_what_it_filled(tmp_path):
+    source, home, local = tmp_path / "skills", tmp_path / "home", tmp_path / "local"
+    skill(local, ".", "filled", "filled")
+    skill(source, "private", "by-hand", "by hand")
+    skills.install(home, source, str(local))
+    result = skills.install(home, source)
+    assert result["changed"]
+    assert result["installed"] == ["by-hand"]
+    assert not (source / "private/filled").exists()
+    assert (source / "private/by-hand/SKILL.md").read_text() == "by hand"
+    for root in skills.ROOTS:
+        assert not (home / root / "filled").exists()
+        assert (home / root / "by-hand/SKILL.md").read_text() == "by hand"
+    assert not skills.install(home, source)["changed"]
+
+
 def test_private_git_source_fills_private_and_installs_idempotently(tmp_path):
     source, home, remote = tmp_path / "skills", tmp_path / "home", tmp_path / "remote"
     skill(source, "public", "shared", "public shared")

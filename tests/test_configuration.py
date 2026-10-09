@@ -133,7 +133,7 @@ def test_private_skills_source_is_accepted(configuration, skills):
         {"private_source": "--upload-pack=touch /tmp/x"},
         {"private_source": "https://token@github.com/owner/skills.git"},
         {"private_source": "https://user:token@github.com/owner/skills.git"},
-        {"private_source": "/srv/skills", "private_ref": "-main"},
+        {"private_source": "git@github.com:owner/skills.git", "private_ref": "-main"},
         {"private_source": "/srv/skills", "token": "x"},
     ],
 )

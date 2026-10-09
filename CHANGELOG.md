@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Each release publishes the worker container image to the GitHub Container Registry as `ghcr.io/i098/crewship:X.Y.Z` and `:latest`, so the repository page lists it under Packages ([#54](https://github.com/i098/Crewship/issues/54)).
 - README sponsor list: a daily `sponsors` workflow writes the GitHub Sponsors of i098 into the Sponsors section and opens one pull request when the list changes; while there are no sponsors, the "be the first" line stays ([#68](https://github.com/i098/Crewship/issues/68)).
 - One-command install for a fresh Ubuntu machine: `install.sh` (`curl … | bash`) and the `crewship` npm package (`npx crewship`), published from each release with npm trusted publishing ([#40](https://github.com/i098/Crewship/issues/40)).
-- Optional `skills.private_source` host setting (a local directory or a git URL, with an optional `skills.private_ref`) that fills `skills/private/` before the skills install; git uses the account's own sign-in, and without the setting nothing is fetched ([#57](https://github.com/i098/Crewship/issues/57)).
+- Optional `skills.private_source` host setting (a local directory or a git URL, with an optional `skills.private_ref`) that fills `skills/private/` before the skills install; git uses the account's own sign-in, without the setting nothing is fetched, and removing it removes the skills an earlier fill added ([#57](https://github.com/i098/Crewship/issues/57)).
 
 ### Changed
 

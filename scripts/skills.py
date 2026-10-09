@@ -4,7 +4,8 @@
 skills/public/<name>/ ships with Crewship; skills/private/<name>/ stays on the
 host and wins over a public skill of the same name. With --private-source (a
 local directory, or a git URL fetched at --private-ref, default HEAD), the
-skills found there are first copied into skills/private/. Each skill is then
+skills found there are first copied into skills/private/; without it, the
+skills an earlier fill added are removed from there. Each skill is then
 copied into every root in ROOTS. A manifest records the names this script
 installed, so a skill the operator put there by hand is never replaced or
 removed. stdout is one JSON result.
@@ -91,9 +92,8 @@ def install(home, skills=SKILLS, private_source=None, private_ref="HEAD"):
     before = json.dumps({r: sorted(n) for r, n in owned.items()}, sort_keys=True) + "\n"
     changed, skipped = False, []
     try:
-        if private_source:
-            filled = found(fetch(private_source, private_ref, home / CACHE))
-            changed |= sync(filled, skills / "private", owned[PRIVATE], skipped)
+        filled = found(fetch(private_source, private_ref, home / CACHE)) if private_source else {}
+        changed |= sync(filled, skills / "private", owned[PRIVATE], skipped)
         wanted = sources(skills)
         for root in ROOTS:
             changed |= sync(wanted, home / root, owned[root], skipped)
