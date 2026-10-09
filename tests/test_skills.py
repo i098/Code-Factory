@@ -87,6 +87,9 @@ PRIVATE = re.compile(
 
 
 def test_public_skills_are_named_and_hold_no_private_details():
+    shapes = ["/home/x", "a@b.io", "h.ts.net", "10.1.2.3", "github.com/x", "k.env", "Captain"]
+    assert all(PRIVATE.search(s) for s in shapes)
+    assert not PRIVATE.search("http://127.0.0.1:9222")
     public = Path(__file__).parents[1] / "skills/public"
     files = [p for p in public.rglob("*") if p.is_file()]
     assert files
