@@ -27,3 +27,6 @@ artifacts/
 .claude/
 .codex/
 .ssh/
+# Private skills stay on the host (skills/private/README.md).
+skills/private/*
+!skills/private/README.md
