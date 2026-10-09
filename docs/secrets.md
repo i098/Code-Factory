@@ -17,7 +17,7 @@ Never paste a value from this file into a repository, issue, PR, log, or chat. C
 
 `workers/fleet-secrets/split.jq` defines the split. The Worker joins its bindings `super_env_0`, `super_env_1`, … in order and decodes them, which gives the file byte for byte.
 
-Limits: a secret holds at most 65,536 bytes, and an account holds at most 100 secrets during the Secrets Store beta. One chunk holds 49,152 bytes of the file, so the secret count grows by one per 48 KiB of file, not per variable. A push briefly needs room for the old and the new chunks together.
+Limits: a secret holds at most 65,536 bytes, and an account holds at most 100 secrets during the Secrets Store beta. One chunk holds 49,152 bytes of the file, so the secret count grows by one per 48 KiB of file, not per variable. A push needs room for the old and the new chunks together, and makes that room itself when the store is full (see below).
 
 ## Push after editing super.env
 
@@ -30,6 +30,8 @@ scripts/stow-secrets.sh
 It reads `CLOUDFLARE_ACCOUNT_ID` and the account token `CF_API_TOKEN_GLOBAL` from the file itself. It creates the chunks for the current file and updates `FLEET_SECRETS_ACCESS_CLIENT_ID`, then redeploys the Worker bound to them, then turns `workers.dev` and preview URLs off. It refuses to overwrite a same-named secret whose comment is not `super.env`. Running it twice leaves the same state.
 
 A changed file gets new chunk names, so a push never changes a chunk that a running Worker reads. After the redeploy, the script waits 30 seconds for every edge to run the new Worker, then deletes every secret with comment `super.env` that the new Worker does not bind: older chunks and the secrets of the earlier one-secret-per-variable layout. It never deletes a secret with another comment.
+
+If the store has no room for the new chunks (secret count plus chunks to create above 100), the script deletes just enough of those replaced `super.env` secrets before it creates the chunks, then continues as above. The running Worker then loses some bindings until the redeploy finishes, so `fetch-secrets.sh` can fail for a few seconds. This happens whenever the store lacks room, normally only once, on the move from the one-secret-per-variable layout. The fetch works again after the redeploy.
 
 ## Fetch on a new host
 

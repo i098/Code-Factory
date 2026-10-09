@@ -199,3 +199,128 @@ def test_fetch_failure_leaves_existing_file(tmp_path, server):
     assert "403" in result.stderr
     assert dest.read_text() == "OLD=1\n"
     assert sorted(p.name for p in tmp_path.iterdir()) == [".config", "super.env"]
+
+
+class FakeCloudflare(http.server.BaseHTTPRequestHandler):
+    """Secrets Store API with the 100-secret cap; `store` maps name -> {id, comment, value}."""
+
+    store: dict
+    calls: list
+    prefix = "/secrets_store/stores/store-1/secrets"
+    static = {
+        "/access/organizations": {"auth_domain": "team.example"},
+        "/access/apps": [{"domain": "fleet-secrets.iterative.sh", "aud": "aud-1"}],
+        "/secrets_store/stores": [{"id": "store-1"}],
+    }
+
+    def reply(self, result=None, errors=None, status=200):
+        body = json.dumps({"success": errors is None, "result": result, "errors": errors}).encode()
+        self.send_response(status)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def handle_any(self):
+        path = self.path.split("?")[0].split("/accounts/acct", 1)[1]
+        raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        if path.startswith(self.prefix):
+            return self.secrets(path[len(self.prefix) + 1 :], raw)
+        if path.startswith("/workers/"):
+            self.calls.append((self.command, path))
+            return self.reply({})
+        self.reply(self.static[path])
+
+    def secrets(self, sid, raw):
+        if self.command == "GET":
+            return self.reply([{"name": n, "id": s["id"], "comment": s["comment"]} for n, s in self.store.items()])
+        if self.command == "POST":
+            return self.create(json.loads(raw))
+        name = next((n for n, s in self.store.items() if s["id"] == sid), None)
+        if name is None:
+            return self.reply(errors=[{"code": 10000, "message": "not found"}], status=404)
+        self.calls.append((self.command, name))
+        if self.command == "DELETE":
+            del self.store[name]
+        else:
+            self.store[name]["value"] = json.loads(raw)["value"]
+        self.reply({})
+
+    def create(self, new):
+        self.calls.append(("POST", [s["name"] for s in new]))
+        if len(self.store) + len(new) > 100:
+            return self.reply(errors=[{"code": 1003, "message": "maximum_secrets_exceeded"}], status=400)
+        for s in new:
+            self.store[s["name"]] = {"id": f"id-{s['name']}", "comment": s["comment"], "value": s["value"]}
+        self.reply([])
+
+    do_GET = do_POST = do_PATCH = do_PUT = do_DELETE = handle_any
+
+    def log_message(self, *args):
+        pass
+
+
+def run_stow(tmp_path: Path, old_secrets: int, token: str) -> subprocess.CompletedProcess:
+    """Run stow-secrets.sh against the fake store; curl's argv lands in tmp_path/argv."""
+    (tmp_path / "super.env").write_text(
+        f"CLOUDFLARE_ACCOUNT_ID=acct\nCF_API_TOKEN_GLOBAL={token}\n{BIG_ENV}"
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "sleep").write_text("#!/bin/sh\n")
+    (bin_dir / "curl").write_text(
+        f'#!/bin/sh\nprintf "%s\\n" "$@" >>{tmp_path}/argv\nexec {shutil.which("curl")} "$@"\n'
+    )
+    for tool in bin_dir.iterdir():
+        tool.chmod(0o755)
+    FakeCloudflare.calls = []
+    FakeCloudflare.store = {
+        f"OLD_{i}": {"id": f"id-old-{i}", "comment": "super.env", "value": "x"} for i in range(old_secrets)
+    }
+    FakeCloudflare.store["KEEP"] = {"id": "id-keep", "comment": "other", "value": "x"}
+    FakeCloudflare.store["FLEET_SECRETS_ACCESS_CLIENT_ID"] = {
+        "id": "id-client", "comment": "super.env", "value": "old",
+    }
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), FakeCloudflare)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        return subprocess.run(
+            [ROOT / "scripts/stow-secrets.sh"],
+            env={
+                "PATH": f"{bin_dir}:{os.environ['PATH']}",
+                "HOME": str(tmp_path),
+                "CF_API_BASE": f"http://127.0.0.1:{httpd.server_port}",
+            },
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        httpd.shutdown()
+
+
+@pytest.mark.skipif(not shutil.which("jq") or not shutil.which("curl"), reason="needs jq and curl")
+@pytest.mark.parametrize("old_secrets, full", [(98, True), (10, False)], ids=["full", "roomy"])
+def test_stow_makes_room_in_a_full_store_before_creating_chunks(tmp_path, old_secrets, full):
+    token = "fake-token-value-123"
+    result = run_stow(tmp_path, old_secrets, token)
+    assert result.returncode == 0, result.stderr
+
+    store = FakeCloudflare.store
+    chunks = sorted(n for n in store if n.startswith("super_env_"))
+    assert len(chunks) > 1
+    assert sorted(store) == sorted(["KEEP", "FLEET_SECRETS_ACCESS_CLIENT_ID", *chunks])
+    assert store["KEEP"]["value"] == "x"
+    assert store["FLEET_SECRETS_ACCESS_CLIENT_ID"]["value"] == "client-1"
+
+    mutations = [c for c in FakeCloudflare.calls if c[0] in ("POST", "DELETE") and "workers" not in c[1]]
+    first_post = next(i for i, c in enumerate(mutations) if c[0] == "POST")
+    room = 100 - (old_secrets + 2)
+    expected_early = max(0, len(chunks) - room)
+    assert (expected_early > 0) == full
+    assert first_post == expected_early
+    assert all(c[0] == "DELETE" for c in mutations[:first_post])
+    deleted = [c[1] for c in mutations if c[0] == "DELETE"]
+    assert sorted(deleted) == sorted(f"OLD_{i}" for i in range(old_secrets))
+
+    argv = (tmp_path / "argv").read_text()
+    values = [token, *(s["value"] for s in store.values())]
+    assert not any(v in argv or v in result.stdout + result.stderr for v in values if len(v) > 1)
