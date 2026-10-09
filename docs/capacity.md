@@ -56,7 +56,7 @@ The Setting column names the profile that installs each pruner and what tunes it
 
 | Pruner | Removes | Runs | Setting |
 | --- | --- | --- | --- |
-| Docker guard (`crewship-docker-guard.timer`) | Stopped containers 24 h after they exit. Running containers 48 h old are reported, never removed. Never a container with the `crewship.keep` label or a restart policy, a volume or an image. | every hour | `fleet.docker_guard.stopped_hours`; profile `fleet_guards` |
+| Docker guard (`crewship-docker-guard.timer`) | Stopped containers 24 h (default) after they exit. Running containers 48 h old are reported, never removed. Never a container with the `crewship.keep` label or a restart policy, a volume or an image. | every hour | `fleet.docker_guard.stopped_hours`; profile `fleet_guards` |
 | Storage guard (`crewship-storage-guard.timer`) | At 92% disk use: Docker build cache, dangling images, and unused images created more than 168 h ago. Never volumes, containers, repositories, logs or home content. | every 5 min | `factory_storage_guard_*` in `ansible/group_vars/all.yml`; profile `fleet_guards` |
 | Dev-server reaper (`crewship-dev-server-reaper.timer`) | `next dev`, `next-server` and `tsc --noEmit` trees whose lane is done, paused, blocked or failed, has no agent, or is idle for 30 min or more. | every 2 min | `REAPER_IDLE_MIN` (30) in the script; profile `fleet_guards` |
 | Devtools-bridge reaper (`crewship-devtools-bridge-reaper.timer`) | Attached chrome-devtools-axi bridges whose process tree used no CPU and whose session state did not change for 60 min. Never any other bridge. | every 10 min | `REAPER_IDLE_MIN` (60) in the script; profile `fleet_guards` |
