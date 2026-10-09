@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- README screenshot now shows a real Herdr session, with all project names and agent text changed to generic examples ([#35](https://github.com/i098/Code-Factory/issues/35)).
+- README screenshot now shows a real Herdr session with Firstmate, with the other project names and agent text changed to generic examples ([#35](https://github.com/i098/Code-Factory/issues/35)).
 
 ## [0.1.0] - 2026-10-09
 
