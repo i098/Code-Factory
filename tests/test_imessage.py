@@ -730,7 +730,7 @@ def test_bridge_rides_out_an_upstream_outage(tmp_path):
         wait_for(lambda: "photon-m5-lost" in text(notes), "the note for the lost attachment")
         (fake / "messages" / "m3.json").unlink()  # the text that a threaded send points to is gone
         cli("--reply", "2", "five")
-        wait_for(lambda: len(text(fake / "sent").splitlines()) == 7, "the unthreaded send")
+        wait_for(lambda: len(text(fake / "sent").splitlines()) == 7 and not list((state / "outbox").glob("*.json")), "the unthreaded send, delivered and dequeued")
     finally:
         bridge.terminate()
         bridge.wait(10)
