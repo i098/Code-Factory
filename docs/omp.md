@@ -13,6 +13,7 @@ With the `agents` profile on, `./ship.sh launch`:
 5. Installs the extension `~/.omp/agent/extensions/fm-no-pattern-kill.ts` from [`config/omp-no-pattern-kill.ts`](../config/omp-no-pattern-kill.ts). It blocks `pkill`, `killall` and kill-by-`pgrep` commands in every omp session: all agents on the host run as one user and each worker's brief sits in its command line, so a name or pattern can match other workers. Kill a process by the PID you started instead. Every apply rewrites it. It is a best-effort seatbelt, not a barrier: it matches the command text, so it lets through an absolute path (`/usr/bin/pkill`), a kill whose targets come from `pidof`, `ps | grep` or a `pgrep` loop, and the list form in an eval cell (`subprocess.run(["pkill", ...])`), and it blocks read-only mentions such as `grep -rn pkill docs/`. Removing worker briefs from the command line is the real fix and is out of scope for this recipe.
 6. Installs the extension `~/.omp/agent/extensions/code-factory-quality-gate.ts` from [`config/omp-quality-gate.ts`](../config/omp-quality-gate.ts), the sentrux and fallow check at the end of every agent turn. Every apply rewrites it. See [Quality gate](#quality-gate).
 7. Sets up omp as the no-mistakes pipeline agent. See [no-mistakes pipeline agent](#no-mistakes-pipeline-agent).
+8. Installs the skills in [`skills/`](../skills/) for omp and Claude Code. See [Skills](#skills).
 
 Both copies are first-write-only. If a file already exists, the recipe leaves it alone, so an account's own settings and provider configuration are never overwritten. The one exception is the two status line keys the [status line icons](#status-line-icons) need, which every apply ensures. See [Updating an existing host](#updating-an-existing-host).
 
@@ -145,6 +146,15 @@ Restarting the daemon kills the pipeline runs in flight, so the recipe never doe
 Verification runs `~/.no-mistakes/omp-as-pi/omp-as-pi --omp-as-pi-check`, which confirms the installed omp still lists every flag the wrapper uses and the gate overlay matches its pin. CI runs the wrapper's offline tests with `bash config/omp-as-pi/test.sh`; `test.sh --live` also drives the real omp with a cheap model.
 
 When a new no-mistakes release changes the adapter, re-prove the wrapper against it (`test.sh --live` and a pipeline run), then update the pins in `check-adapter.sh`.
+
+## Skills
+
+Crewship keeps skills, not personal notes, in `skills/`. `CLAUDE.md` and `AGENTS.md` stay free of personal content.
+
+- `skills/public/<name>/SKILL.md`, with any helper files beside it: skills that ship with Crewship.
+- `skills/private/<name>/SKILL.md`: skills that stay on the host. Git ignores this folder except its README, and Docker builds leave it out.
+
+Every apply copies each skill to `~/.omp/agent/skills/<name>/` and `~/.claude/skills/<name>/` with [`scripts/skills.py`](../scripts/skills.py). A private skill wins over a public skill with the same name. The installer records the names it installed in `~/.local/share/code-factory/skills.json`. It rewrites only those skills, and removes one when its source leaves `skills/`. A skill directory that the manifest does not list belongs to the operator: the installer never replaces or removes it and reports it under `skipped`. An unchanged apply changes nothing.
 
 ## Updating an existing host
 

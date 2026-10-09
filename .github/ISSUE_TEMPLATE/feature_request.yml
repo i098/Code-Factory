@@ -1,0 +1,18 @@
+name: Feature request
+description: Ask for a new capability or a change to an existing one.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What do you want to do that Crewship does not let you do now?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The change you want, and how you will use it.
+    validations:
+      required: true

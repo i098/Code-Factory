@@ -10,8 +10,10 @@
 # start_services=false and disables the docker/tailscale/desktop profiles, so the
 # playbook performs file/tool convergence only.
 #
-# Base image: ubuntu:latest, the newest Ubuntu LTS. Nothing is pinned; the
-# registry's content digests verify the layers that are pulled.
+# Base image: ubuntu:latest, the newest Ubuntu LTS, pulled from mirror.gcr.io
+# (Google's Docker Hub mirror: the same official image, no anonymous pull
+# limit). Nothing is pinned; the registry's content digests verify the layers
+# that are pulled.
 #
 # Build targets:
 #   base    OS packages and the factory account only (no repository content)
@@ -24,7 +26,7 @@
 # its latest release, verified against the checksum its publisher posts (the
 # three omp marketplace plugins are the one exception: no publisher posts one).
 
-ARG UBUNTU_IMAGE=ubuntu:latest
+ARG UBUNTU_IMAGE=mirror.gcr.io/library/ubuntu:latest
 
 FROM ${UBUNTU_IMAGE} AS base
 
@@ -169,7 +171,7 @@ LABEL org.opencontainers.image.title="code-factory-worker" \
       org.opencontainers.image.description="Isolated non-root Crewship worker; no systemd, Tailscale or desktop." \
       org.opencontainers.image.source="https://github.com/i098/Crewship" \
       org.opencontainers.image.licenses="FSL-1.1-ALv2" \
-      org.opencontainers.image.base.name="docker.io/library/ubuntu:latest"
+      org.opencontainers.image.base.name="mirror.gcr.io/library/ubuntu:latest"
 
 WORKDIR ${FACTORY_WORKSPACE}
 CMD ["/bin/bash"]

@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - README screenshot of a finished host, captured from demo repositories ([#35](https://github.com/i098/Crewship/issues/35)).
+- Git conventions and branch rules in `CONTRIBUTING.md`, issue forms, a pull request template, `SUPPORT.md`, and `CODEOWNERS` for `.github/` ([#47](https://github.com/i098/Crewship/issues/47)).
+- Sponsor button on the repository page, from `.github/FUNDING.yml`, that opens the i098 GitHub Sponsors profile ([#59](https://github.com/i098/Crewship/issues/59)).
+- `skills/public/` (committed) and `skills/private/` (git-ignored) skill folders, installed for omp and Claude Code by the `agents` profile; a private skill wins over a public one of the same name, and skills added by hand are never touched ([#56](https://github.com/i098/Crewship/issues/56)).
 
 ### Changed
 
@@ -17,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** renamed the entry points and scripts to nautical names, and the old names no longer exist: `bootstrap.sh` is `onboard.sh`; `factory` is `ship.sh`, with `init`, `validate`, `plan`, `apply`, `doctor` now `dock`, `inspect`, `chart`, `launch`, `survey`; `scripts/factory.py`, `install_tools.py`, `push-super-env.sh`, `fetch-super-env.sh` are now `ship.py`, `provisions.py`, `stow-secrets.sh`, `fetch-secrets.sh`. Update notes and scripts that use the old commands ([#44](https://github.com/i098/Crewship/issues/44)).
 - Renamed the project to Crewship; the repository is now i098/Crewship ([#38](https://github.com/i098/Crewship/issues/38)).
 - README screenshot now shows a real Herdr session with Firstmate, with the other project names and agent text changed to generic examples ([#35](https://github.com/i098/Crewship/issues/35)).
+
+### Fixed
+
+- `scripts/stow-secrets.sh` no longer fails with `maximum_secrets_exceeded` once `super.env` has more than 100 variables: it stores the whole file in a few chunks instead of one secret per variable, and it deletes the per-variable secrets the chunks replace. On a full store it deletes just enough of them before creating the chunks, so fetches can fail for a few seconds during that one push ([#58](https://github.com/i098/Crewship/issues/58)).
+- The worker image and the compose backing services pull from `mirror.gcr.io`, Google's Docker Hub mirror, so the CI image build no longer fails on Docker Hub's anonymous pull limit (`429 Too Many Requests`); the images are the same official ones ([#63](https://github.com/i098/Crewship/issues/63)).
 
 ## [0.1.0] - 2026-10-09
 
