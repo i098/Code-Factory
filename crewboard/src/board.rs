@@ -10,6 +10,8 @@ use tokio::sync::Notify;
 use tokio::sync::mpsc::{self, error::TrySendError};
 
 pub const MAX_TOPICS: usize = 1024;
+/// Longest advisory `from`, like a topic name.
+const MAX_FROM: usize = 64;
 /// Messages queued for one subscriber before the board drops it as slow.
 pub const SUB_QUEUE: usize = 1024;
 
@@ -94,7 +96,7 @@ impl Board {
         if !valid_topic(topic) {
             return Err("bad_topic");
         }
-        if body.len() > self.limits.max_msg {
+        if body.len() > self.limits.max_msg || from.is_some_and(|f| f.len() > MAX_FROM) {
             return Err("too_large");
         }
         let seq = self.seq + 1;
@@ -321,6 +323,7 @@ mod tests {
     fn limits_and_global_cap() {
         let mut b = board(400, 100);
         assert_eq!(b.publish("t", None, 1, &"x".repeat(1001)), Err("too_large"));
+        assert_eq!(b.publish("t", Some(&"f".repeat(65)), 1, "x"), Err("too_large"));
         assert_eq!(b.publish("t", None, 1, &"x".repeat(500)), Err("cap"));
         assert_eq!(b.publish("Bad", None, 1, "x"), Err("bad_topic"));
         for topic in ["a", "b", "c", "d"] {

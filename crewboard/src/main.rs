@@ -56,6 +56,7 @@ impl<'a> Args<'a> {
         let mut it = args.iter().map(String::as_str);
         while let Some(arg) = it.next() {
             match arg {
+                "--" => a.pos.extend(it.by_ref()),
                 "--json" => a.json = true,
                 f if allowed.contains(&f) => a.opts.push((f, it.next().unwrap_or_else(|| usage()))),
                 f if f.starts_with('-') && f != "-" => usage(),
@@ -130,10 +131,9 @@ fn serve(rest: &[String]) {
 }
 
 fn publish(rest: &[String]) {
-    let a = Args::parse(rest, &[]);
-    let (topic, text) = match a.pos[..] {
-        [t] => (t, "-"),
-        [t, x] => (t, x),
+    let (topic, text) = match rest {
+        [t] => (t.as_str(), "-"),
+        [t, x] => (t.as_str(), x.as_str()),
         _ => usage(),
     };
     let body = if text == "-" {

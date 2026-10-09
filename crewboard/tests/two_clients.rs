@@ -258,3 +258,28 @@ fn slow_reader_is_cut_off_without_its_backlog() {
     assert!(lines[1..].iter().all(|l| l["body"].is_string() || l["error"] == "slow"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// `pub` text may start with a dash, and `from` is capped like a topic name.
+#[test]
+fn pub_text_with_dash_and_long_from() {
+    let dir: PathBuf = std::env::temp_dir().join(format!("crewboard-dash-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::DirBuilder::new().mode(0o700).create(&dir).unwrap();
+    let sock = dir.join("crewboard.sock");
+    let (sock, dir) = (sock.as_path(), dir.as_path());
+    let _daemon = serve(sock, dir);
+
+    for text in ["- done", "--force retry", "-1 failing"] {
+        stdout(&run(sock, dir, &["pub", "task/a", text]));
+    }
+    let tail = stdout(&run(sock, dir, &["tail", "task/a", "--json"]));
+    let bodies: Vec<String> = tail.lines().map(|l| serde_json::from_str::<Value>(l).unwrap()["body"].as_str().unwrap().to_owned()).collect();
+    assert_eq!(bodies, ["- done", "--force retry", "-1 failing"]);
+    assert_eq!(stdout(&run(sock, dir, &["tail", "-n", "1", "--", "task/a"])).lines().count(), 1);
+
+    let o = cmd(sock, dir, &["pub", "task/a", "x"]).env("FM_TASK_ID", "f".repeat(65)).output().unwrap();
+    assert_eq!((o.status.code(), String::from_utf8_lossy(&o.stderr).trim()), (Some(1), "crewboard: too_large"));
+    let o = cmd(sock, dir, &["pub", "task/a", "x"]).env("FM_TASK_ID", "f".repeat(64)).output().unwrap();
+    assert!(o.status.success(), "{o:?}");
+    std::fs::remove_dir_all(dir).unwrap();
+}
