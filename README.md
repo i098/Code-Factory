@@ -1,12 +1,53 @@
-# ⚡ Crewship
+<div align="center">
 
-[![License: FSL-1.1-Apache-2.0](https://img.shields.io/badge/license-FSL--1.1--Apache--2.0-blue)](LICENSE)
+# 🚢 Crewship
 
-Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, the omp agent fleet, and the Concord (Discord) and slk (Slack) terminal chat clients, provisioned by Ansible from a checksum-verified toolchain (the three omp marketplace plugins are the one exception). No Nix, no chezmoi, no cloud dependencies. Each apply installs the latest Concord and slk release and verifies its checksum; see [docs/chat.md](docs/chat.md).
+**Turn a fresh Ubuntu machine into a self-hosted AI coding agent fleet.**
 
-![Herdr with a sidebar of workspaces and omp agents working on demo repositories in parallel](docs/images/code-factory.png)
+[![CI](https://img.shields.io/github/actions/workflow/status/i098/Crewship/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/i098/Crewship/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/i098/Crewship?style=for-the-badge&logo=github&label=&color=2563eb)](https://github.com/i098/Crewship/releases/latest)
+[![License: FSL-1.1-Apache-2.0](https://img.shields.io/badge/FSL--1.1--Apache--2.0-2563eb?style=for-the-badge)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/i098/Crewship?style=for-the-badge&logo=github&color=2563eb)](https://github.com/i098/Crewship/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/i098/Crewship?style=for-the-badge&logo=git&logoColor=white&label=updated&color=2563eb)](https://github.com/i098/Crewship/commits/main)
+[![Sponsor](https://img.shields.io/badge/Sponsor-db61a2?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/i098)
+
+[Docs](#docs) · [Install](#quick-start) · [Changelog](CHANGELOG.md) · [Discussions](https://github.com/i098/Crewship/discussions)
+
+<img src="docs/images/code-factory.png" alt="Herdr with a sidebar of workspaces and omp agents working on demo repositories in parallel">
 
 *A finished host: Herdr lists the workspaces and agents on the left, and omp agents work side by side.*
+
+</div>
+
+## Why Crewship
+
+- **Self-hosted AI coding agents:** one Ubuntu 24.04 or 26.04 machine runs Herdr, the Firstmate orchestrator, and the omp agent fleet. No cloud dependencies.
+- **Reproducible with Ansible:** profiles in one host file, a check-mode preview with `./ship.sh chart`, and one `./ship.sh launch` that changes the host. No Nix, no chezmoi.
+- **Checksum-verified toolchain:** every apply installs the latest releases and verifies their checksums. The three omp marketplace plugins are the one exception.
+- **Built for an agent fleet:** fleet guards, auto pruners, a self-hosted CI pool, and the Concord (Discord) and slk (Slack) terminal chat clients.
+
+<details>
+<summary><b>Features</b></summary>
+
+- [Herdr workspace](docs/herdr.md): a sidebar of spaces and agents, with live status for each lane
+- [omp agents](docs/omp.md): sign-in, model roles, fallbacks, and the advisor
+- [Fleet guards](docs/fleet-guards.md): shared Supabase, Docker guard, dev-server reaper, storage guard, browser ladder
+- [Capacity and auto pruners](docs/capacity.md): host sizing per lane count, and cleanup timers
+- [Self-hosted CI pool](docs/ci-pool.md): GitHub Actions runners, one job per fresh container
+- [Chat clients](docs/chat.md): Concord (Discord) and slk (Slack) in the terminal
+- [GitHub board](docs/github-board.md): agent work as issues on a Project board, and a shared message board
+- [iMessage bridge](docs/imessage.md): text Firstmate from your phone
+- [Shared credentials](docs/secrets.md): `super.env` in Cloudflare Secrets Store
+- [Google Workspace CLI](docs/google-workspace.md): `gws` with several Google accounts on a headless host
+- [herdr-patch](herdr-patch/README.md): Herdr over mosh with real images
+- [Checksum-verified toolchain](docs/dependencies.md): every tool, package, and image the recipe installs
+- [Migration and recovery](docs/recovery.md): new-device sequence, desktop access, upgrades
+- [Agent host move](docs/agent-host-move.md): move the agents to a new host with parity checks
+- [Security](docs/security.md): credential handling and remote access
+
+</details>
+
+## How it works
 
 ```mermaid
 flowchart TD
@@ -33,6 +74,20 @@ flowchart TD
 ```
 
 ## Quick start
+
+### Get a machine
+
+Rent an Ubuntu 24.04 or 26.04 server from any VPS or cloud provider, for example [Hetzner Cloud](https://www.hetzner.com/cloud/), [OVHcloud VPS](https://www.ovhcloud.com/en/vps/), or [DigitalOcean Droplets](https://www.digitalocean.com/products/droplets). A spare machine at home works too.
+
+| Size | Machine | Runs in parallel |
+| --- | --- | --- |
+| Small (estimated) | 4 vCPU, 16 GB RAM, 100 GB disk | 2 light lanes |
+| Medium (estimated) | 16 vCPU, 64 GB RAM, 300 GB disk | 4 UI lanes + 8 light lanes, or 16 light lanes |
+| Large (measured on a real host) | 96 vCPU x86_64, 247 GB RAM, a 235 GB system disk and two ~2 TB data disks | 37 agent processes in about 67 GB RAM (about 0.35 GB each), load average 30-35 |
+
+Builds, tests, and browsers set the limit, not the agents; each CI job is capped at 4 CPUs and 8 GB. See [Capacity and pruners](docs/capacity.md) for the formula.
+
+### Install
 
 You need Ubuntu 24.04 or 26.04 on x86_64 or aarch64 with systemd, a non-root account with sudo, Python 3.12+, `git`, and `gh`. [`cloud-init/user-data.yaml`](cloud-init/user-data.yaml) can preinstall the OS packages on first boot.
 
@@ -105,4 +160,22 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 | [Google Workspace CLI](docs/google-workspace.md) | `gws`: one OAuth client in testing mode, sign-in for several Google accounts, and carrying each login to a headless host |
 | [Agent host move](docs/agent-host-move.md) | Moving the agents to a new host: what to copy by hand, parity checks, cutover |
 
-Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). License: [FSL-1.1-Apache-2.0](LICENSE).
+Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Support: [SUPPORT.md](SUPPORT.md). Security: [SECURITY.md](SECURITY.md). Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). License: [FSL-1.1-Apache-2.0](LICENSE).
+
+## Sponsors
+
+If Crewship saves you time, sponsor its development on GitHub.
+
+<a href="https://github.com/sponsors/i098"><img src="https://img.shields.io/badge/Sponsor-db61a2?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor i098 on GitHub"></a>
+
+No sponsors yet. Be the first, and your name goes here.
+
+## Star history
+
+<a href="https://star-history.com/#i098/Crewship&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=i098/Crewship&type=Date&theme=dark">
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=i098/Crewship&type=Date">
+    <img alt="Star history chart for i098/Crewship" src="https://api.star-history.com/svg?repos=i098/Crewship&type=Date">
+  </picture>
+</a>
