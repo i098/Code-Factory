@@ -90,3 +90,6 @@ compose.yml
 compose.*.yml
 .devcontainer
 .dockerignore
+
+# Private skills stay on the host; never bake them into an image.
+skills/private/

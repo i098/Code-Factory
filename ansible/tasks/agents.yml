@@ -67,6 +67,18 @@
     remote_src: true
   become: true
 
+# skills/public and skills/private for omp and Claude Code (docs/omp.md#skills).
+# The installer replaces or removes only the skills its manifest records, and
+# prints one JSON object whose `changed` is the only changed signal.
+- name: Install the Crewship skills for omp and Claude Code
+  ansible.builtin.command:
+    argv: [python3, "{{ code_factory_repo }}/scripts/skills.py", --home, "{{ factory_cfg.home }}"]
+  become: "{{ factory_become_target | bool }}"
+  become_user: "{{ factory_cfg.user }}"
+  register: factory_skills_run
+  changed_when: (factory_skills_run.stdout_lines | last | from_json).changed | bool
+  when: not ansible_check_mode
+
 # The omp extension that feeds the Herdr agent sidebar layout ($who, the pull
 # request parts and the bare topic title; docs/herdr.md). Managed: every apply
 # rewrites it.
