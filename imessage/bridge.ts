@@ -77,7 +77,11 @@ if (await saved.exists()) {
   latest = await find(latestRef).catch((e) => void log("could not restore the latest text; sends still go to it")(e));
 }
 const outbox = new Queue<Out>(OUTBOX_DIR, "outbox item", deliver, RETRY_MS);
-const downloads = new Queue<Ref>(DOWNLOADS_DIR, "attachment download", fetchAgain, RETRY_MS);
+const downloads = new Queue<Ref>(DOWNLOADS_DIR, "attachment download", fetchAgain, RETRY_MS, (ref) => {
+  if (!fileNote(`photon-${ref.id}-lost`, `(an earlier attachment of message ${ref.id} could not be saved; the bridge gave up, so no path will follow)`)) {
+    console.error(`fm-imessage: the inbox note for the lost attachment of message ${ref.id} failed`);
+  }
+});
 
 // Stop a pending or running desk turn: he sent more, or Firstmate is active on the line.
 function cancelDesk() {

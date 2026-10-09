@@ -559,7 +559,7 @@ def test_queue_moves_only_provably_bad_items_to_the_dead_letter_folder(tmp_path)
     result = bun(f"""
 import {{ readdirSync }} from "node:fs";
 import {{ Queue }} from {OUTBOX};
-const done = [], tries = {{}};
+const done = [], lost = [], tries = {{}};
 const fail = {{
   bad: () => new Error("message m1 not found"),
   flaky: () => Object.assign(new Error("down"), {{ grpcCode: 14 }}),
@@ -570,15 +570,16 @@ const q = new Queue({json.dumps(str(queue))}, "item", async (item) => {{
   tries[item.v] = (tries[item.v] ?? 0) + 1;
   if (item.v in fail && (item.v === "bad" || tries[item.v] < 3)) throw fail[item.v]();
   done.push(item.v);
-}}, 5);
+}}, 5, (item) => lost.push(item));
 const end = Date.now() + 10000;
 while (done.length < 4 && Date.now() < end) await Bun.sleep(10);
-console.log(JSON.stringify({{ done, tries, left: readdirSync({json.dumps(str(queue))}), dead: readdirSync({json.dumps(str(queue) + "-dead")}).length }}));
+console.log(JSON.stringify({{ done, lost, tries, left: readdirSync({json.dumps(str(queue))}), dead: readdirSync({json.dumps(str(queue) + "-dead")}).length }}));
 process.exit(0);
 """)
     assert result["done"] == ["flaky", "odd", "denied", "ok"]
     assert result["tries"] == {"bad": 1, "flaky": 3, "odd": 3, "denied": 3, "ok": 1}
     assert result["left"] == [] and result["dead"] == 2
+    assert result["lost"] == [{"v": "bad"}]  # told of the parsed item only, not of the corrupt file
 
 
 # A fake spectrum-ts for bridge.ts. Its state is in FAKE_DIR, so it outlives a bridge restart: `down` holds how

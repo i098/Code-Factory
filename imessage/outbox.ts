@@ -45,7 +45,7 @@ export function brief(e: unknown): string {
 // item again, so the order holds. Only an item that is provably bad (see `permanent`, or a file that does not
 // parse) moves to `${dir}-dead/`; the loop logs one line and goes on with the next item. Deleting an item's file
 // drops it by hand. `deliver` may save progress (the bubbles already sent) with `save`. The constructor starts on
-// the items already queued.
+// the items already queued. `lost` is told of each parsed item that moved to the dead-letter folder.
 export class Queue<T> {
   private next: number;
   private busy = false;
@@ -55,6 +55,7 @@ export class Queue<T> {
     private name: string,
     private deliver: (item: T, save: (item: T) => void) => Promise<void>,
     private retryMs: number,
+    private lost?: (item: T) => void,
   ) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     this.next = (this.seqs().at(-1) ?? 0) + 1;
@@ -113,17 +114,20 @@ export class Queue<T> {
     try {
       for (let seq = this.seqs()[0]; seq !== undefined; seq = this.seqs()[0]) {
         if (seq !== head) [head, attempt] = [seq, 0];
+        let item: T | undefined;
         try {
-          let item: T;
           try {
             item = JSON.parse(readFileSync(this.file(seq), "utf8"));
           } catch (e) {
             throw Object.assign(new Error(`unreadable queue file: ${brief(e)}`), { permanent: true });
           }
-          await this.deliver(item, (next) => this.write(seq, next));
+          await this.deliver(item as T, (next) => this.write(seq, next));
           unlinkSync(this.file(seq));
         } catch (e) {
-          if (permanent(e) && this.bury(seq, e)) continue;
+          if (permanent(e) && this.bury(seq, e)) {
+            if (item !== undefined) try { this.lost?.(item); } catch (x) { console.error(`fm-imessage: ${this.name} ${seq} lost notice failed: ${brief(x)}`); }
+            continue;
+          }
           // Capped exponential backoff with jitter, so retries spread out.
           const wait = Math.min(60 * this.retryMs, this.retryMs * 2 ** attempt++) * (0.5 + Math.random() / 2);
           console.error(`fm-imessage: ${this.name} ${seq} failed (try ${attempt}), next try in ${(wait / 1000).toFixed(1)} s: ${brief(e)}`);
