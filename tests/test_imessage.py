@@ -660,6 +660,28 @@ done({{ first, again, gone: [gone.message, permanent(gone)], down: [down.message
     assert result["down"] == ["no relay is reachable", "HTTP 503", False]  # the queue tries again later
 
 
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_a_404_is_final_only_when_every_relay_answered_it():
+    """A relay that is down, or whose body was cut off, may still have the file, so the queue must retry."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ permanent }} from {OUTBOX};
+{FAKE_BB}
+const a = relay(), b = relay(), c = relay(), d = relay();
+const both = await line([a, b]).download("none").catch((e) => e);
+b.down();
+const oneDown = await line([a, b]).download("none").catch((e) => e);
+c.files.set("big", "PNGDATA"); c.slow = 500;
+const cutThen404 = await line([c, d], {{ downloadMs: 200 }}).download("big").catch((e) => e);
+done({{ both: permanent(both), oneDown: [permanent(oneDown), oneDown.status], cutThen404: [permanent(cutThen404), cutThen404.status], secret: JSON.stringify([oneDown.message, cutThen404.message]).includes("pw-test") }});
+""")
+    assert result["both"] is True
+    assert result["oneDown"] == [False, 503]
+    assert result["cutThen404"] == [False, 503]
+    assert not result["secret"]
+
+
 @pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
 def test_bluebubbles_download_has_its_own_timeout_and_a_cut_body_is_a_relay_error():
     """A body slower than callMs still arrives; one slower than downloadMs fails as a timeout the queue retries."""

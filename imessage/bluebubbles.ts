@@ -11,6 +11,7 @@
 // API: https://documenter.getpostman.com/view/765844/UV5RnfwM (BlueBubbles server 1.9).
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import type { Message } from "spectrum-ts";
+import { permanent } from "./outbox.ts";
 
 export type Relay = { url: string; password: string };
 
@@ -218,15 +219,22 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
     );
   }
 
-  // Run `fn` on each healthy relay in order until one succeeds.
+  // Run `fn` on each healthy relay in order until one succeeds. A permanent failure (HTTP 404) is final only when every
+  // configured relay was asked and gave one; otherwise a relay that was down or cut off may still have the item, so the
+  // error is a transient one and the caller tries again.
   private async first<T>(fn: (r: Relay) => Promise<T>): Promise<T> {
-    let last: unknown = new RelayError("no relay is reachable", false, 503);
-    for (const r of await this.healthy()) {
+    const asked = await this.healthy();
+    const errors: unknown[] = [];
+    for (const r of asked) {
       try {
         return await fn(r);
       } catch (e) {
-        last = e;
+        errors.push(e);
       }
+    }
+    const last = errors.at(-1) ?? new RelayError("no relay is reachable", false, 503);
+    if (permanent(last) && !(asked.length === this.relays.length && errors.every(permanent))) {
+      throw new RelayError("a relay that was not asked or was cut off may still have it", false, 503);
     }
     throw last;
   }
