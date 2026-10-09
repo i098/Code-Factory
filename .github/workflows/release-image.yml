@@ -3,8 +3,10 @@
 # A published vX.Y.Z release builds the Dockerfile's worker target and pushes
 # ghcr.io/i098/crewship:X.Y.Z and :latest. The image's
 # org.opencontainers.image.source label links the package to this repository.
-# A pull request that changes this file runs the same build without the push.
-# The action pin matches ci.yml; .github/dependabot.yml moves it.
+# The build job runs installers with a read-only token and hands the image to
+# the push job as an artifact; only the push job holds packages: write.
+# A pull request that changes this file runs the build job alone.
+# The action pins match ci.yml where shared; .github/dependabot.yml moves them.
 name: release-image
 
 on:
@@ -13,17 +15,15 @@ on:
   pull_request:
     paths: [.github/workflows/release-image.yml]
 
-# The push is the only write; checkout of this public repository needs none.
-permissions:
-  packages: write
+permissions: {}
 
 jobs:
-  worker-image:
-    name: publish worker image
+  build:
+    name: build worker image
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    env:
-      IMAGE: ghcr.io/i098/crewship
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,14 +41,39 @@ jobs:
             echo "::error title=release tag::$TAG is not vX.Y.Z"
             exit 1
           fi
+          image=ghcr.io/i098/crewship
           docker build --secret id=github_token,env=GITHUB_TOKEN --target worker \
-            --tag "$IMAGE:${BASH_REMATCH[1]}" --tag "$IMAGE:latest" .
+            --tag "$image:${BASH_REMATCH[1]}" --tag "$image:latest" .
+          docker save "$image:${BASH_REMATCH[1]}" "$image:latest" | gzip > worker-image.tar.gz
+
+      - name: Upload worker image
+        if: github.event_name == 'release'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: worker-image
+          path: worker-image.tar.gz
+          compression-level: 0
+          retention-days: 1
+
+  push:
+    name: push worker image
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      packages: write
+    steps:
+      - name: Download worker image
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: worker-image
 
       - name: Push to the GitHub Container Registry
-        if: github.event_name == 'release'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          docker load < worker-image.tar.gz
           docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<<"$GITHUB_TOKEN"
-          docker push --all-tags "$IMAGE"
+          docker push --all-tags ghcr.io/i098/crewship
