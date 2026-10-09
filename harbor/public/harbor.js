@@ -739,6 +739,7 @@ function mapMarks() {
   for (const s of world) footprint(s, s.mat === "l" ? "l" : s.mat);
   for (const s of ship) footprint(s, s.mat === "l" ? "l" : "o");
   ORDER.forEach(mapPoint);
+  if (mapMode === 2) mapLabels();
   const p = toMap(me.x, me.z);
   if (mapInside(p)) mapPut(p[0] + 1, p[1] + 1, "^>v<"[Math.round(((me.yaw % 6.283) + 6.283) / 1.5708) % 4], "k");
 }
@@ -754,10 +755,18 @@ function footprint(s, cls) {
 }
 function mapPoint(id, n) {
   const p = toMap(anchors[id].x, anchors[id].z), picked = mapMode && n === pick;
-  if (!mapInside(p)) return;
-  mapPut(p[0] + 1, p[1] + 1, picked ? "@" : "*", picked ? "h" : "l");
-  if (mapMode !== 2) return;
-  [...spots[id].title.slice(0, 16)].forEach((ch, k) => { if (p[0] + 3 + k < mapBox.iw) mapPut(p[0] + 3 + k, p[1] + 1, ch, picked ? "h" : "k"); });
+  if (mapInside(p)) mapPut(p[0] + 1, p[1] + 1, picked ? "@" : "*", picked ? "h" : "l");
+}
+// Names on the big map, right of their point, else left of it, else left out where the ship crowds them.
+function mapLabels() {
+  const taken = new Set(ORDER.map((id) => toMap(anchors[id].x, anchors[id].z).join()));
+  ORDER.forEach((id, n) => {
+    const p = toMap(anchors[id].x, anchors[id].z), text = spots[id].title.slice(0, 16);
+    const free = (i0) => i0 >= 0 && i0 + text.length < mapBox.iw && [...text].every((_, k) => !taken.has(`${i0 + k},${p[1]}`));
+    const i0 = [p[0] + 2, p[0] - 1 - text.length].find(free);
+    if (!mapInside(p) || i0 === undefined) return;
+    [...text].forEach((ch, k) => { taken.add(`${i0 + k},${p[1]}`); mapPut(i0 + k + 1, p[1] + 1, ch, mapMode && n === pick ? "h" : "k"); });
+  });
 }
 const toMap = (x, z) => [Math.floor(((x - WORLD.x0) / (WORLD.x1 - WORLD.x0)) * mapBox.iw), Math.floor(((WORLD.z1 - z) / (WORLD.z1 - WORLD.z0)) * mapBox.ih)];
 const fromMap = (i, j) => [WORLD.x0 + (i / mapBox.iw) * (WORLD.x1 - WORLD.x0), WORLD.z1 - (j / mapBox.ih) * (WORLD.z1 - WORLD.z0)];
