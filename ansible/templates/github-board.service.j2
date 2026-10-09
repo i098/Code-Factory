@@ -1,0 +1,15 @@
+{{ ansible_managed | comment }}
+# Triggered by github-board.timer; not enabled on its own. Reads the Firstmate
+# backlog and status files read-only and uses the account's gh login.
+
+[Unit]
+Description=Mirror Firstmate work items to a GitHub board (Crewship managed)
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/bin/python3 %h/.local/bin/github-board.py "{{ factory_firstmate_dir }}" {{ factory_cfg.github_board.repo }} {{ factory_cfg.github_board.project }}
+TimeoutStartSec=10min
+Nice=10
+UMask=0077

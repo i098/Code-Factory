@@ -53,8 +53,9 @@ def validate_config(document):
         fixture = config.get("fleet", {}).get("fixture_archive", "")
         if fixture and ".." in Path(fixture).parts:
             raise ValueError("fleet.fixture_archive must not traverse; give a plain path")
-    if "imessage" in config and not config["profiles"]["firstmate"]:
-        raise ValueError("the iMessage bridge requires the firstmate profile")
+    for block in ("imessage", "github_board"):
+        if block in config and not config["profiles"]["firstmate"]:
+            raise ValueError(f"{block} requires the firstmate profile")
     if "ci_pool" in config:
         pool = config["ci_pool"]
         if not config["profiles"]["docker"]:
@@ -293,6 +294,11 @@ def questions(document):
         "secondmate homes, services, tools and unpushed work to bring over from the old "
         f"host. Use {source} as the checklist."
     )
+    if "github_board" not in config:
+        prompt += (
+            " Then ask one short question: turn on the optional GitHub board, which mirrors "
+            f"Firstmate work to issues and a Project? If yes, follow {ROOT / 'docs/github-board.md'}."
+        )
     returncode = subprocess.run([omp, prompt], cwd=firstmate, env=environment).returncode
     if returncode:
         print(
