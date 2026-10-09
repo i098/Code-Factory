@@ -168,6 +168,7 @@ ENV CODE_FACTORY_IMAGE=worker \
 LABEL org.opencontainers.image.title="code-factory-worker" \
       org.opencontainers.image.description="Isolated non-root Crewship worker; no systemd, Tailscale or desktop." \
       org.opencontainers.image.source="https://github.com/i098/Crewship" \
+      org.opencontainers.image.licenses="FSL-1.1-ALv2" \
       org.opencontainers.image.base.name="docker.io/library/ubuntu:latest"
 
 WORKDIR ${FACTORY_WORKSPACE}
