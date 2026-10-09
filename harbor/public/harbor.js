@@ -18,7 +18,7 @@ const touchFirst = matchMedia("(pointer: coarse)");
 const spots = {};
 for (const li of document.querySelectorAll("#manifest li[data-spot]")) {
   const a = li.querySelector("a");
-  spots[li.dataset.spot] = { title: a.textContent, href: a.href, body: li.querySelector("p").innerHTML };
+  spots[li.dataset.spot] = { title: a.textContent, href: a.href, body: li.querySelector("p") };
 }
 
 // ---- World -------------------------------------------------------------------------------
@@ -1089,6 +1089,14 @@ function nearby() {
   return best;
 }
 
+// Cards are built from DOM nodes and text, never parsed from strings.
+function node(tag, content, cls) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  n.append(...(Array.isArray(content) ? content : [content]));
+  return n;
+}
+
 let shown;
 function show(id) {
   const key = id || (moved ? "" : "welcome");
@@ -1100,14 +1108,21 @@ function show(id) {
     // The intro folds away on the first step, tap or click; its text and links come from the page header.
     const hint = touchFirst.matches ? "The pad walks, a drag looks around, the map in the corner jumps to any point."
       : "WASD or arrows walk, R and F look up and down, the mouse looks around, Enter opens what you point at, M opens the map.";
-    card.innerHTML = moved ? "" : `<h3>${document.querySelector(".top h1").textContent}</h3>` +
-      `<p>${document.querySelector(".tagline").textContent}</p><p class="hint">${hint}</p>` +
-      `<p class="links">${document.querySelector(".top nav").innerHTML}</p>`;
+    if (moved) { card.replaceChildren(); return; }
+    card.replaceChildren(
+      node("h3", document.querySelector(".top h1").textContent),
+      node("p", document.querySelector(".tagline").textContent),
+      node("p", hint, "hint"),
+      node("p", [...document.querySelector(".top nav").cloneNode(true).childNodes], "links"));
     return;
   }
   const s = spots[id];
-  card.innerHTML = `<h3>${s.title}</h3><p>${s.body}</p><p class="hint"><a target="_blank" rel="noopener" href="${s.href}">Open: ${s.title} \u2192</a>` +
-    `${touchFirst.matches ? " &middot; tap to open" : " &middot; Enter opens it"}</p>`;
+  const link = node("a", `Open: ${s.title} \u2192`);
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.href = s.href;
+  card.replaceChildren(node("h3", s.title), s.body.cloneNode(true),
+    node("p", [link, touchFirst.matches ? " \u00b7 tap to open" : " \u00b7 Enter opens it"], "hint"));
 }
 
 // ---- Input -------------------------------------------------------------------------------
