@@ -143,62 +143,94 @@ fn two_clients_history_caps_and_restart() {
     std::fs::remove_dir_all(dir).unwrap();
 }
 
-/// A subscriber that never reads is dropped and its connection closed, not kept with its queue.
-#[test]
-fn stalled_subscriber_is_closed() {
-    use std::io::Read;
+/// A daemon with room for a full subscriber queue of big lines, plus a subscriber on every topic.
+fn big_line_board(tag: &str) -> (PathBuf, Proc, std::os::unix::net::UnixStream) {
     use std::os::unix::net::UnixStream;
 
-    let dir: PathBuf = std::env::temp_dir().join(format!("crewboard-stall-{}", std::process::id()));
+    let dir: PathBuf = std::env::temp_dir().join(format!("crewboard-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::DirBuilder::new().mode(0o700).create(&dir).unwrap();
     let sock = dir.join("crewboard.sock");
-    let (sock, dir) = (sock.as_path(), dir.as_path());
     let args = ["serve", "--socket", sock.to_str().unwrap(), "--cap-bytes", "8000000"];
-    let _daemon = Proc(cmd(sock, dir, &args).stderr(Stdio::null()).spawn().unwrap());
+    let daemon = Proc(cmd(&sock, &dir, &args).stderr(Stdio::null()).spawn().unwrap());
     let start = Instant::now();
-    while !run(sock, dir, &["stat"]).status.success() {
+    while !run(&sock, &dir, &["stat"]).status.success() {
         assert!(start.elapsed() < Duration::from_secs(10), "daemon did not start");
         std::thread::sleep(Duration::from_millis(20));
     }
-
-    let mut stalled = UnixStream::connect(sock).unwrap();
-    stalled.write_all(b"{\"op\":\"sub\",\"topics\":[\"*\"]}\n").unwrap();
-    while stat(sock, dir)["subs"] != 1 {
+    let mut sub = UnixStream::connect(&sock).unwrap();
+    sub.write_all(b"{\"op\":\"sub\",\"topics\":[\"*\"]}\n").unwrap();
+    while stat(&sock, &dir)["subs"] != 1 {
         std::thread::sleep(Duration::from_millis(20));
     }
+    (dir, daemon, sub)
+}
 
-    // Big lines fill the socket buffer and stall the writer; publish until the board drops the subscriber.
+/// Publishes 60 KB lines until the board has dropped every subscriber.
+fn publish_until_dropped(sock: &Path, dir: &Path) -> usize {
+    use std::os::unix::net::UnixStream;
+
     let mut publisher = UnixStream::connect(sock).unwrap();
     let mut replies = BufReader::new(publisher.try_clone().unwrap());
     let body = "x".repeat(60_000);
     let deadline = Instant::now() + Duration::from_secs(120);
-    for i in 0.. {
-        assert!(Instant::now() < deadline, "stalled subscriber was never dropped");
+    for i in 1.. {
+        assert!(Instant::now() < deadline, "subscriber was never dropped");
         writeln!(publisher, "{{\"op\":\"pub\",\"topic\":\"t\",\"body\":\"{body}\"}}").unwrap();
         let mut reply = String::new();
         replies.read_line(&mut reply).unwrap();
         assert!(reply.contains("\"ok\":true"), "{reply}");
         if i % 25 == 0 && stat(sock, dir)["subs"] == 0 {
-            break;
+            assert!(stat(sock, dir)["dropped"].as_u64().unwrap() >= 1);
+            return i * body.len();
         }
     }
-    assert!(stat(sock, dir)["dropped"].as_u64().unwrap() >= 1);
+    unreachable!()
+}
+
+/// Reads to EOF and returns the bytes received; a connection left open fails the test.
+fn read_to_close(s: &mut std::os::unix::net::UnixStream, pause: Duration) -> Vec<u8> {
+    use std::io::Read;
+
+    s.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+    let mut all = Vec::new();
+    let mut buf = vec![0u8; 1 << 13];
+    loop {
+        match s.read(&mut buf) {
+            Ok(0) => return all,
+            Ok(n) => all.extend_from_slice(&buf[..n]),
+            Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => return all,
+            Err(e) => panic!("connection still open: {e}"),
+        }
+        std::thread::sleep(pause);
+    }
+}
+
+/// A subscriber that never reads is dropped and its connection closed, not kept with its queue.
+#[test]
+fn stalled_subscriber_is_closed() {
+    let (dir, _daemon, mut stalled) = big_line_board("stall");
+    let sock = dir.join("crewboard.sock");
+    publish_until_dropped(&sock, &dir);
 
     // Do not read until the write timeout has closed the connection, so nothing drains the backlog.
     std::thread::sleep(Duration::from_secs(7));
-    stalled.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
-    let mut buf = vec![0u8; 1 << 16];
-    let mut total = 0;
-    loop {
-        match stalled.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => total += n,
-            Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => break,
-            Err(e) => panic!("connection still open: {e}"),
-        }
-    }
+    let total = read_to_close(&mut stalled, Duration::ZERO).len();
     // Only what the kernel buffered before the stall arrives, not the ~60 MB queue.
     assert!(total < 8 << 20, "{total} bytes delivered");
-    std::fs::remove_dir_all(dir).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A subscriber that reads, but slower than the board publishes, is cut off when its queue fills.
+#[test]
+fn slow_reader_is_cut_off_without_its_backlog() {
+    let (dir, _daemon, mut slow) = big_line_board("slow");
+    let sock = dir.join("crewboard.sock");
+    // 8 KB every 5 ms never stalls a write for the 5 s timeout, yet needs ~40 s for the 60 MB queue.
+    let reader = std::thread::spawn(move || read_to_close(&mut slow, Duration::from_millis(5)));
+    let published = publish_until_dropped(&sock, &dir);
+    let got = reader.join().unwrap();
+    // The reader gets what it read while the queue filled, never the ~60 MB left queued at the drop.
+    assert!(got.len() + 30_000_000 < published, "{} of {published} bytes delivered", got.len());
+    std::fs::remove_dir_all(&dir).unwrap();
 }

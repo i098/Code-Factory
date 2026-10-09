@@ -11,7 +11,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{UnixListener, UnixStream};
 
-use crate::board::{Board, Limits, Subscription};
+use crate::board::{Board, Feed, Limits, Subscription};
 
 type Shared = Arc<Mutex<Board>>;
 
@@ -128,7 +128,7 @@ async fn put(w: &mut OwnedWriteHalf, line: &str) -> io::Result<()> {
 
 /// Streams replay then live messages until the client closes its end or falls behind.
 async fn stream_sub(mut r: BufReader<OwnedReadHalf>, mut w: OwnedWriteHalf, board: Shared, sub: Subscription) -> io::Result<()> {
-    let (id, replay, mut rx) = sub;
+    let (id, replay, Feed { mut rx, slow }) = sub;
     let reader = tokio::spawn(async move {
         let mut sink = [0u8; 256];
         while matches!(r.read(&mut sink).await, Ok(n) if n > 0) {}
@@ -136,21 +136,31 @@ async fn stream_sub(mut r: BufReader<OwnedReadHalf>, mut w: OwnedWriteHalf, boar
     let stop_reader = reader.abort_handle();
     let shared = board.clone();
     let writer = tokio::spawn(async move {
-        let result = async {
-            for line in replay {
-                put(&mut w, &line).await?;
+        let mut replay = replay.into_iter();
+        // (write timed out, notice may follow the last whole line)
+        let (timed_out, notice) = loop {
+            let next = tokio::select! {
+                biased;
+                _ = slow.notified() => break (false, true),
+                next = async { match replay.next() { Some(line) => Some(line), None => rx.recv().await } } => next,
+            };
+            let Some(line) = next else { break (false, true) };
+            tokio::select! {
+                wrote = put(&mut w, &line) => {
+                    if let Err(e) = wrote {
+                        break (e.kind() == io::ErrorKind::TimedOut, false);
+                    }
+                }
+                _ = slow.notified() => break (false, false),
             }
-            while let Some(line) = rx.recv().await {
-                put(&mut w, &line).await?;
-            }
-            // The board drops the sender only when this subscriber's queue is full.
-            // Every queued line is written by now, so the notice cannot split a line.
+        };
+        // The queue is full: free it now instead of delivering it.
+        drop(rx);
+        if notice {
             let _ = w.as_ref().try_write(b"{\"error\":\"slow\"}\n");
-            Ok::<(), io::Error>(())
         }
-        .await;
-        lock(&shared).unsubscribe(id, matches!(&result, Err(e) if e.kind() == io::ErrorKind::TimedOut));
-        // Dropping both halves closes the socket.
+        let _ = w.shutdown().await;
+        lock(&shared).unsubscribe(id, timed_out);
         drop(w);
         stop_reader.abort();
     });

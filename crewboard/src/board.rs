@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
+use tokio::sync::Notify;
 use tokio::sync::mpsc::{self, error::TrySendError};
 
 pub const MAX_TOPICS: usize = 1024;
@@ -43,10 +44,17 @@ struct Sub {
     id: u64,
     patterns: Vec<String>,
     tx: mpsc::Sender<Arc<str>>,
+    slow: Arc<Notify>,
+}
+
+/// A subscriber's live message queue, and the signal that the board dropped it as slow.
+pub struct Feed {
+    pub rx: mpsc::Receiver<Arc<str>>,
+    pub slow: Arc<Notify>,
 }
 
 /// Subscriber id, replay lines, and the live message queue.
-pub type Subscription = (u64, Vec<Arc<str>>, mpsc::Receiver<Arc<str>>);
+pub type Subscription = (u64, Vec<Arc<str>>, Feed);
 
 pub struct Board {
     pub limits: Limits,
@@ -132,6 +140,7 @@ impl Board {
                 Ok(()) => true,
                 Err(TrySendError::Full(_)) => {
                     *dropped += 1;
+                    s.slow.notify_one();
                     false
                 }
                 Err(TrySendError::Closed(_)) => false,
@@ -167,8 +176,9 @@ impl Board {
         }
         let (tx, rx) = mpsc::channel(SUB_QUEUE);
         self.next_sub += 1;
-        self.subs.push(Sub { id: self.next_sub, patterns, tx });
-        Ok((self.next_sub, replay, rx))
+        let slow = Arc::new(Notify::new());
+        self.subs.push(Sub { id: self.next_sub, patterns, tx, slow: slow.clone() });
+        Ok((self.next_sub, replay, Feed { rx, slow }))
     }
 
     /// Removes a subscriber; `slow` counts it as dropped for being too slow.
@@ -360,7 +370,7 @@ mod tests {
         let (_, _, mut fast) = b.subscribe(vec!["t".into()], None).unwrap();
         for _ in 0..SUB_QUEUE {
             b.publish("t", None, 1, "x").unwrap();
-            fast.try_recv().unwrap();
+            fast.rx.try_recv().unwrap();
         }
         assert_eq!(b.stat()["subs"], json!(2));
         b.publish("t", None, 1, "x").unwrap();
