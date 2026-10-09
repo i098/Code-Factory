@@ -584,7 +584,8 @@ process.exit(0);
 
 # A fake spectrum-ts for bridge.ts. Its state is in FAKE_DIR, so it outlives a bridge restart: `down` holds how
 # many more upstream calls fail with UNAVAILABLE, typing always fails while `typing-down` exists, `inbound/` holds
-# the owner's messages for the bridge to receive, `calls` logs every call, and `sent` logs each delivered message.
+# the owner's messages for the bridge to receive, `edits/` holds the line's raw message.edited events, `calls` logs
+# every call, and `sent` logs each delivered message.
 FAKE_UPSTREAM = """
 import { appendFileSync, existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 const dir = process.env.FAKE_DIR;
@@ -632,7 +633,19 @@ async function* messages() {
     await Bun.sleep(20);
   }
 }
-export const Spectrum = async () => ({ messages: messages() });
+// The line's own client, which spectrum-ts keeps in its internals; its message events include edits.
+async function* lineEvents() {
+  for (;;) {
+    for (const f of readdirSync(`${dir}/edits`).sort()) {
+      const event = JSON.parse(readFileSync(`${dir}/edits/${f}`, "utf8"));
+      renameSync(`${dir}/edits/${f}`, `${dir}/seen-${f}`);
+      yield event;
+    }
+    await Bun.sleep(20);
+  }
+}
+const line = { messages: { subscribeEvents: lineEvents } };
+export const Spectrum = async () => ({ messages: messages(), __internal: { platforms: new Map([["imessage", { client: [{ client: line }] }]]) } });
 export const imessage = Object.assign(() => ({ space: { get: async (id) => space(id) } }), { config: () => ({}) });
 """
 
@@ -644,9 +657,9 @@ def wait_for(check, what, timeout=30):
         time.sleep(0.05)
 
 
-@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
-def test_bridge_rides_out_an_upstream_outage(tmp_path):
-    """Sends, a tapback and an attachment outlive an UNAVAILABLE outage and a restart, then arrive in order."""
+def fake_bridge(tmp_path):
+    """bridge.ts against the fake spectrum-ts: the fake's directory, the state directory, the notes file, and
+    start(n), inbound(mid, ...), cli(*args) and text(path) helpers."""
     app, fake, state, bin_dir = (tmp_path / d for d in ("app", "fake", "state", "bin"))
     shutil.copytree(ROOT / "imessage", app, ignore=shutil.ignore_patterns("fm-*"))
     pkg = app / "node_modules/spectrum-ts"
@@ -654,7 +667,7 @@ def test_bridge_rides_out_an_upstream_outage(tmp_path):
     exports = {".": "./index.js", "./providers/imessage": "./index.js"}
     (pkg / "package.json").write_text(json.dumps({"name": "spectrum-ts", "type": "module", "exports": exports}))
     (pkg / "index.js").write_text(FAKE_UPSTREAM)
-    for d in (fake / "inbound", fake / "messages", bin_dir):
+    for d in (fake / "inbound", fake / "messages", fake / "edits", bin_dir):
         d.mkdir(parents=True)
     (fake / "down").write_text("0")
     (fake / "typing-down").touch()
@@ -701,6 +714,13 @@ def test_bridge_rides_out_an_upstream_outage(tmp_path):
         assert result.returncode == 0, result.stderr
         return result.stdout
 
+    return fake, state, notes, err, start, inbound, cli, text
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_bridge_rides_out_an_upstream_outage(tmp_path):
+    """Sends, a tapback and an attachment outlive an UNAVAILABLE outage and a restart, then arrive in order."""
+    fake, state, notes, err, start, inbound, cli, text = fake_bridge(tmp_path)
     bridge = start(1)
     try:
         inbound("m1", text="you there")
@@ -744,3 +764,33 @@ def test_bridge_rides_out_an_upstream_outage(tmp_path):
     assert [json.loads(p.read_text()) for p in (state / "downloads-dead").glob("*.json")] == [{"space": "chat-1", "id": "m5"}]
     logs = text(err)
     assert "UNAVAILABLE" in logs and not re.search(r"^\s+at ", logs, re.M), logs
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_bridge_files_his_edits_as_new_notes(tmp_path):
+    """An edit of his text wakes Firstmate with a new note that carries the old text; other edits file nothing."""
+    fake, state, notes, err, start, inbound, cli, text = fake_bridge(tmp_path)
+
+    def edit(seq, mid, new, **fields):
+        event = {"type": "message.edited", "sequence": seq, "messageGuid": mid, "content": {"text": new},
+                 "chatGuid": "any;-;+10000000000", "isFromMe": False, **fields}
+        (fake / "edits" / f"{seq:03}.json").write_text(json.dumps(event))
+
+    bridge = start(1)
+    try:
+        inbound("m1", text="adding a memory")
+        edit(1, "m1", "adding a member")
+        edit(2, "m1", "member")  # a second edit is compared with the first
+        edit(3, "m1", "hijack", chatGuid="any;-;+19999999999")  # someone else's conversation
+        edit(4, "m1", "mine", isFromMe=True)  # the line's own edit
+        edit(5, "m9", "late")  # a text the bridge never saw
+        wait_for(lambda: "photon-m9-edit-5 " in text(notes), "the note for the last edit")
+    finally:
+        bridge.terminate()
+        bridge.wait(10)
+    head = "[iMessage from the owner; answer with fm-imessage]"
+    assert [line for line in text(notes).splitlines() if "[edited]" in line] == [
+        f"note --request-id photon-m1-edit-1 -- {head} [edited] adding a member (was: adding a memory)",
+        f"note --request-id photon-m1-edit-2 -- {head} [edited] member (was: adding a member)",
+        f"note --request-id photon-m9-edit-5 -- {head} [edited] late (was: not known: the bridge did not see the text before the edit)",
+    ]

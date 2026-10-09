@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-09
+
 ### Added
 
 - README screenshot of a finished host, captured from demo repositories ([#35](https://github.com/i098/Crewship/issues/35)).
@@ -33,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/stow-secrets.sh` no longer fails with `maximum_secrets_exceeded` once `super.env` has more than 100 variables: it stores the whole file in a few chunks instead of one secret per variable, and it deletes the per-variable secrets the chunks replace. On a full store it deletes just enough of them before creating the chunks, so fetches can fail for a few seconds during that one push ([#58](https://github.com/i098/Crewship/issues/58)).
 - The worker image and the compose backing services pull from `mirror.gcr.io`, Google's Docker Hub mirror, so the CI image build no longer fails on Docker Hub's anonymous pull limit (`429 Too Many Requests`); the images are the same official ones ([#63](https://github.com/i098/Crewship/issues/63)).
 - The iMessage bridge no longer loses messages when the Photon service is down: every send and tapback, including the desk's and the "firstmate did not get that" reply, goes to a durable outbox that retries transient errors with backoff and keeps the order, failed attachment downloads are retried and their note is filed again with the saved path, an item that can never pass moves to a dead-letter folder instead of blocking the queue, typing errors never fail a send, and an `UNAVAILABLE` reply is logged as one line ([#61](https://github.com/i098/Crewship/issues/61)).
+- The iMessage bridge no longer drops the owner's edited texts: each edit becomes a new inbox note, `[edited] <new text> (was: <old text>)`, that wakes Firstmate; when the bridge does not know the old text, the note says so ([#80](https://github.com/i098/Crewship/issues/80)).
 
 ## [0.1.0] - 2026-10-09
 
@@ -59,5 +62,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - iMessage front desk waits a 4-second quiet period, sends multi-bubble replies, and keeps the full intake ([#25](https://github.com/i098/Crewship/pull/25), [#28](https://github.com/i098/Crewship/pull/28)).
 - Firstmate inbox wake patches apply on top of upstream main ([#30](https://github.com/i098/Crewship/pull/30)).
 
-[Unreleased]: https://github.com/i098/Crewship/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/i098/Crewship/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/i098/Crewship/releases/tag/v0.2.0
 [0.1.0]: https://github.com/i098/Crewship/releases/tag/v0.1.0
