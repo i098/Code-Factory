@@ -18,11 +18,6 @@ export function brief(e: unknown): string {
   return `${transient(e) ?? (e instanceof Error ? e.name : "error")}: ${message}`;
 }
 
-// The wait before the next try: exponential from `base` ms, capped at `cap`, with jitter so retries spread out.
-export function backoff(attempt: number, base: number, cap: number): number {
-  return Math.min(cap, base * 2 ** attempt) * (0.5 + Math.random() / 2);
-}
-
 // A durable FIFO queue in `dir`: one JSON file per item, named by a rising sequence number and written atomically
 // (fsync, then rename), so an item survives a crash or a restart once add() returns. One loop delivers the oldest
 // item; when it fails, the loop logs one line, waits one backoff step (at most 60 × `retryMs`) and tries the same
@@ -36,15 +31,11 @@ export class Queue<T> {
     private dir: string,
     private name: string,
     private deliver: (item: T, save: (item: T) => void) => Promise<void>,
-    private retryMs = 1000,
+    private retryMs: number,
   ) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     this.next = (this.seqs().at(-1) ?? 0) + 1;
     void this.drain();
-  }
-
-  get size(): number {
-    return this.seqs().length;
   }
 
   add(item: T) {
@@ -90,7 +81,8 @@ export class Queue<T> {
           await this.deliver(JSON.parse(readFileSync(this.file(seq), "utf8")), (item) => this.write(seq, item));
           unlinkSync(this.file(seq));
         } catch (e) {
-          const wait = backoff(attempt++, this.retryMs, 60 * this.retryMs);
+          // Capped exponential backoff with jitter, so retries spread out.
+          const wait = Math.min(60 * this.retryMs, this.retryMs * 2 ** attempt++) * (0.5 + Math.random() / 2);
           console.error(`fm-imessage: ${this.name} ${seq} failed (try ${attempt}), next try in ${(wait / 1000).toFixed(1)} s: ${brief(e)}`);
           await Bun.sleep(wait);
         }

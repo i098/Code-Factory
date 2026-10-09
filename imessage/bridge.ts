@@ -132,9 +132,8 @@ console.log(`fm-imessage: listening on 127.0.0.1:${PORT}, latest text ${latest ?
 
 // Puts one item in the outbox and answers once the item is on disk.
 function queue(item: Out, what: string) {
-  const ahead = outbox.size;
   outbox.add(item);
-  return new Response(`queued ${what}${ahead ? `, behind ${ahead} earlier item(s)` : ""}; the bridge sends in order and retries while the upstream fails\n`);
+  return new Response(`queued ${what}; the bridge sends in order and retries while the upstream fails\n`);
 }
 
 async function find(ref: Ref): Promise<Message> {
