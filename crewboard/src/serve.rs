@@ -2,7 +2,8 @@
 //!
 //! Wire protocol: one JSON request per line; each answers with one JSON line
 //! (`hist` with lines ended by `{"end":true}`), except `sub`.
-//! - `{"op":"pub","topic":T,"body":B,"from":F}` -> `{"ok":true,"seq":N}`
+//! - `{"op":"pub","topic":T,"body":B,"from":F}` -> `{"ok":true,"seq":N}`; a body over
+//!   `--max-msg` bytes or a `from` over 64 bytes is `{"ok":false,"error":"too_large"}`
 //! - `{"op":"hist","topic":T,"n":N}`, `{"op":"topics"}`, `{"op":"stat"}`
 //! - `{"op":"sub","topics":[T..],"since":N,"boot":ID}` streams until either side closes.
 //!   The first line is `{"boot":ID,"seq":N}`: the board's boot id and seq. With `since`,
