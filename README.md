@@ -166,7 +166,10 @@ If Crewship saves you time, sponsor its development on GitHub.
 
 <a href="https://github.com/sponsors/i098"><img src="https://img.shields.io/badge/Sponsor-db61a2?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor i098 on GitHub"></a>
 
+<!-- The sponsors workflow writes the sponsor list between these markers; the line below is FALLBACK in scripts/sponsors.py. -->
+<!-- sponsors -->
 No sponsors yet. Be the first, and your name goes here.
+<!-- /sponsors -->
 
 ## Star history
 
