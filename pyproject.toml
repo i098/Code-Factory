@@ -1,5 +1,5 @@
 [project]
-name = "code-factory"
+name = "crewship"
 version = "1.0.0"
 description = "Repeatable Herdr development host provisioning"
 requires-python = ">=3.12"

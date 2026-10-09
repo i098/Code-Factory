@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | `./onboard.sh` | `./bootstrap.sh` | Installs the repository tooling: the latest uv, then the locked Python environment with Ansible. Changes nothing else on the host. |
 | `./ship.sh dock` | `./factory init` | Copies `config/default.yml` to `.local/host.yml` with your user, home, and `~/Dev` workspace filled in. Never overwrites an existing file. Options: `--user`, `--home`, `--container`, and `--board`, which turns on the [crew board](board.md). |
-| `./ship.sh inspect` | `./factory validate` | Checks the config against `schemas/factory.schema.json` and the cross-field rules below. |
+| `./ship.sh inspect` | `./factory validate` | Checks the config against `schemas/crewship.schema.json` and the cross-field rules below. |
 | `./ship.sh chart` | `./factory plan` | Runs the Ansible playbook in check mode. Reports what would change; mutates nothing. |
 | `./ship.sh launch` | `./factory apply` | Runs the playbook for real. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, the first successful interactive apply with omp signed in then opens the new-host questions (below). |
 | `./ship.sh survey` | `./factory doctor` | Checks that each expected tool runs and reports `gh` authentication. Changes nothing. |

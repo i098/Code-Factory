@@ -1,5 +1,5 @@
 ---
-# Optional `ssh mac` from the factory account to an operator Mac
+# Optional `ssh mac` from the Crewship account to an operator Mac
 # (docs/security.md#ssh-to-a-mac). Runs only when factory.mac_ssh is set,
 # which belongs in .local/host.yml only.
 #

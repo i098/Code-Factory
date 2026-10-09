@@ -6,7 +6,7 @@
 #   * no SSH server, no Tailscale daemon, no XFCE/TigerVNC/noVNC desktop
 #   * no host Docker socket, no host PID/network namespace, no credential binds
 # Those live only on a real host provisioned by ansible/** with
-# factory.start_services=true. Inside this image the factory configuration sets
+# factory.start_services=true. Inside this image the Crewship configuration sets
 # start_services=false and disables the docker/tailscale/desktop profiles, so the
 # playbook performs file/tool convergence only.
 #
@@ -16,7 +16,7 @@
 # that are pulled.
 #
 # Build targets:
-#   base    OS packages and the factory account only (no repository content)
+#   base    OS packages and the Crewship account only (no repository content)
 #   worker  provisioned worker image; devcontainer and compose default
 #   smoke   worker + tests/container-smoke.sh as CMD (behavior smoke)
 #
@@ -69,7 +69,7 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 # Ubuntu 24.04 ships an "ubuntu" account on uid/gid 1000. Release the id before
-# claiming it for the factory user so uid/gid stay configurable and stable.
+# claiming it for the Crewship user so uid/gid stay configurable and stable.
 RUN set -eux; \
     if getent passwd "${FACTORY_UID}" >/dev/null; then \
         existing_user="$(getent passwd "${FACTORY_UID}" | cut -d: -f1)"; \
@@ -98,7 +98,7 @@ RUN set -eux; \
         "${FACTORY_HOME}/.cache" \
         "${FACTORY_WORKSPACE}" \
         /opt/code-factory; \
-    # Ansible become for the unprivileged factory user. The container publishes no
+    # Ansible become for the unprivileged Crewship user. The container publishes no
     # ports by default, mounts no host socket and holds no host credentials, so the
     # blast radius of this sudoers entry is the container itself. A real host keeps
     # its own sudo policy; this file is never applied by ansible/**.
@@ -123,7 +123,7 @@ FROM base AS worker
 ARG FACTORY_USER=coder
 ARG FACTORY_HOME=/home/coder
 ARG FACTORY_WORKSPACE=/home/coder/Dev
-ARG FACTORY_CONFIG=containers/factory.container.yml
+ARG FACTORY_CONFIG=containers/crewship.container.yml
 
 COPY --chown=${FACTORY_USER}:${FACTORY_USER} . /opt/code-factory
 
@@ -167,7 +167,7 @@ RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
 ENV CODE_FACTORY_IMAGE=worker \
     CODE_FACTORY_CONFIG=/opt/code-factory/${FACTORY_CONFIG}
 
-LABEL org.opencontainers.image.title="code-factory-worker" \
+LABEL org.opencontainers.image.title="crewship-worker" \
       org.opencontainers.image.description="Isolated non-root Crewship worker; no systemd, Tailscale or desktop." \
       org.opencontainers.image.source="https://github.com/i098/Crewship" \
       org.opencontainers.image.licenses="FSL-1.1-ALv2" \
@@ -183,7 +183,7 @@ FROM worker AS smoke
 
 ENV CODE_FACTORY_IMAGE=smoke
 
-LABEL org.opencontainers.image.title="code-factory-smoke" \
+LABEL org.opencontainers.image.title="crewship-smoke" \
       org.opencontainers.image.description="Crewship worker image running tests/container-smoke.sh."
 
 WORKDIR /opt/code-factory

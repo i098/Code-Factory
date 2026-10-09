@@ -13,7 +13,7 @@
 
 [Docs](#docs) · [Install](#quick-start) · [Changelog](CHANGELOG.md) · [Discussions](https://github.com/i098/Crewship/discussions)
 
-<img src="docs/images/code-factory.png" alt="Herdr with a sidebar of workspaces and omp agents working on demo repositories in parallel">
+<img src="docs/images/crewship.png" alt="Herdr with a sidebar of workspaces and omp agents working on demo repositories in parallel">
 
 *A finished host: Herdr lists the workspaces and agents on the left, and omp agents work side by side.*
 

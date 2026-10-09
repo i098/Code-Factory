@@ -7,7 +7,7 @@
 # still correct - only the module-side interpreter is pinned here.
 all:
   children:
-    code_factory:
+    crewship:
       hosts:
         localhost:
           ansible_connection: local

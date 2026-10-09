@@ -95,7 +95,7 @@ jobs:
         run: ./ship.sh inspect --config config/default.yml
 
       - name: Validate container configuration
-        run: ./ship.sh inspect --config containers/factory.container.yml
+        run: ./ship.sh inspect --config containers/crewship.container.yml
 
   # crewboard/ is a Rust crate; its Cargo.lock stays locked like uv.lock.
   # Rust tracks its latest stable release through the runner's rustup.
@@ -267,7 +267,7 @@ jobs:
               problems.append("build.target must be the worker stage")
           for key in ("containerUser", "remoteUser"):
               if doc.get(key) in (None, "root"):
-                  problems.append(f"{key} must name the non-root factory account")
+                  problems.append(f"{key} must name the non-root Crewship account")
 
           run_args = doc.get("runArgs", [])
           forbidden = ("--privileged", "--pid=host", "--network=host", "--ipc=host", "--userns=host")
@@ -297,7 +297,7 @@ jobs:
       - name: Create throwaway compose secret
         run: |
           set -euo pipefail
-          secret_dir="$RUNNER_TEMP/code-factory-secrets"
+          secret_dir="$RUNNER_TEMP/crewship-secrets"
           install -d -m 700 "$secret_dir"
           echo "CODE_FACTORY_SECRET_DIR=$secret_dir" >> "$GITHUB_ENV"
           umask 077
@@ -372,7 +372,7 @@ jobs:
       - name: Build worker image
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: docker build --secret id=github_token,env=GITHUB_TOKEN --target worker --tag code-factory/worker:ci .
+        run: docker build --secret id=github_token,env=GITHUB_TOKEN --target worker --tag crewship/worker:ci .
 
       - name: Behavior smoke in the worker image
         env:
@@ -385,5 +385,5 @@ jobs:
       - name: Remove throwaway secret and images
         if: always()
         run: |
-          rm -rf "${RUNNER_TEMP:?}/code-factory-secrets"
-          docker image rm -f code-factory/worker:ci >/dev/null 2>&1 || true
+          rm -rf "${RUNNER_TEMP:?}/crewship-secrets"
+          docker image rm -f crewship/worker:ci >/dev/null 2>&1 || true

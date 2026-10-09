@@ -20,7 +20,7 @@ modules=baseline,firewall,fail2ban,updates
 # user=<operator login>
 # pubkey_file=/home/<operator login>/.ssh/authorized_keys
 {% elif ansible_user_id == factory_cfg.user %}
-# Apply ran as {{ factory_cfg.user }}, the factory account that runs the agents and
+# Apply ran as {{ factory_cfg.user }}, the Crewship account that runs the agents and
 # must not gain sudo through this file, so no sudo user is set. Set both to the
 # operator's login before use:
 # user=<operator login>

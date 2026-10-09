@@ -8,8 +8,8 @@
  * ponytail and i-have-adhd set their own text statuses ("🐴 ponytail: ⚡ FULL",
  * "● ADHD ON") and clear them when their mode turns off. omp gives every
  * extension the same ui object, so this wraps ui.setStatus once, keeps those
- * two keys for itself, and renders the combined icons under one key. Code
- * Factory installs it as ~/.omp/agent/extensions/aa-mode-icons.ts: omp loads
+ * two keys for itself, and renders the combined icons under one key.
+ * Crewship installs it as ~/.omp/agent/extensions/aa-mode-icons.ts: omp loads
  * extensions in name order, so the "aa-" name sorts first and the wrap is in
  * place before the plugins' own session_start handlers run.
  *
