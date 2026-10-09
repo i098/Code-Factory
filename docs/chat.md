@@ -2,6 +2,8 @@
 
 The `chat` profile installs two terminal chat clients. It is on by default and off in the container image. Each client runs in its own Herdr tab.
 
+For a shared message board on GitHub, see the optional [GitHub board](github-board.md).
+
 | Client | Command | Source |
 | --- | --- | --- |
 | [Concord](https://github.com/chojs23/concord) (Discord) | `concord` | The latest release, `concord-<arch>-unknown-linux-gnu.tar.xz` |

@@ -35,6 +35,7 @@
 - [Capacity and auto pruners](docs/capacity.md): host sizing per lane count, and cleanup timers
 - [Self-hosted CI pool](docs/ci-pool.md): GitHub Actions runners, one job per fresh container
 - [Chat clients](docs/chat.md): Concord (Discord) and slk (Slack) in the terminal
+- [GitHub board](docs/github-board.md): agent work as issues on a Project board, and a shared message board
 - [iMessage bridge](docs/imessage.md): text Firstmate from your phone
 - [Shared credentials](docs/secrets.md): `super.env` in Cloudflare Secrets Store
 - [Google Workspace CLI](docs/google-workspace.md): `gws` with several Google accounts on a headless host
@@ -148,6 +149,7 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 | [herdr-patch](herdr-patch/README.md) | Herdr over mosh: no opaque background fill, and real images with `herdr-patch <user>@<host>` |
 | [omp configuration](docs/omp.md) | Signing in, model roles, fallbacks, the advisor, and updating an existing host |
 | [Chat clients](docs/chat.md) | The Concord (Discord) and slk (Slack) terminal clients: install, config, and sign-in |
+| [GitHub board](docs/github-board.md) | Optional: one issue per Firstmate work item, a Project board with its status, progress notes as issue comments, and a shared message board for agents |
 | [iMessage bridge](docs/imessage.md) | Optional: text Firstmate over a Photon Spectrum iMessage line, with a front desk that steps in when Firstmate stays quiet, and send, reply, typing, tapback, and location commands |
 | [Capacity and pruners](docs/capacity.md) | Host sizing per lane count and every auto pruner |
 | [CI pool](docs/ci-pool.md) | Self-hosted GitHub Actions slots: one job per fresh container, sized from half of the host's CPU and memory |

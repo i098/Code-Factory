@@ -12,8 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README screenshot of a finished host, captured from demo repositories ([#35](https://github.com/i098/Crewship/issues/35)).
 - Git conventions and branch rules in `CONTRIBUTING.md`, issue forms, a pull request template, `SUPPORT.md`, and `CODEOWNERS` for `.github/` ([#47](https://github.com/i098/Crewship/issues/47)).
 - Sponsor button on the repository page, from `.github/FUNDING.yml`, that opens the i098 GitHub Sponsors profile ([#59](https://github.com/i098/Crewship/issues/59)).
+- Optional GitHub board (`factory.github_board`): a user timer mirrors Firstmate work items to issues in a repository you choose, keeps a Project `Status` field in step (queued, in progress, in review, done), and posts new status lines as batched issue comments. The new-host questions ask whether to turn it on; without the key the host makes no GitHub calls for it ([#45](https://github.com/i098/Crewship/issues/45)).
 - README: a centered header with a badge row and short links, a Why Crewship list, a collapsed Features list, a Get a machine part with sizing, a Sponsors section, and a star-history chart; `SECURITY.md`, `CODE_OF_CONDUCT.md`, and a 1280x640 social preview image ([#39](https://github.com/i098/Crewship/issues/39)).
 - `skills/public/` (committed) and `skills/private/` (git-ignored) skill folders, installed for omp and Claude Code by the `agents` profile; a private skill wins over a public one of the same name, and skills added by hand are never touched ([#56](https://github.com/i098/Crewship/issues/56)).
+- Each release publishes the worker container image to the GitHub Container Registry as `ghcr.io/i098/crewship:X.Y.Z` and `:latest`, so the repository page lists it under Packages ([#54](https://github.com/i098/Crewship/issues/54)).
 
 ### Changed
 
@@ -27,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `scripts/stow-secrets.sh` no longer fails with `maximum_secrets_exceeded` once `super.env` has more than 100 variables: it stores the whole file in a few chunks instead of one secret per variable, and it deletes the per-variable secrets the chunks replace. On a full store it deletes just enough of them before creating the chunks, so fetches can fail for a few seconds during that one push ([#58](https://github.com/i098/Crewship/issues/58)).
 - The worker image and the compose backing services pull from `mirror.gcr.io`, Google's Docker Hub mirror, so the CI image build no longer fails on Docker Hub's anonymous pull limit (`429 Too Many Requests`); the images are the same official ones ([#63](https://github.com/i098/Crewship/issues/63)).
+- The iMessage bridge no longer loses messages when the Photon service is down: every send and tapback, including the desk's and the "firstmate did not get that" reply, goes to a durable outbox that retries transient errors with backoff and keeps the order, failed attachment downloads are retried and their note is filed again with the saved path, an item that can never pass moves to a dead-letter folder instead of blocking the queue, typing errors never fail a send, and an `UNAVAILABLE` reply is logged as one line ([#61](https://github.com/i098/Crewship/issues/61)).
 
 ## [0.1.0] - 2026-10-09
 

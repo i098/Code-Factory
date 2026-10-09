@@ -69,6 +69,9 @@ factory:
   #   owner_name: the owner          # the default; how the desk prompt names him
   #   desk_model: claude-haiku-5-5   # the default
   #   supervisor_model: ""           # the default: the desk says it does not know
+  # github_board:         # Optional, off when absent; set only in .local/host.yml. See github-board.md
+  #   repo: owner/board
+  #   project: 3
   # ci_pool:              # Optional; self-hosted GitHub Actions slots. See ci-pool.md
   #   data_dir: /mnt/data/ci
   #   repos:
@@ -82,6 +85,7 @@ factory:
 - `fleet_guards` needs `docker` and `firstmate`. Obscura is always its latest release. An older `.local/host.yml` that still sets `browsers.obscura_version` or `browsers.obscura_sha256` keeps working: both keys are deprecated, ignored, and reported in one warning on stderr. No edit is required.
 - `ci_pool` needs `docker`, and no two `ci_pool.repos` entries may make the same unit name.
 - `imessage` needs `firstmate`, and `imessage.owner` is a phone number in E.164 form (`+` and digits).
+- `github_board` needs `firstmate`, `github_board.repo` is `owner/name`, and `github_board.project` is a Project number.
 
 The Firstmate checkout tracks the default branch of upstream Firstmate, not a sha. Every apply fetches `origin/main` and puts `main` at that revision plus the [Firstmate patch layer](dependencies.md#firstmate-patch-layer), so tracking it is how a host stays current. Do not re-pin it to a sha. Each run resolves `origin/main` once and reports the sha it installed. To track a fork, set `firstmate.url` in `.local/host.yml`. The URL applies to a fresh clone; verification fails when an existing checkout's `origin` is a different URL, and provisioning never changes it for you. To switch an existing checkout, run `git -C <workspace>/firstmate remote set-url origin <url>` and `git -C <workspace>/firstmate fetch origin`, reconcile any local commits on `main` with `origin/main` by hand, then run `./ship.sh launch`.
 
@@ -90,6 +94,7 @@ The Firstmate checkout tracks the default branch of upstream Firstmate, not a sh
 After a successful `./ship.sh launch` with the `firstmate` profile on, once omp has a provider login, Crewship starts omp in the Firstmate checkout with an opening prompt. Firstmate then asks the move decisions for this host one question at a time: which secondmate homes, services, tools, and unpushed work to bring over.
 
 - The questions follow `firstmate.checklist` when it is set and `gh` can read it: `repo` is a GitHub repository (it can be private) and `path` is the checklist file in it. Set it only in `.local/host.yml`, never in `config/default.yml`. Otherwise they follow [Agent host move](agent-host-move.md).
+- When `.local/host.yml` has no `github_board` block, the last question asks whether to turn on the [GitHub board](github-board.md). The answer is off unless you choose it.
 - They are asked once per host. When the omp session exits successfully, apply writes the marker `~/.local/share/code-factory/new-host-questions-done`; while it exists, later applies skip the questions and print one line naming it. If omp exits non-zero, apply writes no marker and prints one line saying the questions did not complete. To ask again, delete the marker and rerun `./ship.sh launch` interactively.
 - The launch needs an interactive terminal, run as `factory.user`. When stdin is not a TTY, when `CI` is set, or when another account runs apply, apply skips them without writing the marker and prints one line saying to rerun `./ship.sh launch` interactively.
 - They need an omp provider login. Apply checks with `omp models --json`; when it lists no models or fails, apply skips the questions without writing the marker and prints one line saying to sign in to omp with `/login` ([Sign in](omp.md#sign-in)) and rerun `./ship.sh launch` interactively. On a new host the first apply installs omp, so sign in after it and then rerun apply.

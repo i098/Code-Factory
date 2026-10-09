@@ -107,6 +107,15 @@
         - factory_cfg.imessage is defined
       tags: [imessage]
 
+    # Runs on every host: without factory.github_board it removes the timer.
+    - name: Optional GitHub board for Firstmate work items
+      ansible.builtin.import_tasks: tasks/github_board.yml
+      become: "{{ factory_become_target | bool }}"
+      become_user: "{{ factory_cfg.user }}"
+      environment: "{{ factory_user_env }}"
+      when: factory_account_ready | bool
+      tags: [github_board]
+
     - name: Docker engine and Compose v2 from Ubuntu
       ansible.builtin.import_tasks: tasks/docker.yml
       when: factory_cfg.profiles.docker | bool

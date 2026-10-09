@@ -239,6 +239,24 @@
             "owner"
           ]
         },
+        "github_board": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repo": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+            },
+            "project": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "repo",
+            "project"
+          ]
+        },
         "desktop": {
           "type": "object",
           "additionalProperties": false,
