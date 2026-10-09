@@ -168,29 +168,37 @@ fn stalled_subscriber_is_closed() {
         std::thread::sleep(Duration::from_millis(20));
     }
 
-    // Big lines fill the socket buffer, stall the writer, then fill the queue past 1024.
+    // Big lines fill the socket buffer and stall the writer; publish until the board drops the subscriber.
     let mut publisher = UnixStream::connect(sock).unwrap();
     let mut replies = BufReader::new(publisher.try_clone().unwrap());
     let body = "x".repeat(60_000);
-    for _ in 0..1100 {
+    let deadline = Instant::now() + Duration::from_secs(120);
+    for i in 0.. {
+        assert!(Instant::now() < deadline, "stalled subscriber was never dropped");
         writeln!(publisher, "{{\"op\":\"pub\",\"topic\":\"t\",\"body\":\"{body}\"}}").unwrap();
         let mut reply = String::new();
         replies.read_line(&mut reply).unwrap();
         assert!(reply.contains("\"ok\":true"), "{reply}");
+        if i % 25 == 0 && stat(sock, dir)["subs"] == 0 {
+            break;
+        }
     }
-    let s = stat(sock, dir);
-    assert_eq!((&s["subs"], &s["dropped"]), (&0.into(), &1.into()));
+    assert!(stat(sock, dir)["dropped"].as_u64().unwrap() >= 1);
 
-    // Once the write times out the daemon closes the socket, which frees the queued lines.
+    // Do not read until the write timeout has closed the connection, so nothing drains the backlog.
+    std::thread::sleep(Duration::from_secs(7));
     stalled.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
     let mut buf = vec![0u8; 1 << 16];
+    let mut total = 0;
     loop {
         match stalled.read(&mut buf) {
             Ok(0) => break,
-            Ok(_) => {}
+            Ok(n) => total += n,
             Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => break,
             Err(e) => panic!("connection still open: {e}"),
         }
     }
+    // Only what the kernel buffered before the stall arrives, not the ~60 MB queue.
+    assert!(total < 8 << 20, "{total} bytes delivered");
     std::fs::remove_dir_all(dir).unwrap();
 }

@@ -171,8 +171,12 @@ impl Board {
         Ok((self.next_sub, replay, rx))
     }
 
-    pub fn unsubscribe(&mut self, id: u64) {
-        self.subs.retain(|s| s.id != id);
+    /// Removes a subscriber; `slow` counts it as dropped for being too slow.
+    pub fn unsubscribe(&mut self, id: u64, slow: bool) {
+        if let Some(i) = self.subs.iter().position(|s| s.id == id) {
+            self.subs.remove(i);
+            self.dropped += u64::from(slow);
+        }
     }
 
     /// The last `n` messages of `topic`, oldest first.

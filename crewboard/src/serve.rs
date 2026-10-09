@@ -136,7 +136,7 @@ async fn stream_sub(mut r: BufReader<OwnedReadHalf>, mut w: OwnedWriteHalf, boar
     let stop_reader = reader.abort_handle();
     let shared = board.clone();
     let writer = tokio::spawn(async move {
-        let _ = async {
+        let result = async {
             for line in replay {
                 put(&mut w, &line).await?;
             }
@@ -149,13 +149,13 @@ async fn stream_sub(mut r: BufReader<OwnedReadHalf>, mut w: OwnedWriteHalf, boar
             Ok::<(), io::Error>(())
         }
         .await;
-        lock(&shared).unsubscribe(id);
+        lock(&shared).unsubscribe(id, matches!(&result, Err(e) if e.kind() == io::ErrorKind::TimedOut));
         // Dropping both halves closes the socket.
         drop(w);
         stop_reader.abort();
     });
     let _ = reader.await;
     writer.abort();
-    lock(&board).unsubscribe(id);
+    lock(&board).unsubscribe(id, false);
     Ok(())
 }
