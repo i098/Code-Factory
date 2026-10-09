@@ -46,4 +46,4 @@ Remove the `github_board` block from `.local/host.yml` and run `./ship.sh launch
 
 ## Troubleshooting
 
-Read the last runs with `journalctl --user -u github-board.service`. A Project with no `Status` field, or with an option missing, stops the run with a message that names the missing options. Add them, and the next run continues.
+Read the last runs with `journalctl --user -u github-board.service`. A failed `gh` call stops the run with the `gh` error text, for example a missing `project` scope or a Project that does not exist. A Project with no `Status` field, or with an option missing, stops the run with a message that names the missing options. Add them, and the next run continues.
