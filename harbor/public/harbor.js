@@ -485,8 +485,8 @@ function beamOn(x, z) {
   return ahead > 0 && off < 0.07 ? 0.8 * (1 - off / 0.07) * (1 - d / BEAM.reach) : 0;
 }
 
-// Seventy shades from empty to dense, so light reads as gradients rather than steps.
-const RAMP = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
+// Density ramp of shading glyphs, from empty to solid; letters stay for labels and signs only.
+const RAMP = " .`',:;~-=+*#%@▒▓█";
 const RANGE = { lighthouse: 400, nest: 30, office: 40, antenna: 50, containers: 40, lifeboat: 25, tender: 25 };
 const MOON = (() => { const v = [0.2, 0.3, 0.93], l = Math.hypot(...v); return v.map((c) => c / l); })();
 // Objects whose feature is not in the page's list are scenery.
@@ -590,7 +590,7 @@ function gulls() {
     const a = T * 0.22 + g * 1.3, r = 10 + g * 4;
     const p = project({ x: Math.cos(a) * r - 4, y: 13 + g * 1.6 + Math.sin(T + g), z: 6 + Math.sin(a) * r });
     const c = p && p[0] >= 0 && p[0] < cols && p[1] >= 0 && p[1] < rows ? p[1] * cols + p[0] : -1;
-    if (c >= 0 && ID[c] === 0) { G[c] = "v"; C[c] = "k"; }
+    if (c >= 0 && ID[c] === 0) { G[c] = "^"; C[c] = "k"; }
   }
 }
 
@@ -810,7 +810,7 @@ function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
   let ch, cls = mat;
   if (mat === "l") {
     const flash = s === beacon ? Math.cos(T * 2.2 + Math.atan2(dx, dz) * 2) > 0.3 : s !== antennaLamp || Math.sin(T * 3) > 0;
-    ch = flash ? "@" : "o"; cls = "l7";
+    ch = flash ? "@" : "*"; cls = "l7";
   } else {
     const wx = onShip ? SX + rc * (px - SX) - rs * py : px, wy = onShip ? rs * (px - SX) + rc * py + bob : py;
     const [lit, warm] = lightAt(wx, wy, pz, nx, ny, nz);
@@ -889,7 +889,8 @@ function shadeWater(c, t, dx, dy, dz) {
   const body = (0.03 + 0.12 * Math.max(0, nx * MOON[0] + ny * MOON[1] + nz * MOON[2])) * (1 + near);
   const fog = Math.exp(-t * 0.014), lum = ((body * (1 - fresnel) + 0.03 * fresnel + moonSpec + lampSpec + foam * 0.35 + beamOn(x, z) * 0.6) * fog) + 0.015 * (1 - fog);
   const mat = foam > 0.4 ? "k" : lampSpec > moonSpec && lampSpec > 0.1 ? "l" : moonSpec > 0.1 ? "m" : near > 0.2 ? "w" : "d";
-  put(c, glyph(lum, (c ^ Math.floor(t)) & 1), mat + tier(lum, 0), -1, t);
+  const soft = Math.min(0.78, lum); // highlights stay sparkles, not solid blocks
+  put(c, glyph(soft, (c ^ Math.floor(t)) & 1), mat + tier(lum, 0), -1, t);
 }
 // How close a sky ray passes to the lighthouse beam, as a glow from 0 to 1.
 function beamGlow(dx, dy, dz) {
@@ -903,7 +904,7 @@ function beamGlow(dx, dy, dz) {
 function shadeSky(c, dx, dy, dz) {
   const m = dx * MOON[0] + dy * MOON[1] + dz * MOON[2], el = Math.asin(dy);
   const r = hash(Math.floor(Math.atan2(dx, dz) * 150), Math.floor(el * 150)) * 2.5;
-  if (m > 0.9988) put(c, m > 0.99935 ? "@" : "o", "k", 0, Infinity);
+  if (m > 0.9988) put(c, m > 0.99935 ? "@" : "%", "k", 0, Infinity);
   else if (el > 0.04 && r < 0.03) put(c, r < 0.006 ? "*" : ".", "k", 0, Infinity);
   else if (beamGlow(dx, dy, dz) > 0.15) put(c, glyph(beamGlow(dx, dy, dz) * 0.8, 0), "l" + Math.min(7, 2 + Math.floor(beamGlow(dx, dy, dz) * 6)), 0, Infinity);
   else put(c, el < 0.035 ? "." : " ", "f", 0, Infinity);
@@ -927,18 +928,34 @@ function outline(c, i, j) {
   const off = (n, inside) => !inside || SP[n] !== target;
   return slope(off(c - 1, i > 0), off(c + 1, i < cols - 1), off(c - cols, j > 0), off(c + cols, j < rows - 1));
 }
-// Draws each row as runs of one colour.
+// Draws the scene as runs of one colour, then the mini map on its own backing above it.
 function draw(mid) {
   ctx.fillStyle = "#060a14";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   for (let j = 0; j < rows; j++) {
     let run = "", cur = C[j * cols], from = 0;
     for (let i = 0; i < cols; i++) {
-      const c = j * cols + i, aim = c === mid;
-      const map = MAPCELLS.get(c), mark = map ? map[0] : aim ? "+" : LINE.get(c) || outline(c, i, j);
-      const cls = map ? map[1] : aim ? (target ? "h" : "k") : mark ? "h" : C[c];
+      const c = j * cols + i, aim = c === mid, hud = MAPCELLS.has(c);
+      const mark = hud ? " " : aim ? "+" : LINE.get(c) || outline(c, i, j);
+      const cls = hud ? "" : aim ? (target ? "h" : "k") : mark ? "h" : C[c];
       if (cls !== cur) { paint(run, cur, from, j); run = ""; cur = cls; from = i; }
       run += mark || edge(c, i, j) || G[c];
+    }
+    paint(run, cur, from, j);
+  }
+  drawMap();
+}
+function drawMap() {
+  const b = mapBox;
+  if (!b) return;
+  ctx.fillStyle = "rgba(6, 10, 20, 0.94)";
+  ctx.fillRect(padX + b.oi * cellW, padY + b.oj * cellH, b.w * cellW, b.h * cellH);
+  for (let j = b.oj; j < b.oj + b.h; j++) {
+    let run = "", cur = "", from = b.oi;
+    for (let i = b.oi; i < b.oi + b.w; i++) {
+      const [ch, cls] = MAPCELLS.get(j * cols + i);
+      if (cls !== cur) { paint(run, cur, from, j); run = ""; cur = cls; from = i; }
+      run += ch;
     }
     paint(run, cur, from, j);
   }
