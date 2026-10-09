@@ -89,6 +89,17 @@ Builds, tests, and browsers set the limit, not the agents; each CI job is capped
 
 ### Install
 
+On a fresh Ubuntu 24.04 or 26.04 machine (x86_64 or aarch64, systemd), as a non-root account with sudo, run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/i098/Crewship/main/install.sh | bash
+```
+
+With Node or Bun installed, `npx crewship`, `bunx crewship` or `pnpm dlx crewship` runs the same installer. It installs the OS packages, clones the latest release into `~/Crewship`, and runs the steps below with the default host config. It stops only to ask for your sudo password, and a second run changes nothing. Then authenticate GitHub with `gh auth login` and sign in to omp ([Sign in](docs/omp.md#sign-in)).
+
+<details>
+<summary>Manual Quick Start</summary>
+
 You need Ubuntu 24.04 or 26.04 on x86_64 or aarch64 with systemd, a non-root account with sudo, Python 3.12+, `git`, and `gh`. [`cloud-init/user-data.yaml`](cloud-init/user-data.yaml) can preinstall the OS packages on first boot.
 
 1. Authenticate GitHub (for private repositories and gh-axi):
@@ -137,6 +148,8 @@ You need Ubuntu 24.04 or 26.04 on x86_64 or aarch64 with systemd, a non-root acc
    ```
 
 Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs/omp.md#sign-in). Credentials are never copied from another host; see [Migration and recovery](docs/recovery.md).
+
+</details>
 
 ## Docs
 
