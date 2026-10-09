@@ -232,7 +232,9 @@ class FakeCloudflare(http.server.BaseHTTPRequestHandler):
 
     def secrets(self, sid, raw):
         if self.command == "GET":
-            return self.reply([{"name": n, "id": s["id"], "comment": s["comment"]} for n, s in self.store.items()])
+            return self.reply(
+                [{"name": n, "id": s["id"], "comment": s["comment"]} for n, s in self.store.items()]
+            )
         if self.command == "POST":
             return self.create(json.loads(raw))
         name = next((n for n, s in self.store.items() if s["id"] == sid), None)
@@ -248,9 +250,15 @@ class FakeCloudflare(http.server.BaseHTTPRequestHandler):
     def create(self, new):
         self.calls.append(("POST", [s["name"] for s in new]))
         if len(self.store) + len(new) > 100:
-            return self.reply(errors=[{"code": 1003, "message": "maximum_secrets_exceeded"}], status=400)
+            return self.reply(
+                errors=[{"code": 1003, "message": "maximum_secrets_exceeded"}], status=400
+            )
         for s in new:
-            self.store[s["name"]] = {"id": f"id-{s['name']}", "comment": s["comment"], "value": s["value"]}
+            self.store[s["name"]] = {
+                "id": f"id-{s['name']}",
+                "comment": s["comment"],
+                "value": s["value"],
+            }
         self.reply([])
 
     do_GET = do_POST = do_PATCH = do_PUT = do_DELETE = handle_any
@@ -274,11 +282,14 @@ def run_stow(tmp_path: Path, old_secrets: int, token: str) -> subprocess.Complet
         tool.chmod(0o755)
     FakeCloudflare.calls = []
     FakeCloudflare.store = {
-        f"OLD_{i}": {"id": f"id-old-{i}", "comment": "super.env", "value": "x"} for i in range(old_secrets)
+        f"OLD_{i}": {"id": f"id-old-{i}", "comment": "super.env", "value": "x"}
+        for i in range(old_secrets)
     }
     FakeCloudflare.store["KEEP"] = {"id": "id-keep", "comment": "other", "value": "x"}
     FakeCloudflare.store["FLEET_SECRETS_ACCESS_CLIENT_ID"] = {
-        "id": "id-client", "comment": "super.env", "value": "old",
+        "id": "id-client",
+        "comment": "super.env",
+        "value": "old",
     }
     httpd = http.server.HTTPServer(("127.0.0.1", 0), FakeCloudflare)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -311,7 +322,9 @@ def test_stow_makes_room_in_a_full_store_before_creating_chunks(tmp_path, old_se
     assert store["KEEP"]["value"] == "x"
     assert store["FLEET_SECRETS_ACCESS_CLIENT_ID"]["value"] == "client-1"
 
-    mutations = [c for c in FakeCloudflare.calls if c[0] in ("POST", "DELETE") and "workers" not in c[1]]
+    mutations = [
+        c for c in FakeCloudflare.calls if c[0] in ("POST", "DELETE") and "workers" not in c[1]
+    ]
     first_post = next(i for i, c in enumerate(mutations) if c[0] == "POST")
     room = 100 - (old_secrets + 2)
     expected_early = max(0, len(chunks) - room)
