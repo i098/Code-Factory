@@ -77,7 +77,9 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on pushes to `main`, on every p
 - On pull requests, the `quality gate` job: `sentrux gate .` against the committed `.sentrux/baseline.json` fails on a `DEGRADED` verdict, on a drop past `FM_QUALITY_MAX_DROP`, and when the gate cannot give a verdict; `fallow audit` on the changed JS/TS only warns ([Quality gate](omp.md#quality-gate)).
 - A full worker image build and the behavior smoke in `tests/container-smoke.sh`.
 
-Every action is pinned to the commit SHA of its latest release (Dependabot moves the pins weekly), and the token is read-only. uv and Bun are their latest releases, the same as `./onboard.sh` and `./ship.sh launch` install.
+Every action is pinned to the commit SHA of its latest release (Dependabot moves the pins weekly), and the CI token is read-only. uv and Bun are their latest releases, the same as `./onboard.sh` and `./ship.sh launch` install.
+
+`.github/workflows/npm-publish.yml` runs when a `vX.Y.Z` GitHub release is published. It sets the version of the `crewship` npm package (`npm/`) to the tag and publishes it with npm trusted publishing: the job's OIDC token (`id-token: write`, its only other permission is `contents: read`) replaces a stored npm token, and npm adds a provenance attestation. The npm trusted publisher accepts only this workflow in the `npm` environment, and only `v*` tags can deploy to that environment. Each publish shows under Deployments with the package page as its URL. The package holds only `npm/crewship.js`, which fetches and runs `install.sh` from the release with the same version; `tests/test_npm_package.py` fails if anything else enters the tarball.
 
 ## Primary sources
 
