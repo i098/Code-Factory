@@ -50,9 +50,9 @@ def inline(text, limit=None):
     return re.sub(r"`([^`]+)`", r"<code>\1</code>", html.escape(text, quote=False))
 
 
-def first_sentence(markdown_section):
-    paragraph = markdown_section.strip().split("\n\n", 1)[0].replace("\n", " ")
-    return paragraph.split(". ", 1)[0].rstrip(".") + "."
+def first_sentence(markdown):
+    prose = next(p for p in markdown.split("\n\n") if p.strip() and p.strip()[0] not in "#<[!|>`-")
+    return " ".join(prose.replace("**", "").split()).split(". ", 1)[0].rstrip(".") + "."
 
 
 def points(readme, changelog):
@@ -84,7 +84,6 @@ def points(readme, changelog):
         re.sub(r"\s*\(\[#\d+\].*$", "", item)
         for item in re.findall(r"^- (.+)$", unreleased, re.M)[:3]
     ]
-    intro = readme.split("\n\n", 2)[1]
     quick = readme.split("\n## Quick start\n", 1)[1]
     rows += [
         (
@@ -97,7 +96,7 @@ def points(readme, changelog):
             "sign",
             "Crewship on GitHub",
             REPO,
-            f"The name on the bow. {inline(first_sentence(intro))}",
+            f"The name on the bow. {inline(first_sentence(readme))}",
         ),
         (
             "office",

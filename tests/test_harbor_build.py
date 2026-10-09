@@ -16,15 +16,20 @@ class Manifest(HTMLParser):
 
     def __init__(self):
         super().__init__()
-        self.spots, self.links, self.inside = [], [], False
+        self.spots, self.links, self.inside, self.text = [], [], False, {}
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         if tag == "li" and "data-spot" in attrs:
             self.spots.append(attrs["data-spot"])
+            self.text[attrs["data-spot"]] = ""
             self.inside = True
         elif tag == "a" and self.inside:
             self.links.append(attrs)
+
+    def handle_data(self, data):
+        if self.inside and self.spots:
+            self.text[self.spots[-1]] += data
 
     def handle_endtag(self, tag):
         if tag == "li":
@@ -75,3 +80,11 @@ def test_mapped_rows_get_their_own_spot_and_no_board(tmp_path, monkeypatch, caps
     assert "docsboard" not in manifest.spots
     assert {build.SCENE[link][0] for _, link, _ in mapped} <= set(manifest.spots)
     assert capsys.readouterr().err == ""
+
+
+def test_readme_cards_show_prose_not_markdown(tmp_path, monkeypatch):
+    manifest = built(tmp_path, monkeypatch, (ROOT / "README.md").read_text())
+
+    assert manifest.text["sign"].endswith("Turn a fresh Ubuntu machine into a self-hosted AI coding agent fleet.")
+    assert manifest.text["gangway"].startswith("Quick startThe gangway. Rent an Ubuntu")
+    assert [spot for spot in ("sign", "gangway") if "#" in manifest.text[spot]] == []
