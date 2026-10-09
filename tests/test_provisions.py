@@ -565,3 +565,10 @@ def test_a_failed_command_reports_why_it_failed(monkeypatch, capsys, tmp_path):
         runpy.run_path(str(SPEC.origin), run_name="__main__")
     assert exit_status.value.code == 1
     assert "error: network down" in capsys.readouterr().err
+
+
+def test_every_installed_tool_has_a_built_with_line():
+    readme = (Path(__file__).parents[1] / "README.md").read_text()
+    section = readme.split("\n## Built with\n", 1)[1].split("\n## ", 1)[0]
+    tools = {*EVERYTHING, *installer.OMP_PLUGINS}
+    assert [tool for tool in sorted(tools) if f"`{tool}`" not in section] == []
