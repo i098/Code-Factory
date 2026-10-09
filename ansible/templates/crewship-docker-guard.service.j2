@@ -1,0 +1,17 @@
+{{ ansible_managed | comment }}
+# Triggered by crewship-docker-guard.timer; not enabled on its own.
+# Removes stopped containers older than DOCKER_GUARD_STOPPED_HOURS and reports
+# running ones older than 48 h. Never touches a container with the
+# crewship.keep label or a restart policy, volumes or images.
+
+[Unit]
+Description=Fleet Docker guard - remove stale stopped containers, report long-running ones (Crewship managed)
+ConditionPathExists={{ factory_fleet_doctor_dir }}/docker-guard.sh
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=DOCKER_GUARD_STOPPED_HOURS={{ factory_cfg.fleet.docker_guard.stopped_hours }}
+ExecStart={{ factory_fleet_doctor_dir }}/docker-guard.sh
+TimeoutStartSec=600
+Nice=5

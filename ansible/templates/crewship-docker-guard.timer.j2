@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Fleet Docker guard every hour (Crewship managed)
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=1h
+Unit=crewship-docker-guard.service
+
+[Install]
+WantedBy=timers.target

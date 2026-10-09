@@ -21,7 +21,7 @@
 #     minutes (default 30).
 # Otherwise (a lane actively working) the server is left alone.
 #
-# Runs every 2 minutes from flotilla-dev-server-reaper.timer and at login.
+# Runs every 2 minutes from crewship-dev-server-reaper.timer and at login.
 # Every kill: dev-server-reaper.log here, one line in COMMS.md for the
 # orchestrator, notify-master.sh when present.
 set -u
