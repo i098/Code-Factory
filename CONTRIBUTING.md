@@ -64,14 +64,50 @@ Fleet guards (`fleet/`) are runtime scripts deployed to `~/oss-fleet/` on the bo
 4. Add it to `factory_fleet_units` and/or `factory_fleet_enabled_units` (or `factory_fleet_browser_units` / `factory_fleet_browser_enabled_units`) in `group_vars/all.yml`.
 5. Update `docs/fleet-guards.md`.
 
+## Commits and branches
+
+Commits follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/):
+
+- The subject line is `type(scope): subject`. The type is `feat`, `fix`, `docs`, `refactor`, `test`, `ci`, or `chore`; the scope is optional.
+- Mark a breaking change with `!` after the type or scope, or with a `BREAKING CHANGE:` footer.
+- Write the subject in the imperative, in 72 characters or fewer, with no period at the end.
+- Wrap the body at 72 characters and tell why the change is necessary.
+
+A good commit:
+
+```text
+fix(provisions): check the digest before install
+
+The installer moved the binary into place and then checked its
+SHA-256 digest. A bad download could replace a good tool before
+the check failed. Check the digest first and stop on a mismatch.
+```
+
+Branch names are `type/short-description`, with a type from the list above, for example `feat/one-command-install`.
+
 ## Pull requests
 
 - One concern per PR.
+- The title uses the commit format, for example `docs(contributing): add git conventions and branch rules`.
+- The body starts with `Closes #N` for the issue that the PR resolves. The [PR template](.github/PULL_REQUEST_TEMPLATE.md) fills in the other sections.
 - Tests pass (`uv run pytest`).
 - Lint clean (`uv run ruff check`).
 - Ansible syntax clean (`--syntax-check`).
 - Idempotent: `launch` → `launch` = `changed=0` on the second run.
 - Describe what changed and why in the PR body.
+- Add one line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
+- PRs merge with a merge commit; squash and rebase merging are off.
+
+Open an issue with the [bug report](.github/ISSUE_TEMPLATE/bug_report.yml) or the [feature request](.github/ISSUE_TEMPLATE/feature_request.yml) form. Ask questions in the [Discussions Q&A category](https://github.com/i098/Crewship/discussions/categories/q-a) ([SUPPORT.md](SUPPORT.md)).
+
+## Branch rules
+
+GitHub rulesets enforce these rules, with no bypass:
+
+- `main` changes only through a pull request. Before a merge, the checks `configuration and python checks`, `quality gate`, and `worker image behavior smoke` must pass, and the branch must be up to date with `main`. No approval is necessary.
+- `main` cannot be force-pushed or deleted.
+- GitHub deletes the head branch after the merge.
+- A `v*` tag cannot be deleted or moved.
 
 ## Changelog and releases
 

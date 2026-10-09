@@ -1,0 +1,39 @@
+name: Bug report
+description: Something in Crewship does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Tell what you saw, and what you expected to see.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The commands you ran, in order.
+      placeholder: |
+        1. ./ship.sh inspect
+        2. ./ship.sh launch
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The release tag or the commit SHA of your checkout.
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      description: The operating system and its version, for example Ubuntu 24.04.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The output of the failed command, or of `./ship.sh survey`. Remove secrets first.
+      render: text
