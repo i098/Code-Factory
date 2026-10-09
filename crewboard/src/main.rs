@@ -1,0 +1,188 @@
+//! crewboard: a host-local, in-memory message board for agents.
+//! One binary: the daemon (`serve`) and its clients (`pub`, `sub`, `tail`, `topics`, `stat`).
+
+mod board;
+mod serve;
+
+use std::io::{self, BufRead, BufReader, Read, Write};
+use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
+use std::process::exit;
+use std::str::FromStr;
+
+use serde_json::{Value, json};
+
+const USAGE: &str = "usage:
+  crewboard pub <topic> [text|-]          publish; reads stdin when text is - or absent
+  crewboard sub <topic>... [--since N] [--json]
+                                          stream messages; a trailing * matches a prefix
+  crewboard tail <topic> [-n 50] [--json] print history, then exit
+  crewboard topics                        list topics with counts
+  crewboard stat                          print caps, usage and the boot id
+  crewboard serve [--socket PATH] [--cap-bytes 67108864] [--history 256] [--max-msg 65536]
+
+The socket is $CREWBOARD_SOCKET, else $XDG_RUNTIME_DIR/crewboard.sock.
+Clients exit 3 with \"board off\" when no daemon answers on it.";
+
+fn usage() -> ! {
+    eprintln!("{USAGE}");
+    exit(2)
+}
+
+fn fail(msg: &str) -> ! {
+    eprintln!("crewboard: {msg}");
+    exit(1)
+}
+
+fn off() -> ! {
+    eprintln!("crewboard: board off");
+    exit(3)
+}
+
+/// Positional arguments, `--flag value` options from `allowed`, and `--json`.
+#[derive(Default)]
+struct Args<'a> {
+    pos: Vec<&'a str>,
+    opts: Vec<(&'a str, &'a str)>,
+    json: bool,
+}
+
+impl<'a> Args<'a> {
+    fn parse(args: &'a [String], allowed: &[&str]) -> Self {
+        let mut a = Args::default();
+        let mut it = args.iter().map(String::as_str);
+        while let Some(arg) = it.next() {
+            match arg {
+                "--json" => a.json = true,
+                f if allowed.contains(&f) => a.opts.push((f, it.next().unwrap_or_else(|| usage()))),
+                f if f.starts_with('-') && f != "-" => usage(),
+                p => a.pos.push(p),
+            }
+        }
+        a
+    }
+
+    fn opt<T: FromStr>(&self, name: &str) -> Option<T> {
+        let (_, v) = self.opts.iter().rev().find(|(f, _)| *f == name)?;
+        Some(v.parse().unwrap_or_else(|_| usage()))
+    }
+}
+
+fn socket_path() -> Option<PathBuf> {
+    std::env::var_os("CREWBOARD_SOCKET")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("XDG_RUNTIME_DIR").map(|d| PathBuf::from(d).join("crewboard.sock")))
+}
+
+/// Sends one request and returns the reply stream.
+fn request(req: Value) -> BufReader<UnixStream> {
+    let path = socket_path().unwrap_or_else(|| off());
+    let mut s = match UnixStream::connect(&path) {
+        Ok(s) => s,
+        Err(e) if matches!(e.kind(), io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused) => off(),
+        Err(e) => fail(&format!("{}: {e}", path.display())),
+    };
+    writeln!(s, "{req}").unwrap_or_else(|e| fail(&e.to_string()));
+    BufReader::new(s)
+}
+
+/// The next reply line, raw and parsed. A closed stream means the daemon is gone.
+fn next(r: &mut impl BufRead) -> (String, Value) {
+    let mut line = String::new();
+    match r.read_line(&mut line) {
+        Ok(0) => off(),
+        Ok(_) => {}
+        Err(e) => fail(&e.to_string()),
+    }
+    let v: Value = serde_json::from_str(&line).unwrap_or_else(|e| fail(&format!("bad reply: {e}")));
+    if let Some(e) = v["error"].as_str() {
+        fail(e);
+    }
+    line.truncate(line.trim_end().len());
+    (line, v)
+}
+
+fn print_msg(raw: &str, m: &Value, json: bool) {
+    if json {
+        println!("{raw}");
+    } else {
+        let s = |k: &str| m[k].as_str().unwrap_or("-").to_owned();
+        println!("{} {} {} {}: {}", m["seq"], s("ts"), s("from"), s("topic"), s("body"));
+    }
+}
+
+fn serve(rest: &[String]) {
+    let a = Args::parse(rest, &["--socket", "--cap-bytes", "--history", "--max-msg"]);
+    if !a.pos.is_empty() {
+        usage();
+    }
+    let d = board::Limits::default();
+    let limits = board::Limits {
+        cap_bytes: a.opt("--cap-bytes").unwrap_or(d.cap_bytes),
+        history: a.opt("--history").unwrap_or(d.history),
+        max_msg: a.opt("--max-msg").unwrap_or(d.max_msg),
+    };
+    let path = a.opt("--socket").or_else(socket_path).unwrap_or_else(|| fail("no socket path: set XDG_RUNTIME_DIR or --socket"));
+    serve::run(&path, limits).unwrap_or_else(|e| fail(&e.to_string()));
+}
+
+fn publish(rest: &[String]) {
+    let a = Args::parse(rest, &[]);
+    let (topic, text) = match a.pos[..] {
+        [t] => (t, "-"),
+        [t, x] => (t, x),
+        _ => usage(),
+    };
+    let body = if text == "-" {
+        let mut s = String::new();
+        io::stdin().read_to_string(&mut s).unwrap_or_else(|e| fail(&e.to_string()));
+        s.strip_suffix('\n').map(String::from).unwrap_or(s)
+    } else {
+        text.to_owned()
+    };
+    let from = std::env::var("FM_TASK_ID").ok();
+    let (_, v) = next(&mut request(json!({"op": "pub", "topic": topic, "body": body, "from": from})));
+    println!("{}", v["seq"]);
+}
+
+fn subscribe(rest: &[String]) {
+    let a = Args::parse(rest, &["--since"]);
+    if a.pos.is_empty() {
+        usage();
+    }
+    let mut r = request(json!({"op": "sub", "topics": a.pos, "since": a.opt::<u64>("--since")}));
+    loop {
+        let (raw, v) = next(&mut r);
+        match v["gap"].as_bool() {
+            Some(true) if !a.json => eprintln!("crewboard: gap: messages before seq {} are gone", v["oldest"]),
+            _ => print_msg(&raw, &v, a.json),
+        }
+    }
+}
+
+fn tail(rest: &[String]) {
+    let a = Args::parse(rest, &["-n"]);
+    let [topic] = a.pos[..] else { usage() };
+    let mut r = request(json!({"op": "hist", "topic": topic, "n": a.opt::<u64>("-n").unwrap_or(50)}));
+    loop {
+        let (raw, v) = next(&mut r);
+        if v["end"] == true {
+            break;
+        }
+        print_msg(&raw, &v, a.json);
+    }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let Some((cmd, rest)) = args.split_first() else { usage() };
+    match cmd.as_str() {
+        "serve" => serve(rest),
+        "pub" => publish(rest),
+        "sub" => subscribe(rest),
+        "tail" => tail(rest),
+        "topics" | "stat" if rest.is_empty() => println!("{}", next(&mut request(json!({"op": cmd}))).0),
+        "-h" | "--help" | "help" => println!("{USAGE}"),
+        _ => usage(),
+    }
+}

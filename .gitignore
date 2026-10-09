@@ -30,3 +30,4 @@ artifacts/
 # Private skills stay on the host (skills/private/README.md).
 skills/private/*
 !skills/private/README.md
+target/
