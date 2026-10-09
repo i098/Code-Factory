@@ -36,31 +36,41 @@ def tree(path):
     }
 
 
+def remove(path):
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.exists():
+        shutil.rmtree(path)
+
+
 def install(home, skills=SKILLS):
     record = home / MANIFEST
     owned = json.loads(record.read_text()) if record.is_file() else {}
+    owned = {root: set(owned.get(root, [])) for root in ROOTS}
+    before = json.dumps({r: sorted(n) for r, n in owned.items()}, sort_keys=True) + "\n"
     wanted = sources(skills)
     changed, skipped = False, []
-    for root in ROOTS:
-        mine = set(owned.get(root, []))
-        for name, source in wanted.items():
-            target = home / root / name
-            if name not in mine and (target.exists() or target.is_symlink()):
-                skipped.append(str(target))
-                continue
-            if tree(target) != tree(source):
-                shutil.rmtree(target, ignore_errors=True)
-                shutil.copytree(source, target)
+    try:
+        for root, mine in owned.items():
+            for name, source in wanted.items():
+                target = home / root / name
+                if name not in mine and (target.exists() or target.is_symlink()):
+                    skipped.append(str(target))
+                    continue
+                mine.add(name)  # claimed before the copy, so a failed copy is retried
+                if tree(target) != tree(source):
+                    remove(target)
+                    shutil.copytree(source, target)
+                    changed = True
+            for name in mine - wanted.keys():
+                remove(home / root / name)
+                mine.discard(name)
                 changed = True
-            mine.add(name)
-        for name in mine - wanted.keys():
-            shutil.rmtree(home / root / name, ignore_errors=True)
-            changed = True
-        owned[root] = sorted(mine & wanted.keys())
-    text = json.dumps(owned, sort_keys=True) + "\n"
-    if not record.is_file() or record.read_text() != text:
-        record.parent.mkdir(parents=True, exist_ok=True)
-        record.write_text(text)
+    finally:
+        text = json.dumps({r: sorted(n) for r, n in owned.items()}, sort_keys=True) + "\n"
+        if text != before:
+            record.parent.mkdir(parents=True, exist_ok=True)
+            record.write_text(text)
     return {"changed": changed, "installed": sorted(wanted), "skipped": skipped}
 
 

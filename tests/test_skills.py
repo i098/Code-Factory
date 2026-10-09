@@ -49,3 +49,27 @@ def test_install_both_sets_private_wins_and_hand_added_skills_stay(tmp_path):
         assert not (home / root / "only-private").exists()
     assert (home / ".omp/agent/skills/hand-made").is_dir()
     assert (hand / "SKILL.md").read_text() == "operator"
+
+
+def test_failed_copy_still_records_what_was_installed(tmp_path, monkeypatch):
+    source, home = tmp_path / "skills", tmp_path / "home"
+    skill(source, "public", "a", "a")
+    skill(source, "public", "b", "b")
+    real = skills.shutil.copytree
+
+    def flaky(src, dst):
+        if Path(src).name == "b":
+            raise OSError("disk full")
+        return real(src, dst)
+
+    monkeypatch.setattr(skills.shutil, "copytree", flaky)
+    try:
+        skills.install(home, source)
+    except OSError:
+        pass
+    monkeypatch.setattr(skills.shutil, "copytree", real)
+
+    result = skills.install(home, source)
+    assert result["skipped"] == []
+    for root in skills.ROOTS:
+        assert (home / root / "b/SKILL.md").read_text() == "b"
