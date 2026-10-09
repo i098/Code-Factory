@@ -11,9 +11,11 @@
 //   conversation the service opened itself was refused. That text's conversation and message ids are kept in the
 //   state directory, so a restart can still reach him.
 // Location: when he shares his location with the line in Find My, GET /location (the fm-location command).
+// Edits: spectrum-ts drops the line's message.edited events, so the bridge reads them from the line's own client
+//   and files each edit as a new note, "[edited] <new text> (was: <old text>)".
 // Runs as the systemd --user service fm-imessage (docs/imessage.md). Docs: https://photon.codes/docs/spectrum-ts
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import type { AdvancedIMessage } from "@photon-ai/advanced-imessage/grpc";
+import type { AdvancedIMessage, EventTypeMap } from "@photon-ai/advanced-imessage/grpc";
 import { Spectrum, type Message } from "spectrum-ts";
 import { imessage } from "spectrum-ts/providers/imessage";
 import { type Attachment, bubbles, describe, DeskTiming, deskInput, deskPrompt, isSkip, localCommand, parseReact, typingPause } from "./desk.ts";
@@ -42,6 +44,7 @@ const DOWNLOADS_DIR = `${STATE}/downloads`; // his messages with an attachment n
 for (const dir of [STATE, DESK_DIR, ATTACH_DIR]) mkdirSync(dir, { recursive: true, mode: 0o700 });
 let burstFrom: number | undefined; // the memory id of his first text the desk has not answered yet
 const recent: Message[] = []; // his last texts, newest last, for a threaded reply to one a few bubbles up
+const said = new Map<string, string>(); // his last 100 texts by message id, for the "was:" part of an edit note
 // One line for a transient upstream failure; the whole error, with its stack, for anything else.
 const log = (what: string) => (e: unknown) =>
   transient(e) ? console.error(`fm-imessage: ${what}: ${brief(e)}`) : console.error(`fm-imessage: ${what}:`, e);
@@ -58,11 +61,12 @@ const app = await Spectrum({
   projectSecret: need("PHOTON_PROJECT_SECRET"),
   providers: [imessage.config()],
 });
-// Spectrum has no public accessor for the line's Advanced iMessage client, which owns Find My locations;
-// this reads its internal platform map (spectrum-ts 12.10). Recheck after a spectrum-ts upgrade.
+// Spectrum has no public accessor for the line's Advanced iMessage client, which owns Find My locations and the raw
+// message events with his edits; this reads its internal platform map (spectrum-ts 12.10). Recheck after a
+// spectrum-ts upgrade.
 const internals = Reflect.get(app, "__internal") as { platforms?: Map<string, { client?: { client?: AdvancedIMessage }[] }> } | undefined;
 const raw = internals?.platforms?.get?.("imessage")?.client?.[0]?.client;
-if (!raw) console.warn("fm-imessage: no Advanced iMessage client in spectrum-ts internals; GET /location is off until the bridge is updated for this spectrum-ts");
+if (!raw) console.warn("fm-imessage: no Advanced iMessage client in spectrum-ts internals; GET /location and edits are off until the bridge is updated for this spectrum-ts");
 // A message by its conversation and message ids, which outlive a restart.
 type Ref = { space: string; id: string };
 // One outbox item for his text `id`: a tapback, or bubbles (`done` of them sent so far), the first one threaded to
@@ -274,26 +278,66 @@ async function handle(message: Message) {
   const { text, failed } = await noteText(message);
   console.log(`fm-imessage: inbound ${message.content.type} -> ${text === undefined ? "ignored" : "note"}`);
   if (text === undefined) return;
-  // Hand the text to Firstmate first, so the wake never waits on the desk model.
-  if (!fileNote(`photon-${message.id}`, text)) {
-    outbox.add({ space: message.space.id, id: message.id, bubbles: ["firstmate did not get that, send it again"], reply: message.id, silent: true });
-    return;
-  }
+  const ref = { space: message.space.id, id: message.id };
+  if (!wake(`photon-${message.id}`, text, ref)) return;
+  heard(message.id, text);
   if (failed !== undefined) {
     log("download an attachment")(failed);
-    downloads.add({ space: message.space.id, id: message.id });
+    downloads.add(ref);
   }
-  const id = remember("owner", text);
-  if (id !== undefined) burstFrom ??= id;
   latest = message;
-  latestRef = { space: message.space.id, id: message.id };
+  latestRef = ref;
   recent.push(message);
   recent.splice(0, Math.max(0, recent.length - 10));
-  cancelDesk();
-  desk.inboundText();
   await Bun.write(LATEST_FILE, `${message.space.id}\n${message.id}\n`).catch(log("persist the latest text"));
   await message.read().catch(log("mark read"));
 }
+
+// Hands his text to Firstmate first, so the wake never waits on the desk model, then starts the desk's quiet
+// period. False when the inbox refused the note: he is asked to send it again.
+function wake(requestId: string, text: string, ref: Ref): boolean {
+  if (!fileNote(requestId, text)) {
+    outbox.add({ ...ref, bubbles: ["firstmate did not get that, send it again"], reply: ref.id, silent: true });
+    return false;
+  }
+  const id = remember("owner", text);
+  if (id !== undefined) burstFrom ??= id;
+  cancelDesk();
+  desk.inboundText();
+  return true;
+}
+
+function heard(id: string, text: string) {
+  said.delete(id);
+  said.set(id, text);
+  if (said.size > 100) said.delete(said.keys().next().value!);
+}
+
+// His edits, from the line's own event stream: spectrum-ts consumes message.edited without passing it on.
+// ponytail: an edit made while this stream is down is lost; replay events.catchUp if that matters.
+async function watchEdits(client: AdvancedIMessage) {
+  for (;;) {
+    try {
+      for await (const e of client.messages.subscribeEvents()) {
+        if (e.type === "message.edited" && !e.isFromMe && (e.actor?.address ?? e.chatGuid.split(";-;")[1]) === OWNER) edited(e);
+      }
+    } catch (e) {
+      log("edit stream")(e);
+    }
+    await Bun.sleep(5 * RETRY_MS);
+  }
+}
+
+function edited(e: EventTypeMap["message.edited"]) {
+  const text = e.content.text ?? "(no text)";
+  const was = said.get(e.messageGuid) ?? "not known: the bridge did not see the text before the edit";
+  console.log("fm-imessage: inbound edit -> note");
+  if (wake(`photon-${e.messageGuid}-edit-${e.sequence}`, `[edited] ${text} (was: ${was})`, { space: e.chatGuid, id: e.messageGuid })) {
+    heard(e.messageGuid, text);
+  }
+}
+
+if (raw) void watchEdits(raw);
 
 for await (const [, message] of app.messages) {
   if (message.direction === "outbound") continue;
