@@ -1,5 +1,7 @@
 # ⚡ Crewship
 
+[![License: FSL-1.1-Apache-2.0](https://img.shields.io/badge/license-FSL--1.1--Apache--2.0-blue)](LICENSE)
+
 Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, the omp agent fleet, and the Concord (Discord) and slk (Slack) terminal chat clients, provisioned by Ansible from a checksum-verified toolchain (the three omp marketplace plugins are the one exception). No Nix, no chezmoi, no cloud dependencies. Each apply installs the latest Concord and slk release and verifies its checksum; see [docs/chat.md](docs/chat.md).
 
 ![Herdr with a sidebar of workspaces and omp agents working on demo repositories in parallel](docs/images/code-factory.png)
@@ -102,4 +104,4 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 | [Google Workspace CLI](docs/google-workspace.md) | `gws`: one OAuth client in testing mode, sign-in for several Google accounts, and carrying each login to a headless host |
 | [Agent host move](docs/agent-host-move.md) | Moving the agents to a new host: what to copy by hand, parity checks, cutover |
 
-Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). License: [MIT](LICENSE).
+Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). License: [FSL-1.1-Apache-2.0](LICENSE).
