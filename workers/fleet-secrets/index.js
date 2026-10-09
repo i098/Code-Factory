@@ -2,9 +2,9 @@
 // token. Access guards the hostname; this code re-verifies the Access JWT so a misconfigured
 // Access app still fails closed. Never log request data or secret values here.
 // Plain-text bindings team_domain (<team>.cloudflareaccess.com) and aud (the Access app AUD
-// tag) come from the Access API at push time. Secret bindings: super_env_layout plus one per
-// variable, written by scripts/stow-secrets.sh; FLEET_SECRETS_ACCESS_CLIENT_ID names the
-// one service token allowed in.
+// tag) come from the Access API at push time. Secret bindings, written by
+// scripts/stow-secrets.sh: super_env_0, super_env_1, ... hold the file's base64 in order, and
+// FLEET_SECRETS_ACCESS_CLIENT_ID names the one service token allowed in.
 const headers = { "Cache-Control": "no-store" };
 const deny = (status = 403) => new Response(null, { status, headers });
 const bytes = (s) =>
@@ -42,11 +42,9 @@ export default {
     if (request.method !== "GET") return deny();
     if (!(await authorized(request, env).catch(() => false))) return deny();
     try {
-      let text = "";
-      for (const [literal, name] of JSON.parse(await env.super_env_layout.get())) {
-        text += literal + (name ? await env[name].get() : "");
-      }
-      return new Response(text, {
+      let b64 = "";
+      for (let i = 0; env[`super_env_${i}`]; i++) b64 += await env[`super_env_${i}`].get();
+      return new Response(bytes(b64), {
         headers: { ...headers, "Content-Type": "text/plain; charset=utf-8" },
       });
     } catch {
