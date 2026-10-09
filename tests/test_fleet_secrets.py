@@ -1,4 +1,4 @@
-"""super.env sync pieces with fake values: splitter round trip, Worker auth, fetch script.
+"""super.env sync pieces with fake values: chunk round trip, Worker auth, fetch script.
 
 The Worker runs under Node with a stubbed Access certs endpoint and an RSA key made per run.
 """
@@ -22,16 +22,22 @@ FAKE_ENV = (
     "SINGLE='single'\n"
     "\n"
     "DUP=first\n"
-    "#DEAD=commented values stay in the layout\n"
+    "#DEAD=commented values stay in the file\n"
     'LONE="unbalanced\n'
     "DUP=last \u00e9\n"
     "FLEET_SECRETS_ACCESS_CLIENT_ID=client-1\n"
     "NO_NEWLINE=end"
 )
+# More than 100 variables, multibyte characters and CRLF lines: larger than one secret.
+BIG_ENV = (
+    "".join(f"VAR_{i}='value {i} \u00e9\u20ac\U0001f600 {'x' * (i % 97)}'\r\n" for i in range(1500))
+    + "FLEET_SECRETS_ACCESS_CLIENT_ID=client-1"
+)
 
 HARNESS = """
+import { readFileSync } from "node:fs";
 import worker from "%s";
-const { secrets, layout } = JSON.parse(process.argv[1]);
+const { chunks, vars } = JSON.parse(readFileSync(0, "utf8"));
 const algo = { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" };
 const gen = () => crypto.subtle.generateKey(
   { ...algo, modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]) }, true,
@@ -50,8 +56,8 @@ async function jwt(claims, key = good.privateKey) {
   return `${head}.${body}.${b64(sig)}`;
 }
 const env = { team_domain: "team.example", aud: "aud-1",
-  super_env_layout: { get: async () => JSON.stringify(layout) } };
-for (const [k, v] of Object.entries(secrets)) env[k] = { get: async () => v };
+  FLEET_SECRETS_ACCESS_CLIENT_ID: { get: async () => vars.FLEET_SECRETS_ACCESS_CLIENT_ID } };
+chunks.forEach((c, i) => { env[`super_env_${i}`] = { get: async () => c }; });
 const now = Date.now() / 1000;
 const ok = { iss: "https://team.example", aud: ["aud-1"], exp: now + 60, nbf: now - 1,
   common_name: "client-1" };
@@ -90,13 +96,11 @@ def split(text: str) -> dict:
     return json.loads(result.stdout)
 
 
-def test_split_names_one_secret_per_assignment():
-    secrets = split(FAKE_ENV)["secrets"]
-    assert secrets == {
+def test_split_keeps_each_variables_last_assignment_without_quotes():
+    assert split(FAKE_ENV)["vars"] == {
         "A": "plain value with = and # inside",
         "QUOTED": "double quoted",
         "SINGLE": "single",
-        "DUP__1": "first",
         "LONE": '"unbalanced',
         "DUP": "last \u00e9",
         "NO_NEWLINE": "end",
@@ -104,23 +108,25 @@ def test_split_names_one_secret_per_assignment():
     }
 
 
-@pytest.mark.parametrize("line", ["EMPTY=", "super_env_layout=x", f"BIG={'x' * 65537}"])
-def test_split_refuses_values_the_store_cannot_hold(line):
-    with pytest.raises(subprocess.CalledProcessError):
-        split(line + "\n")
+def test_split_cuts_a_large_file_into_chunks_one_secret_can_hold():
+    chunks = split(BIG_ENV)["chunks"]
+    assert len(chunks) > 1
+    assert all(0 < len(c.encode()) <= 65536 for c in chunks)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="needs node")
-def test_worker_serves_exact_file_only_to_the_service_token():
+@pytest.mark.parametrize("text", [FAKE_ENV, BIG_ENV], ids=["small", "big"])
+def test_worker_serves_exact_file_only_to_the_service_token(text):
     harness = HARNESS % (WORKER / "index.js").as_uri()
     result = subprocess.run(
-        ["node", "--input-type=module", "-e", harness, json.dumps(split(FAKE_ENV))],
+        ["node", "--input-type=module", "-e", harness],
+        input=json.dumps(split(text)),
         capture_output=True,
         text=True,
         check=True,
     )
     out = json.loads(result.stdout)
-    assert out["valid"] == {"status": 200, "cache": "no-store", "body": FAKE_ENV}
+    assert out["valid"] == {"status": 200, "cache": "no-store", "body": text}
     for name, r in out.items():
         if name != "valid":
             assert r["status"] == 403, name

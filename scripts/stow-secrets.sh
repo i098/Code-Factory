@@ -14,11 +14,16 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 jq -Rs -f "$dir/split.jq" "$src" >"$tmp/split.json"
-jq '[(.secrets | to_entries[] | {name: .key, value}),
-     {name: "super_env_layout", value: (.layout | tojson)}]
+# Chunk names carry the file's hash, so a push never changes a chunk a running Worker reads:
+# it adds the new set, redeploys, then deletes the old set.
+# The Worker checks the Access JWT's client id against FLEET_SECRETS_ACCESS_CLIENT_ID.
+jq --arg v "$(sha256sum <"$src" | cut -c1-12)" '
+    [(.chunks | to_entries[] | {name: "super_env_\($v)_\(.key)", value}),
+     {name: "FLEET_SECRETS_ACCESS_CLIENT_ID",
+      value: (.vars.FLEET_SECRETS_ACCESS_CLIENT_ID // error("no FLEET_SECRETS_ACCESS_CLIENT_ID"))}]
     | map(. + {scopes: ["workers"], comment: "super.env"})' "$tmp/split.json" >"$tmp/entries.json"
-account=$(jq -er .secrets.CLOUDFLARE_ACCOUNT_ID "$tmp/split.json")
-jq -j '"Authorization: Bearer \(.secrets.CF_API_TOKEN_GLOBAL // error("no CF_API_TOKEN_GLOBAL"))\n"' \
+account=$(jq -er .vars.CLOUDFLARE_ACCOUNT_ID "$tmp/split.json")
+jq -j '"Authorization: Bearer \(.vars.CF_API_TOKEN_GLOBAL // error("no CF_API_TOKEN_GLOBAL"))\n"' \
   "$tmp/split.json" >"$tmp/auth"
 
 api() { # METHOD PATH [curl args...]; prints the response, fails on success=false
@@ -62,7 +67,8 @@ jq --arg store "$store" --arg team "$team" --arg aud "$aud" '{
     compatibility_date: "2026-09-01",
     observability: {enabled: false},
     logpush: false,
-    bindings: (map({type: "secrets_store_secret", name, store_id: $store, secret_name: .name})
+    bindings: (map({type: "secrets_store_secret", store_id: $store, secret_name: .name,
+                    name: (.name | sub("^super_env_[0-9a-f]{12}_"; "super_env_"))})
       + [{type: "plain_text", name: "team_domain", text: $team},
          {type: "plain_text", name: "aud", text: $aud}])
   }' "$tmp/entries.json" >"$tmp/metadata.json"
@@ -71,12 +77,13 @@ api PUT "/workers/scripts/$worker" \
   -F "index.js=@$dir/index.js;type=application/javascript+module" >/dev/null
 echo '{"enabled": false, "previews_enabled": false}' >"$tmp/subdomain.json"
 send POST "/workers/scripts/$worker/subdomain" "$tmp/subdomain.json"
-echo "Pushed $(jq length "$tmp/entries.json") secrets from $src; Worker $worker deployed."
 
+# Delete what an earlier push stored and this one no longer binds (older chunk sets, the old
+# one-secret-per-variable layout) once the redeploy has reached every edge.
 jq -r --slurpfile want "$tmp/entries.json" \
   '($want[0] | map({(.name): true}) | add) as $w
-   | to_entries[] | select(.value.comment == "super.env" and ($w[.key] | not)) | .key' \
+   | to_entries[] | select(.value.comment == "super.env" and ($w[.key] | not)) | .value.id' \
   "$tmp/existing.json" >"$tmp/stale"
-[[ -s $tmp/stale ]] || exit 0
-echo "Secrets whose variable is no longer in $src; delete them by hand in the dashboard:"
-cat "$tmp/stale"
+[[ ! -s $tmp/stale ]] || sleep 30 # ponytail: fixed wait; old Worker versions served for ~15 s in tests
+while read -r id; do api DELETE "$secrets/$id" >/dev/null; done <"$tmp/stale"
+echo "Pushed $(jq length "$tmp/entries.json") secrets, deployed $worker, deleted $(wc -l <"$tmp/stale") stale."

@@ -9,16 +9,15 @@ Never paste a value from this file into a repository, issue, PR, log, or chat. C
 | Piece | Where | Notes |
 | --- | --- | --- |
 | Source of truth | `~/super.env` on the primary VPS, mode `600` | Edit here, then push. |
-| One secret per variable | Account Secrets Store (`default_secrets_store`), named after the variable, comment `super.env`, scope `workers` | Holds the value without one surrounding pair of matching quotes. |
-| Repeated variable names | Secrets `NAME`, `NAME__1`, `NAME__2`, … | `NAME` holds the last assignment, the one `source` keeps. Earlier ones are numbered in file order. |
-| Everything else: comments, blank lines, quotes, order | Secret `super_env_layout` | The comments hold retired credentials, so they are a secret too. |
+| The whole file | Account Secrets Store (`default_secrets_store`), secrets `super_env_<hash>_0`, `super_env_<hash>_1`, …, comment `super.env`, scope `workers` | The file's base64, cut into chunks of at most 65,536 characters. `<hash>` is the first 12 hex digits of the file's sha256. The comments hold retired credentials, so they stay a secret too. |
+| Client id for the Worker's own check | Secret `FLEET_SECRETS_ACCESS_CLIENT_ID`, comment `super.env`, scope `workers` | A copy of that variable's last assignment, without one surrounding pair of matching quotes. |
 | Fetch endpoint | Worker `fleet-secrets` on the custom domain `host` names in `scripts/stow-secrets.sh` | No `workers.dev` or preview URL. Answers with `Cache-Control: no-store`. |
 | Gate | Cloudflare Access app `fleet-secrets`, one policy: Service Auth for service token `fleet-secrets-fetch` | The Worker also verifies the Access JWT: issuer, audience, expiry, signature, and the token's client id. Anything else gets `403`. |
 | Fetch credential | `FLEET_SECRETS_ACCESS_CLIENT_ID`, `FLEET_SECRETS_ACCESS_CLIENT_SECRET` at the end of `~/super.env` | Expires one year after creation. |
 
-`workers/fleet-secrets/split.jq` defines the split. The Worker rebuilds the file byte for byte from `super_env_layout` plus the per-variable secrets.
+`workers/fleet-secrets/split.jq` defines the split. The Worker joins its bindings `super_env_0`, `super_env_1`, … in order and decodes them, which gives the file byte for byte.
 
-Limits: a secret holds at most 65,536 bytes, and an account holds at most 100 secrets during the Secrets Store beta. Every current value and the layout fit in one secret, so nothing is chunked. The push script refuses an empty value, a value or layout above the limit, and a variable whose secret name would collide with another binding: `super_env_layout`, `team_domain`, `aud`, or a generated `NAME__n`.
+Limits: a secret holds at most 65,536 bytes, and an account holds at most 100 secrets during the Secrets Store beta. One chunk holds 49,152 bytes of the file, so the secret count grows by one per 48 KiB of file, not per variable. A push briefly needs room for the old and the new chunks together.
 
 ## Push after editing super.env
 
@@ -28,9 +27,9 @@ On the VPS, from this repository:
 scripts/stow-secrets.sh
 ```
 
-It reads `CLOUDFLARE_ACCOUNT_ID` and the account token `CF_API_TOKEN_GLOBAL` from the file itself. It creates or overwrites every secret, then redeploys the Worker with one binding per variable, then turns `workers.dev` and preview URLs off. It refuses to overwrite a same-named secret whose comment is not `super.env`. Running it twice leaves the same state.
+It reads `CLOUDFLARE_ACCOUNT_ID` and the account token `CF_API_TOKEN_GLOBAL` from the file itself. It creates the chunks for the current file and updates `FLEET_SECRETS_ACCESS_CLIENT_ID`, then redeploys the Worker bound to them, then turns `workers.dev` and preview URLs off. It refuses to overwrite a same-named secret whose comment is not `super.env`. Running it twice leaves the same state.
 
-If a variable was deleted from the file, the script lists the orphaned secret names and deletes nothing. Delete them by hand in the Cloudflare dashboard's Secrets Store.
+A changed file gets new chunk names, so a push never changes a chunk that a running Worker reads. After the redeploy, the script waits 30 seconds for every edge to run the new Worker, then deletes every secret with comment `super.env` that the new Worker does not bind: older chunks and the secrets of the earlier one-secret-per-variable layout. It never deletes a secret with another comment.
 
 ## Fetch on a new host
 
