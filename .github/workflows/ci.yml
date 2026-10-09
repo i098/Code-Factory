@@ -164,9 +164,9 @@ jobs:
               if not match:
                   continue
               ref, alias = expand(match.group(1)), match.group(2)
-              # The base tracks the newest Ubuntu LTS; nothing else is pulled.
-              if ref not in stages and ref != "ubuntu:latest":
-                  problems.append(f"FROM {ref} is neither a previous stage nor ubuntu:latest")
+              # The base tracks the newest Ubuntu LTS from mirror.gcr.io (no pull limit).
+              if ref not in stages and ref != "mirror.gcr.io/library/ubuntu:latest":
+                  problems.append(f"FROM {ref} is neither a previous stage nor mirror.gcr.io/library/ubuntu:latest")
               if alias:
                   stages.add(alias)
 
