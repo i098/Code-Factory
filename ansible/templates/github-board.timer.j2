@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+
+[Unit]
+Description=Periodic GitHub board sync (Crewship managed)
+
+[Timer]
+Unit=github-board.service
+# The minimum gap between runs; a run with nothing new makes no GitHub calls.
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
