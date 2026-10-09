@@ -40,7 +40,7 @@ If the first argument does not start with `-`, it is the host. If there is no ar
 
 You must make the link because `mosh-server` and non-interactive SSH commands start with a `PATH` that does not include `~/.local/bin`. Without the link, mosh and SSH cannot find `herdr-patch`. The same link is necessary for `herdr` (`/usr/local/bin/herdr`).
 
-On a Code Factory host, `./factory apply` does these steps from the checkout, and links `herdr` too. Its verification makes sure that `herdr` and `herdr-patch` resolve with the `PATH` of `mosh-server`.
+On a Crewship host, `./factory apply` does these steps from the checkout, and links `herdr` too. Its verification makes sure that `herdr` and `herdr-patch` resolve with the `PATH` of `mosh-server`.
 
 Each mosh login starts a new `herdr-patch` process. Thus, after you install a new version, you do not have to restart Herdr.
 
@@ -152,7 +152,7 @@ sudo rm /usr/local/bin/herdr-patch
 rm ~/.local/bin/herdr-patch
 ```
 
-Then attach with `mosh <user>@<host> -- herdr` again. On a Code Factory host, also remove the install and link tasks in `ansible/tasks/herdr.yml` and the check in `ansible/tasks/verify.yml`.
+Then attach with `mosh <user>@<host> -- herdr` again. On a Crewship host, also remove the install and link tasks in `ansible/tasks/herdr.yml` and the check in `ansible/tasks/verify.yml`.
 
 ## Tests
 

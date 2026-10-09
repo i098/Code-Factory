@@ -1,4 +1,4 @@
-# Code Factory compose stack.
+# Crewship compose stack.
 #
 #   docker compose --profile worker up -d            # isolated non-root worker
 #   docker compose --profile worker --profile data up -d   # + example backing services

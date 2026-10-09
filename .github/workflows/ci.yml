@@ -1,4 +1,4 @@
-# Continuous integration for Code Factory.
+# Continuous integration for Crewship.
 #
 # Runs the repository's real interfaces: locked Python dependency sync, the
 # project's own lint/test commands, schema validation of both configuration

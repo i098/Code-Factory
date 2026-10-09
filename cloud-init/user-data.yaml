@@ -1,10 +1,10 @@
 #cloud-config
-# Code Factory - optional first-boot prerequisites for a fresh Ubuntu
+# Crewship - optional first-boot prerequisites for a fresh Ubuntu
 # 24.04 / 26.04 machine. Vendor neutral: nothing here is specific to a cloud,
 # a hypervisor or an image vendor.
 #
 # What this does
-#   Installs the operating-system packages needed to *run* Code Factory:
+#   Installs the operating-system packages needed to *run* Crewship:
 #   git to obtain the checkout, python3 + python3-venv for the uv bootstrap,
 #   acl because Ansible escalates from one unprivileged account to another,
 #   and the archive/transport tools the tool installer uses.
@@ -28,8 +28,8 @@
 #     sudo cloud-init schema --config-file cloud-init/user-data.yaml
 #
 # After first boot, as the account that will own the factory:
-#   git clone <your private remote> ~/Dev/Code-Factory
-#   cd ~/Dev/Code-Factory && ./bootstrap.sh init && ./bootstrap.sh apply
+#   git clone <your private remote> ~/Dev/Crewship
+#   cd ~/Dev/Crewship && ./bootstrap.sh init && ./bootstrap.sh apply
 #
 # Keep the distribution's own package sources; this adds none of its own. The
 # Chrome, Docker and Tailscale sources are added later, by the profiles that
@@ -71,7 +71,7 @@ write_files:
     permissions: "0644"
     defer: true
     content: |
-      # Code Factory cloud-init prerequisites applied at first boot.
+      # Crewship cloud-init prerequisites applied at first boot.
       # Packages only. No account, credential, firewall or SSH change was made
       # here, and no provisioning was run.
       prerequisites=ca-certificates,curl,gnupg,openssl,git,rsync,tar,unzip,xz-utils,zstd,python3,python3-venv,jq,procps,acl,sudo

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install public tools into a user-owned Code Factory prefix.
+"""Install public tools into a user-owned Crewship prefix.
 
 Stdlib-only: also bootstraps uv before repository dependencies exist. stdout is
 one JSON result; installer progress goes to stderr. Existing unmanaged commands

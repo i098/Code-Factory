@@ -1,4 +1,4 @@
-# Code Factory - NoCloud seed metadata.
+# Crewship - NoCloud seed metadata.
 #
 # Only needed for the NoCloud datasource (seed ISO or a vfat filesystem
 # labelled CIDATA), where cloud-init requires a file named exactly

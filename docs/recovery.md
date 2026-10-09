@@ -3,7 +3,7 @@
 ## New-device sequence
 
 1. Start with a supported Ubuntu installation and working SSH/sudo access. `cloud-init/user-data.yaml` installs initial OS prerequisites; it does not create credentials, log in to services, or clone this private repository.
-2. Authenticate GitHub on the new device and clone Code Factory. Run the [Quick start](../README.md#quick-start): bootstrap, init, validate, plan, apply, and doctor.
+2. Authenticate GitHub on the new device and clone Crewship. Run the [Quick start](../README.md#quick-start): bootstrap, init, validate, plan, apply, and doctor.
 3. Confirm Herdr's user service and executable agree. Both resolve to the versioned release that apply resolved and installed (see [Latest releases](dependencies.md#latest-releases)).
 4. Authenticate agent/provider CLIs under the configured operator account (for omp, see [Sign in](omp.md#sign-in)). Confirm the configured models exist for that account. Recreate per-project approval/trust choices instead of copying a global auto-approval list.
 5. If selected, authenticate Tailscale as a new device and review its ACL/SSH policy. Installation alone does not authorize incoming connections.
@@ -50,7 +50,7 @@ The included PostgreSQL/Redis Compose services are empty development examples. T
 
 For `thinking`/`redacted_thinking` replay errors, inspect the complete request path. Prefix-bound reasoning can fail even when the opaque thinking fields are unchanged: an intermediary may have rewritten earlier messages, system text, or tool schemas. Preserve request bodies, route affinity, and signer identity; do not strip reasoning as a generic workaround.
 
-The inspected local Headroom/pxpipe fixes, version/hash guards, and offline regressions are in [proxy-fixes](../proxy-fixes/README.md). Default fresh Code Factory agent configuration does not import machine-specific proxy URLs. Providers can be used directly; installing the optional proxies and their credentials is a separate, deliberate operation.
+The inspected local Headroom/pxpipe fixes, version/hash guards, and offline regressions are in [proxy-fixes](../proxy-fixes/README.md). Default fresh Crewship agent configuration does not import machine-specific proxy URLs. Providers can be used directly; installing the optional proxies and their credentials is a separate, deliberate operation.
 
 Never upload a raw failed HTTP request to a public issue or this repository. Such files contain prompts and may include secrets in tool output. Share only sanitized block shapes, lengths, hashes, provider/version information, and error classifications.
 

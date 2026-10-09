@@ -1,4 +1,4 @@
-# Seeded once by Code Factory (docs/chat.md); Concord owns this file afterwards.
+# Seeded once by Crewship (docs/chat.md); Concord owns this file afterwards.
 [display]
 # Images go out as kitty graphics, which WezTerm, kitty and Ghostty draw.
 image_protocol = "kitty"

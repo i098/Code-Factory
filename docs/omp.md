@@ -1,6 +1,6 @@
 # omp configuration
 
-omp (`@oh-my-pi/pi-coding-agent`) is the agent harness Code Factory installs. This guide covers what the recipe sets up, how to sign in, and how to change models and settings. For every omp setting, run `omp config list` or read omp's own docs.
+omp (`@oh-my-pi/pi-coding-agent`) is the agent harness Crewship installs. This guide covers what the recipe sets up, how to sign in, and how to change models and settings. For every omp setting, run `omp config list` or read omp's own docs.
 
 ## What the recipe sets up
 

@@ -1,4 +1,4 @@
-# ⚡ Code Factory
+# ⚡ Crewship
 
 Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, the omp agent fleet, and the Concord (Discord) and slk (Slack) terminal chat clients, provisioned by Ansible from a checksum-verified toolchain (the three omp marketplace plugins are the one exception). No Nix, no chezmoi, no cloud dependencies. Each apply installs the latest Concord and slk release and verifies its checksum; see [docs/chat.md](docs/chat.md).
 
@@ -43,8 +43,8 @@ You need Ubuntu 24.04 or 26.04 on x86_64 or aarch64 with systemd, a non-root acc
 2. Clone the repository:
 
    ```bash
-   git clone https://github.com/i098/Code-Factory.git
-   cd Code-Factory
+   git clone https://github.com/i098/Crewship.git
+   cd Crewship
    ```
 
 3. Install the repository tooling (the latest uv, then the locked Python environment with Ansible):

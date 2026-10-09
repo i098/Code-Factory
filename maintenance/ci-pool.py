@@ -40,7 +40,7 @@ TEMPLATE = UNITS / "ci-runner@.service"
 WANTS = UNITS / "default.target.wants"
 HOOK = HOME / ".config/ci-pool/job-started.sh"
 UNIT_TEXT = """\
-# Written by ci-pool.py apply (Code Factory); instances come from factory.ci_pool.
+# Written by ci-pool.py apply (Crewship); instances come from factory.ci_pool.
 [Unit]
 Description=CI pool runner slot %i (one GitHub Actions job per start)
 After=network-online.target
@@ -71,7 +71,7 @@ CONTAINER_PREP = (
 # alone would still let later `if: always()` steps run.
 HOOK_TEXT = """\
 #!/usr/bin/env bash
-# Written by ci-pool.py apply (Code Factory): refuse code from outside the repository.
+# Written by ci-pool.py apply (Crewship): refuse code from outside the repository.
 python3 - <<'PY' || { sudo kill -KILL -1; exit 1; }
 import json, os, sys
 repo = os.environ["GITHUB_REPOSITORY"]

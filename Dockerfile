@@ -1,4 +1,4 @@
-# Code Factory container worker.
+# Crewship container worker.
 #
 # This image is a repeatable, isolated, NON-ROOT worker and a provisioning smoke
 # surface. It is deliberately NOT a native host:
@@ -166,8 +166,8 @@ ENV CODE_FACTORY_IMAGE=worker \
     CODE_FACTORY_CONFIG=/opt/code-factory/${FACTORY_CONFIG}
 
 LABEL org.opencontainers.image.title="code-factory-worker" \
-      org.opencontainers.image.description="Isolated non-root Code Factory worker; no systemd, Tailscale or desktop." \
-      org.opencontainers.image.source="https://github.com/i098/Code-Factory" \
+      org.opencontainers.image.description="Isolated non-root Crewship worker; no systemd, Tailscale or desktop." \
+      org.opencontainers.image.source="https://github.com/i098/Crewship" \
       org.opencontainers.image.base.name="docker.io/library/ubuntu:latest"
 
 WORKDIR ${FACTORY_WORKSPACE}
@@ -181,7 +181,7 @@ FROM worker AS smoke
 ENV CODE_FACTORY_IMAGE=smoke
 
 LABEL org.opencontainers.image.title="code-factory-smoke" \
-      org.opencontainers.image.description="Code Factory worker image running tests/container-smoke.sh."
+      org.opencontainers.image.description="Crewship worker image running tests/container-smoke.sh."
 
 WORKDIR /opt/code-factory
 CMD ["/opt/code-factory/tests/container-smoke.sh", "--in-container"]
