@@ -30,7 +30,7 @@ def install(env, *args):
     )
 
 
-@pytest.mark.parametrize("args", [["--help"], ["-h"], ["--container", "--help"]])
+@pytest.mark.parametrize("args", [["--help"], ["-h"], ["--container", "--help"], ["--user", "--help"]])
 def test_help_prints_usage_and_changes_nothing(tmp_path, args):
     result = install(sandbox(tmp_path), *args)
     assert (result.returncode, result.stderr) == (0, "")

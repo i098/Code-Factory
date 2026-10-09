@@ -16,9 +16,12 @@ The options go to ./ship.sh dock, which writes the host config on the first run.
 
 # Runs before any install step, so --help and a bad option change nothing.
 check_args() {
+  local arg
+  for arg; do
+    case $arg in -h | --help) printf '%s\n' "$USAGE"; exit 0 ;; esac
+  done
   while (($#)); do
     case $1 in
-      -h | --help) printf '%s\n' "$USAGE"; exit 0 ;;
       --container | --user=?* | --home=?*) shift ;;
       --user | --home) (($# > 1)) || break; shift 2 ;;
       *) break ;;
