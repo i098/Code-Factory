@@ -51,6 +51,8 @@ struct Sub {
 pub struct Feed {
     pub rx: mpsc::Receiver<Arc<str>>,
     pub slow: Arc<Notify>,
+    /// The first line of the stream: the boot id and the seq at subscription time.
+    pub hello: Arc<str>,
 }
 
 /// Subscriber id, replay lines, and the live message queue.
@@ -150,15 +152,16 @@ impl Board {
     }
 
     /// Registers a subscriber. With `since`, replays retained messages with a
-    /// higher seq, led by a gap marker when any of them were evicted. A `since`
-    /// beyond the board's seq means the board restarted: it is a gap and replays all.
-    pub fn subscribe(&mut self, patterns: Vec<String>, since: Option<u64>) -> Result<Subscription, &'static str> {
+    /// higher seq, led by a gap marker when any of them were evicted. The board
+    /// restarted when `since` is beyond its seq or `boot` is not its boot id: that
+    /// is a gap marked `restarted` and replays all retained messages.
+    pub fn subscribe(&mut self, patterns: Vec<String>, since: Option<u64>, boot: Option<&str>) -> Result<Subscription, &'static str> {
         if patterns.is_empty() || !patterns.iter().all(|p| valid_pattern(p)) {
             return Err("bad_topic");
         }
         let mut replay = Vec::new();
         if let Some(since) = since {
-            let restarted = since > self.seq;
+            let restarted = since > self.seq || boot.is_some_and(|b| b != self.boot);
             let mut lost = self.forgotten;
             let mut msgs: Vec<&Msg> = Vec::new();
             for (name, t) in &self.topics {
@@ -170,7 +173,8 @@ impl Board {
             msgs.sort_unstable_by_key(|m| m.seq);
             if restarted || lost > since {
                 let oldest = msgs.first().map_or(self.seq + 1, |m| m.seq);
-                replay.push(format!("{{\"gap\":true,\"oldest\":{oldest}}}\n").into());
+                let restarted = if restarted { ",\"restarted\":true" } else { "" };
+                replay.push(format!("{{\"gap\":true,\"oldest\":{oldest}{restarted}}}\n").into());
             }
             replay.extend(msgs.into_iter().map(|m| m.line.clone()));
         }
@@ -178,7 +182,8 @@ impl Board {
         self.next_sub += 1;
         let slow = Arc::new(Notify::new());
         self.subs.push(Sub { id: self.next_sub, patterns, tx, slow: slow.clone() });
-        Ok((self.next_sub, replay, Feed { rx, slow }))
+        let hello = format!("{{\"boot\":{},\"seq\":{}}}\n", Value::from(self.boot.as_str()), self.seq).into();
+        Ok((self.next_sub, replay, Feed { rx, slow, hello }))
     }
 
     /// Removes a subscriber; `slow` counts it as dropped for being too slow.
@@ -302,13 +307,13 @@ mod tests {
         }
         b.publish("u", Some("me"), 1, "4").unwrap();
         assert_eq!(seqs(&b.history("t", 10)), [json!(2), json!(3)]);
-        let (_, replay, _rx) = b.subscribe(vec!["t".into()], Some(0)).unwrap();
+        let (_, replay, _rx) = b.subscribe(vec!["t".into()], Some(0), None).unwrap();
         assert_eq!(&*replay[0], "{\"gap\":true,\"oldest\":2}\n");
         assert_eq!(seqs(&replay[1..]), [json!(2), json!(3)]);
         // Nothing after seq 1 was evicted from `t`, and `u` evicted nothing.
-        let (_, replay, _rx) = b.subscribe(vec!["t".into(), "u".into()], Some(1)).unwrap();
+        let (_, replay, _rx) = b.subscribe(vec!["t".into(), "u".into()], Some(1), None).unwrap();
         assert_eq!(seqs(&replay), [json!(2), json!(3), json!(4)]);
-        let (_, replay, _rx) = b.subscribe(vec!["u".into()], None).unwrap();
+        let (_, replay, _rx) = b.subscribe(vec!["u".into()], None, None).unwrap();
         assert!(replay.is_empty());
     }
 
@@ -344,9 +349,9 @@ mod tests {
         let kept: usize = b.topics().as_array().unwrap().iter().map(|t| b.history(t["topic"].as_str().unwrap(), 10).iter().map(|l| l.len()).sum::<usize>()).sum();
         assert_eq!(b.stat()["bytes"], json!(kept));
         // t1 held seq 2: a subscriber that saw seq 1 must be told about the loss.
-        let (_, replay, _rx) = b.subscribe(vec!["t0".into()], Some(1)).unwrap();
+        let (_, replay, _rx) = b.subscribe(vec!["t0".into()], Some(1), None).unwrap();
         assert_eq!(&*replay[0], "{\"gap\":true,\"oldest\":1025}\n");
-        let (_, replay, _rx) = b.subscribe(vec!["t0".into()], Some(2)).unwrap();
+        let (_, replay, _rx) = b.subscribe(vec!["t0".into()], Some(2), None).unwrap();
         assert_eq!(seqs(&replay), [json!(1025)]);
     }
 
@@ -356,18 +361,47 @@ mod tests {
         for body in ["1", "2", "3"] {
             b.publish("t", None, 1, body).unwrap();
         }
-        let (_, replay, _rx) = b.subscribe(vec!["t".into()], Some(100)).unwrap();
-        assert_eq!(&*replay[0], "{\"gap\":true,\"oldest\":1}\n");
+        let (_, replay, _rx) = b.subscribe(vec!["t".into()], Some(100), None).unwrap();
+        assert_eq!(&*replay[0], "{\"gap\":true,\"oldest\":1,\"restarted\":true}\n");
         assert_eq!(seqs(&replay[1..]), [json!(1), json!(2), json!(3)]);
-        let (_, replay, _rx) = b.subscribe(vec!["t".into()], Some(3)).unwrap();
+        let (_, replay, _rx) = b.subscribe(vec!["t".into()], Some(3), None).unwrap();
         assert!(replay.is_empty());
+    }
+
+    #[test]
+    fn boot_id_detects_a_restart_past_the_old_seq() {
+        let mut old = board(1 << 20, 10);
+        for body in ["1", "2", "3"] {
+            old.publish("t", None, 1, body).unwrap();
+        }
+        let (_, _, feed) = old.subscribe(vec!["t".into()], None, None).unwrap();
+        let hello: Value = serde_json::from_str(&feed.hello).unwrap();
+        assert_eq!(hello["seq"], json!(3));
+        let old_boot = hello["boot"].as_str().unwrap().to_owned();
+
+        let mut new = board(1 << 20, 10);
+        for body in ["1", "2", "3", "4", "5"] {
+            new.publish("t", None, 1, body).unwrap();
+        }
+        let (_, _, feed) = new.subscribe(vec!["t".into()], None, None).unwrap();
+        let new_boot = serde_json::from_str::<Value>(&feed.hello).unwrap()["boot"].clone();
+        assert_ne!(new_boot, json!(old_boot));
+
+        let (_, replay, _rx) = new.subscribe(vec!["t".into()], Some(3), Some(&old_boot)).unwrap();
+        assert_eq!(&*replay[0], "{\"gap\":true,\"oldest\":1,\"restarted\":true}\n");
+        assert_eq!(seqs(&replay[1..]), [json!(1), json!(2), json!(3), json!(4), json!(5)]);
+        // Without a boot id the seq alone cannot tell: it continues the stream.
+        let (_, replay, _rx) = new.subscribe(vec!["t".into()], Some(3), None).unwrap();
+        assert_eq!(seqs(&replay), [json!(4), json!(5)]);
+        let (_, replay, _rx) = new.subscribe(vec!["t".into()], Some(3), new_boot.as_str()).unwrap();
+        assert_eq!(seqs(&replay), [json!(4), json!(5)]);
     }
 
     #[test]
     fn slow_subscriber_is_dropped() {
         let mut b = board(1 << 20, 10);
-        let (_, _, _rx) = b.subscribe(vec!["*".into()], None).unwrap();
-        let (_, _, mut fast) = b.subscribe(vec!["t".into()], None).unwrap();
+        let (_, _, _rx) = b.subscribe(vec!["*".into()], None, None).unwrap();
+        let (_, _, mut fast) = b.subscribe(vec!["t".into()], None, None).unwrap();
         for _ in 0..SUB_QUEUE {
             b.publish("t", None, 1, "x").unwrap();
             fast.rx.try_recv().unwrap();

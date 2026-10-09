@@ -14,8 +14,11 @@ use serde_json::{Value, json};
 
 const USAGE: &str = "usage:
   crewboard pub <topic> [text|-]          publish; reads stdin when text is - or absent
-  crewboard sub <topic>... [--since N] [--json]
-                                          stream messages; a trailing * matches a prefix
+  crewboard sub <topic>... [--since N [--boot ID]] [--json]
+                                          stream messages; a trailing * matches a prefix.
+                                          The first line is {\"boot\":ID,\"seq\":N} (stderr unless --json);
+                                          pass the last boot ID and seq back on reconnect: a different
+                                          boot replays all history after a gap marker with restarted:true
   crewboard tail <topic> [-n 50] [--json] print history, then exit
   crewboard topics                        list topics with counts
   crewboard stat                          print caps, usage and the boot id
@@ -146,16 +149,25 @@ fn publish(rest: &[String]) {
 }
 
 fn subscribe(rest: &[String]) {
-    let a = Args::parse(rest, &["--since"]);
-    if a.pos.is_empty() {
+    let a = Args::parse(rest, &["--since", "--boot"]);
+    let (since, boot) = (a.opt::<u64>("--since"), a.opt::<String>("--boot"));
+    if a.pos.is_empty() || (boot.is_some() && since.is_none()) {
         usage();
     }
-    let mut r = request(json!({"op": "sub", "topics": a.pos, "since": a.opt::<u64>("--since")}));
+    let mut r = request(json!({"op": "sub", "topics": a.pos, "since": since, "boot": boot}));
     loop {
         let (raw, v) = next(&mut r);
-        match v["gap"].as_bool() {
-            Some(true) if !a.json => eprintln!("crewboard: gap: messages before seq {} are gone", v["oldest"]),
-            _ => print_msg(&raw, &v, a.json),
+        if v["boot"].is_string() {
+            if a.json {
+                println!("{raw}");
+            } else {
+                eprintln!("crewboard: boot {} seq {}", v["boot"].as_str().unwrap_or("-"), v["seq"]);
+            }
+        } else if v["gap"] == true && !a.json {
+            let why = if v["restarted"] == true { "the board restarted; its history starts at" } else { "messages before" };
+            eprintln!("crewboard: gap: {why} seq {} are gone", v["oldest"]);
+        } else {
+            print_msg(&raw, &v, a.json);
         }
     }
 }

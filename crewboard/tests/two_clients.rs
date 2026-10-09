@@ -90,6 +90,8 @@ fn two_clients_history_caps_and_restart() {
 
     // Client A subscribes; client B publishes as an argument and from stdin.
     let (mut a, a_rx) = sub(sock, dir, &["sub", "task/a", "fleet", "--since", "0", "--json"]);
+    let hello = recv(&a_rx);
+    assert_eq!((hello["boot"].is_string(), &hello["seq"]), (true, &0.into()));
     let o = cmd(sock, dir, &["pub", "task/a", "hello"]).env("FM_TASK_ID", "b").output().unwrap();
     assert_eq!(stdout(&o).trim(), "1");
     let mut b = cmd(sock, dir, &["pub", "fleet"]).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
@@ -109,11 +111,13 @@ fn two_clients_history_caps_and_restart() {
     }
     assert_eq!(stdout(&run(sock, dir, &["tail", "task/a", "-n", "2"])).lines().map(|l| &l[..1]).collect::<Vec<_>>(), ["4", "5"]);
     let (_late, late_rx) = sub(sock, dir, &["sub", "task/a", "--since", "0", "--json"]);
+    assert!(recv(&late_rx)["boot"].is_string());
     assert_eq!(recv(&late_rx), serde_json::json!({"gap": true, "oldest": 3}));
     for want in [3, 4, 5] {
         assert_eq!(recv(&late_rx)["seq"], want);
     }
     let (_caught_up, rx) = sub(sock, dir, &["sub", "task/*", "--since", "3", "--json"]);
+    assert!(recv(&rx)["boot"].is_string());
     assert_eq!(recv(&rx)["seq"], 4);
 
     // Message size limit, then the global cap evicts the oldest messages first.
@@ -138,6 +142,20 @@ fn two_clients_history_caps_and_restart() {
     assert_ne!(s["boot"], boot);
     assert_eq!((&s["seq"], &s["topics"], &s["bytes"]), (&0.into(), &0.into(), &0.into()));
     assert_eq!(stdout(&run(sock, dir, &["pub", "task/a", "after restart"])).trim(), "1");
+
+    // A subscriber that saw seq 3 on the old board reconnects after the new board passed seq 3:
+    // the old boot id tells the two boards apart, so it gets a restart gap, not a false continuation.
+    for body in ["2", "3", "4", "5"] {
+        stdout(&run(sock, dir, &["pub", "task/a", body]));
+    }
+    let old_boot = boot.as_str().unwrap();
+    let (_again, again_rx) = sub(sock, dir, &["sub", "task/a", "--since", "3", "--boot", old_boot, "--json"]);
+    let hello = recv(&again_rx);
+    assert_eq!((hello["boot"].is_string(), hello["boot"] == boot, &hello["seq"]), (true, false, &5.into()));
+    assert_eq!(recv(&again_rx), serde_json::json!({"gap": true, "oldest": 3, "restarted": true}));
+    for want in [3, 4, 5] {
+        assert_eq!(recv(&again_rx)["seq"], want);
+    }
 
     drop(restarted);
     std::fs::remove_dir_all(dir).unwrap();
@@ -232,5 +250,11 @@ fn slow_reader_is_cut_off_without_its_backlog() {
     let got = reader.join().unwrap();
     // The reader gets what it read while the queue filled, never the ~60 MB left queued at the drop.
     assert!(got.len() + 30_000_000 < published, "{} of {published} bytes delivered", got.len());
+    // The stream stops on a whole line; the slow notice is best effort, as the socket may have no room.
+    let text = String::from_utf8(got).unwrap();
+    assert!(text.ends_with('\n'));
+    let lines: Vec<Value> = text.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert!(lines[0]["boot"].is_string());
+    assert!(lines[1..].iter().all(|l| l["body"].is_string() || l["error"] == "slow"));
     std::fs::remove_dir_all(&dir).unwrap();
 }

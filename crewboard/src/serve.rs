@@ -1,4 +1,16 @@
 //! `crewboard serve`: the Unix socket daemon around `Board`.
+//!
+//! Wire protocol: one JSON request per line; each answers with one JSON line
+//! (`hist` with lines ended by `{"end":true}`), except `sub`.
+//! - `{"op":"pub","topic":T,"body":B,"from":F}` -> `{"ok":true,"seq":N}`
+//! - `{"op":"hist","topic":T,"n":N}`, `{"op":"topics"}`, `{"op":"stat"}`
+//! - `{"op":"sub","topics":[T..],"since":N,"boot":ID}` streams until either side closes.
+//!   The first line is `{"boot":ID,"seq":N}`: the board's boot id and seq. With `since`,
+//!   retained messages above it follow, led by `{"gap":true,"oldest":N}` when some were
+//!   evicted. When `boot` differs from the board's, or `since` is above its seq, the board
+//!   restarted: the gap carries `"restarted":true` and all retained messages follow.
+//!   `boot` without `since` is ignored. A subscriber that falls behind gets
+//!   `{"error":"slow"}` when the socket has room, and is disconnected.
 
 use std::io;
 use std::os::unix::fs::FileTypeExt;
@@ -77,7 +89,7 @@ async fn conn(stream: UnixStream, board: Shared, uid: u32) -> io::Result<()> {
             return Ok(());
         }
         if n == max_line && line.last() != Some(&b'\n') {
-            return w.write_all(format!("{}\n", err("too_large")).as_bytes()).await;
+            return put(&mut w, &format!("{}\n", err("too_large"))).await;
         }
         let req: Value = serde_json::from_slice(&line).unwrap_or(Value::Null);
         let reply = if req["op"] == "sub" {
@@ -88,13 +100,18 @@ async fn conn(stream: UnixStream, board: Shared, uid: u32) -> io::Result<()> {
         } else {
             answer(&board, pid, &req)
         };
-        w.write_all(reply.as_bytes()).await?;
+        put(&mut w, &reply).await?;
     }
 }
 
 fn subscribe(board: &Shared, req: &Value) -> Result<Subscription, &'static str> {
     let topics = req["topics"].as_array().and_then(|a| a.iter().map(|t| t.as_str().map(String::from)).collect());
-    lock(board).subscribe(topics.ok_or("bad_request")?, req["since"].as_u64())
+    let boot = match &req["boot"] {
+        Value::Null => None,
+        Value::String(b) => Some(b.as_str()),
+        _ => return Err("bad_request"),
+    };
+    lock(board).subscribe(topics.ok_or("bad_request")?, req["since"].as_u64(), boot)
 }
 
 /// The reply lines to any request but `sub`, newline included.
@@ -128,7 +145,7 @@ async fn put(w: &mut OwnedWriteHalf, line: &str) -> io::Result<()> {
 
 /// Streams replay then live messages until the client closes its end or falls behind.
 async fn stream_sub(mut r: BufReader<OwnedReadHalf>, mut w: OwnedWriteHalf, board: Shared, sub: Subscription) -> io::Result<()> {
-    let (id, replay, Feed { mut rx, slow }) = sub;
+    let (id, replay, Feed { mut rx, slow, hello }) = sub;
     let reader = tokio::spawn(async move {
         let mut sink = [0u8; 256];
         while matches!(r.read(&mut sink).await, Ok(n) if n > 0) {}
@@ -136,22 +153,30 @@ async fn stream_sub(mut r: BufReader<OwnedReadHalf>, mut w: OwnedWriteHalf, boar
     let stop_reader = reader.abort_handle();
     let shared = board.clone();
     let writer = tokio::spawn(async move {
-        let mut replay = replay.into_iter();
+        let mut lines = std::iter::once(hello).chain(replay);
         // (write timed out, notice may follow the last whole line)
         let (timed_out, notice) = loop {
             let next = tokio::select! {
                 biased;
                 _ = slow.notified() => break (false, true),
-                next = async { match replay.next() { Some(line) => Some(line), None => rx.recv().await } } => next,
+                next = async { match lines.next() { Some(line) => Some(line), None => rx.recv().await } } => next,
             };
             let Some(line) = next else { break (false, true) };
-            tokio::select! {
-                wrote = put(&mut w, &line) => {
-                    if let Err(e) = wrote {
-                        break (e.kind() == io::ErrorKind::TimedOut, false);
-                    }
+            let mut write = std::pin::pin!(put(&mut w, &line));
+            // A line in flight is finished, never cut, so the notice cannot land inside it.
+            let (wrote, dropped_slow) = tokio::select! {
+                wrote = &mut write => (wrote, false),
+                _ = slow.notified() => {
+                    rx.close();
+                    while rx.try_recv().is_ok() {}
+                    (write.await, true)
                 }
-                _ = slow.notified() => break (false, false),
+            };
+            if let Err(e) = wrote {
+                break (e.kind() == io::ErrorKind::TimedOut, false);
+            }
+            if dropped_slow {
+                break (false, true);
             }
         };
         // The queue is full: free it now instead of delivering it.
