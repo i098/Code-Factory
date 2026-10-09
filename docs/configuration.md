@@ -4,14 +4,18 @@
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `./onboard.sh` | Installs the repository tooling: the latest uv, then the locked Python environment with Ansible. Changes nothing else on the host. |
-| `./ship.sh dock` | Copies `config/default.yml` to `.local/host.yml` with your user, home, and `~/Dev` workspace filled in. Never overwrites an existing file. Options: `--user`, `--home`, `--container`. |
-| `./ship.sh inspect` | Checks the config against `schemas/factory.schema.json` and the cross-field rules below. |
-| `./ship.sh chart` | Runs the Ansible playbook in check mode. Reports what would change; mutates nothing. |
-| `./ship.sh launch` | Runs the playbook for real. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, the first successful interactive apply with omp signed in then opens the new-host questions (below). |
-| `./ship.sh survey` | Checks that each expected tool runs and reports `gh` authentication. Changes nothing. |
+| New name | Old name | What it does |
+| --- | --- | --- |
+| `./onboard.sh` | `./bootstrap.sh` | Installs the repository tooling: the latest uv, then the locked Python environment with Ansible. Changes nothing else on the host. |
+| `./ship.sh dock` | `./factory init` | Copies `config/default.yml` to `.local/host.yml` with your user, home, and `~/Dev` workspace filled in. Never overwrites an existing file. Options: `--user`, `--home`, `--container`. |
+| `./ship.sh inspect` | `./factory validate` | Checks the config against `schemas/factory.schema.json` and the cross-field rules below. |
+| `./ship.sh chart` | `./factory plan` | Runs the Ansible playbook in check mode. Reports what would change; mutates nothing. |
+| `./ship.sh launch` | `./factory apply` | Runs the playbook for real. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, the first successful interactive apply with omp signed in then opens the new-host questions (below). |
+| `./ship.sh survey` | `./factory doctor` | Checks that each expected tool runs and reports `gh` authentication. Changes nothing. |
+| `scripts/ship.py` | `scripts/factory.py` | The Python program behind `ship.sh`. |
+| `scripts/provisions.py` | `scripts/install_tools.py` | Installs the public tools into the user-owned Crewship prefix. |
+| `scripts/stow-secrets.sh` | `scripts/push-super-env.sh` | Pushes `~/super.env` to Cloudflare Secrets Store and redeploys the fleet-secrets Worker. |
+| `scripts/fetch-secrets.sh` | `scripts/fetch-super-env.sh` | Pulls `super.env` from the fleet-secrets Worker into `~/super.env`. |
 
 `inspect`, `chart`, `launch`, and `survey` read `--config <path>` if you pass one, otherwise `.local/host.yml`. If `.local/host.yml` does not exist, `inspect`, `chart`, and `survey` fall back to `config/default.yml` (user `coder`); `launch` refuses to run.
 
