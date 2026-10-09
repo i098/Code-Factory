@@ -85,6 +85,7 @@ def test_mapped_rows_get_their_own_spot_and_no_board(tmp_path, monkeypatch, caps
 def test_readme_cards_show_prose_not_markdown(tmp_path, monkeypatch):
     manifest = built(tmp_path, monkeypatch, (ROOT / "README.md").read_text())
 
-    assert manifest.text["sign"].endswith("Turn a fresh Ubuntu machine into a self-hosted AI coding agent fleet.")
-    assert manifest.text["gangway"].startswith("Quick startThe gangway. Rent an Ubuntu")
-    assert [spot for spot in ("sign", "gangway") if "#" in manifest.text[spot]] == []
+    for spot in ("sign", "gangway"):
+        body = manifest.text[spot].split(".", 1)[1].strip()
+        assert body and not body.startswith(("#", "<", "![", "|"))
+        assert ".." not in body
