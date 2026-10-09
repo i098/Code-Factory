@@ -91,8 +91,38 @@ function painted(text, u0, u1, v0, v1) {
 const hash = (a, b) => { const h = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return h - Math.floor(h); };
 
 // Harbor: quay, breakwater, the dock and what stands on them.
-box(world, -70, -2, 14, 70, 1.2, 46, "t", { solid: false });
-box(world, -46, -2, -36, -26, 1, 14, "t", { solid: false });
+// The road network: junctions and the links between them. It is drawn on the island and is the route
+// the mini map walks you along (deck, gangway, dock, avenue, plaza, breakwater path).
+const NODES = [[-0.3, -6], [-0.3, -1.2], [-0.3, 5.5], [1.9, -1.2], [4.2, -1.2], [5, 13.5], [5, 19.6], [5, 24.6], [-5, 19.6],
+  [-16, 19.6], [-28, 19.6], [-30, 10], [-30, -14], [14, 19.6], [20, 19.6]];
+const LINKS = [[0, 1], [1, 2], [1, 3], [3, 4], [4, 5], [5, 6], [6, 7], [6, 8], [8, 9], [9, 10], [10, 11], [11, 12], [6, 13], [13, 14]];
+// Distance from (x, z) to the nearest island road (the links past the dock), and how far along it you are.
+const ROADS = LINKS.slice(5).map(([a, b]) => {
+  const [ax, az] = NODES[a], dx = NODES[b][0] - ax, dz = NODES[b][1] - az;
+  return [ax, az, dx, dz, dx * dx + dz * dz];
+});
+function roadAt(x, z) {
+  let best = Infinity, along = 0;
+  for (const [ax, az, dx, dz, l2] of ROADS) {
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)), ex = x - ax - t * dx, ez = z - az - t * dz;
+    const d = ex * ex + ez * ez;
+    if (d < best) { best = d; along = t * Math.sqrt(l2); }
+  }
+  return [Math.sqrt(best), along];
+}
+// Island ground as material and glyph: road with edges and a dashed centre, the plaza, grass, dirt and flowers.
+function ground(x, y, z, nx, ny) {
+  if (ny < 0.5) return null;
+  const [d, along] = roadAt(x, z), plaza = Math.hypot(x - 5, z - 24.6);
+  if (plaza < 3.2) return plaza > 2.9 ? "s=" : (Math.floor(x * 1.5) + Math.floor(z * 1.5)) % 2 ? "t+" : "t.";
+  if (d < 1.1) return d > 0.88 ? "s=" : d < 0.15 && along % 1.6 < 0.8 ? "s-" : "t ";
+  const h = hash(Math.floor(x * 2), Math.floor(z * 2));
+  if (h < 0.025) return ["r*", "b*", "s*"][Math.floor(h * 120)];
+  if (hash(Math.floor(x / 4), Math.floor(z / 4)) < 0.2) return h < 0.5 ? "o:" : "o.";
+  return "g" + "\"',.;`"[Math.floor(h * 6)];
+}
+box(world, -70, -2, 14, 70, 1.2, 46, "t", { solid: false, tex: ground });
+box(world, -46, -2, -36, -26, 1, 14, "t", { solid: false, tex: ground });
 const seam = (u) => ((u + 99) % 0.45 < 0.07 ? "-" : null);
 box(world, 3, 0.85, -16, 7, 1.2, 14, "t", { solid: false, tex: (x, y, z, nx, ny) => (ny > 0.5 ? seam(z) : null) });
 for (const z of [-15.6, -11, -6, 3, 8, 13.4]) {
@@ -137,10 +167,10 @@ for (let i = 0; i < 16; i++) {
 }
 
 // Harbor detail, kept to the edges so the walk stays clear: cargo, rope, boats, rocks, palms, lamps.
-for (const [x, z, h] of [[6.2, -9.5, 0.8], [6.2, -8.6, 0.8], [6.25, -9.1, 1.6], [12, 20.5, 0.9], [13, 20.6, 0.9], [12.5, 20.5, 1.8]]) {
+for (const [x, z, h] of [[6.2, -9.5, 0.8], [6.2, -8.6, 0.8], [6.25, -9.1, 1.6], [12, 21.2, 0.9], [13, 21.3, 0.9], [12.5, 21.2, 1.8]]) {
   box(world, x, h - 0.8 + 1.2, z, x + 0.75, h + 1.2, z + 0.75, "o", { tex: (x, y, z, nx, ny, nz) => (Math.abs(nx) + Math.abs(nz) > 0.5 && ((x + z + y) * 4 + 99) % 1 < 0.15 ? "-" : null) });
 }
-for (const [x, z] of [[6.5, 0.6], [6.5, 1.3], [5.9, 0.9], [6.5, 10.8], [15.5, 20.5], [16.2, 20.4]]) {
+for (const [x, z] of [[6.5, 0.6], [6.5, 1.3], [5.9, 0.9], [6.5, 10.8], [15.5, 21.4], [16.2, 21.3]]) {
   column(world, x, z, 0.3, 0.27, 1.2, 2.1, "o", { spot: "barrels", tex: (x, y) => (Math.abs(y - 1.42) < 0.06 || Math.abs(y - 1.88) < 0.06 ? "-" : null) });
 }
 for (const [x, z] of [[3.6, -4.6], [3.6, 6.4], [6.4, -13]]) column(world, x, z, 0.38, 0.38, 1.2, 1.36, "s", { solid: false });
@@ -154,7 +184,7 @@ boat(-8, 9.5, 1.3, 3.6, "r", "lifeboat");
 boat(-11.5, 8.6, 1.2, 3.2, "b", "tender");
 boat(9.5, 7, 1.4, 4, "o");
 for (let z = -32; z < 12; z += 5.5) column(world, -26.6, z + hash(z, 4) * 2, 0.9 + hash(z, 5) * 0.5, 0.35, 0.2, 1.3 + hash(z, 6) * 0.8, "t");
-for (const [x, z] of [[21, 24], [-16, 19], [-30, 2]]) {
+for (const [x, z] of [[21, 24], [-16, 23.5], [-30, 2]]) {
   column(world, x, z, 0.28, 0.16, z > 10 ? 1.2 : 1, 7, "o");
   for (let a = 0; a < 6; a++) beam(world, [x, 7, z], [x + 2.6 * Math.cos(a * 1.05), 5.6, z + 2.6 * Math.sin(a * 1.05)], "g");
 }
@@ -163,11 +193,26 @@ for (const x of [-4, 12]) {
   box(world, x - 0.16, 4.2, 14.26, x + 0.32, 4.65, 14.7, "l");
 }
 // A mailbox by the office and a notice board on the quay that leads to how this page is built.
-box(world, -0.55, 1.2, 19.9, -0.45, 2.2, 20, "t", { spot: "mailbox" });
-box(world, -0.8, 2.2, 19.7, -0.2, 2.7, 20.2, "r", { spot: "mailbox" });
-const howText = painted("HOW", -9.45, -8.15, 2.45, 3.25); // faces north, so left to right runs toward -x
-for (const x of [8.1, 9.35]) box(world, x, 1.2, 14.62, x + 0.15, 2.4, 14.75, "o", { spot: "how" });
-box(world, 7.95, 2.35, 14.5, 9.65, 3.35, 14.62, "o", { spot: "how", tex: (x, y, z, nx, ny, nz) => (nz > 0.5 ? (howText(-x, y) ? "l" : "-") : null) });
+box(world, -0.55, 1.2, 21.4, -0.45, 2.2, 21.5, "t", { spot: "mailbox" });
+box(world, -0.8, 2.2, 21.2, -0.2, 2.7, 21.7, "r", { spot: "mailbox" });
+// Landscaping: hedges round the plaza, round trees, lamps along the avenue, a fence on the quay front.
+for (const [x0, x1, z0, z1] of [[1, 2.2, 22, 27.4], [7.8, 9, 22, 27.4], [2.2, 3.4, 27.6, 28.4], [6.6, 7.8, 27.6, 28.4]]) {
+  box(world, x0, 1.2, z0, x1, 1.9, z1, "g", { tex: (x, y, z) => (hash(Math.floor(x * 3), Math.floor(z * 3 + y * 3)) < 0.3 ? "-" : null) });
+}
+for (const [x, z] of [[-10, 23], [0, 25], [11, 24], [17, 27], [-22, 24]]) {
+  column(world, x, z, 0.22, 0.18, 1.2, 3, "o");
+  column(world, x, z, 1.6, 0.3, 2.6, 6.2, "g", { tex: (x, y) => (Math.sin(y * 6 + x * 3) > 0.6 ? "-" : null) });
+}
+for (const x of [-20, -10, 0, 10, 18]) {
+  box(world, x, 1.2, 20.9, x + 0.14, 4, 21.04, "t");
+  box(world, x - 0.14, 4, 20.76, x + 0.28, 4.4, 21.18, "l");
+}
+for (let x = -25; x < -6; x += 2.5) box(world, x, 1.2, 14.2, x + 0.12, 2.1, 14.32, "o");
+box(world, -25, 1.75, 14.22, -6.3, 1.85, 14.3, "o");
+box(world, -25, 1.45, 14.22, -6.3, 1.53, 14.3, "o");
+const howText = painted("HOW", 7.4, 8.7, 2.45, 3.25);
+for (const x of [7.35, 8.6]) box(world, x, 1.2, 16.72, x + 0.15, 2.4, 16.85, "o", { spot: "how" });
+box(world, 7.2, 2.35, 16.6, 8.9, 3.35, 16.72, "o", { spot: "how", tex: (x, y, z, nx, ny, nz) => (nz < -0.5 ? (howText(x, y) ? "l" : "-") : null) });
 
 // Ship, in its own frame: hull, rails, cabin, helm, mast, sail, crow's nest, hatch, lantern.
 const k = 1 / 3.2;
@@ -283,10 +328,10 @@ function enter(P, ox, oy, oz, dx, dy, dz) {
   if (tn <= tf && tn > 1e-3 && tn < hitT) { hitT = tn; hitK = kk; return true; }
   return false;
 }
-function trace(list, ox, oy, oz, dx, dy, dz) {
+function trace(list, col, ox, oy, oz, dx, dy, dz) {
   const ix = 1 / dx, iy = 1 / dy, iz = 1 / dz;
   for (const s of list) {
-    if (boxEntry(s.bb, ox, oy, oz, ix, iy, iz) <= hitT && enter(s.P, ox, oy, oz, dx, dy, dz)) hitS = s;
+    if (col >= s.i0 && col <= s.i1 && boxEntry(s.bb, ox, oy, oz, ix, iy, iz) <= hitT && enter(s.P, ox, oy, oz, dx, dy, dz)) hitS = s;
   }
 }
 
@@ -336,12 +381,14 @@ function render() {
   Object.assign(cam, { x: me.x, y: me.eye, z: me.z, f: [fx, fy, fz], r: [rx, 0, rz], u: [ux, uy, uz], tanH, tanV });
   // Camera origin in the ship frame (rotate by -roll about the ship's long axis, after the bob).
   cam.lx = rc * (me.x - SX) + rs * (me.eye - bob) + SX; cam.ly = -rs * (me.x - SX) + rc * (me.eye - bob);
+  cull(world, false); cull(ship, true);
   for (let j = 0, c = 0; j < rows; j++) {
     const v = (1 - (2 * j + 1) / rows) * tanV;
+    rowWorld = world.filter((s) => s.j0 <= j && j <= s.j1); rowShip = ship.filter((s) => s.j0 <= j && j <= s.j1);
     for (let i = 0; i < cols; i++, c++) {
       const h = ((2 * i + 1) / cols - 1) * tanH;
-      const dx = fx + rx * h + ux * v, dy = fy + uy * v, dz = fz + rz * h + uz * v, n = Math.hypot(dx, dy, dz);
-      cast(c, (i + j) & 1, dx / n, dy / n, dz / n);
+      const dx = fx + rx * h + ux * v, dy = fy + uy * v, dz = fz + rz * h + uz * v, n = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      cast(c, i, (i + j) & 1, dx / n, dy / n, dz / n);
     }
   }
   gulls();
@@ -352,6 +399,28 @@ function render() {
   label(looked && spot === target ? [cols >> 1, rows >> 1] : target && project(anchors[target]));
   minimap();
   draw(mid);
+}
+
+// Screen rectangle of each solid's bounding box this frame, so a ray only tests solids that can cover its cell.
+let rowWorld = [], rowShip = [];
+function cull(list, inShip) {
+  const [f0, f1, f2] = cam.f, [r0, , r2] = cam.r, [u0, u1, u2] = cam.u;
+  for (const s of list) {
+    const b = s.bb;
+    let i0 = Infinity, i1 = -Infinity, j0 = Infinity, j1 = -Infinity, behind = 0;
+    for (let k = 0; k < 8; k++) {
+      let x = k & 1 ? b[3] : b[0], y = k & 2 ? b[4] : b[1];
+      const z = k & 4 ? b[5] : b[2];
+      if (inShip) { const lx = x - SX; x = SX + rc * lx - rs * y; y = rs * lx + rc * y + bob; }
+      const px = x - cam.x, py = y - cam.y, pz = z - cam.z, d = px * f0 + py * f1 + pz * f2;
+      if (d < 0.2) { behind++; continue; }
+      const si = ((px * r0 + pz * r2) / d / cam.tanH + 1) * cols / 2, sj = (1 - (px * u0 + py * u1 + pz * u2) / d / cam.tanV) * rows / 2;
+      i0 = Math.min(i0, si); i1 = Math.max(i1, si); j0 = Math.min(j0, sj); j1 = Math.max(j1, sj);
+    }
+    if (behind === 8) { s.i0 = s.j0 = 1; s.i1 = s.j1 = 0; } // wholly behind you
+    else if (behind) { s.i0 = s.j0 = -1; s.i1 = cols; s.j1 = rows; } // around you: test everywhere
+    else { s.i0 = Math.floor(i0) - 1; s.i1 = Math.ceil(i1) + 1; s.j0 = Math.floor(j0) - 1; s.j1 = Math.ceil(j1) + 1; }
+  }
 }
 
 // A few gulls circle over the harbor, drawn only where they are against the sky.
@@ -376,6 +445,7 @@ function project(a) {
 const LINE = new Map();
 function label(at) {
   LINE.clear();
+  card.hidden = mapMode === 2; // the full-screen map covers the scene, so no label floats over it
   if (!target || !at) { card.style.transform = ""; return; }
   at = [Math.max(0, Math.min(cols - 1, at[0])), Math.max(0, Math.min(rows - 1, at[1]))];
   const W = stage.clientWidth, H = stage.clientHeight, w = card.offsetWidth, h = card.offsetHeight;
@@ -430,7 +500,7 @@ function mapTerrain() {
     for (let i = 0; i < mapBox.iw; i++) {
       const [x, z] = fromMap(i + 0.5, j + 0.5), f = FLOORS.findIndex(([x0, x1, z0, z1]) => x >= x0 && x < x1 && z >= z0 && z < z1);
       if (f < 0) mapPut(i + 1, j + 1, (i + j) % 5 ? " " : "~", "d");
-      else mapPut(i + 1, j + 1, f === 0 ? "#" : ".", f === 0 ? "o" : "t");
+      else mapPut(i + 1, j + 1, f === 0 ? "#" : f > 1 && roadAt(x, z)[0] < 1.4 ? "+" : ".", f === 0 ? "o" : f > 1 && roadAt(x, z)[0] < 1.4 ? "s" : "t");
     }
   }
 }
@@ -456,49 +526,109 @@ function standFor(a) {
   }
   return [me.x, me.z];
 }
-// Jumps next to a point of interest and faces it; its label shows until you move.
+// Walks to a point of interest along the roads (or jumps there with reduced motion), then faces it.
+let walkPath = [], walkTo = null;
 function go(id) {
-  const a = anchors[id], [x, z] = standFor(a);
-  me.x = x; me.z = z; me.eye = floorAt(x, z) + 1.6;
-  me.yaw = Math.atan2(a.x - x, a.z - z);
-  me.pitch = Math.max(-1.1, Math.min(1.1, Math.atan2(a.y + (a.ship ? bob : 0) - me.eye, Math.hypot(a.x - x, a.z - z))));
-  jumped = id; moved = true; mapMode = 0; dirty = true;
+  const stand = standFor(anchors[id]);
+  setMap(0); moved = true; dirty = true; jumped = null;
+  if (reduced.matches) { me.x = stand[0]; me.z = stand[1]; me.eye = floorAt(...stand) + 1.6; face(id); return; }
+  walkPath = [...route(nearestNode(me.x, me.z), nearestNode(...stand)), stand];
+  walkTo = id;
 }
-// M picks on the map, M again fills the screen, M or Escape closes; arrows choose, Enter goes.
+function face(id) {
+  const a = anchors[id];
+  me.yaw = Math.atan2(a.x - me.x, a.z - me.z);
+  me.pitch = Math.max(-1.1, Math.min(1.1, Math.atan2(a.y + (a.ship ? bob : 0) - me.eye, Math.hypot(a.x - me.x, a.z - me.z))));
+  jumped = id;
+}
+const nearestNode = (x, z) => NODES.reduce((b, n, i) => (Math.hypot(n[0] - x, n[1] - z) < Math.hypot(NODES[b][0] - x, NODES[b][1] - z) ? i : b), 0);
+// Shortest road route between two junctions (Dijkstra over a handful of nodes).
+function route(from, to) {
+  const dist = NODES.map(() => Infinity), prev = [], todo = new Set(NODES.keys());
+  dist[from] = 0;
+  while (todo.size) {
+    const u = [...todo].reduce((a, b) => (dist[a] < dist[b] ? a : b));
+    todo.delete(u);
+    for (const [a, b] of LINKS) {
+      const v = a === u ? b : b === u ? a : -1, d = v < 0 ? 0 : dist[u] + Math.hypot(NODES[v][0] - NODES[u][0], NODES[v][1] - NODES[u][1]);
+      if (v >= 0 && todo.has(v) && d < dist[v]) { dist[v] = d; prev[v] = u; }
+    }
+  }
+  const path = [];
+  for (let v = to; v !== undefined; v = prev[v]) path.unshift(NODES[v]);
+  return path;
+}
+// One frame of the auto-walk: head for the next waypoint, turning smoothly; face the object on arrival.
+function autoStep(dt) {
+  const [tx, tz] = walkPath[0], dx = tx - me.x, dz = tz - me.z, d = Math.hypot(dx, dz), v = 4.5 * dt;
+  if (d <= v) {
+    me.x = tx; me.z = tz; walkPath.shift();
+    if (!walkPath.length) face(walkTo);
+    return true;
+  }
+  me.x += (dx / d) * v; me.z += (dz / d) * v;
+  const turn = Math.atan2(dx, dz) - me.yaw;
+  me.yaw += Math.atan2(Math.sin(turn), Math.cos(turn)) * Math.min(1, dt * 6);
+  me.pitch *= 0.9;
+  return true;
+}
+// An open map frees the mouse (no pointer lock, a normal cursor) so you can point at it; walking hides it again.
+function setMap(mode) {
+  mapMode = mode;
+  if (mode && document.pointerLockElement) document.exitPointerLock();
+  stage.classList.toggle("mapping", mode > 0);
+}
+// M picks on the map, M again fills the screen, M or Escape closes; arrows or the mouse choose, Enter goes.
 function mapKey(e) {
-  if (e.code === "KeyM") mapMode = (mapMode + 1) % 3;
+  if (e.code === "KeyM") setMap((mapMode + 1) % 3);
   else if (!mapMode) return false;
-  else if (e.key === "Escape") mapMode = 0;
+  else if (e.key === "Escape") setMap(0);
   else if (e.key === "Enter") go(ORDER[pick]);
   else if (/^Arrow/.test(e.key)) pick = (pick + (/Right|Down/.test(e.key) ? 1 : ORDER.length - 1)) % ORDER.length;
   else return false;
   moved = true; // using the map folds the intro away
   return true;
 }
-// A tap on the map: the corner mark resizes it, the caption jumps to the pick, elsewhere picks the nearest point.
-function tapMap(cx, cy) {
+// Map cell under a screen point, or null outside the map.
+function mapCell(cx, cy) {
   const b = mapBox, i = b && Math.floor((cx - padX) / cellW) - b.oi, j = b && Math.floor((cy - padY) / cellH) - b.oj;
-  if (!b || i < 0 || j < 0 || i >= b.w || j >= b.h) return false;
-  if (j === 0) mapMode = mapMode === 2 ? 0 : 2;
-  else if (j >= b.h - 2) go(ORDER[pick]);
+  return b && i >= 0 && j >= 0 && i < b.w && j < b.h ? [i, j] : null;
+}
+// Points of interest nearest to a map cell, the closest first (several when they share a cell).
+function nearestPoints(i, j) {
+  const d = (id) => { const [pi, pj] = toMap(anchors[id].x, anchors[id].z); return Math.hypot(pi - i + 1, (pj - j + 1) * 2); };
+  const all = ORDER.map((id, n) => [d(id), n]).sort((p, q) => p[0] - q[0]);
+  return all.filter((p) => p[0] <= all[0][0] + 0.01).map(([, n]) => n);
+}
+// Hovering the open map with the mouse picks the nearest point.
+function hoverMap(cx, cy) {
+  const at = mapMode && mapCell(cx, cy);
+  if (!at || at[1] === 0 || at[1] >= mapBox.h - 2) return;
+  const near = nearestPoints(...at);
+  if (!near.includes(pick)) { pick = near[0]; dirty = true; }
+}
+// A tap or click on the map: the corner mark resizes it, the caption goes to the pick, elsewhere picks the nearest point.
+function tapMap(cx, cy) {
+  const at = mapCell(cx, cy);
+  if (!at) return false;
+  if (at[1] === 0) setMap(mapMode === 2 ? 0 : 2);
+  else if (at[1] >= mapBox.h - 2) go(ORDER[pick]);
   else {
-    const d = (id) => { const [pi, pj] = toMap(anchors[id].x, anchors[id].z); return Math.hypot(pi - i + 1, (pj - j + 1) * 2); };
-    const near = ORDER.map((id, n) => [d(id), n]).sort((p, q) => p[0] - q[0]).filter((p, _, all) => p[0] <= all[0][0] + 0.01);
-    const k = near.findIndex(([, n]) => n === pick);
-    pick = near[(k + 1) % near.length][1];
-    if (mapMode === 0) mapMode = 1;
+    const near = nearestPoints(...at);
+    pick = near[(near.indexOf(pick) + 1) % near.length];
+    if (mapMode === 0) setMap(1);
   }
   dirty = true;
   return true;
 }
 
 // One ray: the nearest of the solids, the water and the sky decides the cell.
-function cast(c, odd, dx, dy, dz) {
+function cast(c, i, odd, dx, dy, dz) {
   hitT = Infinity; hitS = null;
-  trace(world, cam.x, cam.y, cam.z, dx, dy, dz);
+  trace(rowWorld, i, cam.x, cam.y, cam.z, dx, dy, dz);
   const wS = hitS;
   const ldx = rc * dx + rs * dy, ldy = -rs * dx + rc * dy;
-  trace(ship, cam.lx, cam.ly, cam.z, ldx, ldy, dz);
+  trace(rowShip, i, cam.lx, cam.ly, cam.z, ldx, ldy, dz);
   const tw = dy < 0 ? -cam.y / dy : Infinity;
   SP[c] = null;
   if (hitS && hitT < tw) shadeSolid(c, odd, hitS !== wS, dx, dy, dz, ldx, ldy);
@@ -511,14 +641,14 @@ function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
   const nx = onShip ? rc * lnx - rs * lny : lnx, ny = onShip ? rs * lnx + rc * lny : lny;
   const px = onShip ? cam.lx + ldx * t : cam.x + dx * t, py = onShip ? cam.ly + ldy * t : cam.y + dy * t;
   const tex = s.tex && s.tex(px, py, cam.z + dz * t, lnx, lny, nz);
-  const mat = tex && tex !== "-" ? tex : s.mat, dim = (tex === "-" ? 0.45 : 1) * (s.dim || 1);
+  const mat = tex && tex !== "-" ? tex[0] : s.mat, dim = (tex === "-" ? 0.45 : 1) * (s.dim || 1);
   let ch;
   if (mat === "l") {
     const flash = s === beacon ? Math.cos(T * 2.2 + Math.atan2(dx, dz) * 2) > 0.3 : s !== antennaLamp || Math.sin(T * 3) > 0;
     ch = flash ? "@" : "o";
   } else if (ny > 0.7) {
     // Decks, dock and quay stay sparse so that what stands on them reads first.
-    ch = dim < 1 ? ":" : odd ? " " : t < 9 ? "," : ".";
+    ch = tex && tex.length === 2 ? (t > 35 && odd ? " " : tex[1]) : dim < 1 ? ":" : odd ? " " : t < 9 ? "," : ".";
   } else {
     const lit = Math.max(0, nx * L[0] + ny * L[1] + nz * L[2]), face = Math.max(0, -(nx * dx + ny * dy + nz * dz));
     const b = (0.12 + 0.45 * lit + 0.38 * face) * dim * (0.3 + 0.7 * Math.exp(-t * 0.012));
@@ -632,17 +762,18 @@ stage.addEventListener("blur", () => keys.clear());
 const look = (dx, dy, k) => {
   me.yaw += dx * k;
   me.pitch = Math.max(-1.2, Math.min(1.2, me.pitch - dy * k));
-  moved = true; jumped = null;
+  moved = true; jumped = null; walkPath = [];
   dirty = true;
 };
 // A click only starts mouse look; Enter opens what you point at. On a phone a tap on the label opens it.
 canvas.addEventListener("click", () => {
-  if (!touchFirst.matches && stage.requestPointerLock) stage.requestPointerLock();
+  if (!mapMode && !touchFirst.matches && stage.requestPointerLock) stage.requestPointerLock();
   stage.focus({ preventScroll: true });
 });
 card.addEventListener("click", (e) => { if (touchFirst.matches && !e.target.closest("a")) open(); });
 document.addEventListener("mousemove", (e) => {
   if (document.pointerLockElement === stage) look(e.movementX, e.movementY, 0.0022);
+  else hoverMap(e.clientX, e.clientY);
 });
 let padId = null, lookId = null, lastX = 0, lastY = 0;
 function steer(e) {
@@ -680,8 +811,8 @@ function step(dt) {
   const tilt = (keys.has("u") ? 1 : 0) - (keys.has("d") ? 1 : 0);
   const fwd = (keys.has("f") ? 1 : 0) - (keys.has("b") ? 1 : 0) + stick.y;
   const side = (keys.has("r") ? 1 : 0) - (keys.has("l") ? 1 : 0) + stick.x;
-  if (!turn && !tilt && !fwd && !side) return false;
-  moved = true; jumped = null;
+  if (!turn && !tilt && !fwd && !side) return walkPath.length ? autoStep(dt) : false;
+  moved = true; jumped = null; walkPath = [];
   me.yaw += turn * 1.9 * dt;
   me.pitch = Math.max(-1.2, Math.min(1.2, me.pitch + tilt * 1.2 * dt));
   const c = Math.cos(me.yaw), s = Math.sin(me.yaw), v = 3.4 * dt;
