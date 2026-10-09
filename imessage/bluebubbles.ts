@@ -2,23 +2,32 @@
 // "relays", on Macs signed into the same Apple Account, used as one line in config order.
 // Outbound: each call goes to the first healthy relay and fails over in order. A send that may have reached a
 //   relay (a timeout or a server error after the request went out) is retried on the next relay only after no
-//   relay shows it as sent, so one text is never sent twice.
+//   relay shows it as sent, so one text is never sent twice. The bridge's outbox (outbox.ts) retries what fails.
 // Inbound: every relay posts its webhook here, and a catch-up query fills any gap. A webhook is only a hint: the
 //   message itself is read back from a relay with the password, so a forged webhook can only name a real message.
-//   Messages are de-duplicated by GUID with a bounded seen-set on disk.
+//   Messages are de-duplicated by GUID with a bounded seen-set on disk. A failed attachment download is retried by
+//   the bridge's download queue.
 // The API takes the password only as a query parameter, so a request URL is never logged or put in an error.
 // API: https://documenter.getpostman.com/view/765844/UV5RnfwM (BlueBubbles server 1.9).
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import type { Attachment, LineMessage } from "./desk.ts";
+import type { Message } from "spectrum-ts";
 
 export type Relay = { url: string; password: string };
+
+// A spectrum-ts message content (a type-only import: bun erases it). A BlueBubbles message has the same shape as
+// desk.ts Bubble, so the bridge handles it like a Photon one.
+type Content = Message["content"];
+type Bubble = {
+  id: string; content: Content; direction: "inbound" | "outbound"; sender: { id: string };
+  space: { id: string; send(text: string): Promise<unknown>; startTyping(): Promise<void>; stopTyping(): Promise<void> };
+  react(emoji: string): Promise<unknown>; reply(text: string): Promise<unknown>; read(): Promise<unknown>;
+};
 
 const DEFAULTS = {
   pingMs: 3000, // health check timeout
   healthMs: 10_000, // how long a health result is kept
   callMs: 15_000, // any other call
   sendMs: 30_000, // a send: the server answers once Messages has the message
-  delays: [1000, 2000, 4000, 8000], // between attachment download attempts
   skewMs: 60_000, // clock difference allowed between this host and a relay when looking for a sent text
   seenMax: 1000, // message GUIDs kept for de-duplication
   catchUpMs: 60_000, // between catch-up queries
@@ -29,10 +38,11 @@ const TAPBACKS: Record<string, string> = {
   "❤️": "love", "❤": "love", "👍": "like", "👎": "dislike", "😂": "laugh", "‼️": "emphasize", "‼": "emphasize", "❓": "question",
 };
 
-// A failed relay call. `status` is the HTTP status, or undefined when the relay was not reached or did not answer.
-// `maybeSent` is true when the request may have reached the relay anyway (a timeout, a server error).
+// A failed relay call. `status` is the HTTP status (503 when no relay is reachable); `code` names a network failure
+// (outbox.ts reads both). `maybeSent` is true when the request may have reached the relay anyway (a timeout, a
+// server error). The original fetch error is not kept: it holds the URL, which holds the password.
 class RelayError extends Error {
-  constructor(message: string, readonly maybeSent: boolean, readonly status?: number) {
+  constructor(message: string, readonly maybeSent: boolean, readonly status?: number, readonly code?: string) {
     super(message);
   }
 }
@@ -44,14 +54,14 @@ type BBMessage = {
   associatedMessageGuid?: string | null; threadOriginatorGuid?: string | null;
 };
 
-export class BlueBubbles implements AsyncIterable<LineMessage> {
+export class BlueBubbles implements AsyncIterable<Bubble> {
   private opts: typeof DEFAULTS;
   private health = new Map<Relay, { ok: boolean; at: number }>();
   private unsure = new Map<string, number>(); // client GUID -> start of a send that may have gone out
   private seen = new Map<string, number>(); // message GUID -> its date, oldest first
   private seenFile: string;
   private appended = 0;
-  private queue: LineMessage[] = [];
+  private queue: Bubble[] = [];
   private wake?: () => void;
   private chain = Promise.resolve();
   private since: number;
@@ -92,17 +102,18 @@ export class BlueBubbles implements AsyncIterable<LineMessage> {
   // A webhook from any relay. Only "new-message" events matter; the reply is immediate.
   async webhook(req: Request): Promise<Response> {
     if (req.method !== "POST" || new URL(req.url).pathname !== "/bluebubbles") return new Response("not found\n", { status: 404 });
-    const event: unknown = await req.json().catch(() => undefined);
-    const data = event && typeof event === "object" && "type" in event && event.type === "new-message" && "data" in event ? event.data : undefined;
-    if (data && typeof data === "object" && "guid" in data && typeof data.guid === "string" && !("isFromMe" in data && data.isFromMe)) {
-      void this.accept(data.guid);
-    }
+    // Only the GUID is used, and only after a type check: the message itself is read back from a relay.
+    const event: { type?: unknown; data?: { guid?: unknown; isFromMe?: unknown } } = await req.json().catch(() => ({}));
+    const guid = event.type === "new-message" && !event.data?.isFromMe ? event.data?.guid : undefined;
+    if (typeof guid === "string") void this.accept(guid);
     return new Response("ok\n");
   }
 
-  // The latest text kept by the bridge, rebuilt without a relay call so a restart works while every relay is down.
-  restore(chat: string, guid: string): LineMessage {
-    return this.message({ guid, text: "", chats: [{ guid: chat }] }, chat, { type: "text", text: "" });
+  // One message read whole (content and attachments) from the first relay that has it.
+  async message(guid: string): Promise<Bubble> {
+    const built = await this.build(await this.read(guid));
+    if (!built) throw Object.assign(new Error(`message ${guid} has nothing to show`), { permanent: true });
+    return built;
   }
 
   // Queue one message by GUID, once. `data` is the message when a query already read it.
@@ -111,8 +122,7 @@ export class BlueBubbles implements AsyncIterable<LineMessage> {
     this.remember(guid, data?.dateCreated ?? 0);
     this.chain = this.chain.then(async () => {
       try {
-        // The relay's own record of the message (see BBMessage); the API has no schema to check it against.
-        const m = data ?? ((await this.first((r) => this.call(r, "GET", `message/${encodeURIComponent(guid)}`, { with: "chats,attachments" }))) as BBMessage);
+        const m = data ?? (await this.read(guid));
         this.seen.set(guid, m.dateCreated ?? 0);
         this.since = Math.max(this.since, m.dateCreated ?? 0);
         appendFileSync(this.seenFile, `${guid} ${m.dateCreated ?? 0}\n`, { mode: 0o600 });
@@ -135,7 +145,7 @@ export class BlueBubbles implements AsyncIterable<LineMessage> {
       for (const m of found) await this.accept(m.guid, m);
     } catch (e) {
       // An unreachable relay was already logged when it went down.
-      if (!(e instanceof RelayError) || e.status !== undefined) this.log(`catch-up failed: ${e instanceof Error ? e.message : String(e)}`);
+      if (!(e instanceof RelayError && (e.code || e.status === 503))) this.log(`catch-up failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -146,7 +156,7 @@ export class BlueBubbles implements AsyncIterable<LineMessage> {
     const id = guid ?? crypto.randomUUID();
     const started = this.unsure.get(id) ?? Date.now();
     let maybeSent = this.unsure.has(id);
-    let last: unknown = new RelayError("no relay is reachable", false);
+    let last: unknown = new RelayError("no relay is reachable", false, 503);
     for (const r of await this.healthy()) {
       try {
         if (!maybeSent || !(await this.wentOut(chat, text, started))) {
@@ -165,23 +175,22 @@ export class BlueBubbles implements AsyncIterable<LineMessage> {
     throw last;
   }
 
-  // Put a tapback on a message. BlueBubbles has six; any other emoji fails with the list.
+  // Put a tapback on a message. BlueBubbles has six; any other emoji fails with the list, as a permanent error so
+  // the outbox moves it to the dead-letter folder instead of holding the queue.
   async react(chat: string, guid: string, emoji: string) {
     const reaction = TAPBACKS[emoji.trim()];
-    if (!reaction) throw new Error(`no BlueBubbles tapback for ${emoji}; use one of ❤️ 👍 👎 😂 ‼️ ❓`);
+    if (!reaction) throw Object.assign(new Error(`no BlueBubbles tapback for ${emoji}; use one of ❤️ 👍 👎 😂 ‼️ ❓`), { permanent: true });
     await this.first((r) => this.call(r, "POST", "message/react", undefined, { chatGuid: chat, selectedMessageGuid: guid, reaction, partIndex: 0 }));
   }
 
-  // Download an attachment from whichever relay has it, with retry and backoff.
+  // Download an attachment from whichever relay has it. The bridge's download queue retries a failure.
   async download(guid: string): Promise<Buffer> {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        return await this.first((r) => this.call(r, "GET", `attachment/${encodeURIComponent(guid)}/download`, { original: "true" }, undefined, this.opts.callMs, true)) as Buffer;
-      } catch (e) {
-        if (attempt >= this.opts.delays.length) throw e;
-        await Bun.sleep(this.opts.delays[attempt]!);
-      }
-    }
+    return (await this.first((r) => this.call(r, "GET", `attachment/${encodeURIComponent(guid)}/download`, { original: "true" }, undefined, this.opts.callMs, true))) as Buffer;
+  }
+
+  // The relay's own record of a message (see BBMessage); the API has no schema to check it against.
+  private async read(guid: string): Promise<BBMessage> {
+    return (await this.first((r) => this.call(r, "GET", `message/${encodeURIComponent(guid)}`, { with: "chats,attachments" }))) as BBMessage;
   }
 
   // True when a relay shows `text` as sent into `chat` since `since`. Throws when no relay can be asked, so the
@@ -199,11 +208,12 @@ export class BlueBubbles implements AsyncIterable<LineMessage> {
         // ask the next relay
       }
     }
-    if (!asked) throw new RelayError("could not check whether an earlier try was sent; no relay answered", true);
+    if (!asked) throw new RelayError("could not check whether an earlier try was sent; no relay answered", true, 503);
     return false;
   }
 
-  private typing(chat: string, method: "POST" | "DELETE"): Promise<void> {
+  // Start (POST) or stop (DELETE) the typing bubble in a chat.
+  typing(chat: string, method: "POST" | "DELETE"): Promise<void> {
     // A typing error never fails or delays a send: it is logged as one line and dropped.
     return this.first((r) => this.call(r, method, `chat/${encodeURIComponent(chat)}/typing`)).then(
       () => undefined,
@@ -213,7 +223,7 @@ export class BlueBubbles implements AsyncIterable<LineMessage> {
 
   // Run `fn` on each healthy relay in order until one succeeds.
   private async first<T>(fn: (r: Relay) => Promise<T>): Promise<T> {
-    let last: unknown = new RelayError("no relay is reachable", false);
+    let last: unknown = new RelayError("no relay is reachable", false, 503);
     for (const r of await this.healthy()) {
       try {
         return await fn(r);
@@ -249,20 +259,8 @@ export class BlueBubbles implements AsyncIterable<LineMessage> {
     const url = new URL(`api/v1/${path}`, r.url.endsWith("/") ? r.url : `${r.url}/`);
     for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
     url.searchParams.set("password", r.password);
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method,
-        headers: body === undefined ? undefined : { "content-type": "application/json" },
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(timeout),
-      });
-    } catch (e) {
-      const refused = e instanceof Error && "code" in e && e.code === "ConnectionRefused";
-      const why = e instanceof Error && e.name === "TimeoutError" ? `no answer in ${timeout} ms` : refused ? "connection refused" : "unreachable";
-      this.mark(r, false, why);
-      throw new RelayError(`${this.name(r)}: ${why}`, !refused);
-    }
+    const payload = body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
+    const res = await fetch(url, { method, ...payload, signal: AbortSignal.timeout(timeout) }).catch((e) => this.unreached(r, e, timeout));
     this.mark(r, true);
     if (!res.ok) {
       const detail = (await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 200);
@@ -271,6 +269,14 @@ export class BlueBubbles implements AsyncIterable<LineMessage> {
     if (binary) return Buffer.from(await res.arrayBuffer());
     const json: unknown = await res.json();
     return json && typeof json === "object" && "data" in json ? json.data : undefined;
+  }
+
+  // A relay that gave no answer: marked down, and the error without the fetch error, whose URL holds the password.
+  private unreached(r: Relay, e: unknown, timeout: number): never {
+    const code = e instanceof Error && e.name === "TimeoutError" ? "ETIMEDOUT" : e instanceof Error && "code" in e && e.code === "ConnectionRefused" ? "ConnectionRefused" : "ENETUNREACH";
+    const why = { ETIMEDOUT: `no answer in ${timeout} ms`, ConnectionRefused: "connection refused", ENETUNREACH: "unreachable" }[code];
+    this.mark(r, false, why);
+    throw new RelayError(`${this.name(r)}: ${why}`, code !== "ConnectionRefused", undefined, code);
   }
 
   private remember(guid: string, date: number) {
@@ -286,42 +292,42 @@ export class BlueBubbles implements AsyncIterable<LineMessage> {
     this.appended = 0;
   }
 
-  private push(m: LineMessage) {
+  private push(m: Bubble) {
     this.queue.push(m);
     this.wake?.();
     this.wake = undefined;
   }
 
   // The bridge's view of one BlueBubbles message, or undefined for one with nothing to show.
-  private async build(m: BBMessage): Promise<LineMessage | undefined> {
+  private async build(m: BBMessage): Promise<Bubble | undefined> {
     const chat = m.chats?.[0]?.guid;
     if (!chat) return undefined;
-    if (m.associatedMessageGuid) return this.message(m, chat, { type: "reaction" } as LineMessage["content"]);
+    if (m.associatedMessageGuid) return this.wrap(m, chat, { type: "reaction" } as Content);
     // Messages puts U+FFFC in the text where each attachment sits.
     const text = (m.text ?? "").replace(/\uFFFC/g, "").trim();
-    const parts: LineMessage["content"][] = [
-      ...(text ? [{ type: "text", text } as LineMessage["content"]] : []),
+    const parts: Content[] = [
+      ...(text ? [{ type: "text", text } as Content] : []),
       ...(m.attachments ?? []).map((a) => this.attachment(a)),
     ];
     if (!parts.length) return undefined;
-    let content = parts.length === 1 ? parts[0]! : ({ type: "group", items: parts.map((c) => ({ content: c })) } as unknown as LineMessage["content"]);
+    let content = parts.length === 1 ? parts[0]! : ({ type: "group", items: parts.map((c) => ({ content: c })) } as unknown as Content);
     if (m.threadOriginatorGuid) {
       const target = await this.first((r) => this.call(r, "GET", `message/${encodeURIComponent(m.threadOriginatorGuid!)}`)).then(
         (t) => ({ type: "text", text: ((t as BBMessage).text ?? "").replace(/\uFFFC/g, "").trim() }),
         () => ({ type: "unknown" }),
       );
-      content = { type: "reply", content, target: { content: target } } as unknown as LineMessage["content"];
+      content = { type: "reply", content, target: { content: target } } as unknown as Content;
     }
-    return this.message(m, chat, content);
+    return this.wrap(m, chat, content);
   }
 
-  private attachment(a: BBAttachment): LineMessage["content"] {
+  private attachment(a: BBAttachment): Content {
     const c = { type: "attachment", id: a.guid, name: a.transferName || "file", mimeType: a.mimeType || "application/octet-stream", size: a.totalBytes,
       read: () => this.download(a.guid) };
-    return c as unknown as Attachment;
+    return c as unknown as Content;
   }
 
-  private message(m: BBMessage, chat: string, content: LineMessage["content"]): LineMessage {
+  private wrap(m: BBMessage, chat: string, content: Content): Bubble {
     const space = {
       id: chat,
       send: (text: string) => this.send(chat, text),

@@ -251,11 +251,16 @@
               "type": "string",
               "pattern": "^([A-Za-z0-9][A-Za-z0-9_./:-]*)?$"
             },
-            "transport": {
-              "enum": [
-                "photon",
-                "bluebubbles"
-              ]
+            "transports": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "photon",
+                  "bluebubbles"
+                ]
+              }
             },
             "bluebubbles": {
               "type": "object",
@@ -298,12 +303,14 @@
           ],
           "if": {
             "properties": {
-              "transport": {
-                "const": "bluebubbles"
+              "transports": {
+                "contains": {
+                  "const": "bluebubbles"
+                }
               }
             },
             "required": [
-              "transport"
+              "transports"
             ]
           },
           "then": {

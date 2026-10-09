@@ -72,7 +72,7 @@ factory:
   #   owner_name: the owner          # the default; how the desk prompt names him
   #   desk_model: claude-haiku-5-5   # the default
   #   supervisor_model: ""           # the default: the desk says it does not know
-  #   transport: photon              # the default; or bluebubbles, with the block below
+  #   transports: [photon]           # the default; in order, e.g. [photon, bluebubbles] with the block below
   #   bluebubbles:
   #     relays:                      # in failover order
   #       - url: http://<relay>:1234
@@ -97,7 +97,7 @@ factory:
 - `firstmate` and `browser_prune.enabled` need `agents`.
 - `fleet_guards` needs `docker` and `firstmate`. Obscura is always its latest release. An older `.local/host.yml` that still sets `browsers.obscura_version` or `browsers.obscura_sha256` keeps working: both keys are deprecated, ignored, and reported in one warning on stderr. No edit is required.
 - `ci_pool` needs `docker`, and no two `ci_pool.repos` entries may make the same unit name.
-- `imessage` needs `firstmate`, and `imessage.owner` is a phone number in E.164 form (`+` and digits). `transport: bluebubbles` needs the `bluebubbles` block.
+- `imessage` needs `firstmate`, and `imessage.owner` is a phone number in E.164 form (`+` and digits). `bluebubbles` in `transports` needs the `bluebubbles` block.
 - `github_board` needs `firstmate`, `github_board.repo` is `owner/name`, and `github_board.project` is a Project number.
 - `board` needs `firstmate` and `development`.
 

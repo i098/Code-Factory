@@ -17,8 +17,10 @@ Environment="FM_IMESSAGE_OWNER={{ factory_cfg.imessage.owner }}"
 Environment="FM_IMESSAGE_DESK_MODEL={{ factory_imessage_desk_model }}"
 Environment="FM_IMESSAGE_SUPERVISOR_MODEL={{ factory_imessage_supervisor_model }}"
 Environment="FM_IMESSAGE_OWNER_NAME={{ factory_imessage_owner_name }}"
-{% if factory_cfg.imessage.transport | default('photon') == 'bluebubbles' %}
-Environment="FM_IMESSAGE_TRANSPORT=bluebubbles"
+{% set imessage_transports = factory_cfg.imessage.transports | default(['photon']) %}
+# The transports in order: the first one sends, the next ones are fallbacks.
+Environment="FM_IMESSAGE_TRANSPORTS={{ imessage_transports | join(' ') }}"
+{% if 'bluebubbles' in imessage_transports %}
 # Each relay is "url,VARIABLE": VARIABLE names its password in ~/super.env.
 Environment="FM_BLUEBUBBLES_RELAYS={% for relay in factory_cfg.imessage.bluebubbles.relays %}{{ relay.url }},{{ relay.password_env | default('BLUEBUBBLES_PASSWORD') }}{{ '' if loop.last else ' ' }}{% endfor %}"
 Environment="FM_BLUEBUBBLES_WEBHOOK={{ factory_cfg.imessage.bluebubbles.webhook_listen }}"

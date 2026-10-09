@@ -1,6 +1,6 @@
 # iMessage bridge
 
-The iMessage bridge lets the owner talk to Firstmate from a phone. It is a small Bun service, `fm-imessage.service`, that uses one of two transports for the iMessage line: a [Photon Spectrum](https://photon.codes/docs/spectrum-ts) project (the default), or [self-hosted BlueBubbles relays](#use-self-hosted-bluebubbles-relays) on Macs that you control. It is off by default.
+The iMessage bridge lets the owner talk to Firstmate from a phone. It is a small Bun service, `fm-imessage.service`, that uses one or both of two transports for the iMessage line: a [Photon Spectrum](https://photon.codes/docs/spectrum-ts) project (the default), and [self-hosted BlueBubbles relays](#use-self-hosted-bluebubbles-relays) on Macs that you control. It is off by default.
 
 ## What it does
 
@@ -81,12 +81,12 @@ A relay is a Mac that runs [BlueBubbles server](https://bluebubbles.app) and is 
 
 Add each password to `~/super.env` as [Shared credentials](secrets.md) describes, for example `BLUEBUBBLES_PASSWORD=...`. The host config names the variable, never the password.
 
-### Switch the transport
+### Choose the transports
 
-First [enable the bridge](#enable-it). Then add `transport` and the `bluebubbles` block to the `imessage` block in `.local/host.yml`, and run `./ship.sh launch`:
+First [enable the bridge](#enable-it). Then add `transports` and the `bluebubbles` block to the `imessage` block in `.local/host.yml`, and run `./ship.sh launch`:
 
 ```yaml
-    transport: bluebubbles
+    transports: [photon, bluebubbles]   # in order; [bluebubbles] uses the relays alone
     bluebubbles:
       relays:                      # in failover order
         - url: http://<relay-1>:1234
@@ -95,16 +95,24 @@ First [enable the bridge](#enable-it). Then add `transport` and the `bluebubbles
       webhook_listen: <agent host address>:8766   # where the relays post their webhooks
 ```
 
-`webhook_listen` must be an address that the relays reach and nothing else does, such as the agent host's address on your private network. To go back to Photon, remove `transport` and the `bluebubbles` block.
+`webhook_listen` must be an address that the relays reach and nothing else does, such as the agent host's address on your private network. To use Photon alone again, remove `transports` and the `bluebubbles` block.
+
+With two transports, the first one is the primary line and the second one is the fallback:
+
+- **Sends.** Each send and tapback goes through the [outbox](#upstream-outages) first. The outbox loop sends each bubble into the owner's latest conversation on the first transport. If that send surely did not go out (a Photon `UNAVAILABLE` error, a refused connection, or no reachable relay), the bubble goes to the next transport and the bridge logs one line. Any other error, for example a timeout, stops there, and the outbox tries the item again later, so a text is never sent twice. The next bubble tries the primary first again, so the primary takes over again when it is back. If no transport takes a bubble, the primary's error decides: the outbox retries it, or moves a provably bad item to the dead-letter folder.
+- **Where a fallback text arrives.** A fallback send goes into the owner's latest conversation on that transport. Before he texts the BlueBubbles line, it goes to a new chat with his number from the line's Apple Account. Photon can only answer in a conversation that he started.
+- **Replies, typing, and tapbacks.** `--reply N` threads on the transport that his text came in on, and falls back to a plain send. Typing bubbles, tapbacks, and the desk go to his latest text on any transport. A typing error never fails a send.
+- **Inbound.** The bridge takes his texts from both transports. It files each message id once.
+- **Start.** If Photon cannot start while another transport is set, the bridge logs one line and runs on the others until its next restart.
 
 ### How the relay set behaves
 
 - **Health.** The bridge pings each relay with its password (3 second timeout) and keeps the result for 10 seconds. A relay that goes down or comes back is logged as one line.
-- **Sends.** A send, typing bubble, tapback, or read receipt goes to the first healthy relay, then to the next one if it fails. A typing error is logged and never fails a send. When all relays are down, the send fails with HTTP 502 and `fm-imessage` exits non-zero.
-- **No double sends.** Each send has a client GUID (BlueBubbles `tempGuid`). If a relay may have sent a text but did not answer (a timeout or a server error), the bridge asks the relays whether the text is in the chat before it tries the next relay. It looks for the same text from the line in the last minute or so. Two known limits: a text that reaches the other Macs through iCloud late can be sent twice, and a text identical to one sent in the same minute counts as sent.
+- **Sends.** A send, typing bubble, tapback, or read receipt goes to the first healthy relay, then to the next one if it fails. A typing error is logged and never fails a send. When all relays are down, the outbox keeps the item and tries again.
+- **No double sends.** Each outbox item keeps a client GUID, and each bubble sends with its own one (BlueBubbles `tempGuid`). If a relay may have sent a text but did not answer (a timeout or a server error), the bridge asks the relays whether the text is in the chat before it sends that bubble again, on any relay. It looks for the same text from the line in the last minute or so. Known limits: a text that reaches the other Macs through iCloud late can be sent twice; a text identical to one sent in the same minute counts as sent; and after a restart the bridge no longer knows that a send was unsure, so the outbox's at-least-once rule applies.
 - **Inbound.** Every relay posts its webhook. A webhook carries only the message GUID that the bridge acts on: the bridge reads the message back from a relay with the password, so a forged webhook cannot inject text. The bridge keeps the last 1000 message GUIDs in `~/.local/state/fm-imessage/bluebubbles-seen`, so a message from several relays, or after a restart, is filed once. Each minute, and at start, it also asks a relay for messages that it missed, for example while the bridge restarted.
-- **Attachments.** The bridge downloads a file from whichever relay has it, and tries 5 times with backoff (1, 2, 4, and 8 seconds).
-- **Tapbacks.** BlueBubbles has six: ❤️ 👍 👎 😂 ‼️ ❓. `fm-imessage --react` with another emoji fails.
+- **Attachments.** The bridge downloads a file from whichever relay has it. A failed download goes to the download queue, which retries it like a Photon download.
+- **Tapbacks.** BlueBubbles has six: ❤️ 👍 👎 😂 ‼️ ❓. A tapback with another emoji moves to the dead-letter folder.
 - **Location.** `fm-location` works only with Photon.
 
 ## Enable it
