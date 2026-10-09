@@ -151,6 +151,31 @@ def test_a_missing_backlog_makes_no_calls(home):
     assert github.calls == []
 
 
+@pytest.mark.parametrize("repo, project", [("owner/other", 3), ("owner/board", 4)])
+def test_a_changed_repo_or_project_starts_fresh_instead_of_reusing_issue_numbers(home, repo, project):
+    github = FakeGitHub()
+    write_backlog(home, queued=["a"], in_flight=[], done=[])
+    board.sync(home, "owner/board", 3, github)
+    github.take()
+
+    board.sync(home, repo, project, github)
+    calls = github.take()
+    assert [call[0] for call in calls if call[0].endswith("/issues")] == [f"repos/{repo}/issues"]
+    assert not [call for call in calls if "PATCH" in call]
+
+    board.sync(home, repo, project, github)
+    assert github.take() == []
+
+
+def test_a_failed_gh_call_reports_gh_stderr(monkeypatch):
+    def failing(command, **kwargs):
+        raise subprocess.CalledProcessError(1, command, stderr="missing scope: project\n")
+
+    monkeypatch.setattr(board.subprocess, "run", failing)
+    with pytest.raises(SystemExit, match="missing scope: project"):
+        board.gh(["graphql", "-f", "query=secret query text"])
+
+
 def test_a_status_option_missing_from_the_project_stops_before_any_status_change(home):
     github = FakeGitHub()
     write_backlog(home, queued=[], in_flight=["b"], done=[])

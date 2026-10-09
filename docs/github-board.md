@@ -34,7 +34,7 @@ The new-host questions also ask, one time, whether to turn the board on, when `.
 
 ## Turn it off
 
-Remove the `github_board` block from `.local/host.yml` and run `./ship.sh launch`. Apply stops `github-board.timer` and removes the timer, `github-board.service` and `~/.local/bin/github-board.py`. After that, the host makes no GitHub calls for the board. The issues and the Project stay on GitHub. The board's own record, `~/.local/state/github-board/state.json`, also stays, so when you turn the board on again it continues with the same issues. To start again with new issues, remove that file before you turn the board on.
+Remove the `github_board` block from `.local/host.yml` and run `./ship.sh launch`. Apply stops `github-board.timer` and removes the timer, `github-board.service` and `~/.local/bin/github-board.py`. After that, the host makes no GitHub calls for the board. The issues and the Project stay on GitHub. The board's own record, `~/.local/state/github-board/state.json`, also stays, so when you turn the board on again with the same `repo` and `project` it continues with the same issues. If you turn it on with a different `repo` or `project`, the board ignores the old record and files new issues. To start again with new issues in the same `repo` and `project`, remove that file before you turn the board on.
 
 ## Rate limits
 

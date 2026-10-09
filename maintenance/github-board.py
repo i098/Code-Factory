@@ -43,7 +43,10 @@ fragment board on ProjectV2 {
 
 def gh(args):
     """One `gh api` call; a pause after each keeps the run well inside GitHub's limits."""
-    result = subprocess.run(["gh", "api", *args], capture_output=True, text=True, check=True)
+    try:
+        result = subprocess.run(["gh", "api", *args], capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as error:
+        sys.exit(f"gh api {args[0]} failed: {error.stderr.strip()}")
     time.sleep(1)
     return json.loads(result.stdout or "null")
 
@@ -108,11 +111,13 @@ def set_statuses(gh, repo, project, moves):
 
 
 def sync(home, repo, project, gh=gh):
-    state = json.loads(STATE.read_text()) if STATE.exists() else {}
+    target = {"repo": repo, "project": project}
+    saved = json.loads(STATE.read_text()) if STATE.exists() else {}
+    state = saved["items"] if {key: saved.get(key) for key in target} == target else {}
 
     def save():
         STATE.parent.mkdir(parents=True, exist_ok=True)
-        STATE.write_text(json.dumps(state, indent=1, sort_keys=True))
+        STATE.write_text(json.dumps({**target, "items": state}, indent=1, sort_keys=True))
 
     moves = {}
     for key, item in snapshot(home).items():
