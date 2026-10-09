@@ -79,23 +79,45 @@ flowchart TD
 
 Rent an Ubuntu 24.04 or 26.04 server from any VPS or cloud provider, for example [Hetzner Cloud](https://www.hetzner.com/cloud/), [OVHcloud VPS](https://www.ovhcloud.com/en/vps/), or [DigitalOcean Droplets](https://www.digitalocean.com/products/droplets). A spare machine at home works too.
 
-| Size | Machine | Runs in parallel |
-| --- | --- | --- |
-| Small (estimated) | 4 vCPU, 16 GB RAM, 100 GB disk | 2 light lanes |
-| Medium (estimated) | 16 vCPU, 64 GB RAM, 300 GB disk | 4 UI lanes + 8 light lanes, or 16 light lanes |
-| Large (measured on a real host) | 96 vCPU x86_64, 247 GB RAM, a 235 GB system disk and two ~2 TB data disks | 37 agent processes in about 67 GB RAM (about 0.35 GB each), load average 30-35 |
-
-Builds, tests, and browsers set the limit, not the agents; each CI job is capped at 4 CPUs and 8 GB. See [Capacity and pruners](docs/capacity.md) for the formula.
+Runs on 4 vCPU / 16 GB and up; a 96 vCPU / 247 GB host ran 37 agents in about 67 GB RAM ([Capacity](docs/capacity.md)).
 
 ### Install
 
-On a fresh Ubuntu 24.04 or 26.04 machine (x86_64 or aarch64, systemd), as a non-root account with sudo, run:
+With curl:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/i098/Crewship/main/install.sh | bash
 ```
 
-With Node or Bun installed, `npx crewship`, `bunx crewship` or `pnpm dlx crewship` runs the same installer. It installs the OS packages, clones the latest release into `~/Crewship`, and runs the steps below with the default host config. It stops only to ask for your sudo password, and a second run changes nothing. Then authenticate GitHub with `gh auth login` and sign in to omp ([Sign in](docs/omp.md#sign-in)).
+With npx:
+
+```bash
+npx crewship
+```
+
+With bunx:
+
+```bash
+bunx crewship
+```
+
+With pnpm:
+
+```bash
+pnpm dlx crewship
+```
+
+Sign in to GitHub:
+
+```bash
+gh auth login
+```
+
+[Sign in to omp](docs/omp.md#sign-in):
+
+```bash
+omp
+```
 
 <details>
 <summary>Manual Quick Start</summary>
