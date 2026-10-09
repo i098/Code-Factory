@@ -4,7 +4,7 @@ omp (`@oh-my-pi/pi-coding-agent`) is the agent harness Crewship installs. This g
 
 ## What the recipe sets up
 
-With the `agents` profile on, `./factory apply`:
+With the `agents` profile on, `./ship.sh launch`:
 
 1. Installs the latest published omp, resolved from the npm registry on every apply, plus the omp plugins ponytail, i-have-adhd and caveman, upgraded on every apply (see [Dependencies](dependencies.md#latest-releases)).
 2. Copies [`config/omp.yml`](../config/omp.yml) to `~/.omp/agent/config.yml` (directory `0700`, file `0600`), and [`config/omp-lsp.json`](../config/omp-lsp.json) to `~/.omp/agent/lsp.json`, which disables the markdown language server (marksman): it costs each session about 90 MB, and markdown diagnostics add nothing to agent work.
@@ -158,4 +158,4 @@ Because the seed is first-write-only, an edit to `config/omp.yml` never reaches 
 
 2. Merge the changes you want into `~/.omp/agent/config.yml` by hand, or use `/settings` and `/model` in a session.
 
-To upgrade omp itself, run `./factory apply`: it installs the newest published omp and relinks `~/.local/bin/omp`.
+To upgrade omp itself, run `./ship.sh launch`: it installs the newest published omp and relinks `~/.local/bin/omp`.

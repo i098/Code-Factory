@@ -12,7 +12,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).parents[1]
-SPEC = importlib.util.spec_from_file_location("factory_config", ROOT / "scripts/factory.py")
+SPEC = importlib.util.spec_from_file_location("factory_config", ROOT / "scripts/ship.py")
 factory = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(factory)
 
@@ -40,7 +40,7 @@ def test_legacy_obscura_keys_are_ignored_with_one_warning_and_apply_proceeds(
     )
     monkeypatch.setattr(factory, "questions", lambda document: 0)
     for host in (current, legacy):
-        monkeypatch.setattr(factory.sys, "argv", ["factory", "apply", "--config", str(host)])
+        monkeypatch.setattr(factory.sys, "argv", ["ship.sh", "launch", "--config", str(host)])
         assert factory.main() == 0
     warning = capsys.readouterr().err
     assert provisioned == [False, False]
@@ -212,7 +212,7 @@ def test_questions_launch_only_on_an_interactive_terminal_outside_ci(
     monkeypatch.setattr(factory.subprocess, "run", fake_omp(launches))
     assert factory.questions(configuration) == 0
     assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"] * launched
-    skipped = capsys.readouterr().out.count("rerun ./factory apply interactively")
+    skipped = capsys.readouterr().out.count("rerun ./ship.sh launch interactively")
     assert skipped == (0 if launched else 1)
 
 
@@ -232,7 +232,7 @@ def test_second_apply_does_not_reopen_the_questions(configuration, tmp_path, mon
         factory.subprocess, "run", fake_omp(launches, exits=lambda n: 0 if n > 1 else 1)
     )
     monkeypatch.setattr(
-        factory.sys, "argv", ["factory", "apply", "--config", str(tmp_path / "host.yml")]
+        factory.sys, "argv", ["ship.sh", "launch", "--config", str(tmp_path / "host.yml")]
     )
     marker = tmp_path / ".local/share/code-factory/new-host-questions-done"
     assert factory.main() == 0
@@ -278,7 +278,7 @@ def test_another_accounts_apply_skips_questions_without_reading_the_unreadable_h
         assert factory.questions(configuration) == 0
     finally:
         home.chmod(0o700)
-    assert "rerun ./factory apply interactively as another-account" in capsys.readouterr().out
+    assert "rerun ./ship.sh launch interactively as another-account" in capsys.readouterr().out
 
 
 def test_apply_warns_when_firstmate_still_tracks_the_stale_fork(
@@ -289,11 +289,11 @@ def test_apply_warns_when_firstmate_still_tracks_the_stale_fork(
     host.write_text(yaml.safe_dump(configuration))
     monkeypatch.setattr(factory, "provision", lambda document, check: 0)
     monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: False)
-    monkeypatch.setattr(factory.sys, "argv", ["factory", "apply", "--config", str(host)])
+    monkeypatch.setattr(factory.sys, "argv", ["ship.sh", "launch", "--config", str(host)])
     assert factory.main() == 0
     output = capsys.readouterr()
     assert output.err.startswith("WARNING: firstmate.url is the stale fork")
-    assert "rerun ./factory apply interactively" in output.out
+    assert "rerun ./ship.sh launch interactively" in output.out
 
 
 def _verify_firstmate(tmp_path, origin, configured):

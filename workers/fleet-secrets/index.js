@@ -3,7 +3,7 @@
 // Access app still fails closed. Never log request data or secret values here.
 // Plain-text bindings team_domain (<team>.cloudflareaccess.com) and aud (the Access app AUD
 // tag) come from the Access API at push time. Secret bindings: super_env_layout plus one per
-// variable, written by scripts/push-super-env.sh; FLEET_SECRETS_ACCESS_CLIENT_ID names the
+// variable, written by scripts/stow-secrets.sh; FLEET_SECRETS_ACCESS_CLIENT_ID names the
 // one service token allowed in.
 const headers = { "Cache-Control": "no-store" };
 const deny = (status = 403) => new Response(null, { status, headers });

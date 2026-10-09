@@ -13,7 +13,7 @@
 # SSH hardening is the separate last step above, so it is not listed here.
 modules=baseline,firewall,fail2ban,updates
 
-# The account that ran ./factory apply is the operator: it keeps the SSH keys
+# The account that ran ./ship.sh launch is the operator: it keeps the SSH keys
 # it logs in with and is made a sudo user.
 {% if ansible_user_id == 'root' %}
 # Apply ran as root, so the operator account is unknown. Set both before use:

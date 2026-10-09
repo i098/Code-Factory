@@ -12,7 +12,7 @@
 # What this deliberately does not do
 #   * no SSH keys, passwords, API tokens, auth keys or node identities - add
 #     access through your platform's own key mechanism before first boot
-#   * no account creation: `./factory apply` creates factory.user with the
+#   * no account creation: `./ship.sh launch` creates factory.user with the
 #     home and workspace from your configuration document
 #   * no sshd, firewall, UFW or Tailscale change - all of those stay manual
 #     and reviewed (docs/security.md)
@@ -29,7 +29,7 @@
 #
 # After first boot, as the account that will own the factory:
 #   git clone <your private remote> ~/Dev/Crewship
-#   cd ~/Dev/Crewship && ./bootstrap.sh init && ./bootstrap.sh apply
+#   cd ~/Dev/Crewship && ./onboard.sh dock && ./onboard.sh launch
 #
 # Keep the distribution's own package sources; this adds none of its own. The
 # Chrome, Docker and Tailscale sources are added later, by the profiles that
@@ -64,7 +64,7 @@ packages:
   - sudo
 
 write_files:
-  # Evidence that the prerequisites ran, for support and for `factory doctor`.
+  # Evidence that the prerequisites ran, for support and for `ship.sh survey`.
   # No secret, no host identity, no provider metadata.
   - path: /var/lib/code-factory/cloud-init-prerequisites
     owner: root:root
@@ -75,7 +75,7 @@ write_files:
       # Packages only. No account, credential, firewall or SSH change was made
       # here, and no provisioning was run.
       prerequisites=ca-certificates,curl,gnupg,openssl,git,rsync,tar,unzip,xz-utils,zstd,python3,python3-venv,jq,procps,acl,sudo
-      next=clone the repository, then ./bootstrap.sh apply
+      next=clone the repository, then ./onboard.sh launch
 
 # Nothing is executed on first boot: provisioning is an explicit, credentialed
 # step the operator runs, not something a seed image starts on its own.

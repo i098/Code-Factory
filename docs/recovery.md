@@ -3,7 +3,7 @@
 ## New-device sequence
 
 1. Start with a supported Ubuntu installation and working SSH/sudo access. `cloud-init/user-data.yaml` installs initial OS prerequisites; it does not create credentials, log in to services, or clone this private repository.
-2. Authenticate GitHub on the new device and clone Crewship. Run the [Quick start](../README.md#quick-start): bootstrap, init, validate, plan, apply, and doctor.
+2. Authenticate GitHub on the new device and clone Crewship. Run the [Quick start](../README.md#quick-start): `onboard.sh`, then `ship.sh` `dock`, `inspect`, `chart`, `launch`, and `survey`.
 3. Confirm Herdr's user service and executable agree. Both resolve to the versioned release that apply resolved and installed (see [Latest releases](dependencies.md#latest-releases)).
 4. Authenticate agent/provider CLIs under the configured operator account (for omp, see [Sign in](omp.md#sign-in)). Confirm the configured models exist for that account. Recreate per-project approval/trust choices instead of copying a global auto-approval list.
 5. If selected, authenticate Tailscale as a new device and review its ACL/SSH policy. Installation alone does not authorize incoming connections.
@@ -15,13 +15,13 @@ Do not point two machines at the same live session, task registry, browser profi
 ## Troubleshooting
 
 ```bash
-./factory doctor    # actionable diagnostics
-./factory plan      # preview what apply would change
+./ship.sh survey    # actionable diagnostics
+./ship.sh chart      # preview what apply would change
 ```
 
 - **`fleet guards require the docker and firstmate profiles`**: enable both profiles in `.local/host.yml`.
 - **Empty fixture archive**: the shared database is a read-only fixture that cannot be rebuilt from migrations. Copy the volume snapshot from a host that has the fixture; see [The fixture](fleet-guards.md#the-fixture).
-- **Spawn refused by the memory floor**: wait for a lane to finish, or lower the floor in this repository's `config/spawn-memory-floor-mb` and rerun `./factory apply`. Every apply rewrites the Firstmate checkout's copy, so an edit made only there is reverted.
+- **Spawn refused by the memory floor**: wait for a lane to finish, or lower the floor in this repository's `config/spawn-memory-floor-mb` and rerun `./ship.sh launch`. Every apply rewrites the Firstmate checkout's copy, so an edit made only there is reverted.
 
 ## Desktop access
 
@@ -56,7 +56,7 @@ Never upload a raw failed HTTP request to a public issue or this repository. Suc
 
 ## Drift and upgrades
 
-Run `./factory plan` before applying; every apply upgrades each tool to its latest release, and a herdr upgrade restarts `herdr.service`. An unmanaged executable at a managed command path is a refusal, not permission to overwrite it. Firstmate refuses dirty or independently advanced checkouts. Preserve that work and decide whether to update the configuration or move to a separate clean checkout.
+Run `./ship.sh chart` before applying; every apply upgrades each tool to its latest release, and a herdr upgrade restarts `herdr.service`. An unmanaged executable at a managed command path is a refusal, not permission to overwrite it. Firstmate refuses dirty or independently advanced checkouts. Preserve that work and decide whether to update the configuration or move to a separate clean checkout.
 
 Existing OMP settings are first-write-only: provisioning will not replace provider configuration or credentials on a reused account. Review and merge the exported safe preferences manually if deliberately updating an established account.
 

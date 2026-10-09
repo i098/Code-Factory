@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 SPEC = importlib.util.spec_from_file_location(
-    "install_tools", Path(__file__).parents[1] / "scripts/install_tools.py"
+    "provisions", Path(__file__).parents[1] / "scripts/provisions.py"
 )
 installer = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(installer)
@@ -410,7 +410,7 @@ def test_github_token_goes_only_to_the_github_api(monkeypatch, env, expected):
 def run_cli(monkeypatch, capsys, tmp_path, *argv):
     monkeypatch.setattr(installer, "platform_key", lambda: "linux-x86_64")
     monkeypatch.setattr(
-        installer.sys, "argv", ["install_tools.py", "--home", str(tmp_path), *argv, "--resolve"]
+        installer.sys, "argv", ["provisions.py", "--home", str(tmp_path), *argv, "--resolve"]
     )
     installer.main()
     return json.loads(capsys.readouterr().out)
@@ -536,7 +536,7 @@ def test_an_apply_merges_its_resolved_record_into_the_existing_one(
     monkeypatch.setattr(installer, "platform_key", lambda: "linux-x86_64")
     monkeypatch.setattr(installer, "install_asset", lambda *args: False)
     monkeypatch.setattr(
-        installer.sys, "argv", ["install_tools.py", "--home", str(tmp_path), "--tools", "uv", *argv]
+        installer.sys, "argv", ["provisions.py", "--home", str(tmp_path), "--tools", "uv", *argv]
     )
     installer.main()
     assert json.loads(record.read_text()) == expected
@@ -558,7 +558,7 @@ def test_a_failed_command_reports_why_it_failed(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(
         installer.sys,
         "argv",
-        ["install_tools.py", "--home", str(tmp_path), "--tools", "uv", "--development"]
+        ["provisions.py", "--home", str(tmp_path), "--tools", "uv", "--development"]
         + ["--resolved", json.dumps(resolved)],
     )
     with pytest.raises(SystemExit) as exit_status:

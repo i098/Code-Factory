@@ -2,23 +2,23 @@
 
 ## How it works
 
-Crewship is an Ansible playbook with a Python CLI wrapper (`scripts/factory.py`). The source of truth is:
+Crewship is an Ansible playbook with a Python CLI wrapper (`scripts/ship.py`). The source of truth is:
 
 - `config/default.yml` — ship defaults (every field the schema requires)
 - `schemas/factory.schema.json` — JSON Schema for the host config
 - `ansible/group_vars/all.yml` — Jinja vars consumed by tasks
 - `ansible/tasks/*.yml` — the tasks themselves (one file per concern)
 - `ansible/templates/*.j2` — systemd unit templates
-- `scripts/factory.py` — CLI (`init`, `validate`, `plan`, `apply`, `doctor`)
-- `scripts/install_tools.py` — latest-release tool installer (idempotent)
+- `scripts/ship.py` — CLI (`dock`, `inspect`, `chart`, `launch`, `survey`)
+- `scripts/provisions.py` — latest-release tool installer (idempotent)
 - `fleet/` — runtime scripts deployed to `~/oss-fleet/` on the target host
 - `config/` — per-tool config templates deployed to Firstmate homes
 
 ## Design rules
 
-Every task is idempotent; a second unchanged `apply` reports `changed=0`.
+Every task is idempotent; a second unchanged `launch` reports `changed=0`.
 
-Every task is check-mode safe: `plan` (Ansible `--check`) previews without mutating.
+Every task is check-mode safe: `chart` (Ansible `--check`) previews without mutating.
 
 Nothing is pinned: every tool tracks its latest release, resolved once per apply and verified by the checksum its publisher posts; what each source is verified against, and the omp marketplace plugin exception, are in [Dependencies](docs/dependencies.md). Only the repository's own Python environment (`uv.lock`) stays locked, and CI pins each GitHub Action to the commit SHA of its latest release, kept current by Dependabot.
 
@@ -47,8 +47,8 @@ uv run ansible-playbook -i ansible/inventory.yml ansible/site.yml --syntax-check
 
 ## Adding a new tool
 
-1. Add it to `GITHUB_LATEST` (a GitHub release whose assets carry a SHA-256 digest; when the release publishes its own `<asset>.sha256` files, also list it in `SHA256_FILE` to verify against those) or `NPM_LATEST` in `scripts/install_tools.py`. A tool from elsewhere needs its own resolver in `resolve_latest` that reads the checksum its publisher posts for the release.
-2. Register where it installs: `factory_core_tools` in `group_vars/all.yml` for every host, `AGENT_TOOLS` in `scripts/install_tools.py` for the `agents` profile's native tools (npm tools in `NPM_LATEST` need no step), or `factory_installer_also` in `group_vars/all.yml` for a source Ansible installs itself.
+1. Add it to `GITHUB_LATEST` (a GitHub release whose assets carry a SHA-256 digest; when the release publishes its own `<asset>.sha256` files, also list it in `SHA256_FILE` to verify against those) or `NPM_LATEST` in `scripts/provisions.py`. A tool from elsewhere needs its own resolver in `resolve_latest` that reads the checksum its publisher posts for the release.
+2. Register where it installs: `factory_core_tools` in `group_vars/all.yml` for every host, `AGENT_TOOLS` in `scripts/provisions.py` for the `agents` profile's native tools (npm tools in `NPM_LATEST` need no step), or `factory_installer_also` in `group_vars/all.yml` for a source Ansible installs itself.
 3. If it needs a systemd unit, add a `.j2` template in `ansible/templates/` and wire it in the relevant task file.
 4. If it needs environment variables, add them to `group_vars/all.yml` (not to shell rc files).
 5. Update `docs/architecture.md` if the tool changes the host's architecture.
@@ -70,7 +70,7 @@ Fleet guards (`fleet/`) are runtime scripts deployed to `~/oss-fleet/` on the bo
 - Tests pass (`uv run pytest`).
 - Lint clean (`uv run ruff check`).
 - Ansible syntax clean (`--syntax-check`).
-- Idempotent: `apply` → `apply` = `changed=0` on the second run.
+- Idempotent: `launch` → `launch` = `changed=0` on the second run.
 - Describe what changed and why in the PR body.
 
 ## Changelog and releases

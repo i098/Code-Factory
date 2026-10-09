@@ -60,7 +60,7 @@ jobs:
         run: bash config/omp-as-pi/test.sh
 
       - name: Validate default configuration
-        run: ./factory validate --config config/default.yml
+        run: ./ship.sh inspect --config config/default.yml
 
       - name: Validate container configuration
-        run: ./factory validate --config containers/factory.container.yml
+        run: ./ship.sh inspect --config containers/factory.container.yml

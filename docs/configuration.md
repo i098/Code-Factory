@@ -4,19 +4,24 @@
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `./factory init` | Copies `config/default.yml` to `.local/host.yml` with your user, home, and `~/Dev` workspace filled in. Never overwrites an existing file. Options: `--user`, `--home`, `--container`. |
-| `./factory validate` | Checks the config against `schemas/factory.schema.json` and the cross-field rules below. |
-| `./factory plan` | Runs the Ansible playbook in check mode. Reports what would change; mutates nothing. |
-| `./factory apply` | Runs the playbook for real. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, the first successful interactive apply with omp signed in then opens the new-host questions (below). |
-| `./factory doctor` | Checks that each expected tool runs and reports `gh` authentication. Changes nothing. |
+| New name | Old name | What it does |
+| --- | --- | --- |
+| `./onboard.sh` | `./bootstrap.sh` | Installs the repository tooling: the latest uv, then the locked Python environment with Ansible. Changes nothing else on the host. |
+| `./ship.sh dock` | `./factory init` | Copies `config/default.yml` to `.local/host.yml` with your user, home, and `~/Dev` workspace filled in. Never overwrites an existing file. Options: `--user`, `--home`, `--container`. |
+| `./ship.sh inspect` | `./factory validate` | Checks the config against `schemas/factory.schema.json` and the cross-field rules below. |
+| `./ship.sh chart` | `./factory plan` | Runs the Ansible playbook in check mode. Reports what would change; mutates nothing. |
+| `./ship.sh launch` | `./factory apply` | Runs the playbook for real. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, the first successful interactive apply with omp signed in then opens the new-host questions (below). |
+| `./ship.sh survey` | `./factory doctor` | Checks that each expected tool runs and reports `gh` authentication. Changes nothing. |
+| `scripts/ship.py` | `scripts/factory.py` | The Python program behind `ship.sh`. |
+| `scripts/provisions.py` | `scripts/install_tools.py` | Installs the public tools into the user-owned Crewship prefix. |
+| `scripts/stow-secrets.sh` | `scripts/push-super-env.sh` | Pushes `~/super.env` to Cloudflare Secrets Store and redeploys the fleet-secrets Worker. |
+| `scripts/fetch-secrets.sh` | `scripts/fetch-super-env.sh` | Pulls `super.env` from the fleet-secrets Worker into `~/super.env`. |
 
-`validate`, `plan`, `apply`, and `doctor` read `--config <path>` if you pass one, otherwise `.local/host.yml`. If `.local/host.yml` does not exist, `validate`, `plan`, and `doctor` fall back to `config/default.yml` (user `coder`); `apply` refuses to run.
+`inspect`, `chart`, `launch`, and `survey` read `--config <path>` if you pass one, otherwise `.local/host.yml`. If `.local/host.yml` does not exist, `inspect`, `chart`, and `survey` fall back to `config/default.yml` (user `coder`); `launch` refuses to run.
 
 ## The host config
 
-An excerpt with the defaults `./factory init` writes. The full document is [`config/default.yml`](../config/default.yml).
+An excerpt with the defaults `./ship.sh dock` writes. The full document is [`config/default.yml`](../config/default.yml).
 
 ```yaml
 factory:
@@ -68,7 +73,7 @@ factory:
   #     - { repo: owner/name, slots: 2, labels: [my-label] }
 ```
 
-`validate` also enforces these rules:
+`inspect` also enforces these rules:
 
 - `user` is not `root`, and `workspace` is inside `home`.
 - `firstmate` and `browser_prune.enabled` need `agents`.
@@ -76,16 +81,16 @@ factory:
 - `ci_pool` needs `docker`, and no two `ci_pool.repos` entries may make the same unit name.
 - `imessage` needs `firstmate`, and `imessage.owner` is a phone number in E.164 form (`+` and digits).
 
-The Firstmate checkout tracks the default branch of upstream Firstmate, not a sha. Every apply fetches `origin/main` and puts `main` at that revision plus the [Firstmate patch layer](dependencies.md#firstmate-patch-layer), so tracking it is how a host stays current. Do not re-pin it to a sha. Each run resolves `origin/main` once and reports the sha it installed. To track a fork, set `firstmate.url` in `.local/host.yml`. The URL applies to a fresh clone; verification fails when an existing checkout's `origin` is a different URL, and provisioning never changes it for you. To switch an existing checkout, run `git -C <workspace>/firstmate remote set-url origin <url>` and `git -C <workspace>/firstmate fetch origin`, reconcile any local commits on `main` with `origin/main` by hand, then run `./factory apply`.
+The Firstmate checkout tracks the default branch of upstream Firstmate, not a sha. Every apply fetches `origin/main` and puts `main` at that revision plus the [Firstmate patch layer](dependencies.md#firstmate-patch-layer), so tracking it is how a host stays current. Do not re-pin it to a sha. Each run resolves `origin/main` once and reports the sha it installed. To track a fork, set `firstmate.url` in `.local/host.yml`. The URL applies to a fresh clone; verification fails when an existing checkout's `origin` is a different URL, and provisioning never changes it for you. To switch an existing checkout, run `git -C <workspace>/firstmate remote set-url origin <url>` and `git -C <workspace>/firstmate fetch origin`, reconcile any local commits on `main` with `origin/main` by hand, then run `./ship.sh launch`.
 
 ## New-host questions
 
-After a successful `./factory apply` with the `firstmate` profile on, once omp has a provider login, Crewship starts omp in the Firstmate checkout with an opening prompt. Firstmate then asks the move decisions for this host one question at a time: which secondmate homes, services, tools, and unpushed work to bring over.
+After a successful `./ship.sh launch` with the `firstmate` profile on, once omp has a provider login, Crewship starts omp in the Firstmate checkout with an opening prompt. Firstmate then asks the move decisions for this host one question at a time: which secondmate homes, services, tools, and unpushed work to bring over.
 
 - The questions follow `firstmate.checklist` when it is set and `gh` can read it: `repo` is a GitHub repository (it can be private) and `path` is the checklist file in it. Set it only in `.local/host.yml`, never in `config/default.yml`. Otherwise they follow [Agent host move](agent-host-move.md).
-- They are asked once per host. When the omp session exits successfully, apply writes the marker `~/.local/share/code-factory/new-host-questions-done`; while it exists, later applies skip the questions and print one line naming it. If omp exits non-zero, apply writes no marker and prints one line saying the questions did not complete. To ask again, delete the marker and rerun `./factory apply` interactively.
-- The launch needs an interactive terminal, run as `factory.user`. When stdin is not a TTY, when `CI` is set, or when another account runs apply, apply skips them without writing the marker and prints one line saying to rerun `./factory apply` interactively.
-- They need an omp provider login. Apply checks with `omp models --json`; when it lists no models or fails, apply skips the questions without writing the marker and prints one line saying to sign in to omp with `/login` ([Sign in](omp.md#sign-in)) and rerun `./factory apply` interactively. On a new host the first apply installs omp, so sign in after it and then rerun apply.
+- They are asked once per host. When the omp session exits successfully, apply writes the marker `~/.local/share/code-factory/new-host-questions-done`; while it exists, later applies skip the questions and print one line naming it. If omp exits non-zero, apply writes no marker and prints one line saying the questions did not complete. To ask again, delete the marker and rerun `./ship.sh launch` interactively.
+- The launch needs an interactive terminal, run as `factory.user`. When stdin is not a TTY, when `CI` is set, or when another account runs apply, apply skips them without writing the marker and prints one line saying to rerun `./ship.sh launch` interactively.
+- They need an omp provider login. Apply checks with `omp models --json`; when it lists no models or fails, apply skips the questions without writing the marker and prints one line saying to sign in to omp with `/login` ([Sign in](omp.md#sign-in)) and rerun `./ship.sh launch` interactively. On a new host the first apply installs omp, so sign in after it and then rerun apply.
 
 The recipe refuses to overwrite a conflicting unmanaged command or an independently advanced Firstmate checkout. See [Drift and upgrades](recovery.md#drift-and-upgrades).
 
@@ -126,7 +131,7 @@ Apply sets the new `data-root` but copies nothing, so Docker starts with an empt
 1. Make sure that `sudo docker ps -q` prints nothing. Do not stop containers that other work needs.
 2. `sudo systemctl stop docker.socket docker.service`
 3. `sudo rsync -aHAX /var/lib/docker/ <data_dir>/docker/`
-4. Set `"data-root": "<data_dir>/docker"` in `/etc/docker/daemon.json`, or run `./factory apply`.
+4. Set `"data-root": "<data_dir>/docker"` in `/etc/docker/daemon.json`, or run `./ship.sh launch`.
 5. `sudo systemctl start docker.service`, then make sure that `sudo docker info -f '{{.DockerRootDir}}'` and `sudo docker images` show the new root and the images.
 6. Remove `/var/lib/docker` only after that check.
 

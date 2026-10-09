@@ -14,7 +14,7 @@
 - name: Report that check mode cannot verify provisioning outputs
   ansible.builtin.debug:
     msg: >-
-      check mode: skipping output verification. `./factory apply` verifies the
+      check mode: skipping output verification. `./ship.sh launch` verifies the
       resolved Herdr and omp releases, unit wiring, pruner runtime, the Firstmate revision it
       resolved and the loopback-only desktop listeners.
   when: ansible_check_mode or not (factory_account_ready | bool)

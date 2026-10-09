@@ -2,11 +2,11 @@
 """Refuse to provision an image with a configuration that describes another machine.
 
 Run inside the Dockerfile `worker` stage, as the image account, after
-`./factory validate` has accepted the document against schemas/factory.schema.json:
+`./ship.sh inspect` has accepted the document against schemas/factory.schema.json:
 
     uv run --project . --locked python containers/assert-image-config.py CONFIG
 
-`./factory validate` proves the document is well formed. This guard proves it is
+`./ship.sh inspect` proves the document is well formed. This guard proves it is
 the *right* document for this image: the account it provisions is the account the
 build runs as, and every capability an ordinary container cannot host is off.
 Without it a stale or copied document would silently converge a different home,

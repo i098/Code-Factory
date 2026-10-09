@@ -19,7 +19,7 @@
     fail_msg: >-
       The `factory` extra vars are not a valid Crewship configuration
       document (schema_version 1, absolute home/workspace, profile mapping).
-      Run `./factory validate` first.
+      Run `./ship.sh inspect` first.
     quiet: true
 
 - name: Assert the host is a supported Ubuntu release

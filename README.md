@@ -8,10 +8,10 @@ Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Fir
 
 ```mermaid
 flowchart TD
-    box["Fresh Ubuntu 24.04 or 26.04"] --> boot["./bootstrap.sh: latest uv, Ansible"]
-    boot --> init["./factory init: writes .local/host.yml"]
-    init --> check["./factory validate, then plan"]
-    check --> apply["./factory apply"]
+    box["Fresh Ubuntu 24.04 or 26.04"] --> boot["./onboard.sh: latest uv, Ansible"]
+    boot --> init["./ship.sh dock: writes .local/host.yml"]
+    init --> check["./ship.sh inspect, then chart"]
+    check --> apply["./ship.sh launch"]
     lock["toolchain: latest releases, checksum-verified (omp plugins excepted)"] --> apply
     apply --> profiles["Ansible profiles"]
     subgraph host["Finished host"]
@@ -50,33 +50,33 @@ You need Ubuntu 24.04 or 26.04 on x86_64 or aarch64 with systemd, a non-root acc
 3. Install the repository tooling (the latest uv, then the locked Python environment with Ansible):
 
    ```bash
-   ./bootstrap.sh
+   ./onboard.sh
    ```
 
 4. Create your host config, then review its profiles, user, and paths:
 
    ```bash
-   ./factory init
+   ./ship.sh dock
    ${EDITOR:-nano} .local/host.yml
    ```
 
-5. Validate the config and preview the changes. `plan` is Ansible check mode and changes nothing:
+5. Validate the config and preview the changes. `chart` is Ansible check mode and changes nothing:
 
    ```bash
-   ./factory validate
-   ./factory plan
+   ./ship.sh inspect
+   ./ship.sh chart
    ```
 
-6. Apply. This is the only step that changes the host, and it may ask for your sudo password. With the `firstmate` profile on, the first successful interactive apply after you sign in to omp opens the [new-host questions](docs/configuration.md#new-host-questions); a fresh host's first apply installs omp, so sign in to omp after it and rerun apply:
+6. Launch. This is the only step that changes the host, and it may ask for your sudo password. With the `firstmate` profile on, the first successful interactive apply after you sign in to omp opens the [new-host questions](docs/configuration.md#new-host-questions); a fresh host's first apply installs omp, so sign in to omp after it and rerun apply:
 
    ```bash
-   ./factory apply
+   ./ship.sh launch
    ```
 
 7. Check the result:
 
    ```bash
-   ./factory doctor
+   ./ship.sh survey
    ```
 
 Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs/omp.md#sign-in). Credentials are never copied from another host; see [Migration and recovery](docs/recovery.md).
@@ -85,7 +85,7 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 
 | Doc | What it covers |
 | --- | --- |
-| [Configuration](docs/configuration.md) | `.local/host.yml`, the `./factory` commands, and what each profile installs |
+| [Configuration](docs/configuration.md) | `.local/host.yml`, the `./ship.sh` commands, and what each profile installs |
 | [Dependencies](docs/dependencies.md) | Every tool, package, and image the recipe installs, and what the host must already have |
 | [Fleet guards](docs/fleet-guards.md) | Shared Supabase, Docker guard, dev-server reaper, storage guard, spawn memory floor, browser ladder |
 | [Herdr sidebar](docs/herdr.md) | The Spaces and Agents sidebar layouts, what each line and token shows, the reporter timer and omp extension that feed them, and how to override them or turn parts off |

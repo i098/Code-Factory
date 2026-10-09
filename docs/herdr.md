@@ -106,7 +106,7 @@ The issue comes from the worker's task record in its home first: the first `issu
 
 ### The omp extension
 
-Herdr configuration alone cannot drop the `π` (omp puts it at the start of every terminal title) or know about pull requests. With the `agents` profile on, `./factory apply` installs [`config/herdr-sidebar.ts`](../config/herdr-sidebar.ts) as `~/.omp/agent/extensions/code-factory-herdr-sidebar.ts`. omp loads it at startup. Every apply rewrites it, so do not edit the installed copy.
+Herdr configuration alone cannot drop the `π` (omp puts it at the start of every terminal title) or know about pull requests. With the `agents` profile on, `./ship.sh launch` installs [`config/herdr-sidebar.ts`](../config/herdr-sidebar.ts) as `~/.omp/agent/extensions/code-factory-herdr-sidebar.ts`. omp loads it at startup. Every apply rewrites it, so do not edit the installed copy.
 
 The extension does nothing outside Herdr (`HERDR_ENV` is not `1`) or in an omp started from another omp's shell (`OMPCODE=1`). Inside a Herdr pane it:
 
@@ -125,11 +125,11 @@ The result carries `terminal_title` and `tokens.who`, `tokens.pr`, and so on.
 
 ### Pane state
 
-Herdr learns whether an omp agent is working, blocked or idle from its own omp extension, `~/.omp/agent/extensions/herdr-omp-agent-state.ts`. With the `agents` profile on, every `./factory apply` runs `herdr integration install omp` with the herdr it installed, so a herdr upgrade refreshes the extension; apply reports a change only when herdr rewrote the file, and verification fails unless `herdr integration status` reports `omp: current`. Without the extension Herdr shows every omp agent as idle. Apply installs no integration for other agents.
+Herdr learns whether an omp agent is working, blocked or idle from its own omp extension, `~/.omp/agent/extensions/herdr-omp-agent-state.ts`. With the `agents` profile on, every `./ship.sh launch` runs `herdr integration install omp` with the herdr it installed, so a herdr upgrade refreshes the extension; apply reports a change only when herdr rewrote the file, and verification fails unless `herdr integration status` reports `omp: current`. Without the extension Herdr shows every omp agent as idle. Apply installs no integration for other agents.
 
 ## Override the layouts or turn parts off
 
-Set these keys under `factory.herdr` in `.local/host.yml`, then run `./factory apply`:
+Set these keys under `factory.herdr` in `.local/host.yml`, then run `./ship.sh launch`:
 
 | Key | Default | Effect |
 | --- | --- | --- |
@@ -200,13 +200,13 @@ What the mobile layout forces, compared with the desktop sidebar:
 
 btop draws nothing in a pane smaller than its shown boxes need; it shows `Terminal size too small` instead. All four boxes need 80x24 in btop 1.4 (the cpu box is 60 columns wide, the proc box 44 beside the 36 of mem and net), so a 50-column phone pane is too small.
 
-`./factory apply` installs the latest btop release as `~/.local/bin/btop-bin`, [`config/btop.conf`](../config/btop.conf) as `~/.config/btop/btop.conf`, and [`maintenance/btop.sh`](../maintenance/btop.sh) as `~/.local/bin/btop`. The launcher starts btop with preset 0 (all four boxes) in a pane of at least 80x24, and otherwise with preset 4 (processes only, which needs 44x16). When a phone attaches to the same session and the pane crosses 80x24, the launcher restarts btop with the other preset. Quitting btop ends the launcher.
+`./ship.sh launch` installs the latest btop release as `~/.local/bin/btop-bin`, [`config/btop.conf`](../config/btop.conf) as `~/.config/btop/btop.conf`, and [`maintenance/btop.sh`](../maintenance/btop.sh) as `~/.local/bin/btop`. The launcher starts btop with preset 0 (all four boxes) in a pane of at least 80x24, and otherwise with preset 4 (processes only, which needs 44x16). When a phone attaches to the same session and the pane crosses 80x24, the launcher restarts btop with the other preset. Quitting btop ends the launcher.
 
 btop saves its config on exit, including the last preset's boxes; the launcher always passes a preset, so that never changes what it shows. Every apply rewrites the config, so make lasting changes in `config/btop.conf`, and keep preset 4 there.
 
 ## Viewing from another machine
 
-Sidebar layouts are client-side: Herdr draws the sidebar from the config of the machine you view from, even over `herdr --remote`. The host still reports every token, but the viewing machine needs the host's layout to show them. `./factory apply` installs [`maintenance/herdr-sidebar-to-client.py`](../maintenance/herdr-sidebar-to-client.py) as `~/.local/bin/herdr-sidebar-to-client.py`. On the viewing machine, run it against the host with Python 3 and ssh access, where `<host>` is anything `ssh` accepts, such as `user@host`:
+Sidebar layouts are client-side: Herdr draws the sidebar from the config of the machine you view from, even over `herdr --remote`. The host still reports every token, but the viewing machine needs the host's layout to show them. `./ship.sh launch` installs [`maintenance/herdr-sidebar-to-client.py`](../maintenance/herdr-sidebar-to-client.py) as `~/.local/bin/herdr-sidebar-to-client.py`. On the viewing machine, run it against the host with Python 3 and ssh access, where `<host>` is anything `ssh` accepts, such as `user@host`:
 
 ```bash
 ssh <host> cat .local/bin/herdr-sidebar-to-client.py | python3 - <host>
@@ -214,11 +214,11 @@ ssh <host> cat .local/bin/herdr-sidebar-to-client.py | python3 - <host>
 
 It copies the host's `sidebar_width`, `sidebar_max_width`, `[ui.sidebar.agents]`, `[ui.sidebar.spaces]` and `[theme.custom] sidebar_bg` into `~/.config/herdr/config.toml` on the viewing machine, or into the path given as a second argument, and leaves every other setting there as is. It writes a timestamped `.bak-sidebar-` copy of that file first. Run it again after the host's layout changes.
 
-Pane state (the sidebar dots) is reported on the host by the omp integration `./factory apply` installs, so the host needs nothing more. A machine that views the host with `herdr --remote` should run the same Herdr release as the host: the host runs the latest, so on the viewing machine run `herdr update`, then compare `herdr --version` with the host's.
+Pane state (the sidebar dots) is reported on the host by the omp integration `./ship.sh launch` installs, so the host needs nothing more. A machine that views the host with `herdr --remote` should run the same Herdr release as the host: the host runs the latest, so on the viewing machine run `herdr update`, then compare `herdr --version` with the host's.
 
 ## Over mosh
 
-Over mosh, Herdr 0.9.3 can paint an opaque fill over older panes ([herdr#3773](https://github.com/herdrdev/herdr/issues/3773)), and mosh drops the images in the panes. `./factory apply` installs [`herdr-patch/herdr-patch`](../herdr-patch/herdr-patch) as `~/.local/bin/herdr-patch`, which fixes both. `mosh-server` starts its command with the system `PATH`, which has no `~/.local/bin`, so apply also links `/usr/local/bin/herdr-patch` and `/usr/local/bin/herdr` to the installed files.
+Over mosh, Herdr 0.9.3 can paint an opaque fill over older panes ([herdr#3773](https://github.com/herdrdev/herdr/issues/3773)), and mosh drops the images in the panes. `./ship.sh launch` installs [`herdr-patch/herdr-patch`](../herdr-patch/herdr-patch) as `~/.local/bin/herdr-patch`, which fixes both. `mosh-server` starts its command with the system `PATH`, which has no `~/.local/bin`, so apply also links `/usr/local/bin/herdr-patch` and `/usr/local/bin/herdr` to the installed files.
 
 On your computer, install the same script and attach with real images:
 
