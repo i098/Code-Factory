@@ -78,11 +78,11 @@ flowchart TD
 
 Rent an Ubuntu 24.04 or 26.04 server from any VPS or cloud provider, for example [Hetzner Cloud](https://www.hetzner.com/cloud/), [OVHcloud VPS](https://www.ovhcloud.com/en/vps/), or [DigitalOcean Droplets](https://www.digitalocean.com/products/droplets). A spare machine at home works too.
 
-| Size | vCPU | RAM | Disk | Runs in parallel | Source |
-| --- | --- | --- | --- | --- | --- |
-| Small | 4 | 16 GB | 100 GB | 2 light lanes | estimated |
-| Medium | 16 | 64 GB | 300 GB | 4 UI lanes + 8 light lanes, or 16 light lanes | estimated |
-| Large (a real host) | 96, x86_64 | 247 GB | 235 GB system disk, two ~2 TB data disks | 37 agent processes used about 67 GB RAM (about 0.35 GB each) at a load average of 30-35 | measured |
+| Size | Machine | Runs in parallel |
+| --- | --- | --- |
+| Small (estimated) | 4 vCPU, 16 GB RAM, 100 GB disk | 2 light lanes |
+| Medium (estimated) | 16 vCPU, 64 GB RAM, 300 GB disk | 4 UI lanes + 8 light lanes, or 16 light lanes |
+| Large (measured on a real host) | 96 vCPU x86_64, 247 GB RAM, a 235 GB system disk and two ~2 TB data disks | 37 agent processes in about 67 GB RAM (about 0.35 GB each), load average 30-35 |
 
 Builds, tests, and browsers set the limit, not the agents; each CI job is capped at 4 CPUs and 8 GB. See [Capacity and pruners](docs/capacity.md) for the formula.
 
