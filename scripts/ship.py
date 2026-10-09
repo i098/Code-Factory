@@ -53,6 +53,9 @@ def validate_config(document):
         fixture = config.get("fleet", {}).get("fixture_archive", "")
         if fixture and ".." in Path(fixture).parts:
             raise ValueError("fleet.fixture_archive must not traverse; give a plain path")
+    skills = config.get("skills", {})
+    if "private_ref" in skills and skills["private_source"].startswith("/"):
+        raise ValueError("skills.private_ref applies only to a git source; remove it for a local path")
     for block in ("imessage", "github_board"):
         if block in config and not config["profiles"]["firstmate"]:
             raise ValueError(f"{block} requires the firstmate profile")
