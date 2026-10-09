@@ -72,3 +72,17 @@ Fleet guards (`fleet/`) are runtime scripts deployed to `~/oss-fleet/` on the bo
 - Ansible syntax clean (`--syntax-check`).
 - Idempotent: `apply` → `apply` = `changed=0` on the second run.
 - Describe what changed and why in the PR body.
+
+## Changelog and releases
+
+[CHANGELOG.md](CHANGELOG.md) follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html). Releases are [GitHub releases](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository) on `vX.Y.Z` tags.
+
+1. Every PR adds one line under `## [Unreleased]`, in the section that fits: Added, Changed, Deprecated, Removed, Fixed, or Security.
+2. To cut a release, open a PR that moves those lines under a new `## [X.Y.Z] - YYYY-MM-DD` heading (ISO 8601 date), leaves `## [Unreleased]` empty, and updates the link references at the bottom of the file. Choose the number:
+   - patch (`Z`): fixes only;
+   - minor (`Y`): a new capability;
+   - major (`X`): a breaking change to the host config or the host layout.
+
+   While the version is `0.y.z` (initial development, see SemVer item 4), a breaking change bumps the minor number instead.
+3. After that PR merges, tag its merge commit on `main` as `vX.Y.Z`. Never move or reuse a published tag.
+4. Publish a GitHub release for the tag, named `vX.Y.Z`, with that version's changelog section as the notes, for example `gh release create vX.Y.Z --target <merge-sha> --title vX.Y.Z --notes-file <section.md>`.
