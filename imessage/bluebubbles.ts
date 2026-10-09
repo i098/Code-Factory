@@ -18,7 +18,7 @@ export type Relay = { url: string; password: string };
 // desk.ts Bubble, so the bridge handles it like a Photon one.
 type Content = Message["content"];
 type Bubble = {
-  id: string; content: Content; direction: "inbound" | "outbound"; sender: { id: string };
+  id: string; content: Content; direction: "inbound" | "outbound"; sender: { id: string }; timestamp?: Date;
   space: { id: string; send(text: string): Promise<unknown>; startTyping(): Promise<void>; stopTyping(): Promise<void> };
   react(emoji: string): Promise<unknown>; reply(text: string): Promise<unknown>; read(): Promise<unknown>;
 };
@@ -139,8 +139,8 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
     for (const r of await this.healthy()) {
       try {
         const found = (await this.call(r, "POST", "message/query", undefined,
-          { after, sort: "ASC", limit: 100, with: ["chats", "attachments"] })) as BBMessage[];
-        for (const m of found) await this.accept(m.guid, m);
+          { after, sort: "DESC", limit: 500, with: ["chats", "attachments"] })) as BBMessage[];
+        for (const m of found.reverse()) await this.accept(m.guid, m);
       } catch (e) {
         // An unreachable relay was already logged when it went down.
         if (!(e instanceof RelayError && (e.code || e.status === 503))) this.log(`catch-up failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -336,6 +336,7 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
       id: m.guid,
       content,
       direction: m.isFromMe ? "outbound" : "inbound",
+      timestamp: m.dateCreated ? new Date(m.dateCreated) : undefined,
       sender: { id: m.handle?.address ?? "" },
       space,
       react: (emoji: string) => this.react(chat, m.guid, emoji),

@@ -414,12 +414,15 @@ async function handle(line: Line, message: LineMessage) {
     log("download an attachment")(failed);
     downloads.add(ref);
   }
-  latest = message;
-  latest = message;
-  latestRef = line.latest = ref;
-  recent.push(ref);
-  recent.splice(0, Math.max(0, recent.length - 10));
-  await Bun.write(latestFile(line.name), `${message.space.id}\n${message.id}\n${Date.now()}\n`).catch(log("persist the latest text"));
+  const at = message.timestamp?.getTime() || Date.now();
+  if (at >= latestAt) {
+    latest = message;
+    latestRef = line.latest = ref;
+    latestAt = at;
+    recent.push(ref);
+    recent.splice(0, Math.max(0, recent.length - 10));
+    await Bun.write(latestFile(line.name), `${message.space.id}\n${message.id}\n${at}\n`).catch(log("persist the latest text"));
+  }
   await message.read().catch(log("mark read"));
 }
 

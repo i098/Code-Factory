@@ -72,6 +72,7 @@ export type Attachment = Extract<Content, { type: "attachment" }>;
 // The part of an iMessage the bridge uses. A spectrum-ts Message (Photon) and a BlueBubbles message
 // (bluebubbles.ts) both have it, so the bridge runs on either transport.
 export type LineMessage = Pick<Message, "id" | "content" | "direction"> & {
+  timestamp?: Date; // when the message was sent; a transport that gives none is treated as just received
   sender?: { id: string };
   space: { id: string; send(text: string): Promise<unknown>; startTyping(): Promise<void>; stopTyping(): Promise<void> };
   react(emoji: string): Promise<unknown>;

@@ -501,7 +501,7 @@ function relay(password = "pw-test") {
         return Response.json({ data: { guid: `sent-${r.sent.length}`, tempGuid: body.tempGuid } });
       }
       if (path === "message/react") { r.sent.push(body); return Response.json({ data: {} }); }
-      if (path === "message/query") return Response.json({ data: [...r.messages.values()].filter((m) => m.dateCreated > body.after) });
+      if (path === "message/query") return Response.json({ data: [...r.messages.values()].filter((m) => m.dateCreated > body.after).sort((a, b) => (body.sort === "DESC" ? b.dateCreated - a.dateCreated : a.dateCreated - b.dateCreated)) });
       let m = path.match(/^chat\\/([^/]+)\\/message$/);
       if (m) return Response.json({ data: icloud.filter((s) => s.chat === decodeURIComponent(m[1]) && s.at > Number(u.searchParams.get("after"))).map((s) => ({ isFromMe: true, text: s.text })) });
       if (/^chat\\/[^/]+\\/(typing|read)$/.test(path)) return Response.json({ data: null });
@@ -1133,9 +1133,10 @@ def test_bridge_files_his_edits_as_new_notes(tmp_path):
 # A fake BlueBubbles relay for a whole-bridge test: it logs each send to FAKE_DIR/relay-sent (a text as
 # "<chat> <text>", a tapback as "react <message> <name>") and serves the messages in FAKE_DIR/relay/<guid>.json. While
 # FAKE_DIR/relay-mode holds "garbled", a send is taken but the answer is unreadable and the sent-texts query fails; while
-# it holds "lost", the answer is unreadable and the send never arrived.
+# it holds "lost", the answer is unreadable and the send never arrived; while it holds "hold-query", a message query waits
+# for FAKE_DIR/query-go. A message query returns the messages in FAKE_DIR/relay newer than its `after`.
 FAKE_RELAY = """
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 const dir = process.env.FAKE_DIR;
 const mode = () => (existsSync(`${dir}/relay-mode`) ? readFileSync(`${dir}/relay-mode`, "utf8").trim() : "");
 const sentLines = () => (existsSync(`${dir}/relay-sent`) ? readFileSync(`${dir}/relay-sent`, "utf8").split("\\n").filter(Boolean) : []);
@@ -1158,7 +1159,12 @@ const server = Bun.serve({ port: 0, async fetch(req) {
   }
   const m = path.match(/^message\\/([^/]+)$/);
   if (m && existsSync(`${dir}/relay/${m[1]}.json`)) return Response.json({ data: JSON.parse(readFileSync(`${dir}/relay/${m[1]}.json`, "utf8")) });
-  if (path === "message/query") return Response.json({ data: [] });
+  if (path === "message/query") {
+    const b = await req.json();
+    while (mode() === "hold-query" && !existsSync(`${dir}/query-go`)) await Bun.sleep(20);
+    const found = readdirSync(`${dir}/relay`).map((f) => JSON.parse(readFileSync(`${dir}/relay/${f}`, "utf8"))).filter((m) => m.dateCreated > b.after);
+    return Response.json({ data: found });
+  }
   return Response.json({ data: null });
 } });
 writeFileSync(`${dir}/relay-port`, String(server.port));
@@ -1247,10 +1253,13 @@ class FallbackRig:
         (self.fake / "inbound" / f"{mid}.json").write_text(json.dumps(record))
         wait_for(lambda: f"photon-{mid} " in read_text(self.notes), f"the Photon note {mid}")
 
-    def relay_text(self, guid, text, at):
+    def relay_message(self, guid, text, at):
         message = {"guid": guid, "text": text, "isFromMe": False, "dateCreated": at, "attachments": [],
                    "handle": {"address": "+10000000000"}, "chats": [{"guid": "iMessage;-;+10000000000"}]}
         (self.fake / "relay" / f"{guid}.json").write_text(json.dumps(message))
+
+    def relay_text(self, guid, text, at):
+        self.relay_message(guid, text, at)
         hook = json.dumps({"type": "new-message", "data": {"guid": guid}})
         subprocess.run(["curl", "-sS", "-d", hook, f"http://127.0.0.1:{self.hook_port}/bluebubbles"], check=True, capture_output=True)
         wait_for(lambda: f"bluebubbles-{guid} " in read_text(self.notes), f"the BlueBubbles note {guid}")
@@ -1374,7 +1383,7 @@ def test_a_restart_targets_his_newest_text_on_any_transport(tmp_path):
     try:
         rig.start()
         rig.photon_text("m1", "on photon")
-        rig.relay_text("g1", "later, on the icloud line", 1)
+        rig.relay_text("g1", "later, on the icloud line", int(time.time() * 1000) + 5000)
         wait_for(lambda: (rig.state / "latest-bluebubbles").exists(), "the BlueBubbles latest file")
         assert len((rig.state / "latest").read_text().split()) == 3  # space, id, time
         rig.stop()
@@ -1390,3 +1399,23 @@ def test_a_restart_targets_his_newest_text_on_any_transport(tmp_path):
     finally:
         rig.close()
     assert "react m1 ❤️" not in read_text(rig.fake / "sent")
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_a_replayed_older_text_never_becomes_his_latest(tmp_path):
+    """A BlueBubbles text whose webhook was lost is filed by the catch-up after a newer Photon text; the tapback still goes to Photon."""
+    rig = FallbackRig(tmp_path)
+    rig.relay_message("g1", "lost webhook, sent earlier", int(time.time() * 1000) - 5 * 60_000)
+    rig.relay_mode("hold-query")
+    try:
+        rig.start()
+        rig.photon_text("m1", "newer, on photon")
+        (rig.fake / "query-go").touch()
+        wait_for(lambda: "bluebubbles-g1 " in read_text(rig.notes), "the replayed BlueBubbles note")
+        rig.cli("--react", "👍")
+        wait_for(lambda: "react m1 👍" in read_text(rig.fake / "sent"), "the tapback on the Photon text")
+    finally:
+        rig.close()
+    assert "react" not in read_text(rig.fake / "relay-sent")
+    assert not (rig.state / "latest-bluebubbles").exists()
+    assert read_text(rig.notes).count("bluebubbles-g1 ") == 1
