@@ -121,7 +121,7 @@ function roadAt(x, z) {
   return [Math.sqrt(best), along, concrete];
 }
 // Island ground as material and glyph: a 3 m concrete road with kerbs and joints every 3 m, a tiled plaza,
-// a 1 m dirt trail with uneven edges, ruts and footprints, and grass, bare earth and flowers elsewhere.
+// a 1 m dirt trail with uneven edges, ruts and footprints, and grass with a few flowers elsewhere.
 function ground(x, y, z, nx, ny) {
   if (ny < 0.5) return null;
   const [d, along, concrete] = roadAt(x, z), plaza = Math.hypot(x - 5, z - 24.6);
@@ -131,11 +131,12 @@ function ground(x, y, z, nx, ny) {
     if (Math.abs(d - 0.22) < 0.06) return "o:";
     return hash(Math.floor(along * 2.5), Math.floor(d * 6)) < 0.18 ? "o," : "o.";
   }
-  const h = hash(Math.floor(x * 2), Math.floor(z * 2));
-  if (h < 0.025) return ["r*", "b*", "s*"][Math.floor(h * 120)];
-  if (hash(Math.floor(x / 4), Math.floor(z / 4)) < 0.2) return h < 0.5 ? "o:" : "o.";
-  // Grass in two greens with moss in the hollows; shadeSolid draws it as blades swaying in the wind.
-  return (hash(Math.floor(x / 3), Math.floor(z / 3) + 50) < 0.3 ? "M" : h < 0.5 ? "G" : "g") + "'";
+  // A few flowers and stones, each a small round dot in its half-metre cell.
+  const cx = Math.floor(x * 2), cz = Math.floor(z * 2), h = hash(cx, cz);
+  if (h < 0.025 && Math.hypot(x * 2 - cx - 0.5, z * 2 - cz - 0.5) < 0.18) return ["r*", "b*", "s*"][Math.floor(h * 120)];
+  // Grass in three greens mixed blade by blade; shadeSolid draws it as blades swaying in the wind.
+  const v = hash(Math.floor(x * 5), Math.floor(z * 5) + 50);
+  return (v < 0.3 ? "M" : v < 0.65 ? "G" : "g") + "'";
 }
 // The island is one height field: a plateau at 1.2 m whose edges slope down through sand beaches into the sea
 // all the way round, with a wobbly coastline, and a steep stone harbour wall only where the dock needs deep water.
@@ -724,13 +725,13 @@ function mapFrame() {
   [...(full ? tip + "   M or Esc closes" : tip).slice(0, iw)].forEach((ch, i) => mapPut(i + 1, h - 2, ch, "h"));
   if (touchFirst.matches) mapPut(w - 2, 0, full ? "x" : "+", "h");
 }
-// The island seen from above: plateau with roads, grass and bare earth, beach and shallow-water bands, deep sea.
+// The island seen from above: plateau with roads and grass, beach and shallow-water bands, deep sea.
 function mapTerrain() {
   for (let j = 0; j < mapBox.ih; j++) {
     for (let i = 0; i < mapBox.iw; i++) {
       const [x, z] = fromMap(i + 0.5, j + 0.5), y = terrainY(x, z);
       let cell = [(i + j) % 6 ? " " : "~", "d"];
-      if (y > 1.12) cell = roadAt(x, z)[0] < 1.4 || Math.hypot(x - 5, z - 24.6) < 3.2 ? ["+", "s"] : hash(Math.floor(x / 4), Math.floor(z / 4)) < 0.2 ? [".", "o"] : [",", "g"];
+      if (y > 1.12) cell = roadAt(x, z)[0] < 1.4 || Math.hypot(x - 5, z - 24.6) < 3.2 ? ["+", "s"] : [",", "g"];
       else if (y > 0) cell = [".", "y"];
       else if (y > -1.2) cell = ["~", "w"];
       mapPut(i + 1, j + 1, ...cell);
