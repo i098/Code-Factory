@@ -16,7 +16,9 @@ name: ci
 on:
   push:
     branches: [main]
+  # labeled/unlabeled: the changelog fragment check reads the `no changelog` label.
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 
 # Read-only by default; no job requests more.
@@ -43,6 +45,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # On a pull request HEAD is the merge commit; HEAD^1 is the base.
+          fetch-depth: 2
 
       - name: Install latest uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -52,6 +56,14 @@ jobs:
 
       - name: Sync locked dependencies
         run: uv sync --locked --group dev
+
+      # Every PR adds changelog.d/<issue>.<type>.md (CONTRIBUTING.md); a PR
+      # with nothing to note carries the `no changelog` label instead.
+      - name: Changelog fragment
+        if: >-
+          github.event_name == 'pull_request' &&
+          !contains(github.event.pull_request.labels.*.name, 'no changelog')
+        run: uv run towncrier check --compare-with HEAD^1
 
       # Bun tracks its latest release, the same as every ./ship.sh launch.
       - name: Install latest Bun
