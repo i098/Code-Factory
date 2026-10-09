@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - README screenshot of a finished host, captured from demo repositories ([#35](https://github.com/i098/Crewship/issues/35)).
+- Git conventions and branch rules in `CONTRIBUTING.md`, issue forms, a pull request template, `SUPPORT.md`, and `CODEOWNERS` for `.github/` ([#47](https://github.com/i098/Crewship/issues/47)).
 - Sponsor button on the repository page, from `.github/FUNDING.yml`, that opens the i098 GitHub Sponsors profile ([#59](https://github.com/i098/Crewship/issues/59)).
 - Optional GitHub board (`factory.github_board`): a user timer mirrors Firstmate work items to issues in a repository you choose, keeps a Project `Status` field in step (queued, in progress, in review, done), and posts new status lines as batched issue comments. The new-host questions ask whether to turn it on; without the key the host makes no GitHub calls for it ([#45](https://github.com/i098/Crewship/issues/45)).
 
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `scripts/stow-secrets.sh` no longer fails with `maximum_secrets_exceeded` once `super.env` has more than 100 variables: it stores the whole file in a few chunks instead of one secret per variable, and it deletes the per-variable secrets the chunks replace. On a full store it deletes just enough of them before creating the chunks, so fetches can fail for a few seconds during that one push ([#58](https://github.com/i098/Crewship/issues/58)).
 - The worker image and the compose backing services pull from `mirror.gcr.io`, Google's Docker Hub mirror, so the CI image build no longer fails on Docker Hub's anonymous pull limit (`429 Too Many Requests`); the images are the same official ones ([#63](https://github.com/i098/Crewship/issues/63)).
 
 ## [0.1.0] - 2026-10-09
