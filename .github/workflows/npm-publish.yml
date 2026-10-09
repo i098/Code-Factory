@@ -1,0 +1,52 @@
+# Publishes the crewship npm package (npm/) for each published vX.Y.Z release.
+#
+# npm trusted publishing: the job's GitHub OIDC token authenticates the
+# publish, so no npm token is stored, and npm adds a provenance attestation.
+# The `npm` environment records each publish under Deployments with the
+# package page as its URL. Actions are pinned to the commit SHA of their
+# latest release (verified 2026-10-09 via the GitHub REST API).
+name: npm publish
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  publish:
+    name: publish crewship to npm
+    if: startsWith(github.event.release.tag_name, 'v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/crewship
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        shell: bash
+        working-directory: npm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Trusted publishing needs npm 11.5.1 or later; the latest Node ships it.
+      - name: Install latest Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: latest
+
+      # The package version is the release tag, so the launcher fetches the
+      # install.sh of the same release.
+      - name: Set the version from the tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: npm version --no-git-tag-version "${TAG#v}"
+
+      - name: Publish
+        run: npm publish --provenance --access public
