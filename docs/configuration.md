@@ -64,6 +64,9 @@ factory:
   # mac_ssh:              # Optional; set only in .local/host.yml. See security.md#ssh-to-a-mac
   #   host: <Mac tailnet name or IP>
   #   user: <Mac login>
+  # skills:               # Optional, off when absent; set only in .local/host.yml. See omp.md#skills
+  #   private_source: git@github.com:owner/private-skills.git   # or an absolute local path
+  #   private_ref: main   # Optional git branch, tag or commit; the default is the remote HEAD
   # imessage:             # Optional, off when absent; set only in .local/host.yml. See imessage.md
   #   owner: "+<country code><number>"
   #   owner_name: the owner          # the default; how the desk prompt names him

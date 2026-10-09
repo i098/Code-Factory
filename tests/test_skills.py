@@ -1,5 +1,8 @@
 import importlib.util
+import subprocess
 from pathlib import Path
+
+import pytest
 
 SPEC = importlib.util.spec_from_file_location(
     "skills", Path(__file__).parents[1] / "scripts/skills.py"
@@ -73,3 +76,66 @@ def test_failed_copy_still_records_what_was_installed(tmp_path, monkeypatch):
     assert result["skipped"] == []
     for root in skills.ROOTS:
         assert (home / root / "b/SKILL.md").read_text() == "b"
+
+
+def git(*argv):
+    subprocess.run(["git", *argv], check=True, capture_output=True)
+
+
+def test_no_private_source_fetches_nothing_and_leaves_private_alone(tmp_path, monkeypatch):
+    source, home = tmp_path / "skills", tmp_path / "home"
+    skill(source, "private", "mine", "mine")
+    monkeypatch.setattr(skills.subprocess, "run", lambda *a, **k: pytest.fail("fetched"))
+    skills.install(home, source)
+    assert [p.name for p in (source / "private").iterdir()] == ["mine"]
+    assert not (home / skills.CACHE).exists()
+
+
+def test_private_git_source_fills_private_and_installs_idempotently(tmp_path):
+    source, home, remote = tmp_path / "skills", tmp_path / "home", tmp_path / "remote"
+    skill(source, "public", "shared", "public shared")
+    skill(source, "private", "by-hand", "by hand")
+    skill(remote, ".", "shared", "remote shared")
+    skill(remote, ".", "gone-later", "remote gone")
+    skill(remote, ".", "by-hand", "remote by hand")
+    git("init", "-q", "-b", "skills", str(remote))
+    git("-C", str(remote), "add", ".")
+    git("-C", str(remote), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x")
+    url = remote.as_uri()
+
+    result = skills.install(home, source, url, "skills")
+    assert result["changed"]
+    assert result["skipped"] == [str(source / "private/by-hand")]
+    assert (source / "private/by-hand/SKILL.md").read_text() == "by hand"
+    for root in skills.ROOTS:
+        assert (home / root / "shared/SKILL.md").read_text() == "remote shared"
+        assert (home / root / "gone-later/SKILL.md").read_text() == "remote gone"
+        assert (home / root / "by-hand/SKILL.md").read_text() == "by hand"
+
+    assert not skills.install(home, source, url, "skills")["changed"]
+
+    # A skill that leaves the source leaves skills/private and every root.
+    git("-C", str(remote), "rm", "-rq", "gone-later")
+    git("-C", str(remote), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "y")
+    assert skills.install(home, source, url, "skills")["changed"]
+    assert not (source / "private/gone-later").exists()
+    for root in skills.ROOTS:
+        assert not (home / root / "gone-later").exists()
+        assert (home / root / "shared/SKILL.md").read_text() == "remote shared"
+
+
+def test_private_local_directory_source_fills_private(tmp_path):
+    source, home, local = tmp_path / "skills", tmp_path / "home", tmp_path / "local"
+    skill(local, ".", "solo", "local solo")
+    result = skills.install(home, source, str(local))
+    assert result["installed"] == ["solo"]
+    assert (source / "private/solo/SKILL.md").read_text() == "local solo"
+    for root in skills.ROOTS:
+        assert (home / root / "solo/SKILL.md").read_text() == "local solo"
+    assert not skills.install(home, source, str(local))["changed"]
+    # A missing local source fails and leaves every filled skill in place.
+    with pytest.raises(FileNotFoundError):
+        skills.install(home, source, str(tmp_path / "unmounted"))
+    assert (source / "private/solo/SKILL.md").read_text() == "local solo"
+    for root in skills.ROOTS:
+        assert (home / root / "solo/SKILL.md").read_text() == "local solo"

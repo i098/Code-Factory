@@ -109,6 +109,40 @@ def test_unknown_fleet_field_is_rejected(configuration):
         factory.validate_config(configuration)
 
 
+@pytest.mark.parametrize(
+    "skills",
+    [
+        {"private_source": "/srv/private-skills"},
+        {"private_source": "git@github.com:owner/skills.git", "private_ref": "main"},
+        {"private_source": "https://github.com/owner/skills.git", "private_ref": "v1.2"},
+        {"private_source": "ssh://git@example.com/owner/skills.git"},
+        {"private_source": "file:///srv/skills.git"},
+    ],
+)
+def test_private_skills_source_is_accepted(configuration, skills):
+    configuration["factory"]["skills"] = skills
+    assert factory.validate_config(configuration) is configuration
+
+
+@pytest.mark.parametrize(
+    "skills",
+    [
+        {},
+        {"private_source": ""},
+        {"private_source": "relative/skills"},
+        {"private_source": "--upload-pack=touch /tmp/x"},
+        {"private_source": "https://token@github.com/owner/skills.git"},
+        {"private_source": "https://user:token@github.com/owner/skills.git"},
+        {"private_source": "/srv/skills", "private_ref": "-main"},
+        {"private_source": "/srv/skills", "token": "x"},
+    ],
+)
+def test_bad_private_skills_source_is_rejected(configuration, skills):
+    configuration["factory"]["skills"] = skills
+    with pytest.raises(ValueError):
+        factory.validate_config(configuration)
+
+
 @pytest.mark.parametrize("data_dir", ["data", "/", "/srv/../root", "/srv/data/"])
 def test_data_dir_must_be_a_plain_absolute_path(configuration, data_dir):
     configuration["factory"]["data_dir"] = data_dir
