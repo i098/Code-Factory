@@ -27,6 +27,7 @@ const DEFAULTS = {
   pingMs: 3000, // health check timeout
   healthMs: 10_000, // how long a health result is kept
   callMs: 15_000, // any other call
+  downloadMs: 10 * 60_000, // an attachment download, body included
   sendMs: 30_000, // a send: the server answers once Messages has the message
   skewMs: 60_000, // clock difference allowed between this host and a relay when looking for a sent text
   seenMax: 1000, // message GUIDs kept for de-duplication
@@ -181,7 +182,7 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
 
   // Download an attachment from whichever relay has it. The bridge's download queue retries a failure.
   async download(guid: string): Promise<Buffer> {
-    return (await this.first((r) => this.call(r, "GET", `attachment/${encodeURIComponent(guid)}/download`, { original: "true" }, undefined, this.opts.callMs, true))) as Buffer;
+    return (await this.first((r) => this.call(r, "GET", `attachment/${encodeURIComponent(guid)}/download`, { original: "true" }, undefined, this.opts.downloadMs, true))) as Buffer;
   }
 
   // The relay's own record of a message (see BBMessage); the API has no schema to check it against.
@@ -262,7 +263,12 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
       const detail = (await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 200);
       throw new RelayError(`${this.name(r)}: HTTP ${res.status} ${detail}`.trim(), res.status >= 500, res.status);
     }
-    if (binary) return Buffer.from(await res.arrayBuffer());
+    if (binary) {
+      return Buffer.from(await res.arrayBuffer().catch((e) => {
+        const timedOut = e instanceof Error && e.name === "TimeoutError";
+        throw new RelayError(`${this.name(r)}: download interrupted${timedOut ? ` after ${timeout} ms` : ""}`, false, undefined, timedOut ? "ETIMEDOUT" : "ECONNRESET");
+      }));
+    }
     const json: unknown = await res.json().catch(() => {
       throw new RelayError(`${this.name(r)}: unreadable answer, HTTP ${res.status}`, true, res.status);
     });

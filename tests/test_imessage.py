@@ -506,6 +506,10 @@ function relay(password = "pw-test") {
       if (m) return Response.json({ data: icloud.filter((s) => s.chat === decodeURIComponent(m[1]) && s.at > Number(u.searchParams.get("after"))).map((s) => ({ isFromMe: true, text: s.text })) });
       if (/^chat\\/[^/]+\\/(typing|read)$/.test(path)) return Response.json({ data: null });
       m = path.match(/^attachment\\/([^/]+)\\/download$/);
+      if (m && r.slow && r.files.has(m[1])) {
+        const body = r.files.get(m[1]);
+        return new Response(new ReadableStream({ async start(c) { c.enqueue(new TextEncoder().encode(body.slice(0, 3))); await Bun.sleep(r.slow); c.enqueue(new TextEncoder().encode(body.slice(3))); c.close(); } }));
+      }
       if (m) return r.files.has(m[1]) ? new Response(r.files.get(m[1])) : Response.json({ error: { message: "Attachment does not exist!" } }, { status: 404 });
       m = path.match(/^message\\/([^/]+)$/);
       if (m && r.messages.has(decodeURIComponent(m[1]))) return Response.json({ data: r.messages.get(decodeURIComponent(m[1])) });
@@ -655,6 +659,26 @@ done({{ first, again, gone: [gone.message, permanent(gone)], down: [down.message
     assert result["gone"][0].startswith("relay 2") and result["gone"][1] is True  # moves to the dead-letter folder
     assert result["down"] == ["no relay is reachable", "HTTP 503", False]  # the queue tries again later
 
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_download_has_its_own_timeout_and_a_cut_body_is_a_relay_error():
+    """A body slower than callMs still arrives; one slower than downloadMs fails as a timeout the queue retries."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ permanent, transient }} from {OUTBOX};
+{FAKE_BB}
+const a = relay();
+a.files.set("big", "PNGDATA"); a.slow = 500;
+const patient = line([a], {{ callMs: 200, downloadMs: 3000 }});
+const ok = (await patient.download("big")).toString();
+const impatient = line([a], {{ callMs: 200, downloadMs: 200 }});
+const cut = await impatient.download("big").catch((e) => e);
+done({{ ok, cut: [cut.constructor.name, cut.message, transient(cut) ?? null, permanent(cut), cut.maybeSent], logs, secret: JSON.stringify([cut.message, logs]).includes("pw-test") }});
+""")
+    assert result["ok"] == "PNGDATA"
+    name, message, kind, perm, maybe_sent = result["cut"]
+    assert (name, kind, perm, maybe_sent) == ("RelayError", "TIMEOUT", False, False) and message.endswith("download interrupted after 200 ms")
+    assert not result["secret"] and not [line for line in result["logs"] if " is down: " in line]
 
 @pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
 def test_bluebubbles_fails_over_in_order_and_never_sends_twice():
