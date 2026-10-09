@@ -28,7 +28,7 @@ flowchart LR
            labels: [my-label]
    ```
 
-2. Run `./factory apply`. To change only the pool, without a full apply, use [Apply without the playbook](#apply-without-the-playbook).
+2. Run `./ship.sh launch`. To change only the pool, without a full apply, use [Apply without the playbook](#apply-without-the-playbook).
 3. In the repository's workflow, run the job on the pool:
 
    ```yaml
@@ -51,7 +51,7 @@ To remove a repository, delete its entry and apply again. Its idle slots stop an
 | `repos[].slots` | required | Slots for this repository: the most jobs it runs at one time. |
 | `repos[].labels` | required | Runner labels that the workflow's `runs-on` selects. |
 
-`./factory validate` refuses the pool without the `docker` profile, a `data_dir` with `..`, and two repositories that make the same unit name.
+`./ship.sh inspect` refuses the pool without the `docker` profile, a `data_dir` with `..`, and two repositories that make the same unit name.
 
 ## Pool size
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sync ~/super.env into Cloudflare Secrets Store and redeploy the fleet-secrets Worker.
-# Usage: scripts/push-super-env.sh      See docs/secrets.md.
+# Usage: scripts/stow-secrets.sh      See docs/secrets.md.
 # Uses CLOUDFLARE_ACCOUNT_ID and CF_API_TOKEN_GLOBAL from the file itself. Secret values only
 # travel through mode-600 temp files, never argv, and nothing prints them.
 set -euo pipefail

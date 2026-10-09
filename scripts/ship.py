@@ -112,7 +112,7 @@ def initialize(args):
     with destination.open("x") as stream:
         yaml.safe_dump(config, stream, sort_keys=False)
     destination.chmod(0o600)
-    print(f"Created {destination}; review profiles before ./factory apply.")
+    print(f"Created {destination}; review profiles before ./ship.sh launch.")
 
 
 def provision(document, check):
@@ -234,14 +234,14 @@ def questions(document):
     ):
         print(
             "New-host questions skipped (needs an interactive terminal); "
-            f"rerun ./factory apply interactively as {config['user']} to start them "
+            f"rerun ./ship.sh launch interactively as {config['user']} to start them "
             f"(asked once, then {marker} records it)"
         )
         return 0
     if marker.exists():
         print(
             f"New-host questions already asked ({marker} exists); delete it and rerun "
-            f"./factory apply interactively as {config['user']} to ask them again"
+            f"./ship.sh launch interactively as {config['user']} to ask them again"
         )
         return 0
     omp = home / ".local/bin/omp"
@@ -261,7 +261,7 @@ def questions(document):
     if not signed_in:
         print(
             f"New-host questions not started: sign in to omp with /login (run omp as "
-            f"{config['user']}), then rerun ./factory apply interactively"
+            f"{config['user']}), then rerun ./ship.sh launch interactively"
         )
         return 0
     source = f"the runbook {ROOT / 'docs/agent-host-move.md'}"
@@ -297,7 +297,7 @@ def questions(document):
     if returncode:
         print(
             f"New-host questions did not complete (omp exited {returncode}); rerun "
-            f"./factory apply interactively as {config['user']} to ask them again"
+            f"./ship.sh launch interactively as {config['user']} to ask them again"
         )
         return returncode
     marker.parent.mkdir(parents=True, exist_ok=True)
@@ -306,19 +306,24 @@ def questions(document):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(prog="ship.sh", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    init = commands.add_parser(
-        "init", help="create ignored host config for this login; never overwrite"
+    dock = commands.add_parser(
+        "dock", help="create ignored host config for this login; never overwrite"
     )
-    init.add_argument("--user")
-    init.add_argument("--home")
-    init.add_argument("--container", action="store_true")
-    for name in ("validate", "plan", "apply", "doctor"):
-        command = commands.add_parser(name)
+    dock.add_argument("--user")
+    dock.add_argument("--home")
+    dock.add_argument("--container", action="store_true")
+    for name, text in (
+        ("inspect", "check the host config against the schema and rules"),
+        ("chart", "preview what launch would change; changes nothing"),
+        ("launch", "provision this host from the host config"),
+        ("survey", "check that each expected tool runs; changes nothing"),
+    ):
+        command = commands.add_parser(name, help=text)
         command.add_argument("--config", type=Path, default=None)
     args = parser.parse_args()
-    if args.command == "init":
+    if args.command == "dock":
         initialize(args)
         return 0
     path = args.config or (
@@ -327,18 +332,18 @@ def main():
         else ROOT / "config/default.yml"
     )
     document = load_config(path.resolve())
-    if args.command == "validate":
+    if args.command == "inspect":
         print(f"Valid host configuration: {path}")
         return 0
-    if args.command == "doctor":
+    if args.command == "survey":
         return doctor(document)
-    if args.command == "apply" and args.config is None and not (ROOT / ".local/host.yml").exists():
+    if args.command == "launch" and args.config is None and not (ROOT / ".local/host.yml").exists():
         raise ValueError(
-            "run ./factory init and review .local/host.yml before applying, or pass an explicit --config"
+            "run ./ship.sh dock and review .local/host.yml before launching, or pass an explicit --config"
         )
-    result = provision(document, args.command == "plan")
+    result = provision(document, args.command == "chart")
     config = document["factory"]
-    if args.command == "apply" and config["profiles"]["firstmate"]:
+    if args.command == "launch" and config["profiles"]["firstmate"]:
         if config["firstmate"]["url"] == STALE_FIRSTMATE_URL:
             print(
                 f"WARNING: firstmate.url is the stale fork {STALE_FIRSTMATE_URL}; this host "
@@ -355,5 +360,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except (OSError, ValueError, jsonschema.ValidationError, subprocess.TimeoutExpired) as error:
-        print(f"factory: {error}", file=sys.stderr)
+        print(f"ship.sh: {error}", file=sys.stderr)
         sys.exit(1)

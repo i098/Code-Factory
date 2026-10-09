@@ -152,7 +152,7 @@ def server():
 
 def fetch(tmp_path: Path, url: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [ROOT / "scripts/fetch-super-env.sh"],
+        [ROOT / "scripts/fetch-secrets.sh"],
         env={"PATH": os.environ["PATH"], "HOME": str(tmp_path), "FLEET_SECRETS_URL": url},
         capture_output=True,
         text=True,

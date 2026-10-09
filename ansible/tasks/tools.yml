@@ -2,7 +2,7 @@
 # Toolchain, installed by the repository installer as the target user: the
 # latest releases tasks/preflight.yml resolved.
 #
-# Contract: python3 <repo>/scripts/install_tools.py
+# Contract: python3 <repo>/scripts/provisions.py
 #           --home <factory.home> --tools herdr,node,bun,uv,btop,sentrux,fallow[,concord,slk]
 #           [--npm] [--development]
 #           --resolved <factory_latest as JSON>

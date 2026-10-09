@@ -19,7 +19,7 @@ factory_cfg: "{{ factory_defaults | combine(factory | default({}, true), recursi
 # Override code_factory_repo if the CLI ever invokes the playbook from outside
 # the checkout.
 code_factory_repo: "{{ playbook_dir | dirname }}"
-factory_installer: "{{ code_factory_repo }}/scripts/install_tools.py"
+factory_installer: "{{ code_factory_repo }}/scripts/provisions.py"
 factory_pruner_source: "{{ code_factory_repo }}/maintenance/chrome-autoprune.py"
 
 # Nothing is pinned: tasks/preflight.yml resolves every tool's latest release

@@ -53,7 +53,7 @@ The unit reads `~/super.env` with `EnvironmentFile=` when it starts. The credent
 
 ## Enable it
 
-Add this block to `.local/host.yml`, then run `./factory apply`. The `firstmate` profile must be on.
+Add this block to `.local/host.yml`, then run `./ship.sh launch`. The `firstmate` profile must be on.
 
 ```yaml
 factory:

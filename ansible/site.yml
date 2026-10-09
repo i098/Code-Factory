@@ -1,6 +1,6 @@
 ---
 # Crewship - native Ubuntu 24.04 / 26.04 provisioning on x86_64 and
-# aarch64. Invoked by `./factory plan` (check mode) and `./factory apply`.
+# aarch64. Invoked by `./ship.sh chart` (check mode) and `./ship.sh launch`.
 #
 # Design rules enforced throughout:
 #   * every task is idempotent; a second unchanged apply reports changed=0
@@ -35,7 +35,7 @@
 
     # Everything below writes files owned by the target account, so it needs a
     # resolvable uid. `factory_account_ready` is false only in check mode on a
-    # host where the account does not exist yet: `./factory plan` then reports
+    # host where the account does not exist yet: `./ship.sh chart` then reports
     # the account work and skips what it cannot preview, instead of failing on
     # an owner that cannot be looked up. On a real apply the account exists by
     # this point and nothing is skipped.

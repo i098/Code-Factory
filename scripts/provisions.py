@@ -222,7 +222,7 @@ def resolve_latest(key, names):
             if tool not in OPTIONAL:
                 raise
             skipped.add(tool)
-            print(f"install_tools: skipping optional {tool}: {error}", file=sys.stderr)
+            print(f"provisions: skipping optional {tool}: {error}", file=sys.stderr)
     if "node" in names:
         releases = json.loads(fetch("https://nodejs.org/dist/index.json", "node release"))
         tag = max((r["version"] for r in releases), key=lambda v: tuple(map(int, v[1:].split("."))))
@@ -677,6 +677,6 @@ if __name__ == "__main__":
     try:
         main()
     except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
-        print(f"install_tools: {error}", file=sys.stderr)
+        print(f"provisions: {error}", file=sys.stderr)
         print(getattr(error, "stderr", None) or "", end="", file=sys.stderr)
         sys.exit(1)
