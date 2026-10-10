@@ -521,6 +521,8 @@ function crossHouseDoor(x, z) {
     me.z <= 20.75 && z > 20.75 && z < 21.2 && Math.abs(x + 5) < 0.42;
   if (!crossing) return false;
   insideHouse = !insideHouse;
+  probeMs = -1;
+  slow = fast = 0;
   layoutDirty = true;
   doorInputHeld = true;
   Object.assign(me, insideHouse ? { x: 0, z: 0.8, yaw: 0, pitch: 0 } : { x: -5, z: 20.35, yaw: Math.PI, pitch: 0 });
@@ -1520,7 +1522,7 @@ function adaptResolution(ms, late) {
 function roomFrameLate(frameMs) {
   if (frameMs > 0) refreshMs = paintedLastFrame ? Math.min(frameMs, refreshMs * 1.001) : frameMs;
   const late = insideHouse && (paintedLastFrame ? frameMs : probeMs) > refreshMs * 1.5;
-  probeMs = 0;
+  probeMs = Math.min(0, probeMs);
   paintedLastFrame = false;
   return late;
 }
@@ -1538,7 +1540,7 @@ function frame(now) {
   const walked = step(dt);
   // The room has no animated objects; repaint only after movement, looking, or resizing.
   if (visible && cols && (walked || dirty || (!insideHouse && !still))) {
-    if (late && (slow === 0 || slow === 20) && !probing) {
+    if (probeMs < 0 || (late && slow % 20 === 0 && !probing)) {
       probeMs = frameMs;
       dirty = true;
       requestAnimationFrame(frame);

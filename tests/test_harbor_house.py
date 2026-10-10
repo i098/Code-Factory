@@ -279,6 +279,39 @@ for (const period of [1000 / 60, 1000 / 30]) {
   for (let i = 0; i < 100; i++) paintFrame(period);
   assert(scale < coarseScale, 'detail must recover when deferred painting stops dropping frames');
 }
+for (const period of [1000 / 60, 1000 / 30]) {
+  for (const entryMode of ['frame', 'step']) {
+    keys.clear(); stick.x = stick.y = 0; step(0);
+    insideHouse = false;
+    scale = 1; shadows = false; slow = fast = 0;
+    refreshMs = Infinity; paintedLastFrame = false; paintQueued = false;
+    Object.assign(me, {x: -5, z: 19, yaw: 0});
+    keys.add('tr');
+    paintFrame(period);
+    for (let i = 0; i < 1000; i++) paintFrame(1000 / 30);
+    assert.equal(scale, 1, 'prolonged exterior callback drift must preserve the startup grid');
+    keys.clear();
+    Object.assign(me, {x: -5, z: 20.6, yaw: 0});
+    keys.add('f');
+    if (entryMode === 'step') for (let i = 0; i < 4; i++) step(0.02);
+    const paintDelay = period < 20 ? period : 0;
+    for (let i = 0; i < 5; i++) paintFrame(period, paintDelay);
+    assert(insideHouse, 'the movement path must enter after prolonged exterior timing drift');
+    keys.clear(); step(0); keys.add('tr');
+    const entryYaw = me.yaw;
+    for (let i = 0; i < 80; i++) paintFrame(period, paintDelay);
+    assert(me.yaw > entryYaw, 'room-entry sampling must preserve continuous turning');
+    if (paintDelay) {
+      assert(scale > 1, 'room entry must detect deferred painting despite inherited exterior timing');
+      const coarseScale = scale;
+      for (let i = 0; i < 100; i++) paintFrame(period);
+      assert(scale < coarseScale, 'room detail must recover after entry painting overload ends');
+    } else {
+      assert.equal(scale, 1, 'room entry on a native 30 Hz display must not reduce detail');
+    }
+  }
+}
+keys.clear();
 """
     subprocess.run(
         [

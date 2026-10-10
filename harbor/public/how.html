@@ -44,6 +44,7 @@
   Inside the room, missed frames also reduce detail relative to the measured display refresh rate.
   Before counting slower callbacks as painting load, the renderer skips one repaint to measure the display period without that load.
   This sample also detects display refresh changes during continuous input.
+  Each door crossing requests the same unloaded sample, so timing from the previous scene does not hide room painting load.
   The room redraws only after movement, looking, resizing, or another change that requires a new frame.
   Reduced motion also stops exterior animation.</li>
   <li><b>Controls.</b> WASD or arrows walk and turn, R and F look up and down, the mouse looks around, Enter opens what you point at. On a phone the pad walks and a drag looks. The label floats beside what you point at, with a leader line in text.</li>
