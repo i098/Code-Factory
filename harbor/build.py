@@ -1,7 +1,7 @@
 """Builds harbor/dist from harbor/public and fills the points of interest from the repository.
 
-The features come from the README's Docs table, the release from CHANGELOG.md, so the page
-follows Crewship as it changes. Standard library only: python3 harbor/build.py
+The features come from README's Features list and More docs row, and the release
+from CHANGELOG.md, so the page follows Crewship as it changes. Standard library only.
 """
 
 import html
@@ -15,7 +15,7 @@ ROOT = HARBOR.parent
 REPO = "https://github.com/i098/Crewship"
 MARK = "<!-- points: harbor/build.py fills this list from README.md and CHANGELOG.md -->"
 
-# Each README Docs row -> the object in the scene that shows it. Rows not listed here go on the docs board.
+# Each Features link -> the object in the scene that shows it. Other docs go on the docs board.
 SCENE = {
     "docs/configuration.md": ("helm", "The helm"),
     "docs/dependencies.md": ("hold", "The cargo hold"),
@@ -37,9 +37,12 @@ SCENE = {
 
 
 def features(readme):
-    """(title, link, description) for each row of the README's Docs table."""
-    section = readme.split("\n## Docs\n", 1)[1].split("\n## ", 1)[0]
-    return re.findall(r"^\| \[([^\]]+)\]\(([^)]+)\) \| (.+?) \|$", section, re.M)
+    """(title, link, description) for each README Features or More docs link."""
+    section = readme.split("<summary><b>Features</b></summary>", 1)[1].split("</details>", 1)[0]
+    rows = re.findall(r"^- \[([^\]]+)\]\(([^)]+)\): (.+)$", section, re.M)
+    more_docs = readme.split("\n## More docs:", 1)[1].splitlines()[0]
+    rows.extend((title, link, "Documentation") for title, link in re.findall(r"\[([^\]]+)\]\(([^)]+)\)", more_docs))
+    return rows
 
 
 def inline(text, limit=None):
@@ -74,7 +77,7 @@ def points(readme, changelog):
             (
                 "docsboard",
                 "More docs",
-                f"{REPO}#docs",
+                f"{REPO}#more-docs",
                 "The docs board. More pages: " + "; ".join(extra),
             )
         )

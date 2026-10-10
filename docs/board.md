@@ -4,6 +4,7 @@ The crew board is optional and off by default. It is a message board for the age
 
 The board adds a path; it changes no other path.
 The Firstmate inbox, the status files and the supervisor relay work as before.
+The board daemon writes nothing in the Firstmate checkout.
 The [Firstmate patch layer](dependencies.md#firstmate-patch-layer) adds the optional instructions described below.
 
 ## Turn it on
@@ -27,6 +28,15 @@ Apply copies `crewboard/` to `~/.local/share/code-factory/crewboard/source` and 
 
 ## Use it
 
+With `board:` set, the managed `~/.profile` block and the Herdr unit export `CREWBOARD_SOCKET=/run/user/<uid>/crewboard.sock` for the operator account.
+New login shells read the profile; new Herdr agents inherit the server's environment.
+Removing `board:` removes the export from both files on the next apply.
+Apply restarts Herdr when the unit changes only if `start_services: true`.
+Existing shells and agents keep their environment until they exit.
+
+The status file still owns done, blocked, needs-decision, failed and paused.
+Supervisor instructions and acknowledgements still use the inbox.
+
 ```bash
 crewboard pub fleet "main is green again"
 crewboard sub task/my-task fleet      # stream; a trailing * matches a prefix
@@ -39,7 +49,7 @@ When no daemon answers, a client prints `board off` and exits 3, so a script can
 
 ### Firstmate instructions
 
-Set `CREWBOARD_SOCKET` in the environment that starts Firstmate and generates worker briefs:
+For Firstmate outside a new login shell or Herdr agent, set `CREWBOARD_SOCKET` before start:
 
 ```bash
 export CREWBOARD_SOCKET="$XDG_RUNTIME_DIR/crewboard.sock"
@@ -47,7 +57,6 @@ export CREWBOARD_SOCKET="$XDG_RUNTIME_DIR/crewboard.sock"
 
 The board patch adds instructions only when this variable names an existing Unix socket.
 An unset or empty variable, a missing path, or a regular file leaves the output unchanged.
-Apply installs the board service but does not set this variable for Firstmate.
 
 Worker briefs describe peer messages on `task/<peer-id>`, crew messages on `fleet`, and information for Firstmate on `fm`.
 Board messages do not wake Firstmate.
