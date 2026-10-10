@@ -17,9 +17,15 @@
 </pre>
 <h1>How this harbor is built</h1>
 <ul>
-  <li><b>Renderer.</b> Every frame casts one ray per character cell from your eye. Buildings, the dock and the hull are convex solids made of planes; masts, barrels, trees and the lighthouse are true cones with smooth normals. The sea is a height field of travelling waves, ray marched per cell; the ship and the boats ride it.</li>
+  <li><b>Renderer.</b> Every frame casts one ray per character cell from your eye.
+  Buildings, the dock and the hull are convex solids made of planes.
+  Masts, barrels, tree trunks and the lighthouse are true cones with smooth normals.
+  Rocks and tree canopies are ellipsoids.
+  The sea is a height field of travelling waves, ray marched per cell; the ship and the boats ride it.</li>
   <li><b>Light.</b> It is night: lamps, lit windows, the lantern and the beacon light what is near them, fall off with distance and cast shadows from the solids around them; the lighthouse beam sweeps; the moon gives a dim fill. The sea shows Fresnel reflection, moon and lamp highlights and foam. Fog and contact shadows add depth.</li>
-  <li><b>Characters.</b> Brightness picks a glyph from the density ramp <code> .`',:;~-=+*#%@▒▓█</code> and one of eight colour levels per material; an edge glyph (<code>| - / \ _</code>) is drawn wherever one surface meets a farther one.</li>
+  <li><b>Characters.</b> Brightness usually picks a glyph from the density ramp <code> .`',:;~-=+*#%@▒▓█</code> and one of eight colour levels per material.
+  Grass uses blade glyphs; pale paving marks and foam keep their texture glyphs with a minimum brightness that decreases in fog.
+  An edge glyph (<code>| - / \ _</code>) is drawn wherever one surface meets a farther one.</li>
   <li><b>Frame loop.</b> <code>requestAnimationFrame</code> moves you, the sea and the ship and redraws the grid on a canvas.
   Devices with <code>(pointer: coarse)</code> draw one glyph per <code>fillText</code> call to limit WebKit's text cache.
   Their canvas uses at most 2 device pixels per CSS pixel.
