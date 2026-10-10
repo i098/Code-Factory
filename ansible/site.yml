@@ -96,7 +96,7 @@
         - crewship_cfg.profiles.firstmate | bool
       tags: [firstmate]
 
-    - name: Optional iMessage bridge to Firstmate over a Photon Spectrum line
+    - name: Optional iMessage bridge to Firstmate over Photon or BlueBubbles
       ansible.builtin.import_tasks: tasks/imessage.yml
       become: "{{ crewship_become_target | bool }}"
       become_user: "{{ crewship_cfg.user }}"
@@ -137,19 +137,26 @@
         - crewship_cfg.ci_pool is defined
       tags: [ci_pool]
 
-    - name: Fleet guards - one shared Supabase stack, Docker guard, worktree env seeding
+    - name: Fleet guards - Docker guard, reapers and storage guard
       ansible.builtin.import_tasks: tasks/fleet_guards.yml
       when:
         - crewship_account_ready | bool
         - crewship_cfg.profiles.fleet_guards | bool
       tags: [fleet]
 
+    - name: Optional shared Supabase stack, CLI, shim and worktree env seeder
+      ansible.builtin.import_tasks: tasks/shared_supabase.yml
+      when:
+        - crewship_account_ready | bool
+        - crewship_cfg.profiles.shared_supabase | bool
+      tags: [fleet, shared_supabase]
+
     - name: Fleet guard units - retire the flotilla units, render and start the crewship ones
       ansible.builtin.import_tasks: tasks/fleet_units.yml
       when:
         - crewship_account_ready | bool
-        - crewship_cfg.profiles.fleet_guards | bool
-      tags: [fleet]
+        - (crewship_cfg.profiles.fleet_guards | bool) or (crewship_cfg.profiles.shared_supabase | bool)
+      tags: [fleet, shared_supabase]
 
     - name: Fleet browser ladder - obscura tier, sync timer, gc timer, env injection
       ansible.builtin.import_tasks: tasks/fleet-browsers.yml
@@ -313,14 +320,7 @@
       become: "{{ crewship_become_target | bool }}"
       become_user: "{{ crewship_cfg.user }}"
       environment: "{{ crewship_user_systemd_env }}"
-      loop:
-        - crewship-shared-supabase-check.timer
-        - crewship-docker-guard.timer
-        - crewship-worktree-env-seed.timer
-        - crewship-worktree-env-seed.path
-        - crewship-dev-server-reaper.timer
-        - crewship-storage-guard.timer
-        - crewship-devtools-bridge-reaper.timer
+      loop: "{{ crewship_fleet_enabled_units | map(attribute='unit') | select('match', '.*\\.(timer|path)$') | list }}"
       when: crewship_manage_services | bool
       listen: restart fleet timers
 

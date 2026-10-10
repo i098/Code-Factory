@@ -32,7 +32,8 @@
 - [Herdr workspace](docs/herdr.md): a sidebar of spaces and agents, with live status for each lane
 - [omp agents](docs/omp.md): sign-in, model roles, fallbacks, and the advisor
 - [Private skills](docs/omp.md#skills): host-only skills in `skills/private/` (opt-in)
-- [Fleet guards](docs/fleet-guards.md): shared Supabase, Docker guard, dev-server reaper, storage guard, spawn memory floor (opt-in)
+- [Fleet guards](docs/fleet-guards.md): Docker guard, dev-server reaper, storage guard, spawn memory floor (opt-in)
+- [Shared Supabase](docs/fleet-guards.md#shared-supabase): shared stack and CLI (opt-in)
 - [Browser ladder](docs/fleet-guards.md#browser-ladder): Obscura, Chrome, and noVNC tiers for agent browsers (opt-in)
 - [Capacity and auto pruners](docs/capacity.md): host sizing per lane count, and cleanup timers
 - [Data disk](docs/configuration.md#data-disk): Docker and the npm and pip caches on a second disk (opt-in)
@@ -57,8 +58,11 @@
 <details>
 <summary><b>Default config</b></summary>
 
-- Agent harness: [omp](docs/omp.md), default model `anthropic/claude-opus-5-5:xhigh`, advisor off
-- Models: `anthropic/claude-fable-5-1`, `anthropic/claude-haiku-5-5`, `anthropic/claude-opus-5-5`, `anthropic/claude-sonnet-5-5`, `kimi-code/k3`
+- Agent harness: [omp](docs/omp.md), home model `anthropic/claude-opus-5-5:xhigh`, advisor off
+- Models: dynamic per-task selection; small `anthropic/claude-haiku-5-5`, `openai-codex/gpt-6-luna`; ordinary (default) `anthropic/claude-sonnet-5-5`, `openai-codex/gpt-6.1-sol`; hard only `anthropic/claude-opus-5-5`.
+- The spawning agent picks the thinking level.
+- Codex context: 272K default, 1M maximum, `extendedContext` on.
+  The current bundled omp catalog limits the effective maximum to 872K.
 - omp plugins: `ponytail`, `i-have-adhd`, `caveman`
 - omp extension `code-factory-quality-gate`: [sentrux and fallow check](docs/omp.md#quality-gate) at each turn end
 - omp extension `aa-mode-icons`: [mode and hook icons](docs/omp.md#status-line-icons) on the status line
@@ -67,11 +71,15 @@
 - omp extension `fm-no-pattern-kill`: blocks `pkill`, `killall`, and kill-by-`pgrep` commands
 - Firstmate patch `0001-watch-wake-on-queued-inbox-note`: [wakes Firstmate](docs/dependencies.md#firstmate-patch-layer) on a queued inbox note
 - Firstmate patch `0002-watch-end-idle-wait-for-inbox-note`: ends the idle wait within about 1 s for an inbox note
+- Firstmate patch `0003-brief-crewboard`: adds the optional [crew board instructions](docs/board.md#firstmate-instructions)
 - Hooks: `code-factory-quality-gate` at omp turn end, SessionStart banners from `ponytail`, `i-have-adhd`, `caveman`, `ACTIONS_RUNNER_HOOK_JOB_STARTED` (opt-in with the [CI pool](docs/ci-pool.md))
 - Pipeline gates: [no-mistakes](docs/omp.md#no-mistakes-pipeline-agent) and `ponytail-review`
-- Skills and rules: [`skills/`](skills/) for omp and Claude Code, [`config/AGENTS.md`](config/AGENTS.md) for Claude Code, omp, and Codex
+- Gate models: per-run pins; routine `openai-codex/gpt-6.1-sol:medium`; ordinary (default) `anthropic/claude-sonnet-5-5:high`; hard `anthropic/claude-opus-5-5:high`.
+  The verified Pi-only adapter preserves per-run model choices and fails on wrapper refusal.
+- Skills and rules: [`skills/`](skills/) for omp and Claude Code, [`config/AGENTS.md`](config/AGENTS.md) for Claude Code, omp, and Codex; public files install with the `agents` profile and private files take precedence ([omp](docs/omp.md#skills)).
+- omp rules ([TTSR](docs/omp.md#rules)): `always-on-skills`, `asd-ste100`, `use-native-stacked-prs`; with the browser ladder: `drive-the-browser-yourself`, `fleet-browser-default-tier`.
 - Profiles on: `agents`, `development`, `firstmate`, `docker`, `chat`
-- Profiles off (opt-in): `tailscale`, `desktop`, `fleet_guards`, `fleet_browsers`
+- Profiles off (opt-in): `tailscale`, `desktop`, `fleet_guards`, `shared_supabase`, `fleet_browsers`
 - Unset (opt-in): `data_dir`, `firstmate.checklist`, `mac_ssh`, `skills`, `imessage`, `github_board`, `board`, `ci_pool`
 - Full files: [`config/default.yml`](config/default.yml), [`config/omp.yml`](config/omp.yml)
 
@@ -180,14 +188,15 @@ You need Ubuntu 24.04 or 26.04 on x86_64 or aarch64 with systemd, a non-root acc
    ${EDITOR:-nano} .local/host.yml
    ```
 
-5. Validate the config and preview the changes. `chart` is Ansible check mode and changes nothing:
+5. Validate the config and preview the changes.
+   `chart` uses Ansible check mode; the first config read can rewrite old keys and keep a backup:
 
    ```bash
    ./ship.sh inspect
    ./ship.sh chart
    ```
 
-6. Launch. This is the only step that changes the host, and it may ask for your sudo password. With the `firstmate` profile on, the first successful interactive apply after you sign in to omp opens the [new-host questions](docs/configuration.md#new-host-questions); a fresh host's first apply installs omp, so sign in to omp after it and rerun apply:
+6. Launch to provision the host; this step may ask for your sudo password. With the `firstmate` profile on, the first successful interactive apply after you sign in to omp opens the [new-host questions](docs/configuration.md#new-host-questions); a fresh host's first apply installs omp, so sign in to omp after it and rerun apply:
 
    ```bash
    ./ship.sh launch

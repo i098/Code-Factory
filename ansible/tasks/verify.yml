@@ -79,20 +79,22 @@
                  crewship_shared_supabase_dir ~ '/guard.sql',
                  crewship_shared_supabase_dir ~ '/supabase/config.toml',
                  crewship_shared_supabase_cli,
-                 crewship_fleet_doctor_dir ~ '/docker-guard.sh',
                  crewship_fleet_doctor_dir ~ '/worktree-env-seed.sh',
-                 crewship_fleet_doctor_dir ~ '/storage-guard.sh',
-                 crewship_fleet_doctor_dir ~ '/devtools-bridge-reaper.sh',
                  crewship_local_bin ~ '/supabase']
-                + (crewship_fleet_units
+                if (crewship_cfg.profiles.shared_supabase | bool) else [])
+             + ([crewship_fleet_doctor_dir ~ '/docker-guard.sh',
+                 crewship_fleet_doctor_dir ~ '/dev-server-reaper.sh',
+                 crewship_fleet_doctor_dir ~ '/storage-guard.sh',
+                 crewship_fleet_doctor_dir ~ '/devtools-bridge-reaper.sh']
+                if (crewship_cfg.profiles.fleet_guards | bool) else [])
+             + ((crewship_fleet_units
                    | map('regex_replace', '^', crewship_user_units ~ '/')
                    | list)
                 + (crewship_fleet_enabled_units | map(attribute='wants')
                    | zip(crewship_fleet_enabled_units | map(attribute='unit'))
                    | map('join', '/')
                    | map('regex_replace', '^', crewship_user_units ~ '/')
-                   | list)
-                if (crewship_cfg.profiles.fleet_guards | bool) else [])
+                   | list))
              + ([crewship_fleet_browsers_dir ~ '/fleet-browser',
                  crewship_fleet_browsers_dir ~ '/cookie-sync.ts',
                  crewship_fleet_browsers_dir ~ '/env.sh']

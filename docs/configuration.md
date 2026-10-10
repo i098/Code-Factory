@@ -48,7 +48,8 @@ crewship:
     docker: true          # Docker engine (group membership opt-in separately)
     tailscale: false      # Daemon only; authenticate separately
     desktop: false        # XFCE + TigerVNC + noVNC
-    fleet_guards: false   # Shared Supabase and the fleet's guards
+    fleet_guards: false   # Docker guard, reapers, storage guard and browser ladder
+    shared_supabase: false # Optional stack, CLI, keeper, shim and env seeder
     fleet_browsers: false # Browser ladder (obscura tier on 127.0.0.1:9222)
     chat: true            # Concord (Discord) and slk (Slack) terminal clients
   herdr:
@@ -74,7 +75,7 @@ crewship:
   # mac_ssh:              # Optional; set only in .local/host.yml. See security.md#ssh-to-a-mac
   #   host: <Mac tailnet name or IP>
   #   user: <Mac login>
-  # skills:               # Optional, off when absent (removing it removes the skills an earlier fill added); set only in .local/host.yml. See omp.md#skills
+  # skills:               # Optional, off when absent (removing it removes the skills and rules an earlier fill added); set only in .local/host.yml. See omp.md#skills
   #   private_source: git@github.com:owner/private-skills.git   # or an absolute local path
   #   private_ref: main   # Optional git branch, tag or commit; the default is the remote HEAD
   # imessage:             # Optional, off when absent; set only in .local/host.yml. See imessage.md
@@ -82,6 +83,12 @@ crewship:
   #   owner_name: the owner          # the default; how the desk prompt names him
   #   desk_model: claude-haiku-5-5   # the default
   #   supervisor_model: ""           # the default: the desk says it does not know
+  #   transports: [photon]           # the default; in order, e.g. [photon, bluebubbles] with the block below
+  #   bluebubbles:
+  #     relays:                      # in failover order
+  #       - url: http://<relay>:1234
+  #         password_env: BLUEBUBBLES_PASSWORD   # the default; a variable name in ~/super.env
+  #     webhook_listen: <agent host address>:8766
   # github_board:         # Optional, off when absent; set only in .local/host.yml. See github-board.md
   #   repo: owner/board
   #   project: 3
@@ -100,8 +107,9 @@ crewship:
 - `user` is not `root`, and `workspace` is inside `home`.
 - `firstmate` and `browser_prune.enabled` need `agents`.
 - `fleet_guards` needs `docker` and `firstmate`. Obscura is always its latest release. An older `.local/host.yml` that still sets `browsers.obscura_version` or `browsers.obscura_sha256` keeps working: both keys are deprecated, ignored, and reported in one warning on stderr. No edit is required.
+- `shared_supabase` needs `docker` and `firstmate`, but does not need `fleet_guards`.
 - `ci_pool` needs `docker`, and no two `ci_pool.repos` entries may make the same unit name.
-- `imessage` needs `firstmate`, and `imessage.owner` is a phone number in E.164 form (`+` and digits).
+- `imessage` needs `firstmate`, and `imessage.owner` is a phone number in E.164 form (`+` and digits). `bluebubbles` in `transports` needs the `bluebubbles` block.
 - `github_board` needs `firstmate`, `github_board.repo` is `owner/name`, and `github_board.project` is a Project number.
 - `board` needs `firstmate` and `development`.
 
@@ -112,8 +120,11 @@ The Firstmate checkout tracks the default branch of upstream Firstmate, not a sh
 After a successful `./ship.sh launch` with the `firstmate` profile on, once omp has a provider login, Crewship starts omp in the Firstmate checkout with an opening prompt. Firstmate then asks the move decisions for this host one question at a time: which secondmate homes, services, tools, and unpushed work to bring over.
 
 - The questions follow `firstmate.checklist` when it is set and `gh` can read it: `repo` is a GitHub repository (it can be private) and `path` is the checklist file in it. Set it only in `.local/host.yml`, never in `config/default.yml`. Otherwise they follow [Agent host move](agent-host-move.md).
-- When `.local/host.yml` has no `github_board` block, the last question asks whether to turn on the [GitHub board](github-board.md). The answer is off unless you choose it.
+- When `.local/host.yml` has no `github_board` block, a question asks whether to turn on the [GitHub board](github-board.md). The answer is off unless you choose it.
 - With the `development` profile on and no `board` block in `.local/host.yml`, one more question asks whether to turn on the [crew board](board.md). The answer is off unless you choose it.
+- When `shared_supabase` is off or omitted, a question asks whether to enable the shared stack and CLI.
+  The prompt names the resolved config path for this apply, including a path supplied through `--config`.
+  Follow [Shared Supabase](fleet-guards.md#shared-supabase) before the next apply.
 - They are asked once per host. When the omp session exits successfully, apply writes the marker `~/.local/share/code-factory/new-host-questions-done`; while it exists, later applies skip the questions and print one line naming it. If omp exits non-zero, apply writes no marker and prints one line saying the questions did not complete. To ask again, delete the marker and rerun `./ship.sh launch` interactively.
 - The launch needs an interactive terminal, run as `crewship.user`. When stdin is not a TTY, when `CI` is set, or when another account runs apply, apply skips them without writing the marker and prints one line saying to rerun `./ship.sh launch` interactively.
 - They need an omp provider login. Apply checks with `omp models --json`; when it lists no models or fails, apply skips the questions without writing the marker and prints one line saying to sign in to omp with `/login` ([Sign in](omp.md#sign-in)) and rerun `./ship.sh launch` interactively. On a new host the first apply installs omp, so sign in after it and then rerun apply.
@@ -124,17 +135,20 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 
 | Profile | Default | What it installs |
 | --- | --- | --- |
-| `agents` | on | omp, AXI tools, gh, no-mistakes, treehouse, gws (Google Workspace CLI; [sign-in](google-workspace.md) is manual), acpx; safe omp presentation and model-role settings (see [omp configuration](omp.md)); omp as the no-mistakes gate agent through the pi adapter with `acp:omp` as the fallback, or `acp:omp` alone when the adapter does not match the pins (see [no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)); first-write acpx config; the pattern-kill guard omp extension; `~/.local/bin/ponytail-review`; browser env defaults; Chrome autoprune timer. |
+| `agents` | on | omp, AXI tools, gh, no-mistakes, treehouse, gws (Google Workspace CLI; [sign-in](google-workspace.md) is manual), acpx; safe omp presentation and model-role settings (see [omp configuration](omp.md)); omp as the [no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent); first-write acpx config; the pattern-kill guard omp extension; `~/.local/bin/ponytail-review`; browser env defaults; Chrome autoprune timer. |
 | `development` | on | Rust toolchain (stable), build essentials. |
 | `firstmate` | on | Firstmate clone tracking upstream `main`, plus seeded Firstmate config: crew dispatch, crew and secondmate harness, the crew omp overlay (crew advisor, see [omp configuration](omp.md#advisor)), Herdr backend selection, startup memory budget, the spawn memory floor, presentation spaces off, and the turn-end pane-churn flag (see [Seeded Firstmate and OMP configuration](architecture.md#seeded-firstmate-and-omp-configuration)). |
 | `docker` | on | Docker engine and Compose v2, with daemon defaults `init` (reaps orphaned children) and `live-restore`. Group membership is opt-in through the Ansible variable `crewship_docker_group_users`. |
-| `fleet_guards` | off | Shared Supabase stack, Docker guard, dev-server reaper, devtools-bridge reaper, storage guard, env seeder. See [Fleet guards](fleet-guards.md). |
+| `fleet_guards` | off | Docker guard, dev-server reaper, devtools-bridge reaper, storage guard and browser ladder. See [Fleet guards](fleet-guards.md). |
+| `shared_supabase` | off | The [shared Supabase stack and CLI](fleet-guards.md#shared-supabase). |
 | `fleet_browsers` | off | The [browser ladder](fleet-guards.md#browser-ladder): the always-on Obscura CDP tier on `127.0.0.1:9222`, the on-demand `chrome` and `vnc` tiers with the `vnc` tier's TigerVNC and noVNC packages, the cookie sync and gc timers, and the ladder environment in shell profiles and the Herdr unit. `fleet_guards` provisions the same ladder, so a `fleet_guards` host needs no change. Needs no other profile; the ladder needs `iproute2` (`ss`) from the base image, which only `desktop` installs. |
 | `chat` | on | The latest [Concord](https://github.com/chojs23/concord) (Discord) and [slk](https://github.com/gammons/slk) (Slack) terminal clients, their shared libraries, and a first-write config for each. Logins stay manual. See [Chat clients](chat.md). |
 | `tailscale` | off | Tailscale daemon only. Authentication is manual; see [Security](security.md#remote-access). |
 | `desktop` | off | Loopback-only XFCE + TigerVNC + noVNC operator desktop on `127.0.0.1:6080`, and the Google Chrome apt package. Needs an operator-created VNC password; see [Desktop access](recovery.md#desktop-access). |
 
 The latest Herdr release is always installed, with the captured UI preferences, the [Spaces and Agents sidebar layouts](herdr.md) with the reporter timer that feeds Spaces, and one canonical, versioned user-service executable. What each profile installs, and where it comes from, is in [Dependencies](dependencies.md).
+
+See [Shared Supabase](fleet-guards.md#shared-supabase) for existing-host management and safe removal.
 
 ## Data disk
 

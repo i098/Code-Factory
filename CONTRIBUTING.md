@@ -61,7 +61,8 @@ Fleet guards (`fleet/`) are runtime scripts deployed to `~/oss-fleet/` on the bo
 1. Write the script in `fleet/doctor/` or `fleet/browsers/`.
 2. Add a `.j2` unit template in `ansible/templates/`.
 3. Wire it in `ansible/tasks/fleet_guards.yml` (or `fleet-browsers.yml`).
-4. Add it to `crewship_fleet_units` and/or `crewship_fleet_enabled_units` (or `crewship_fleet_browser_units` / `crewship_fleet_browser_enabled_units`) in `group_vars/all.yml`.
+4. Add guard units to `crewship_fleet_guard_units` and enabled units to `crewship_fleet_guard_enabled_units` in `ansible/group_vars/all.yml`.
+   Use `crewship_fleet_browser_units` and `crewship_fleet_browser_enabled_units` for the browser ladder.
 5. Update `docs/fleet-guards.md`.
 
 ## Commits and branches
@@ -120,12 +121,9 @@ GitHub rulesets enforce these rules, with no bypass:
    ```
 
    A PR with nothing to note, for example a test-only change, gets the `no changelog` label instead.
-2. To cut a release, run `uv run towncrier build --version X.Y.Z` on a new branch and open a PR with the result. The command writes a new `## [X.Y.Z] - YYYY-MM-DD` section (today's ISO 8601 date) under `## [Unreleased]` in Keep a Changelog order and deletes the fragments it used; `uv run towncrier build --draft --version X.Y.Z` shows the section first and changes nothing. In the same PR, update the link references at the bottom of the file and set `version` in `npm/package.json` to `X.Y.Z`. Choose the number:
-   - patch (`Z`): fixes only;
-   - minor (`Y`): a new capability;
-   - major (`X`): a breaking change to the host config or the host layout.
+2. To cut a release, run `uv run towncrier build --version X.Y.Z` on a new branch and open a PR with the result. The command writes a new `## [X.Y.Z] - YYYY-MM-DD` section (today's ISO 8601 date) under `## [Unreleased]` in Keep a Changelog order and deletes the fragments it used; `uv run towncrier build --draft --version X.Y.Z` shows the section first and changes nothing. In the same PR, update the link references at the bottom of the file and set `version` in `npm/package.json` to `X.Y.Z`. Bump the patch number for every release, and batch changes; release at most once per day.
 
-   While the version is `0.y.z` (initial development, see SemVer item 4), a breaking change bumps the minor number instead.
+   Bump the minor or major number only with the owner's approval.
 3. After that PR merges, tag its merge commit on `main` as `vX.Y.Z`. Never move or reuse a published tag.
 4. Publish a GitHub release for the tag, named `vX.Y.Z`, with that version's changelog section as the notes, for example `gh release create vX.Y.Z --target <merge-sha> --title vX.Y.Z --notes-file <section.md>`. Publishing the release runs `.github/workflows/npm-publish.yml`, which publishes the `crewship` npm package as version `X.Y.Z`. The workflow fails before the publish when `npm/package.json` does not have that version.
 5. The release starts the `release-image` workflow. It builds the `worker` image and pushes it to the GitHub Container Registry as `ghcr.io/i098/crewship:X.Y.Z` and `ghcr.io/i098/crewship:latest`. When the package is public, anyone can pull it without a login: `docker pull ghcr.io/i098/crewship:X.Y.Z`.

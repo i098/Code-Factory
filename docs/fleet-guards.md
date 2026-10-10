@@ -1,11 +1,11 @@
 # Fleet guards
 
-`crewship.profiles.fleet_guards` installs controls that keep a fleet host out of
-swap exhaustion. Its causes: duplicate local Supabase stacks and stray Postgres
-containers, one per lane; zombie processes under containers whose PID 1 is a
-bare `node`; and lanes spawned with nothing bounding concurrency.
+`crewship.profiles.fleet_guards` installs the Docker guard, reapers, storage guard and browser ladder.
+It does not install or start Supabase.
+The separate `crewship.profiles.shared_supabase` profile installs the shared stack, CLI, keeper, shim and environment seeder.
+Both profiles are off by default.
 
-Every control below removes a cause, not a symptom.
+The controls address duplicate backend stacks, orphan processes, idle dev servers and unbounded lane concurrency.
 
 Sizing per lane count and the full list of pruners are in
 [Capacity and pruners](capacity.md).
@@ -21,6 +21,11 @@ Sizing per lane count and the full list of pruners are in
 
 ## What is provisioned
 
+The stack directory, environment seeder, lane heap cap and CLI shim require `shared_supabase`.
+The Docker guard, reapers and storage guard require `fleet_guards`.
+Each profile manages only its own units.
+The Docker defaults and Firstmate spawn floor belong to their respective profiles.
+
 | Path (under the account home) | Purpose |
 | --- | --- |
 | `oss-fleet/shared-supabase/` | The ONE stack: the latest Supabase CLI (`npm install` of the registry's latest `supabase`), `supabase/config.toml` with `crewship.fleet.supabase_project_id`, `check.sh` keeper, `guard.sql`, `README.md`. `check.sh` also generates the project's `<project>.env.local` from the running stack. |
@@ -31,7 +36,7 @@ Sizing per lane count and the full list of pruners are in
 | `oss-fleet/doctor/devtools-bridge-reaper.sh` | Every 10 minutes: stops attached chrome-devtools-axi bridges (`CHROME_DEVTOOLS_AXI_BROWSER_URL` set) whose process tree used no CPU and whose session state files did not change for 60 min (`REAPER_IDLE_MIN`). See [Devtools-bridge reaper](#devtools-bridge-reaper). |
 | Lane node heap cap | `bun run dev`, `bun run tsc` and the other scripts a lane runs through bun, npm or npx put every ancestor directory's `node_modules/.bin` on `PATH`, existing or not, so the seeded `node` wrapper in the pool slot directory above the checkout caps the dev server and type-check at a 2048 MB heap: a runaway `next dev`/`tsc` fails fast with a heap error the agent sees instead of swapping the host. The wrapper is written when the worktree appears, before the first `bun install`, so a fresh lane's first dev server is capped, and it lives outside the checkout, so `rm -rf node_modules` does not remove it. A `node` bin that a dependency puts in the worktree's own `node_modules/.bin` comes first on `PATH` and is left alone. The cap is deliberately not in the `.profile` managed block, the Herdr unit or `BUN_OPTIONS`, which carry only `CHROME_DEVTOOLS_AXI_MCP_PATH`: a process-wide `NODE_OPTIONS` would also cap the chrome-devtools-axi bridge (about 2 GB idle), `chrome-devtools-mcp` and `acpx`, and `--env-file` would switch off bun's own `.env`, `.env.<NODE_ENV>` and `.env.local` autoload. bun does not pass those files, `.npmrc` or `bunfig.toml` settings to a script's node child, which is why the wrapper is the seeded mechanism. |
 | `.local/bin/supabase` | Shim: `status`/`--version` pass through; every lifecycle or schema subcommand is refused with the reason. `npx supabase` bypasses it; the Firstmate tool-call guard below blocks it. |
-| `.config/systemd/user/crewship-*.{service,timer,path}` | Login start + 5-minute keeper for the stack; the seeder on pool changes, every 2 minutes and at login; a timer for each reaper and guard. Apply stops and deletes the same units under their old `flotilla-*` names, except `flotilla-shared-supabase.service`: it is deleted without being stopped, so the shared stack keeps running through the rename and the new unit adopts it. |
+| `.config/systemd/user/crewship-*.{service,timer,path}` | Each profile installs its own units. `shared_supabase` enables the login service, keeper timer and seeder. `fleet_guards` enables the guard and reaper timers. Apply retires only selected `flotilla-*` units; it never stops `flotilla-shared-supabase.service` during migration. |
 | `/etc/docker/daemon.json` | `init: true` and `live-restore: true` merged in (tasks/docker.yml, any profile with docker). |
 | Firstmate `config/spawn-memory-floor-mb` | `8000`: `bin/fm-spawn.sh` refuses a fresh spawn while host `MemAvailable` is below it. Free swap is not counted - "there is swap left" is the thrash state. |
 
@@ -47,6 +52,59 @@ loaded by every omp crewmate that blocks `supabase start|stop|db reset|migration
 `docker run ... postgres`, `psql` against the stack and edits to the shared
 containers, with the reason attached - so the agent learns why before it
 starts a second stack.
+
+## Shared Supabase
+
+Enable `crewship.profiles.shared_supabase: true` in the host config only when the host needs this backend.
+Keep `docker` and `firstmate` enabled.
+Set `fleet.supabase_project_id`, `fleet.fixture_archive` and `fleet.worktree_pools` for the fixture and watched pools.
+The setup questions offer this profile; they do not install it without your choice.
+
+An existing host must enable this profile to keep its stack managed after the upgrade.
+With the profile off or omitted, apply leaves its existing files, units, containers and volumes unchanged.
+This also leaves legacy `flotilla-*` Supabase and seeder units unchanged.
+The existing keeper still runs until the owner removes it manually.
+
+### Manual removal
+
+Set `crewship.profiles.shared_supabase: false` before removing the integration.
+Run these commands as the owner only when the stack is no longer needed.
+They stop the stack and remove its units, CLI and scripts.
+They leave Docker volumes, fixture archives and worktree environment files in place.
+Do not use `--no-backup` or any Docker volume removal command.
+
+```bash
+(
+for prefix in crewship flotilla; do
+  for suffix in shared-supabase-check.timer worktree-env-seed.timer \
+    worktree-env-seed.path shared-supabase-check.service \
+    worktree-env-seed.service shared-supabase.service; do
+    unit="$prefix-$suffix"
+    load_state=$(systemctl --user show "$unit" --property=LoadState --value) || exit
+    if [ "$load_state" != not-found ]; then
+      systemctl --user stop "$unit" || exit
+    fi
+  done
+done
+"$HOME/oss-fleet/shared-supabase/node_modules/.bin/supabase" stop \
+  --workdir "$HOME/oss-fleet/shared-supabase" || exit
+for prefix in crewship flotilla; do
+  for suffix in shared-supabase.service shared-supabase-check.service \
+    shared-supabase-check.timer worktree-env-seed.service \
+    worktree-env-seed.timer worktree-env-seed.path; do
+    rm -f "$HOME/.config/systemd/user/$prefix-$suffix" \
+      "$HOME/.config/systemd/user/default.target.wants/$prefix-$suffix" \
+      "$HOME/.config/systemd/user/timers.target.wants/$prefix-$suffix"
+  done
+done
+systemctl --user daemon-reload
+rm -f "$HOME/.local/bin/supabase" "$HOME/oss-fleet/doctor/worktree-env-seed.sh"
+rm -rf "$HOME/oss-fleet/shared-supabase/node_modules"
+rm -f "$HOME/oss-fleet/shared-supabase/check.sh" \
+  "$HOME/oss-fleet/shared-supabase/guard.sql"
+)
+```
+
 
 ## The fixture
 
@@ -145,7 +203,7 @@ Chrome/Chromium binary (`FLEET_CHROME_BIN`, Google Chrome, Chromium, or a
 Playwright Chromium).
 
 Obscura ships for x86_64 and aarch64; apply installs the latest release for the
-host's platform (see [Dependencies](dependencies.md#fleet-browsers-and-supabase)).
+host's platform (see [Dependencies](dependencies.md#optional-fleet-browsers)).
 A new release never restarts a running tier: apply repoints the `obscura`
 symlink, and the tier picks up the new binary at its next idle refresh or
 restart, because Obscura restarts only when no lane is connected to it.

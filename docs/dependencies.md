@@ -7,7 +7,7 @@ Everything the recipe installs, grouped by where it comes from. Nothing is pinne
 `onboard.sh`, `pyproject.toml`, `uv.lock`
 
 - The latest uv (below), then `uv sync --locked`: ansible-core 2.21.4, jsonschema 4.26.0, PyYAML 6.0.3. `uv.lock` is this repository's own development environment, so it stays locked.
-- Dev group: pytest 9.0.2, ruff 0.16.3.
+- See [pyproject.toml](../pyproject.toml) for the dev dependency group.
 
 ## Latest releases
 
@@ -18,7 +18,7 @@ Everything the recipe installs, grouped by where it comes from. Nothing is pinne
 - `agents` profile, native: gh ([cli/cli](https://github.com/cli/cli/releases/latest)), treehouse ([kunchenguid/treehouse](https://github.com/kunchenguid/treehouse/releases/latest)), verified against the GitHub release-asset digest.
 - `agents` profile, native: gws, the Google Workspace CLI ([googleworkspace/cli](https://github.com/googleworkspace/cli/releases/latest), the static musl build), verified against the `<asset>.sha256` file the release publishes. Signing in Google accounts is manual: see [Google Workspace CLI](google-workspace.md).
 - `agents` profile, no-mistakes ([kunchenguid/no-mistakes](https://github.com/kunchenguid/no-mistakes/releases)): the one tool that tracks the prerelease channel. Each apply resolves the newest non-draft release, betas included (not only the latest stable one), and verifies it against the GitHub release-asset digest.
-- `agents` profile, npm: omp (`@oh-my-pi/pi-coding-agent`), chrome-devtools-axi, gh-axi, lavish-axi, quota-axi, tasks-axi, acpx (runs the no-mistakes fallback gate agent `acp:omp`), and chrome-devtools-mcp (the MCP build chrome-devtools-axi launches through `CHROME_DEVTOOLS_AXI_MCP_PATH`, which points at `~/.local/share/code-factory/chrome-devtools-mcp/current`, a link the installer re-points at each release, so a new release never changes the Herdr unit or the `.profile` block and never restarts `herdr.service`). The fleet requires at least quota-axi 0.1.54 and tasks-axi 0.2.6.
+- `agents` profile, npm: omp (`@oh-my-pi/pi-coding-agent`), chrome-devtools-axi, gh-axi, lavish-axi, quota-axi, tasks-axi, acpx (runs `omp acp`; see [no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)), and chrome-devtools-mcp (the MCP build chrome-devtools-axi launches through `CHROME_DEVTOOLS_AXI_MCP_PATH`, which points at `~/.local/share/code-factory/chrome-devtools-mcp/current`, a link the installer re-points at each release, so a new release never changes the Herdr unit or the `.profile` block and never restarts `herdr.service`). The fleet requires at least quota-axi 0.1.54 and tasks-axi 0.2.6.
 - `agents` profile, no-mistakes pi adapter check: every apply downloads four pi adapter source files of the no-mistakes release it installs from `raw.githubusercontent.com` (each fetch gives up after 30 seconds) and compares them with the sha256 pins in `config/omp-as-pi/check-adapter.sh`. A source that differs from its pin, or is gone from the tag (HTTP 404), switches the gate agent to `acp:omp`; a network error, a timeout or any other HTTP status leaves the agent setting as it is and prints a warning; neither fails the apply (see [no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)).
 - Retired: codex and pnpm are no longer installed (bun is the single package manager and runner; omp is the pi agent). An apply on a host that still has them removes the `codex`, `pnpm` and `pnpx` links in `~/.local/bin` that point into the old `~/.local/share/code-factory/npm` prefix and changes `defaultAgent` in `~/.acpx/config.json` from `codex` to `omp` when it is still `codex`. The old prefix stays on disk, like every superseded install, so shells and AXI bridges started before the upgrade keep their files; delete it by hand when nothing uses it. Commands of the same name installed any other way are left alone.
 - `agents` profile, omp plugins: ponytail ([DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)), i-have-adhd ([ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd)) and caveman ([JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman)) from their GitHub marketplaces, installed once and upgraded with `omp plugin upgrade` on every apply. These are the only installs that are not checksum-verified: no publisher posts a checksum for them, so they track each author's default branch and load as agent instructions and hooks. The operator accepted this to keep them at the latest commit.
@@ -40,10 +40,17 @@ The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests 
 - `tailscale`: `tailscale` from pkgs.tailscale.com, stable track. `crewship_tailscale_version` pins it; empty by default.
 - Google Chrome: `google-chrome-stable` from dl.google.com (`ansible/tasks/browser.yml`). Installed when `crewship_chrome_install` is `true`, or `auto` (the default) with the `desktop` profile. `crewship_chrome_version` pins it; empty by default.
 
-## Fleet browsers and Supabase
+## Optional fleet browsers
 
 - `fleet_browsers` or `fleet_guards` profile: Obscura, the latest [h4ckf0r0day/obscura release](https://github.com/h4ckf0r0day/obscura/releases/latest) for the host's platform, verified against the GitHub release-asset digest (`ansible/tasks/fleet-browsers.yml`). Each release extracts into its own `~/oss-fleet/browsers/obscura-<version>/`. The `vnc` tier's Ubuntu packages: tigervnc-standalone-server, websockify, novnc, xfwm4.
-- `fleet_guards` profile: Supabase CLI, the npm registry's latest `supabase`, installed with `npm install` into `~/oss-fleet/shared-supabase` (`ansible/tasks/fleet_guards.yml`).
+
+## Optional shared Supabase
+
+Only `crewship.profiles.shared_supabase: true` installs the Supabase CLI.
+The default host and a `fleet_guards`-only host neither resolve nor install it.
+The CLI uses the npm registry's latest `supabase`, installed into `oss-fleet/shared-supabase` under the account home.
+The tasks in `ansible/tasks/shared_supabase.yml` install the stack files, keeper, shim and environment seeder.
+The profile needs Docker and Firstmate; its fixture and safe removal steps are in [Fleet guards](fleet-guards.md#shared-supabase).
 
 ## Koncreet
 
@@ -83,6 +90,7 @@ Every host that starts services (`start_services: true`); the container worker i
 | --- | --- |
 | `0001-watch-wake-on-queued-inbox-note.patch` | The watcher wakes Firstmate on its next cycle when an inbox note is queued. Without it, the note waits for an unrelated wake, which can take hours. |
 | `0002-watch-end-idle-wait-for-inbox-note.patch` | The watcher ends its idle wait within about 1 s when an inbox note arrives, instead of up to the full poll interval. Together, the two make a text from the iMessage bridge wake Firstmate in about 2 s. |
+| `0003-brief-crewboard.patch` | Adds the optional [Firstmate board instructions](board.md#firstmate-instructions). |
 
 How apply handles each case:
 

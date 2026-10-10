@@ -10,7 +10,7 @@
 #                                   to an omp gate (ompgate.go): --config
 #                                   gate-overlay.yml --no-rules --no-skills
 #                                   --no-extensions
-# Wired by ~/.no-mistakes/config.yaml: agent: [pi], agent_path_override.pi.
+# Wired by ~/.no-mistakes/config.yaml: agent: pi, agent_path_override.pi.
 #
 # Fail closed: any argument outside the set the v1.85.3 pi adapter emits is
 # refused (exit 64) instead of guessed, the overlay is pinned by sha256, and the
@@ -27,9 +27,7 @@ CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/omp-as-pi/preflight-ok"
 
 REFUSALS="${OMP_AS_PI_REFUSALS:-$HERE/refusals.log}"
 
-# Every refusal is also appended to refusals.log: with `agent: [pi, acp:omp]`
-# no-mistakes falls back to cold acp:omp on a failed pi start, so a refusal does
-# not fail the run, and this log is where it stays visible.
+# Keep refusal evidence even when the caller captures stderr.
 die() {
 	printf '%s %s\n' "$(date -Is)" "$*" >>"$REFUSALS" 2>/dev/null || true
 	printf 'omp-as-pi: %s\n' "$*" >&2
