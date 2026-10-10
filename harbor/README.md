@@ -2,6 +2,8 @@
 
 `harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship at the dock, drawn as text in the browser every frame. Each object opens a floating label for one Crewship feature, an ASCII mini map jumps to any of them, and [how.html](public/how.html) explains how it is built. The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
 
+The island has staggered plaza paving, scattered stones and grass tufts, varied tree canopies, textured bark, and foam along the shore.
+
 It is plain HTML, CSS and JavaScript in `public/`, with no dependencies. Nothing here is part of a host or an image: `.dockerignore` excludes `harbor/`, the playbook never copies it, and `tests/test_harbor_isolation.py` checks both.
 
 ## Content from the repository
@@ -16,6 +18,17 @@ python3 -m http.server --directory harbor/dist 8000
 ```
 
 Then open <http://localhost:8000>.
+
+Upload a branch preview without changing the production version:
+
+```bash
+python3 harbor/build.py
+cd harbor
+npx wrangler@latest versions upload --preview-alias <branch-alias>
+```
+
+Use a branch alias with letters, numbers and hyphens.
+Set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` for the upload.
 
 ## Deploy
 
