@@ -31,8 +31,10 @@ Add an object and a `SCENE` entry to give the link its own place.
 The build limits each sign to a title, a short description and one link.
 Unmapped pages share a short summary with a count and one link to the README feature index.
 The welcome sign has three project links.
-Signs reflow into an available rectangle below or beside the map, clear of the move pad and safe-area edges.
-Touch links have a hit region at least 44 pixels high.
+Signs first reflow below or beside the map, clear of the move pad and safe-area edges.
+If space is limited, signs remove spacing and shorten the visible copy.
+If no clear rectangle fits, signs stay visible over the scene within the safe area.
+Touch links retain 44-pixel hit regions where space permits.
 Enter opens the selected object, and focused HTML links retain their native keyboard behavior.
 
 ## Preview
@@ -49,8 +51,10 @@ Then open <http://localhost:8000>.
 The check loads the built page in Playwright WebKit at desktop and iPhone portrait and landscape sizes.
 The check fails on a crash, an uncaught error, a console error, a fallback to the plain page, or a multi-glyph `fillText` call on touch.
 The check also fails if the first 30 slow frames change the grid, cell size, field of view, or canvas layout.
-It checks every sign against safe-area edges, the map and the move pad.
-It includes 320×568 phones in both orientations and fails if rendering stalls.
+It checks every sign against safe-area edges and checks map and move pad clearance before the final overlay placement.
+It includes 320×568 phones in both orientations and landscape heights of 256 and 192 pixels.
+It checks measured safe insets, visible signs, link hit regions, and keyboard focus without stage scrolling.
+It fails if rendering stalls.
 It taps or clicks every link and opens the docs index with the keyboard.
 See [how.html](public/how.html) for the rendering limits on touch devices.
 To run the check locally:

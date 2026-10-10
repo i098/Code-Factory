@@ -786,10 +786,13 @@ function project(a) {
 
 // Signs use scene cells, including their frame, text and link hit regions.
 const LINE = new Map();
-let signBox = null, signRows = [], signLinks = [], signWidth = 0;
+let signBox = null, signRows = [], signLinks = [], signWidth = "", signInset = 2;
 let safe = [0, 0, 0, 0];
-function signLayout(width) {
-  signWidth = width;
+function signLayout(width, mode, available) {
+  const key = `${width}/${mode}/${available}`;
+  if (key === signWidth) return;
+  signWidth = key;
+  signInset = mode ? 1 : 2;
   signRows = [];
   signLinks = [];
   const wrap = (text, cls) => {
@@ -801,13 +804,18 @@ function signLayout(width) {
     }
     signRows.push([text, cls]);
   };
-  wrap(card.querySelector("h3").textContent, "l");
-  wrap(card.querySelector("p").textContent, "k");
-  signRows.push(["", "t"]);
-  for (const a of card.querySelectorAll("a")) {
+  const short = (text) => text.length > width ? text.slice(0, width - 1) + "…" : text;
+  const links = [...card.querySelectorAll("a")];
+  const body = mode < 3 || available >= links.length + 4;
+  wrap(mode >= 2 ? short(card.querySelector("h3").textContent) : card.querySelector("h3").textContent, "l");
+  if (body) wrap(mode >= 2 ? short(card.querySelector("p").textContent) : card.querySelector("p").textContent, "k");
+  if (!mode) signRows.push(["", "t"]);
+  const linkHeight = Math.min(touchFirst.matches ? Math.ceil(44 / cellH) : 1,
+    mode === 3 ? Math.max(1, Math.floor((available - signRows.length - 2) / links.length)) : Infinity);
+  for (const a of links) {
     const start = signRows.length;
-    wrap(`[${a.textContent}]`, "h");
-    const height = Math.max(signRows.length - start, touchFirst.matches ? Math.ceil(44 / cellH) : 1);
+    wrap(mode === 3 ? short(`[${a.textContent}]`) : `[${a.textContent}]`, "h");
+    const height = Math.max(signRows.length - start, linkHeight);
     while (signRows.length < start + height) signRows.push(["", "h"]);
     signLinks.push({ start, height, a });
   }
@@ -816,7 +824,7 @@ function label(at) {
   LINE.clear();
   signBox = null;
   card.hidden = mapMode === 2;
-  if (card.hidden || !card.firstChild || (target && !at)) return;
+  if (card.hidden || !card.firstChild) return;
   const [top, right, bottom, left] = safe;
   const i0 = Math.max(1, Math.ceil((left - padX) / cellW));
   const i1 = Math.min(cols - 1, Math.floor((stage.clientWidth - right - padX) / cellW));
@@ -828,26 +836,30 @@ function label(at) {
   const below = Math.max(j0, mapBox.oj + mapBox.h + 1);
   const side = Math.min(i1, mapBox.oi - 1, padLeft);
   const anchor = at && [Math.max(i0, Math.min(i1 - 1, at[0])), Math.max(j0, Math.min(j1 - 1, at[1]))];
-  for (const area of [
+  const areas = [
     [i0, below, i1, Math.min(j1, padTop)],
     [i0, below, Math.min(i1, padLeft), j1],
     [i0, j0, side, j1]
-  ]) {
-    signBox = signFit(anchor, ...area);
-    if (signBox) break;
+  ];
+  for (let mode = 0; mode < 3 && !signBox; mode++) {
+    for (const area of areas) {
+      signBox = signFit(anchor, ...area, mode);
+      if (signBox) break;
+    }
   }
+  if (!signBox) signBox = signFit(anchor, i0, j0, i1, j1, 3);
   if (signBox && anchor) signLeader(...anchor);
 }
-function signFit(at, i0, j0, i1, j1) {
-  const width = Math.min(52, i1 - i0 - 4);
+function signFit(at, i0, j0, i1, j1, mode = 0) {
+  const width = Math.min(52, i1 - i0 - (mode ? 2 : 4));
   if (width < 1 || j1 <= j0) return null;
-  if (width !== signWidth) signLayout(width);
-  const w = Math.max(...signRows.map(([text]) => text.length)) + 4, h = signRows.length + 2;
+  signLayout(width, mode, j1 - j0);
+  const w = Math.max(...signRows.map(([text]) => text.length)) + signInset * 2, h = signRows.length + 2;
   if (h > j1 - j0) return null;
   const [ai, aj] = at || [i0, j0];
   const i = at ? ai + 4 + w > i1 ? ai - 4 - w : ai + 4 : i0;
   const j = at ? aj - h - 2 < j0 ? aj + 2 : aj - h - 2 : j0;
-  return { i: Math.max(i0, Math.min(i1 - w, i)), j: Math.max(j0, Math.min(j1 - h, j)), w, h };
+  return { i: Math.max(i0, Math.min(i1 - w, i)), j: Math.max(j0, Math.min(j1 - h, j)), w, h, overlay: mode === 3 };
 }
 function signLeader(ai, aj) {
   const { i, j, w, h } = signBox;
@@ -1334,8 +1346,9 @@ function drawSign() {
   const focused = signLinks.find(({ a }) => a.href === document.activeElement?.href);
   signRows.forEach(([text, cls], n) => {
     paint("|", "t", i, j + n + 1);
-    if (focused && n >= focused.start && n < focused.start + focused.height) paint(">", "l", i + 1, j + n + 1);
-    paint(text, cls, i + 2, j + n + 1);
+    const active = focused && n >= focused.start && n < focused.start + focused.height;
+    if (active && signInset === 2) paint(">", "l", i + 1, j + n + 1);
+    paint(text, active ? "l" : cls, i + signInset, j + n + 1);
     paint("|", "t", i + w - 1, j + n + 1);
   });
   paint("+" + "-".repeat(w - 2) + "+", "t", i, j + h - 1);
@@ -1416,7 +1429,7 @@ canvas.addEventListener("click", (e) => {
   if (!mapMode && !touchFirst.matches && stage.requestPointerLock) stage.requestPointerLock();
   stage.focus({ preventScroll: true });
 });
-plain.addEventListener("focusin", (e) => {
+document.getElementById("page").addEventListener("focusin", (e) => {
   const id = e.target.closest("[data-spot]")?.dataset.spot;
   if (id && anchors[id]) { moved = true; face(id); dirty = true; }
 });
