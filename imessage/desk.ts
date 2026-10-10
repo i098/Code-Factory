@@ -69,6 +69,73 @@ export function typingPause(bubble: string): number {
 type Content = Message["content"];
 export type Attachment = Extract<Content, { type: "attachment" }>;
 
+// The part of an iMessage the bridge uses. A spectrum-ts Message (Photon) and a BlueBubbles message
+// (bluebubbles.ts) both have it, so the bridge runs on either transport.
+export type LineMessage = Pick<Message, "id" | "content" | "direction"> & {
+  timestamp?: Date; // when the message was sent; a transport that gives none is treated as just received
+  sender?: { id: string };
+  space: { id: string; send(text: string): Promise<unknown>; startTyping(): Promise<void>; stopTyping(): Promise<void> };
+  react(emoji: string): Promise<unknown>;
+  reply(text: string): Promise<unknown>;
+  read(): Promise<unknown>;
+};
+
+// One way to send a bubble to the owner: a transport's name and its send.
+export type Route = { name: string; send(text: string): Promise<unknown> };
+
+// True when a failed send surely did not reach the line, so another transport may send it without a double: a
+// BlueBubbles call that never reached a relay, a refused connection, or a Photon (gRPC) UNAVAILABLE that says the
+// request was not taken ("No connection established", or the gateway's own "Please retry"). A bare UNAVAILABLE can
+// follow a write, so it is not enough. Any other error, a timeout above all, may hide a sent text. outbox.ts
+// `transient` is wider: it decides retries, not this.
+export function notSent(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  if ("maybeSent" in e) return e.maybeSent === false;
+  const code = "grpcCode" in e ? e.grpcCode : "code" in e ? e.code : undefined;
+  if (code === "ECONNREFUSED" || code === "ConnectionRefused") return true;
+  return (code === 14 || /\bUNAVAILABLE\b/.test(e.message)) && /No connection established|Please retry/.test(e.message);
+}
+
+// Send `text` on the first route that takes it, in order. A failure that surely did not send moves on to the next
+// route and is logged as one line; any other failure stops, so a text is never sent twice. Returns the route's
+// name. When no route takes it, the first route's error is thrown: the primary transport decides whether the
+// outbox retries the item or moves it to the dead-letter folder.
+export async function failover(routes: Route[], text: string, log: (line: string) => void): Promise<string> {
+  const errors: unknown[] = [];
+  for (const route of routes) {
+    try {
+      await route.send(text);
+      return route.name;
+    } catch (e) {
+      errors.push(e);
+      if (!notSent(e) || route === routes.at(-1)) break;
+      log(`${route.name} could not send (${e instanceof Error ? e.message.split("\n")[0] : String(e)}); trying the next transport`);
+    }
+  }
+  throw errors.length ? errors[0] : new Error("no transport can reach the owner yet; he must text the line first");
+}
+
+// Every line's messages as they come, each tagged with its line, and each message id once: the last `keep` ids
+// are remembered in `seen`, so a message that two transports report is handled once. The caller deletes the id of a
+// message it failed to handle, so a transport can deliver it again.
+export async function* inbound<L extends { messages: AsyncIterable<LineMessage> }>(lines: L[], keep = 1000, seen = new Set<string>()): AsyncGenerator<[L, LineMessage]> {
+  const iterators = lines.map((line) => line.messages[Symbol.asyncIterator]());
+  const next = (i: number) => iterators[i]!.next().then((result) => ({ i, result }));
+  const pending = new Map(iterators.map((_, i) => [i, next(i)]));
+  while (pending.size) {
+    const { i, result } = await Promise.race(pending.values());
+    if (result.done) {
+      pending.delete(i);
+      continue;
+    }
+    pending.set(i, next(i));
+    if (seen.has(result.value.id)) continue;
+    seen.add(result.value.id);
+    if (seen.size > keep) seen.delete(seen.values().next().value!);
+    yield [lines[i]!, result.value];
+  }
+}
+
 // What Firstmate should read for one inbound message, or undefined for pure signals (tapbacks, typing, read
 // receipts, unsends, chat changes). Threaded replies, edits, effects and grouped messages are unwrapped, so
 // nothing he writes is dropped, and an unknown kind still becomes a note. `save` writes an attachment and
@@ -116,7 +183,7 @@ type Timers = { setTimeout(fn: () => void, ms: number): unknown; clearTimeout(t:
 // Firstmate send, tapback or typing since his last text, `run` gets one desk turn for the whole burst.
 // `run` must call its `current()` right before it sends: false means he sent more or Firstmate answered
 // meanwhile, so the draft is dropped (the next quiet period re-reads the whole thread).
-// Photon reports no inbound typing, so only a new text restarts the wait.
+// No transport reports inbound typing, so only a new text restarts the wait.
 export class DeskTiming {
   private seq = 0;
   private inbound = 0;

@@ -92,7 +92,7 @@ factory_vnc_chrome_profile: "{{ factory_cfg.home }}/.vnc-chrome-profile"
 factory_mac_ssh_key: "{{ factory_cfg.home }}/.ssh/id_ed25519_mac"
 # iMessage bridge (factory.imessage, tasks/imessage.yml, docs/imessage.md).
 # The service runs from this copy of imessage/ with the latest spectrum-ts,
-# resolved once per run (factory_latest). Photon credentials stay in ~/super.env.
+# resolved once per run (factory_latest). Photon and relay credentials stay in ~/super.env.
 factory_imessage_dir: "{{ factory_share_dir }}/imessage"
 factory_imessage_desk_model: "{{ factory_cfg.imessage.desk_model | default('claude-haiku-5-5') }}"
 factory_imessage_supervisor_model: "{{ factory_cfg.imessage.supervisor_model | default('') }}"
@@ -252,7 +252,7 @@ factory_installer_also: >-
      + (['psutil'] if ((factory_cfg.profiles.agents | bool)
                        and (factory_cfg.browser_prune.enabled | bool)) else [])
      + (['obscura'] if (factory_fleet_browsers_enabled | bool) else [])
-     + (['supabase'] if (factory_cfg.profiles.fleet_guards | bool) else [])
+     + (['supabase'] if (factory_cfg.profiles.shared_supabase | bool) else [])
      + (['spectrum-ts'] if (factory_cfg.imessage is defined) else []) }}
 
 # --- Herdr static config ----------------------------------------------------
@@ -370,12 +370,9 @@ factory_docker_group_users: []
 # the booleans stay booleans in the written JSON.
 factory_docker_daemon_json: /etc/docker/daemon.json
 
-# --- Fleet guards (profiles.fleet_guards) -----------------------------------
-# ONE shared local Supabase stack for every swarms-platform lane, a Docker
-# guard that clears the containers agents leave behind, an env seeder for
-# every worktree, and a CLI shim. Sources live under fleet/ in this repository;
-# installed paths sit under the account's home so the units keep working after
-# the checkout is gone. docs/fleet-guards.md explains the incident and design.
+# --- Fleet guards and optional shared Supabase -------------------------------
+# Sources live under fleet/. Installed files stay under the account's home.
+# Disabling a profile stops managing its files and units without removing them.
 factory_fleet_sources: "{{ code_factory_repo }}/fleet"
 factory_fleet_dir: "{{ factory_cfg.home }}/oss-fleet"
 factory_fleet_doctor_dir: "{{ factory_fleet_dir }}/doctor"
@@ -429,30 +426,39 @@ factory_storage_guard_image_age_hours: 168
 factory_storage_guard_fill_horizon_hours: 6
 factory_storage_guard_repeat_min: 30
 
-factory_fleet_units:
+factory_shared_supabase_units:
   - crewship-shared-supabase.service
   - crewship-shared-supabase-check.service
   - crewship-shared-supabase-check.timer
-  - crewship-docker-guard.service
-  - crewship-docker-guard.timer
   - crewship-worktree-env-seed.service
   - crewship-worktree-env-seed.path
   - crewship-worktree-env-seed.timer
+factory_fleet_guard_units:
+  - crewship-docker-guard.service
+  - crewship-docker-guard.timer
   - crewship-dev-server-reaper.service
   - crewship-dev-server-reaper.timer
   - crewship-storage-guard.service
   - crewship-storage-guard.timer
   - crewship-devtools-bridge-reaper.service
   - crewship-devtools-bridge-reaper.timer
-factory_fleet_enabled_units:
+factory_shared_supabase_enabled_units:
   - { unit: crewship-shared-supabase.service, wants: default.target.wants }
-  - { unit: crewship-docker-guard.timer, wants: timers.target.wants }
   - { unit: crewship-worktree-env-seed.path, wants: default.target.wants }
   - { unit: crewship-shared-supabase-check.timer, wants: timers.target.wants }
   - { unit: crewship-worktree-env-seed.timer, wants: timers.target.wants }
+factory_fleet_guard_enabled_units:
+  - { unit: crewship-docker-guard.timer, wants: timers.target.wants }
   - { unit: crewship-dev-server-reaper.timer, wants: timers.target.wants }
   - { unit: crewship-storage-guard.timer, wants: timers.target.wants }
   - { unit: crewship-devtools-bridge-reaper.timer, wants: timers.target.wants }
+# Only selected units reach rendering, retirement, enablement and handlers.
+factory_fleet_units: >-
+  {{ (factory_fleet_guard_units if (factory_cfg.profiles.fleet_guards | bool) else [])
+     + (factory_shared_supabase_units if (factory_cfg.profiles.shared_supabase | bool) else []) }}
+factory_fleet_enabled_units: >-
+  {{ (factory_fleet_guard_enabled_units if (factory_cfg.profiles.fleet_guards | bool) else [])
+     + (factory_shared_supabase_enabled_units if (factory_cfg.profiles.shared_supabase | bool) else []) }}
 # Older releases installed the same units as flotilla-*; apply stops and
 # deletes any that remain (tasks/fleet_units.yml).
 factory_fleet_retired_units: "{{ factory_fleet_units | map('regex_replace', '^crewship-', 'flotilla-') | list }}"

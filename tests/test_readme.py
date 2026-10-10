@@ -22,6 +22,7 @@ FEATURES = {
     "factory.profiles.tailscale": "docs/security.md#remote-access",
     "factory.profiles.desktop": "docs/recovery.md#desktop-access",
     "factory.profiles.fleet_guards": "docs/fleet-guards.md",
+    "factory.profiles.shared_supabase": "docs/fleet-guards.md#shared-supabase",
     "factory.profiles.fleet_browsers": "docs/fleet-guards.md#browser-ladder",
     "factory.data_dir": "docs/configuration.md#data-disk",
     "factory.firstmate.checklist": "docs/configuration.md#new-host-questions",
@@ -42,6 +43,7 @@ EXCLUDED = {
     "factory.fleet",
     "factory.fleet.docker_guard",
     "factory.browsers",
+    "factory.imessage.bluebubbles",
 }
 
 
@@ -97,11 +99,11 @@ def test_default_config_lists_the_current_defaults():
     unset = [
         path.removeprefix("factory.")
         for path, off in switches()
-        if off and ".profiles." not in path
+        if off and ".profiles." not in path and path not in EXCLUDED
     ]
     lines = section("Default config")
     for line in [
-        f"- Agent harness: [omp](docs/omp.md), default model `{roles['default']}`, "
+        f"- Agent harness: [omp](docs/omp.md), home model `{roles['default']}`, "
         f"advisor {'on' if omp['advisor']['enabled'] else 'off'}",
         "- omp plugins: " + ticks(provisions.OMP_PLUGINS),
         "- Profiles on: " + ticks(name for name, on in profiles.items() if on),
@@ -118,7 +120,8 @@ def test_default_config_lists_the_current_defaults():
         f"- Models: dynamic per-task selection; small {ticks(small)}; "
         f"ordinary (default) {ticks(ordinary)}; hard only {ticks(hard)}."
     ) in lines
-    assert [choice["model"] for choice in dispatch["default"]] == ordinary
+    assert dispatch["default"] == dispatch["rules"][1]["use"]
+    assert "- The spawning agent picks the thinking level." in lines
     model_overrides = yaml.safe_load((ROOT / "config/omp-models.yml").read_text())
     windows = model_overrides["providers"]["openai-codex"]["modelOverrides"]
     for window in windows.values():

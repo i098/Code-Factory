@@ -32,7 +32,8 @@
 - [Herdr workspace](docs/herdr.md): a sidebar of spaces and agents, with live status for each lane
 - [omp agents](docs/omp.md): sign-in, model roles, fallbacks, and the advisor
 - [Private skills](docs/omp.md#skills): host-only skills in `skills/private/` (opt-in)
-- [Fleet guards](docs/fleet-guards.md): shared Supabase, Docker guard, dev-server reaper, storage guard, spawn memory floor (opt-in)
+- [Fleet guards](docs/fleet-guards.md): Docker guard, dev-server reaper, storage guard, spawn memory floor (opt-in)
+- [Shared Supabase](docs/fleet-guards.md#shared-supabase): shared stack and CLI (opt-in)
 - [Browser ladder](docs/fleet-guards.md#browser-ladder): Obscura, Chrome, and noVNC tiers for agent browsers (opt-in)
 - [Capacity and auto pruners](docs/capacity.md): host sizing per lane count, and cleanup timers
 - [Data disk](docs/configuration.md#data-disk): Docker and the npm and pip caches on a second disk (opt-in)
@@ -57,9 +58,9 @@
 <details>
 <summary><b>Default config</b></summary>
 
-- Agent harness: [omp](docs/omp.md), default model `anthropic/claude-opus-5-5:xhigh`, advisor off
+- Agent harness: [omp](docs/omp.md), home model `anthropic/claude-opus-5-5:xhigh`, advisor off
 - Models: dynamic per-task selection; small `anthropic/claude-haiku-5-5`, `openai-codex/gpt-6-luna`; ordinary (default) `anthropic/claude-sonnet-5-5`, `openai-codex/gpt-6.1-sol`; hard only `anthropic/claude-opus-5-5`.
-  The spawning agent selects a model for each task and chooses the thinking level.
+- The spawning agent picks the thinking level.
 - Codex context: 272K default, 1M maximum, `extendedContext` on.
   The current bundled omp catalog limits the effective maximum to 872K.
 - omp plugins: `ponytail`, `i-have-adhd`, `caveman`
@@ -78,7 +79,7 @@
 - Skills and rules: [`skills/`](skills/) for omp and Claude Code, [`config/AGENTS.md`](config/AGENTS.md) for Claude Code, omp, and Codex; public files install with the `agents` profile and private files take precedence ([omp](docs/omp.md#skills)).
 - omp rules ([TTSR](docs/omp.md#rules)): `always-on-skills`, `asd-ste100`, `use-native-stacked-prs`; with the browser ladder: `drive-the-browser-yourself`, `fleet-browser-default-tier`.
 - Profiles on: `agents`, `development`, `firstmate`, `docker`, `chat`
-- Profiles off (opt-in): `tailscale`, `desktop`, `fleet_guards`, `fleet_browsers`
+- Profiles off (opt-in): `tailscale`, `desktop`, `fleet_guards`, `shared_supabase`, `fleet_browsers`
 - Unset (opt-in): `data_dir`, `firstmate.checklist`, `mac_ssh`, `skills`, `imessage`, `github_board`, `board`, `ci_pool`
 - Full files: [`config/default.yml`](config/default.yml), [`config/omp.yml`](config/omp.yml)
 
