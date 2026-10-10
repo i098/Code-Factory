@@ -51,7 +51,7 @@ def test_every_readme_row_appears_once_and_the_build_never_fails(tmp_path, monke
     readme = (ROOT / "README.md").read_text()
     unmapped = "docs/brand-new-page.md"
     readme = readme.replace(
-        "\n## Docs\n", f"\n## Docs\n\n| [Brand new]({unmapped}) | A page nobody drew yet. |\n", 1
+        "\n## More docs:", f"\n## More docs: [Brand new]({unmapped})", 1
     )
     links = [link for _, link, _ in build.features(readme)]
     manifest = built(tmp_path, monkeypatch, readme)
@@ -69,13 +69,12 @@ def test_every_readme_row_appears_once_and_the_build_never_fails(tmp_path, monke
 def test_mapped_rows_get_their_own_spot_and_no_board(tmp_path, monkeypatch, capsys):
     readme = (ROOT / "README.md").read_text()
     mapped = [row for row in build.features(readme) if row[1] in build.SCENE]
-    section = readme.split("\n## Docs\n", 1)[1].split("\n## ", 1)[0]
-    only = "\n".join(
-        line
-        for line in section.splitlines()
-        if not line.startswith("| [") or any(f"]({r[1]})" in line for r in mapped)
-    )
-    manifest = built(tmp_path, monkeypatch, readme.replace(section, only))
+    section = readme.split("<summary><b>Features</b></summary>", 1)[1].split("</details>", 1)[0]
+    only = "\n".join(f"- [{title}]({link}): {desc}" for title, link, desc in mapped)
+    readme = readme.replace(section, f"\n{only}\n", 1)
+    more_docs = readme.split("\n## More docs:", 1)[1].split("\n## ", 1)[0]
+    readme = readme.replace(more_docs, "", 1)
+    manifest = built(tmp_path, monkeypatch, readme)
 
     assert "docsboard" not in manifest.spots
     assert {build.SCENE[link][0] for _, link, _ in mapped} <= set(manifest.spots)

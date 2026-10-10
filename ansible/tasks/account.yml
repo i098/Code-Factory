@@ -193,7 +193,7 @@
       export {{ key }}="{{ value }}"
       {% endfor %}
       {% endif %}
-      {% for key, value in factory_data_cache_env | dictsort %}
+      {% for key, value in factory_data_cache_env | combine(factory_board_env) | dictsort %}
       export {{ key }}="{{ value }}"
       {% endfor %}
   become: "{{ factory_become_target | bool }}"
