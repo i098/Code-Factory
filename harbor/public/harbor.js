@@ -288,7 +288,7 @@ function fountainWater(x, y, z) {
   return ripple > 0.65 ? "m~" : "w.";
 }
 function fountain() {
-  column(world, 5, 24.6, 1.5, 1.5, 1.2, 1.64, "s",
+  const basin = column(world, 5, 24.6, 1.5, 1.5, 1.2, 1.64, "s",
     { tex: (x, y, z, nx, ny) => ny < 0.5 && y < 1.38 ? "-" : null });
   column(world, 5, 24.6, 1.29, 1.29, 1.64, 1.7, "w",
     { solid: false, dim: 2.4, tex: fountainWater });
@@ -309,8 +309,9 @@ function fountain() {
     beam(world, crest, [5 + c * 0.95, 1.73, 24.6 + s * 0.95], "m",
       { dim: 2.4, tex: fountainWater }, 0.04);
   }
+  return basin;
 }
-fountain();
+const fountainBasin = fountain();
 // Landscaping: hedges round the plaza, round trees, lamps along the avenue, a fence on the quay front.
 for (const [x0, x1, z0, z1] of [[1, 2.2, 22, 27.4], [7.8, 9, 22, 27.4], [2.2, 3.4, 27.6, 28.4], [6.6, 7.8, 27.6, 28.4]]) {
   box(world, x0, 1.2, z0, x1, 1.9, z1, "g", { tex: (x, y, z) => (hash(Math.floor(x * 3), Math.floor(z * 3 + y * 3)) < 0.3 ? "-" : null) });
@@ -825,7 +826,8 @@ function go(id) {
   const stand = standFor(anchors[id]);
   setMap(0); moved = true; dirty = true; jumped = null;
   if (reduced.matches) { me.x = stand[0]; me.z = stand[1]; me.eye = floorAt(...stand) + 1.6; face(id); return; }
-  walkPath = [...route(nearestNode(me.x, me.z), nearestNode(...stand)), stand];
+  const path = route(nearestNode(me.x, me.z), nearestNode(...stand));
+  walkPath = [...approach([me.x, me.z], path[0]), ...path.slice(1), ...approach(path[path.length - 1], stand)];
   walkTo = id;
 }
 function face(id) {
@@ -835,20 +837,34 @@ function face(id) {
   jumped = id;
 }
 const nearestNode = (x, z) => NODES.reduce((b, n, i) => (Math.hypot(n[0] - x, n[1] - z) < Math.hypot(NODES[b][0] - x, NODES[b][1] - z) ? i : b), 0);
+function approach(from, to) {
+  const b = fountainBasin.bb;
+  const bounds = [b[0] - 0.25, b[1], b[2] - 0.25, b[3] + 0.25, b[4], b[5] + 0.25];
+  const clear = (a, c) => boxEntry(bounds, a[0], (b[1] + b[4]) / 2, a[1],
+    1 / (c[0] - a[0]), Infinity, 1 / (c[1] - a[1])) > 1;
+  if (clear(from, to)) return [to];
+  const nodes = [from, to, [bounds[0] - 0.1, bounds[2] - 0.1], [bounds[3] + 0.1, bounds[2] - 0.1],
+    [bounds[3] + 0.1, bounds[5] + 0.1], [bounds[0] - 0.1, bounds[5] + 0.1]];
+  const links = [];
+  for (let a = 0; a < nodes.length; a++) {
+    for (let c = a + 1; c < nodes.length; c++) if (clear(nodes[a], nodes[c])) links.push([a, c]);
+  }
+  return route(0, 1, nodes, links).slice(1);
+}
 // Shortest road route between two junctions (Dijkstra over a handful of nodes).
-function route(from, to) {
-  const dist = NODES.map(() => Infinity), prev = [], todo = new Set(NODES.keys());
+function route(from, to, nodes = NODES, links = LINKS) {
+  const dist = nodes.map(() => Infinity), prev = [], todo = new Set(nodes.keys());
   dist[from] = 0;
   while (todo.size) {
     const u = [...todo].reduce((a, b) => (dist[a] < dist[b] ? a : b));
     todo.delete(u);
-    for (const [a, b] of LINKS) {
-      const v = a === u ? b : b === u ? a : -1, d = v < 0 ? 0 : dist[u] + Math.hypot(NODES[v][0] - NODES[u][0], NODES[v][1] - NODES[u][1]);
+    for (const [a, b] of links) {
+      const v = a === u ? b : b === u ? a : -1, d = v < 0 ? 0 : dist[u] + Math.hypot(nodes[v][0] - nodes[u][0], nodes[v][1] - nodes[u][1]);
       if (v >= 0 && todo.has(v) && d < dist[v]) { dist[v] = d; prev[v] = u; }
     }
   }
   const path = [];
-  for (let v = to; v !== undefined; v = prev[v]) path.unshift(NODES[v]);
+  for (let v = to; v !== undefined; v = prev[v]) path.unshift(nodes[v]);
   return path;
 }
 // One frame of the auto-walk: head for the next waypoint, turning smoothly; face the object on arrival.

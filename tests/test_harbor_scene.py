@@ -1,5 +1,7 @@
 """Exercise fountain walking boundaries in the actual scene without a browser."""
 
+import json
+import runpy
 import shutil
 import subprocess
 from pathlib import Path
@@ -13,18 +15,26 @@ def test_fountain_stops_walking_and_leaves_room_to_pass():
     node = shutil.which("node")
     if node is None:
         pytest.skip("Node is required to run the JavaScript scene")
+    builder = runpy.run_path(str(ROOT / "harbor/build.py"))
+    points = builder["points"](
+        (ROOT / "README.md").read_text(), (ROOT / "CHANGELOG.md").read_text()
+    )
+    point_ids = json.dumps([spot for spot, *_ in points])
     subprocess.run(
-        [node, "-", str(ROOT / "harbor/public/harbor.js")],
+        [node, "-", str(ROOT / "harbor/public/harbor.js"), point_ids],
         input=r"""
 const fs = require('node:fs'), vm = require('node:vm');
 const assert = require('node:assert/strict');
 const element = {
-  hidden: false, classList: { add() {} }, focus() {}, addEventListener() {},
+  hidden: false, classList: { add() {}, toggle() {} }, focus() {}, addEventListener() {},
   firstElementChild: {}, clientWidth: 600, clientHeight: 400,
   getContext: () => ({setTransform() {}, measureText: () => ({width: 6})})
 };
+const manifest = JSON.parse(process.argv[3]).map(id => ({
+  dataset: {spot: id}, querySelector: tag => tag === 'a' ? {textContent: id, href: '#'} : {}
+}));
 const context = vm.createContext({
-  document: {getElementById: () => element, querySelectorAll: () => [],
+  document: {getElementById: () => element, querySelectorAll: () => manifest,
     documentElement: {}, addEventListener() {}},
   matchMedia: () => ({matches: false, addEventListener() {}}),
   getComputedStyle: () => ({getPropertyValue: () => 'monospace'}),
@@ -59,6 +69,32 @@ for (let k = 1; k < path.length; k++) {
     const x = ax + (bx - ax) * i / 20, z = az + (bz - az) * i / 20;
     assert(!blocked(x, z, floorAt(x, z)), 'map route crosses the basin');
     assert.equal(ground(x, 1.2, z, 0, 1)[0], 't', 'map route leaves the paving');
+  }
+}
+function walkToSpot(id, start, dt) {
+  me.x = start[0]; me.z = start[1]; me.eye = floorAt(...start) + 1.6;
+  const stand = standFor(anchors[id]);
+  go(id);
+  let frames = 0;
+  while (walkPath.length && frames++ < 10000) {
+    const x0 = me.x, z0 = me.z;
+    autoStep(dt);
+    for (let i = 0; i <= 10; i++) {
+      const x = x0 + (me.x - x0) * i / 10, z = z0 + (me.z - z0) * i / 10;
+      if (x > 2.5 && x < 7.5 && z > 22 && z < 27.3) {
+        assert(!blocked(x, z, floorAt(x, z)), 'auto-walk crosses the fountain');
+      }
+    }
+  }
+  assert.equal(walkPath.length, 0, 'auto-walk did not finish');
+  assert.equal(jumped, id, 'auto-walk did not face its destination');
+  assert.deepEqual([me.x, me.z], stand, 'auto-walk missed its destination');
+}
+for (const start of [[2.9, 24.6], [7.1, 24.6], [5, 22.5], [5, 26.7]]) {
+  for (const id of ORDER) walkToSpot(id, start, 0.1);
+  for (const end of [[2.9, 24.6], [7.1, 24.6], [5, 22.5], [5, 26.7]]) {
+    anchors.approach = {x: end[0], y: 1.2, z: end[1] + 2.5, r: 0, ship: 0};
+    walkToSpot('approach', start, 0.02);
   }
 }
 `, context);
