@@ -12,7 +12,7 @@
 # What this deliberately does not do
 #   * no SSH keys, passwords, API tokens, auth keys or node identities - add
 #     access through your platform's own key mechanism before first boot
-#   * no account creation: `./ship.sh launch` creates factory.user with the
+#   * no account creation: `./ship.sh launch` creates crewship.user with the
 #     home and workspace from your configuration document
 #   * no sshd, firewall, UFW or Tailscale change - all of those stay manual
 #     and reviewed (docs/security.md)

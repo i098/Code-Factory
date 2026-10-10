@@ -37,8 +37,8 @@ The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests 
 - `development`: build-essential, pkg-config, libssl-dev, python3-dev, cmake, ripgrep.
 - `docker`: docker.io, docker-compose-v2 (Ubuntu's packages, never Docker CE).
 - `desktop`: xfce4, xfce4-terminal, dbus-x11, xauth, x11-xserver-utils, fonts-dejavu-core, tigervnc-standalone-server, tigervnc-common, tigervnc-tools, novnc, websockify, iproute2.
-- `tailscale`: `tailscale` from pkgs.tailscale.com, stable track. `factory_tailscale_version` pins it; empty by default.
-- Google Chrome: `google-chrome-stable` from dl.google.com (`ansible/tasks/browser.yml`). Installed when `factory_chrome_install` is `true`, or `auto` (the default) with the `desktop` profile. `factory_chrome_version` pins it; empty by default.
+- `tailscale`: `tailscale` from pkgs.tailscale.com, stable track. `crewship_tailscale_version` pins it; empty by default.
+- Google Chrome: `google-chrome-stable` from dl.google.com (`ansible/tasks/browser.yml`). Installed when `crewship_chrome_install` is `true`, or `auto` (the default) with the `desktop` profile. `crewship_chrome_version` pins it; empty by default.
 
 ## Fleet browsers and Supabase
 
@@ -59,13 +59,13 @@ Every host that starts services (`start_services: true`); the container worker i
 
 ## iMessage bridge
 
-`factory.imessage` set ([iMessage bridge](imessage.md)).
+`crewship.imessage` set ([iMessage bridge](imessage.md)).
 
 - spectrum-ts, the npm registry's latest release, installed with `bun add --exact` into `~/.local/share/code-factory/imessage` (`ansible/tasks/imessage.yml`). bun is a core tool.
 
 ## Crew board
 
-`factory.board` set ([Crew board](board.md)).
+`crewship.board` set ([Crew board](board.md)).
 
 - crewboard, built from `crewboard/` in this repository with `cargo build --release --locked` by the Rust toolchain of the `development` profile (`ansible/tasks/board.yml`). Its crates are the versions in `crewboard/Cargo.lock`, verified by cargo against the checksums in that file.
 
@@ -73,7 +73,7 @@ Every host that starts services (`start_services: true`); the container worker i
 
 `firstmate` profile.
 
-- `git clone` of `factory.firstmate.url` (upstream `https://github.com/kunchenguid/firstmate.git` by default), tracking `origin/main`, never pinned. Every apply fetches `origin/main` and puts `main` at that revision plus the patch layer below (`ansible/tasks/firstmate.yml`).
+- `git clone` of `crewship.firstmate.url` (upstream `https://github.com/kunchenguid/firstmate.git` by default), tracking `origin/main`, never pinned. Every apply fetches `origin/main` and puts `main` at that revision plus the patch layer below (`ansible/tasks/firstmate.yml`).
 
 ### Firstmate patch layer
 
@@ -101,7 +101,7 @@ To update a patch, edit its file in a pull request. To drop a patch, delete its 
 
 - Worker base `ubuntu:latest` (the newest Ubuntu LTS), pulled from `mirror.gcr.io/library/ubuntu:latest`, Google's Docker Hub mirror with no anonymous pull limit, plus apt: bash, build-essential, ca-certificates, curl, git, iproute2, jq, less, libssl-dev, openssh-client, pkg-config, procps, python3, python3-apt, python3-venv, sudo, tar, unzip, xz-utils, zstd.
 - Optional compose backing services, never installed by apply: `postgres:18-bookworm`, `redis:8-alpine`, from the same mirror, digest-pinned because a floating Postgres tag would move a data volume across major versions it cannot read.
-- CI pool job containers (`maintenance/ci-pool.py`, only with `factory.ci_pool`): the official `ghcr.io/actions/actions-runner:latest`, pulled again when a new image is available. It is the runner GitHub publishes, so it is not checksum-verified here; see [CI pool](ci-pool.md).
+- CI pool job containers (`maintenance/ci-pool.py`, only with `crewship.ci_pool`): the official `ghcr.io/actions/actions-runner:latest`, pulled again when a new image is available. It is the runner GitHub publishes, so it is not checksum-verified here; see [CI pool](ci-pool.md).
 
 ## Assumed on the host
 
@@ -112,7 +112,7 @@ The recipe never installs these. The base requirements (Ubuntu, sudo, Python, `g
 
 Also needed, depending on profile:
 
-- Membership in the `docker` group for the account that runs fleet guards. Opt in with `factory_docker_group_users`.
+- Membership in the `docker` group for the account that runs fleet guards. Opt in with `crewship_docker_group_users`.
 - `psmisc` (`fuser`) for `fleet-browser seed`.
 - `iproute2` (`ss`) for the CLIENTS column of `fleet-browser status`. Without `ss`, every tier reports 0 clients and gc can stop a tier in use. Only the `desktop` profile installs `iproute2`, so a `fleet_browsers` or `fleet_guards` host without `desktop` needs it in the base image.
 - A VNC password created by the operator, for the `desktop` profile.

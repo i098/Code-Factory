@@ -8,7 +8,7 @@
 # ships it.
 #
 # Source: the official Tailscale apt repository for this Ubuntu release,
-# https://pkgs.tailscale.com/{{ factory_tailscale_track }}/ubuntu/
+# https://pkgs.tailscale.com/{{ crewship_tailscale_track }}/ubuntu/
 
 - name: Ensure the keyring directory exists
   ansible.builtin.file:
@@ -21,38 +21,38 @@
 
 - name: Install the Tailscale repository signing key
   ansible.builtin.get_url:
-    url: "https://pkgs.tailscale.com/{{ factory_tailscale_track }}/ubuntu/{{ factory_tailscale_suite }}.noarmor.gpg"
-    dest: "{{ factory_tailscale_keyring }}"
+    url: "https://pkgs.tailscale.com/{{ crewship_tailscale_track }}/ubuntu/{{ crewship_tailscale_suite }}.noarmor.gpg"
+    dest: "{{ crewship_tailscale_keyring }}"
     owner: root
     group: root
     mode: "0644"
   become: true
-  register: factory_tailscale_key
+  register: crewship_tailscale_key
 
 - name: Configure the Tailscale apt repository
   ansible.builtin.deb822_repository:
     name: tailscale
     types: [deb]
-    uris: "https://pkgs.tailscale.com/{{ factory_tailscale_track }}/ubuntu"
-    suites: ["{{ factory_tailscale_suite }}"]
+    uris: "https://pkgs.tailscale.com/{{ crewship_tailscale_track }}/ubuntu"
+    suites: ["{{ crewship_tailscale_suite }}"]
     components: [main]
-    architectures: ["{{ factory_deb_arch }}"]
-    signed_by: "{{ factory_tailscale_keyring }}"
+    architectures: ["{{ crewship_deb_arch }}"]
+    signed_by: "{{ crewship_tailscale_keyring }}"
     enabled: true
     state: present
   become: true
-  register: factory_tailscale_repo
+  register: crewship_tailscale_repo
 
 - name: Refresh the apt cache for the Tailscale repository
   ansible.builtin.apt:
     update_cache: true
   become: true
   changed_when: false
-  when: (factory_tailscale_key.changed | default(false)) or (factory_tailscale_repo.changed | default(false))
+  when: (crewship_tailscale_key.changed | default(false)) or (crewship_tailscale_repo.changed | default(false))
 
 - name: Install Tailscale
   ansible.builtin.apt:
-    name: "tailscale{{ ('=' ~ factory_tailscale_version) if (factory_tailscale_version | default('') | length > 0) else '' }}"
+    name: "tailscale{{ ('=' ~ crewship_tailscale_version) if (crewship_tailscale_version | default('') | length > 0) else '' }}"
     state: present
   become: true
 

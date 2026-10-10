@@ -28,37 +28,37 @@
 
 - name: Install the Google Linux signing key
   ansible.builtin.get_url:
-    url: "{{ factory_chrome_key_url }}"
-    dest: "{{ factory_chrome_keyring }}"
+    url: "{{ crewship_chrome_key_url }}"
+    dest: "{{ crewship_chrome_keyring }}"
     owner: root
     group: root
     mode: "0644"
   become: true
-  register: factory_chrome_key
+  register: crewship_chrome_key
 
 - name: Configure the Google Chrome apt repository
   ansible.builtin.deb822_repository:
     name: google-chrome
     types: [deb]
-    uris: "{{ factory_chrome_repo_uri }}"
+    uris: "{{ crewship_chrome_repo_uri }}"
     suites: [stable]
     components: [main]
-    architectures: ["{{ factory_deb_arch }}"]
-    signed_by: "{{ factory_chrome_keyring }}"
+    architectures: ["{{ crewship_deb_arch }}"]
+    signed_by: "{{ crewship_chrome_keyring }}"
     enabled: true
     state: present
   become: true
-  register: factory_chrome_repo
+  register: crewship_chrome_repo
 
 - name: Refresh the apt cache for the Chrome repository
   ansible.builtin.apt:
     update_cache: true
   become: true
   changed_when: false
-  when: (factory_chrome_key.changed | default(false)) or (factory_chrome_repo.changed | default(false))
+  when: (crewship_chrome_key.changed | default(false)) or (crewship_chrome_repo.changed | default(false))
 
 - name: Install Google Chrome
   ansible.builtin.apt:
-    name: "{{ factory_chrome_package }}{{ ('=' ~ factory_chrome_version) if (factory_chrome_version | default('') | length > 0) else '' }}"
+    name: "{{ crewship_chrome_package }}{{ ('=' ~ crewship_chrome_version) if (crewship_chrome_version | default('') | length > 0) else '' }}"
     state: present
   become: true

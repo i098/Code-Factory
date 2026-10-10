@@ -4,13 +4,13 @@
 
 [Unit]
 Description=Fleet browser tier 3 - VNC display with headed Chromium on 127.0.0.1:9523 (Crewship managed)
-ConditionPathExists={{ factory_fleet_browsers_dir }}/fleet-browser
+ConditionPathExists={{ crewship_fleet_browsers_dir }}/fleet-browser
 ConditionPathExists=/usr/bin/tigervncserver
 
 [Service]
 Type=simple
 Environment=PATH=%h/.local/bin:%h/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart={{ factory_fleet_browsers_dir }}/fleet-browser _run-vnc
+ExecStart={{ crewship_fleet_browsers_dir }}/fleet-browser _run-vnc
 Restart=on-failure
 RestartSec=5
 MemoryMax=4G

@@ -11,11 +11,11 @@
   ansible.builtin.file:
     path: "{{ item.dest | dirname }}"
     state: directory
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "{{ item.dir_mode }}"
   become: true
-  loop: "{{ factory_agent_config_files }}"
+  loop: "{{ crewship_agent_config_files }}"
   loop_control:
     label: "{{ item.dest | dirname }}"
 
@@ -24,23 +24,23 @@
     path: "{{ item.dest }}"
     get_checksum: false
   become: true
-  loop: "{{ factory_agent_config_files }}"
+  loop: "{{ crewship_agent_config_files }}"
   loop_control:
     label: "{{ item.dest }}"
-  register: factory_agent_config_stat
+  register: crewship_agent_config_stat
   changed_when: false
   check_mode: false
 
 - name: Write harness preferences that are absent
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/{{ item.item.src }}"
+    src: "{{ crewship_repo }}/{{ item.item.src }}"
     dest: "{{ item.item.dest }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "{{ item.item.mode }}"
     remote_src: true
   become: true
-  loop: "{{ factory_agent_config_stat.results }}"
+  loop: "{{ crewship_agent_config_stat.results }}"
   loop_control:
     label: "{{ item.item.dest }}"
   when:
@@ -50,7 +50,7 @@
 - name: Report harness preferences left untouched
   ansible.builtin.debug:
     msg: >-
-      {{ factory_agent_config_stat.results
+      {{ crewship_agent_config_stat.results
          | selectattr('stat.exists', 'defined')
          | selectattr('stat.exists')
          | map(attribute='item.dest') | list | join(', ') | default('none', true) }}
@@ -59,10 +59,10 @@
 # The PR-review gate wrapper; it runs the ponytail plugin's own prompt on omp.
 - name: Install ponytail-review
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/maintenance/ponytail-review"
-    dest: "{{ factory_local_bin }}/ponytail-review"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    src: "{{ crewship_repo }}/maintenance/ponytail-review"
+    dest: "{{ crewship_local_bin }}/ponytail-review"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
     remote_src: true
   become: true
@@ -75,14 +75,14 @@
 - name: Install the Crewship skills for omp and Claude Code
   ansible.builtin.command:
     argv: >-
-      {{ ['python3', code_factory_repo ~ '/scripts/skills.py', '--home', factory_cfg.home]
-         + (['--private-source', factory_cfg.skills.private_source,
-             '--private-ref', factory_cfg.skills.private_ref | default('HEAD')]
-            if factory_cfg.skills is defined else []) }}
-  become: "{{ factory_become_target | bool }}"
-  become_user: "{{ factory_cfg.user }}"
-  register: factory_skills_run
-  changed_when: (factory_skills_run.stdout_lines | last | from_json).changed | bool
+      {{ ['python3', crewship_repo ~ '/scripts/skills.py', '--home', crewship_cfg.home]
+         + (['--private-source', crewship_cfg.skills.private_source,
+             '--private-ref', crewship_cfg.skills.private_ref | default('HEAD')]
+            if crewship_cfg.skills is defined else []) }}
+  become: "{{ crewship_become_target | bool }}"
+  become_user: "{{ crewship_cfg.user }}"
+  register: crewship_skills_run
+  changed_when: (crewship_skills_run.stdout_lines | last | from_json).changed | bool
   when: not ansible_check_mode
 
 # config/AGENTS.md as ~/.claude/CLAUDE.md, ~/.omp/agent/AGENTS.md and
@@ -90,38 +90,38 @@
 # since the last apply is moved to a timestamped .bak beside it first.
 - name: Install the global agent instructions
   ansible.builtin.command:
-    argv: [python3, "{{ code_factory_repo }}/scripts/instructions.py", --home, "{{ factory_cfg.home }}"]
-  become: "{{ factory_become_target | bool }}"
-  become_user: "{{ factory_cfg.user }}"
-  register: factory_instructions_run
-  changed_when: (factory_instructions_run.stdout_lines | last | from_json).changed | bool
+    argv: [python3, "{{ crewship_repo }}/scripts/instructions.py", --home, "{{ crewship_cfg.home }}"]
+  become: "{{ crewship_become_target | bool }}"
+  become_user: "{{ crewship_cfg.user }}"
+  register: crewship_instructions_run
+  changed_when: (crewship_instructions_run.stdout_lines | last | from_json).changed | bool
   when: not ansible_check_mode
 
 - name: Report the global agent instructions backed up
   ansible.builtin.debug:
-    msg: "Changed by hand, moved aside: {{ (factory_instructions_run.stdout_lines | last | from_json).backups | join(', ') }}"
+    msg: "Changed by hand, moved aside: {{ (crewship_instructions_run.stdout_lines | last | from_json).backups | join(', ') }}"
   when:
     - not ansible_check_mode
-    - (factory_instructions_run.stdout_lines | last | from_json).backups | length > 0
+    - (crewship_instructions_run.stdout_lines | last | from_json).backups | length > 0
 
 # The omp extension that feeds the Herdr agent sidebar layout ($who, the pull
 # request parts and the bare topic title; docs/herdr.md). Managed: every apply
 # rewrites it.
 - name: Ensure the omp extensions directory
   ansible.builtin.file:
-    path: "{{ factory_omp_sidebar_extension | dirname }}"
+    path: "{{ crewship_omp_sidebar_extension | dirname }}"
     state: directory
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
   become: true
 
 - name: Install the Herdr sidebar omp extension
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/config/herdr-sidebar.ts"
-    dest: "{{ factory_omp_sidebar_extension }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    src: "{{ crewship_repo }}/config/herdr-sidebar.ts"
+    dest: "{{ crewship_omp_sidebar_extension }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0644"
     remote_src: true
   become: true
@@ -130,10 +130,10 @@
 # icons on the status line (docs/omp.md). Managed: every apply rewrites it.
 - name: Install the status icons omp extension
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/config/omp-status-icons.ts"
-    dest: "{{ factory_omp_status_icons_extension }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    src: "{{ crewship_repo }}/config/omp-status-icons.ts"
+    dest: "{{ crewship_omp_status_icons_extension }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0644"
     remote_src: true
   become: true
@@ -143,10 +143,10 @@
 # other workers (docs/omp.md). Managed: every apply rewrites it.
 - name: Install the pattern-kill guard omp extension
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/config/omp-no-pattern-kill.ts"
-    dest: "{{ factory_omp_no_pattern_kill_extension }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    src: "{{ crewship_repo }}/config/omp-no-pattern-kill.ts"
+    dest: "{{ crewship_omp_no_pattern_kill_extension }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0644"
     remote_src: true
   become: true
@@ -155,10 +155,10 @@
 # every agent turn (docs/omp.md#quality-gate). Managed: every apply rewrites it.
 - name: Install the quality gate omp extension
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/config/omp-quality-gate.ts"
-    dest: "{{ factory_omp_quality_gate_extension }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    src: "{{ crewship_repo }}/config/omp-quality-gate.ts"
+    dest: "{{ crewship_omp_quality_gate_extension }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0644"
     remote_src: true
   become: true
@@ -168,10 +168,10 @@
 # acp:omp as the fallback. Managed: every apply rewrites these files.
 - name: Install omp-as-pi, the wrapper that runs omp as the no-mistakes pi agent
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/config/omp-as-pi/"
-    dest: "{{ factory_omp_as_pi_dir }}/"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    src: "{{ crewship_repo }}/config/omp-as-pi/"
+    dest: "{{ crewship_omp_as_pi_dir }}/"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "u=rwX,go=rX"
     directory_mode: "0755"
     remote_src: true
@@ -179,10 +179,10 @@
 
 - name: Install the omp overlay that only daemon-spawned omp loads
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/config/no-mistakes-omp.yml"
-    dest: "{{ factory_no_mistakes_omp_overlay }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    src: "{{ crewship_repo }}/config/no-mistakes-omp.yml"
+    dest: "{{ crewship_no_mistakes_omp_overlay }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0600"
     remote_src: true
   become: true
@@ -193,10 +193,10 @@
 # "no-mistakes-daemon-" prefix to every such unit, and no-mistakes leaves it be.
 - name: Ensure the no-mistakes daemon drop-in directory
   ansible.builtin.file:
-    path: "{{ factory_user_units }}/no-mistakes-daemon-.service.d"
+    path: "{{ crewship_user_units }}/no-mistakes-daemon-.service.d"
     state: directory
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
   become: true
 
@@ -205,13 +205,13 @@
     content: |
       # Managed by Crewship (docs/omp.md#no-mistakes-pipeline-agent).
       [Service]
-      Environment="PI_CONFIG_FILES={{ factory_no_mistakes_omp_overlay }}"
-      {% for key, value in factory_data_cache_env | dictsort %}
+      Environment="PI_CONFIG_FILES={{ crewship_no_mistakes_omp_overlay }}"
+      {% for key, value in crewship_data_cache_env | dictsort %}
       Environment="{{ key }}={{ value }}"
       {% endfor %}
-    dest: "{{ factory_user_units }}/no-mistakes-daemon-.service.d/code-factory.conf"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    dest: "{{ crewship_user_units }}/no-mistakes-daemon-.service.d/code-factory.conf"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0644"
   become: true
   notify:
@@ -227,19 +227,19 @@
   ansible.builtin.command:
     argv:
       - bash
-      - "{{ code_factory_repo }}/config/omp-as-pi/check-adapter.sh"
-      - "v{{ factory_latest['no-mistakes'].version }}"
+      - "{{ crewship_repo }}/config/omp-as-pi/check-adapter.sh"
+      - "v{{ crewship_latest['no-mistakes'].version }}"
   become: true
-  register: factory_pi_adapter
+  register: crewship_pi_adapter
   changed_when: false
   failed_when: false
   check_mode: false
 
 - name: Read the no-mistakes config for the pipeline agent
   ansible.builtin.slurp:
-    path: "{{ factory_cfg.home }}/.no-mistakes/config.yaml"
+    path: "{{ crewship_cfg.home }}/.no-mistakes/config.yaml"
   become: true
-  register: factory_no_mistakes_config_raw
+  register: crewship_no_mistakes_config_raw
   failed_when: false
   check_mode: false
 
@@ -247,20 +247,20 @@
 # choice is the operator's and stays.
 - name: Set the no-mistakes pipeline agent from the pi adapter check
   vars:
-    current: "{{ factory_no_mistakes_config_raw.content | b64decode | from_yaml }}"
+    current: "{{ crewship_no_mistakes_config_raw.content | b64decode | from_yaml }}"
     wanted: >-
       {{ current | combine({
            'agent': ['pi', 'acp:omp'],
-           'agent_path_override': {'pi': factory_omp_as_pi_dir ~ '/omp-as-pi'},
+           'agent_path_override': {'pi': crewship_omp_as_pi_dir ~ '/omp-as-pi'},
            'agent_config': {'pi': {'model': 'anthropic/claude-sonnet-5-5', 'effort': 'high'}}}, recursive=true)
-         if factory_pi_adapter.rc == 0
-         else (current | combine({'agent': ['acp:omp']}) if factory_pi_adapter.rc == 1 else current) }}
+         if crewship_pi_adapter.rc == 0
+         else (current | combine({'agent': ['acp:omp']}) if crewship_pi_adapter.rc == 1 else current) }}
   ansible.builtin.copy:
     content: "{{ wanted | to_nice_yaml(indent=2, sort_keys=false) }}"
-    dest: "{{ factory_cfg.home }}/.no-mistakes/config.yaml"
+    dest: "{{ crewship_cfg.home }}/.no-mistakes/config.yaml"
   become: true
   when:
-    - factory_no_mistakes_config_raw.content is defined
+    - crewship_no_mistakes_config_raw.content is defined
     - current.agent | default([]) in [['acp:omp'], ['pi', 'acp:omp']]
     - wanted != current
   notify: no-mistakes daemon restart required
@@ -269,17 +269,17 @@
   ansible.builtin.debug:
     msg: >-
       Not switching the no-mistakes pipeline agent to pi: {{
-      factory_pi_adapter.stdout | default('', true) or factory_pi_adapter.stderr | default('') }}.
+      crewship_pi_adapter.stdout | default('', true) or crewship_pi_adapter.stderr | default('') }}.
       It stays acp:omp until omp-as-pi is re-proven against this release.
-  when: factory_pi_adapter.rc == 1
+  when: crewship_pi_adapter.rc == 1
 
 - name: Warn that the no-mistakes pi adapter could not be verified
   ansible.builtin.debug:
     msg: >-
       WARNING: could not verify the pi adapter of this no-mistakes release: {{
-      factory_pi_adapter.stdout | default('', true) or factory_pi_adapter.stderr | default('') }}.
+      crewship_pi_adapter.stdout | default('', true) or crewship_pi_adapter.stderr | default('') }}.
       The pipeline agent setting is left as it is; the next apply checks again.
-  when: factory_pi_adapter.rc not in [0, 1]
+  when: crewship_pi_adapter.rc not in [0, 1]
 
 # The omp config is first-write-only, but the status icons row needs two of its
 # keys on every host: `status` in statusLine.leftSegments and no separate hooks
@@ -287,15 +287,15 @@
 # other presets are left alone. Only those two keys are ensured.
 - name: Read the omp config for the status row keys
   ansible.builtin.slurp:
-    path: "{{ factory_omp_config }}"
+    path: "{{ crewship_omp_config }}"
   become: true
-  register: factory_omp_config_raw
+  register: crewship_omp_config_raw
   failed_when: false
   check_mode: false
 
 - name: Ensure the status row keys in the omp config
   vars:
-    current: "{{ factory_omp_config_raw.content | b64decode | from_yaml }}"
+    current: "{{ crewship_omp_config_raw.content | b64decode | from_yaml }}"
     segments: "{{ current.statusLine.leftSegments | default([]) }}"
     wanted: >-
       {{ current | combine({'statusLine': current.statusLine | default({}) | combine({
@@ -303,10 +303,10 @@
            'showHookStatus': false})}) }}
   ansible.builtin.copy:
     content: "{{ wanted | to_nice_yaml(indent=2, sort_keys=false) }}"
-    dest: "{{ factory_omp_config }}"
+    dest: "{{ crewship_omp_config }}"
   become: true
   when:
-    - factory_omp_config_raw.content is defined
+    - crewship_omp_config_raw.content is defined
     - (current.statusLine | default({})).preset | default('default') == 'custom'
     - wanted != current
 
@@ -315,19 +315,19 @@
 # that one value is rewritten, and only while it is still codex.
 - name: Read the acpx config for the default agent
   ansible.builtin.slurp:
-    path: "{{ factory_acpx_config }}"
+    path: "{{ crewship_acpx_config }}"
   become: true
-  register: factory_acpx_config_raw
+  register: crewship_acpx_config_raw
   failed_when: false
   check_mode: false
 
 - name: Point the acpx default agent at omp when it is still codex
   vars:
-    current: "{{ factory_acpx_config_raw.content | b64decode | from_json }}"
+    current: "{{ crewship_acpx_config_raw.content | b64decode | from_json }}"
   ansible.builtin.copy:
     content: "{{ current | combine({'defaultAgent': 'omp'}) | to_nice_json(indent=2, sort_keys=false) }}\n"
-    dest: "{{ factory_acpx_config }}"
+    dest: "{{ crewship_acpx_config }}"
   become: true
   when:
-    - factory_acpx_config_raw.content is defined
+    - crewship_acpx_config_raw.content is defined
     - current.defaultAgent | default('') == 'codex'

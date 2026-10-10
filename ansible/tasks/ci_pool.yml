@@ -1,4 +1,4 @@
-# CI pool (factory.ci_pool, docs/ci-pool.md): just-in-time GitHub Actions
+# CI pool (crewship.ci_pool, docs/ci-pool.md): just-in-time GitHub Actions
 # runners, one job per fresh container, sized from half of the host's CPU and memory.
 #
 # maintenance/ci-pool.py owns the slots: `apply` writes the one unit template
@@ -11,19 +11,19 @@
 
 - name: Create the CI pool data directory
   ansible.builtin.file:
-    path: "{{ factory_cfg.ci_pool.data_dir }}"
+    path: "{{ crewship_cfg.ci_pool.data_dir }}"
     state: directory
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
   become: true
 
 - name: Install the CI pool script
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/maintenance/ci-pool.py"
-    dest: "{{ factory_local_bin }}/ci-pool.py"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    src: "{{ crewship_repo }}/maintenance/ci-pool.py"
+    dest: "{{ crewship_local_bin }}/ci-pool.py"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
     remote_src: true
   become: true
@@ -32,13 +32,13 @@
 - name: Converge the CI pool slots
   ansible.builtin.command:
     argv: >-
-      {{ ['/usr/bin/python3', code_factory_repo ~ '/maintenance/ci-pool.py', 'apply']
+      {{ ['/usr/bin/python3', crewship_repo ~ '/maintenance/ci-pool.py', 'apply']
          + (['--check'] if ansible_check_mode else []) }}
-    stdin: "{{ factory_cfg.ci_pool | to_json }}"
-  become: "{{ factory_become_target | bool }}"
-  become_user: "{{ factory_cfg.user }}"
-  environment: "{{ factory_user_systemd_env | combine({'HOME': factory_cfg.home}) }}"
-  register: factory_ci_pool_apply
-  changed_when: factory_ci_pool_apply.stdout | length > 0
+    stdin: "{{ crewship_cfg.ci_pool | to_json }}"
+  become: "{{ crewship_become_target | bool }}"
+  become_user: "{{ crewship_cfg.user }}"
+  environment: "{{ crewship_user_systemd_env | combine({'HOME': crewship_cfg.home}) }}"
+  register: crewship_ci_pool_apply
+  changed_when: crewship_ci_pool_apply.stdout | length > 0
   check_mode: false
-  when: factory_manage_services | bool
+  when: crewship_manage_services | bool

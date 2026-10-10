@@ -1,5 +1,5 @@
 {{ ansible_managed | comment }}
-# Herdr {{ factory_herdr_version }} ({{ factory_platform }}) as a user service.
+# Herdr {{ crewship_herdr_version }} ({{ crewship_platform }}) as a user service.
 # ExecStart is the absolute versioned path of the release this apply resolved,
 # so neither $PATH nor a leftover /usr/local/bin build can shadow it.
 # No credential, EnvironmentFile or inline secret belongs in this unit.
@@ -10,21 +10,21 @@ Documentation=https://herdr.dev/docs/
 
 [Service]
 Type=simple
-ExecStart={{ factory_herdr_bin }} server
-WorkingDirectory={{ factory_cfg.workspace }}
-Environment=PATH={{ (factory_fleet_browsers_dir ~ ':') if (factory_fleet_browsers_enabled | bool) else '' }}%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-{% if factory_fleet_browsers_enabled | bool %}
+ExecStart={{ crewship_herdr_bin }} server
+WorkingDirectory={{ crewship_cfg.workspace }}
+Environment=PATH={{ (crewship_fleet_browsers_dir ~ ':') if (crewship_fleet_browsers_enabled | bool) else '' }}%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+{% if crewship_fleet_browsers_enabled | bool %}
 # The fleet browser ladder's default tier (docs/fleet-guards.md#browser-ladder).
 Environment=CHROME_DEVTOOLS_AXI_BROWSER_URL=http://127.0.0.1:9222
 Environment=FLEET_BROWSER_TIER=obscura
 {% endif %}
-{% if factory_cfg.profiles.agents | bool %}
+{% if crewship_cfg.profiles.agents | bool %}
 # The installed MCP entrypoint, so AXI never resolves a floating npx package.
-{% for key, value in factory_managed_shell_env | dictsort %}
+{% for key, value in crewship_managed_shell_env | dictsort %}
 Environment="{{ key }}={{ value }}"
 {% endfor %}
 {% endif %}
-{% for key, value in factory_data_cache_env | combine(factory_board_env) | dictsort %}
+{% for key, value in crewship_data_cache_env | combine(crewship_board_env) | dictsort %}
 Environment="{{ key }}={{ value }}"
 {% endfor %}
 Restart=on-failure

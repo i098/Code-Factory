@@ -4,27 +4,37 @@
 
 ## Commands
 
-| New name | Old name | What it does |
-| --- | --- | --- |
-| `./onboard.sh` | `./bootstrap.sh` | Installs the repository tooling: the latest uv, then the locked Python environment with Ansible. Changes nothing else on the host. |
-| `./ship.sh dock` | `./factory init` | Copies `config/default.yml` to `.local/host.yml` with your user, home, and `~/Dev` workspace filled in. Never overwrites an existing file. Options: `--user`, `--home`, `--container`, and `--board`, which turns on the [crew board](board.md). |
-| `./ship.sh inspect` | `./factory validate` | Checks the config against `schemas/crewship.schema.json` and the cross-field rules below. |
-| `./ship.sh chart` | `./factory plan` | Runs the Ansible playbook in check mode. Reports what would change; mutates nothing. |
-| `./ship.sh launch` | `./factory apply` | Runs the playbook for real. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, the first successful interactive apply with omp signed in then opens the new-host questions (below). |
-| `./ship.sh survey` | `./factory doctor` | Checks that each expected tool runs and reports `gh` authentication. Changes nothing. |
-| `scripts/ship.py` | `scripts/factory.py` | The Python program behind `ship.sh`. |
-| `scripts/provisions.py` | `scripts/install_tools.py` | Installs the public tools into the user-owned Crewship prefix. |
-| `scripts/stow-secrets.sh` | `scripts/push-super-env.sh` | Pushes `~/super.env` to Cloudflare Secrets Store and redeploys the fleet-secrets Worker. |
-| `scripts/fetch-secrets.sh` | `scripts/fetch-super-env.sh` | Pulls `super.env` from the fleet-secrets Worker into `~/super.env`. |
+| Command | What it does |
+| --- | --- |
+| `./onboard.sh` | Installs the repository tooling: the latest uv, then the locked Python environment with Ansible. |
+| `./ship.sh dock` | Creates `.local/host.yml` with the current user, home, and workspace. Never overwrites a file. Options: `--user`, `--home`, `--container`, `--board`. |
+| `./ship.sh inspect` | Checks the config against `schemas/crewship.schema.json` and the cross-field rules. |
+| `./ship.sh chart` | Runs Ansible in check mode without changing the host, except for the one-time config rewrite below. |
+| `./ship.sh launch` | Provisions the host. Asks for the sudo password if needed, then opens the new-host questions after a successful interactive apply. |
+| `./ship.sh survey` | Checks the tools and GitHub login without changing the host, except for the one-time config rewrite below. |
+| `scripts/ship.py` | Runs the CLI behind `ship.sh`. |
+| `scripts/provisions.py` | Installs the public tools into the user-owned Crewship prefix. |
+| `scripts/stow-secrets.sh` | Pushes `~/super.env` to Cloudflare Secrets Store and deploys the fleet-secrets Worker. |
+| `scripts/fetch-secrets.sh` | Pulls `super.env` from the fleet-secrets Worker into `~/super.env`. |
 
 `inspect`, `chart`, `launch`, and `survey` read `--config <path>` if you pass one, otherwise `.local/host.yml`. If `.local/host.yml` does not exist, `inspect`, `chart`, and `survey` fall back to `config/default.yml` (user `coder`); `launch` refuses to run.
+
+The next config read rewrites an old root key to `crewship` and prints one notice.
+It keeps the original bytes in `<config>.bak` beside the config.
+The rewritten YAML does not keep comments; the backup keeps them.
+Both files have owner-only permissions (`0600`).
+The second read changes neither file.
+The rewrite keeps unknown keys and values; schema validation still rejects unsupported keys.
+If both root names or an existing backup are present, the command stops without changing the config.
+Keep an existing backup and move it aside before you try the rewrite again.
+Host paths, unit names, and the compose image name do not change in this step.
 
 ## The host config
 
 An excerpt with the defaults `./ship.sh dock` writes. The full document is [`config/default.yml`](../config/default.yml).
 
 ```yaml
-factory:
+crewship:
   user: coder
   home: /home/coder
   workspace: /home/coder/Dev
@@ -105,7 +115,7 @@ After a successful `./ship.sh launch` with the `firstmate` profile on, once omp 
 - When `.local/host.yml` has no `github_board` block, the last question asks whether to turn on the [GitHub board](github-board.md). The answer is off unless you choose it.
 - With the `development` profile on and no `board` block in `.local/host.yml`, one more question asks whether to turn on the [crew board](board.md). The answer is off unless you choose it.
 - They are asked once per host. When the omp session exits successfully, apply writes the marker `~/.local/share/code-factory/new-host-questions-done`; while it exists, later applies skip the questions and print one line naming it. If omp exits non-zero, apply writes no marker and prints one line saying the questions did not complete. To ask again, delete the marker and rerun `./ship.sh launch` interactively.
-- The launch needs an interactive terminal, run as `factory.user`. When stdin is not a TTY, when `CI` is set, or when another account runs apply, apply skips them without writing the marker and prints one line saying to rerun `./ship.sh launch` interactively.
+- The launch needs an interactive terminal, run as `crewship.user`. When stdin is not a TTY, when `CI` is set, or when another account runs apply, apply skips them without writing the marker and prints one line saying to rerun `./ship.sh launch` interactively.
 - They need an omp provider login. Apply checks with `omp models --json`; when it lists no models or fails, apply skips the questions without writing the marker and prints one line saying to sign in to omp with `/login` ([Sign in](omp.md#sign-in)) and rerun `./ship.sh launch` interactively. On a new host the first apply installs omp, so sign in after it and then rerun apply.
 
 The recipe refuses to overwrite a conflicting unmanaged command or an independently advanced Firstmate checkout. See [Drift and upgrades](recovery.md#drift-and-upgrades).
@@ -117,7 +127,7 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 | `agents` | on | omp, AXI tools, gh, no-mistakes, treehouse, gws (Google Workspace CLI; [sign-in](google-workspace.md) is manual), acpx; safe omp presentation and model-role settings (see [omp configuration](omp.md)); omp as the no-mistakes gate agent through the pi adapter with `acp:omp` as the fallback, or `acp:omp` alone when the adapter does not match the pins (see [no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)); first-write acpx config; the pattern-kill guard omp extension; `~/.local/bin/ponytail-review`; browser env defaults; Chrome autoprune timer. |
 | `development` | on | Rust toolchain (stable), build essentials. |
 | `firstmate` | on | Firstmate clone tracking upstream `main`, plus seeded Firstmate config: crew dispatch, crew and secondmate harness, the crew omp overlay (crew advisor, see [omp configuration](omp.md#advisor)), Herdr backend selection, startup memory budget, the spawn memory floor, presentation spaces off, and the turn-end pane-churn flag (see [Seeded Firstmate and OMP configuration](architecture.md#seeded-firstmate-and-omp-configuration)). |
-| `docker` | on | Docker engine and Compose v2, with daemon defaults `init` (reaps orphaned children) and `live-restore`. Group membership is opt-in through the Ansible variable `factory_docker_group_users`. |
+| `docker` | on | Docker engine and Compose v2, with daemon defaults `init` (reaps orphaned children) and `live-restore`. Group membership is opt-in through the Ansible variable `crewship_docker_group_users`. |
 | `fleet_guards` | off | Shared Supabase stack, Docker guard, dev-server reaper, devtools-bridge reaper, storage guard, env seeder. See [Fleet guards](fleet-guards.md). |
 | `fleet_browsers` | off | The [browser ladder](fleet-guards.md#browser-ladder): the always-on Obscura CDP tier on `127.0.0.1:9222`, the on-demand `chrome` and `vnc` tiers with the `vnc` tier's TigerVNC and noVNC packages, the cookie sync and gc timers, and the ladder environment in shell profiles and the Herdr unit. `fleet_guards` provisions the same ladder, so a `fleet_guards` host needs no change. Needs no other profile; the ladder needs `iproute2` (`ss`) from the base image, which only `desktop` installs. |
 | `chat` | on | The latest [Concord](https://github.com/chojs23/concord) (Discord) and [slk](https://github.com/gammons/slk) (Slack) terminal clients, their shared libraries, and a first-write config for each. Logins stay manual. See [Chat clients](chat.md). |

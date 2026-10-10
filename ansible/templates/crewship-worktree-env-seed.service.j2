@@ -4,10 +4,10 @@
 
 [Unit]
 Description=Fleet worktree env seed - shared-backend .env.local into every swarms-platform checkout (Crewship managed)
-ConditionPathExists={{ factory_fleet_doctor_dir }}/worktree-env-seed.sh
+ConditionPathExists={{ crewship_fleet_doctor_dir }}/worktree-env-seed.sh
 
 [Service]
 Type=oneshot
 Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart={{ factory_fleet_doctor_dir }}/worktree-env-seed.sh
+ExecStart={{ crewship_fleet_doctor_dir }}/worktree-env-seed.sh
 TimeoutStartSec=300

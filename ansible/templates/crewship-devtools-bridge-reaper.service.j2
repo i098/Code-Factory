@@ -5,11 +5,11 @@
 
 [Unit]
 Description=Fleet devtools-bridge reaper - stop idle attached chrome-devtools-axi bridges (Crewship managed)
-ConditionPathExists={{ factory_fleet_doctor_dir }}/devtools-bridge-reaper.sh
+ConditionPathExists={{ crewship_fleet_doctor_dir }}/devtools-bridge-reaper.sh
 
 [Service]
 Type=oneshot
 Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart={{ factory_fleet_doctor_dir }}/devtools-bridge-reaper.sh
+ExecStart={{ crewship_fleet_doctor_dir }}/devtools-bridge-reaper.sh
 TimeoutStartSec=300
 Nice=5

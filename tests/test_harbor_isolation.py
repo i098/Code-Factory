@@ -48,7 +48,7 @@ def test_harbor_never_reaches_an_image_or_a_host():
 
     # Hosts: the playbook copies named paths out of the checkout, never the checkout itself.
     variables = yaml.safe_load((ROOT / "ansible/group_vars/all.yml").read_text())
-    variables["code_factory_repo"] = "REPO"
+    variables["crewship_repo"] = "REPO"
 
     def expand(value):
         for _ in range(5):

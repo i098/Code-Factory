@@ -67,10 +67,10 @@ def apply(home, *flags, start_services=False):
     )
     variables = {
         "ansible_become": False,
-        "code_factory_repo": str(ROOT),
-        "factory_group": grp.getgrgid(os.getgid()).gr_name,
-        "factory_become_target": False,
-        "factory": {"user": getpass.getuser(), "home": str(home), "start_services": start_services},
+        "crewship_repo": str(ROOT),
+        "crewship_group": grp.getgrgid(os.getgid()).gr_name,
+        "crewship_become_target": False,
+        "crewship": {"user": getpass.getuser(), "home": str(home), "start_services": start_services},
     }
     result = subprocess.run(
         [Path(sys.executable).parent / "ansible-playbook", "-i", "localhost,", str(playbook),

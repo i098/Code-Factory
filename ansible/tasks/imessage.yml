@@ -1,6 +1,6 @@
 ---
 # Optional iMessage bridge to Firstmate over a Photon Spectrum line
-# (docs/imessage.md). Runs only when factory.imessage is set, which belongs in
+# (docs/imessage.md). Runs only when crewship.imessage is set, which belongs in
 # .local/host.yml only.
 #
 #   * the service runs from a copy of imessage/ under the account's home, with
@@ -15,14 +15,14 @@
     state: directory
     mode: "0755"
   loop:
-    - "{{ factory_imessage_dir }}"
-    - "{{ factory_local_bin }}"
-    - "{{ factory_user_units }}/default.target.wants"
+    - "{{ crewship_imessage_dir }}"
+    - "{{ crewship_local_bin }}"
+    - "{{ crewship_user_units }}/default.target.wants"
 
 - name: Install the iMessage bridge service
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/imessage/{{ item }}"
-    dest: "{{ factory_imessage_dir }}/{{ item }}"
+    src: "{{ crewship_repo }}/imessage/{{ item }}"
+    dest: "{{ crewship_imessage_dir }}/{{ item }}"
     mode: "0644"
     remote_src: true
   loop: [bridge.ts, desk.ts, memory.ts, outbox.ts, zoom.ts]
@@ -30,51 +30,51 @@
 
 - name: Install the iMessage commands
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/imessage/{{ item }}"
-    dest: "{{ factory_local_bin }}/{{ item }}"
+    src: "{{ crewship_repo }}/imessage/{{ item }}"
+    dest: "{{ crewship_local_bin }}/{{ item }}"
     mode: "0755"
     remote_src: true
   loop: [fm-imessage, fm-location]
 
 - name: Read the installed spectrum-ts version
   ansible.builtin.slurp:
-    src: "{{ factory_imessage_dir }}/node_modules/spectrum-ts/package.json"
-  register: factory_imessage_sdk
+    src: "{{ crewship_imessage_dir }}/node_modules/spectrum-ts/package.json"
+  register: crewship_imessage_sdk
   failed_when: false
   check_mode: false
 
 - name: Record whether spectrum-ts needs the resolved release
   ansible.builtin.set_fact:
-    factory_imessage_sdk_stale: >-
-      {{ factory_imessage_sdk.content is not defined
-         or (factory_imessage_sdk.content | b64decode | from_json).version != factory_latest['spectrum-ts'] }}
+    crewship_imessage_sdk_stale: >-
+      {{ crewship_imessage_sdk.content is not defined
+         or (crewship_imessage_sdk.content | b64decode | from_json).version != crewship_latest['spectrum-ts'] }}
 
 - name: Report the spectrum-ts install that check mode cannot perform
   ansible.builtin.debug:
-    msg: "check mode: would run `bun add` in {{ factory_imessage_dir }} for spectrum-ts {{ factory_latest['spectrum-ts'] }}."
+    msg: "check mode: would run `bun add` in {{ crewship_imessage_dir }} for spectrum-ts {{ crewship_latest['spectrum-ts'] }}."
   when:
     - ansible_check_mode
-    - factory_imessage_sdk_stale | bool
+    - crewship_imessage_sdk_stale | bool
 
 # bun checks the integrity the registry records for the resolved version.
 - name: Install the latest spectrum-ts
   ansible.builtin.command:
     argv:
-      - "{{ factory_local_bin }}/bun"
+      - "{{ crewship_local_bin }}/bun"
       - add
       - --exact
-      - "spectrum-ts@{{ factory_latest['spectrum-ts'] }}"
-    chdir: "{{ factory_imessage_dir }}"
+      - "spectrum-ts@{{ crewship_latest['spectrum-ts'] }}"
+    chdir: "{{ crewship_imessage_dir }}"
   changed_when: true
   when:
     - not ansible_check_mode
-    - factory_imessage_sdk_stale | bool
+    - crewship_imessage_sdk_stale | bool
   notify: restart fm-imessage
 
 - name: Render the iMessage bridge unit
   ansible.builtin.template:
     src: fm-imessage.service.j2
-    dest: "{{ factory_user_units }}/fm-imessage.service"
+    dest: "{{ crewship_user_units }}/fm-imessage.service"
     mode: "0600"
   notify:
     - reload user systemd
@@ -82,8 +82,8 @@
 
 - name: Statically enable the iMessage bridge
   ansible.builtin.file:
-    src: "{{ factory_user_units }}/fm-imessage.service"
-    dest: "{{ factory_user_units }}/default.target.wants/fm-imessage.service"
+    src: "{{ crewship_user_units }}/fm-imessage.service"
+    dest: "{{ crewship_user_units }}/default.target.wants/fm-imessage.service"
     state: link
     force: true
     follow: false
@@ -94,5 +94,5 @@
     name: fm-imessage.service
     enabled: true
     state: started
-  environment: "{{ factory_user_systemd_env }}"
-  when: factory_manage_services | bool
+  environment: "{{ crewship_user_systemd_env }}"
+  when: crewship_manage_services | bool

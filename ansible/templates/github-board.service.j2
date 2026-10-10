@@ -9,7 +9,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/usr/bin/python3 %h/.local/bin/github-board.py "{{ factory_firstmate_dir }}" {{ factory_cfg.github_board.repo }} {{ factory_cfg.github_board.project }}
+ExecStart=/usr/bin/python3 %h/.local/bin/github-board.py "{{ crewship_firstmate_dir }}" {{ crewship_cfg.github_board.repo }} {{ crewship_cfg.github_board.project }}
 TimeoutStartSec=10min
 Nice=10
 UMask=0077

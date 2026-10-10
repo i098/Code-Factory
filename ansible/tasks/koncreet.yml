@@ -13,9 +13,9 @@
   block:
     - name: Hash the Ubuntu 26.04 koncreet patch
       ansible.builtin.stat:
-        path: "{{ factory_koncreet_patch }}"
+        path: "{{ crewship_koncreet_patch }}"
         checksum_algorithm: sha256
-      register: factory_koncreet_patch_stat
+      register: crewship_koncreet_patch_stat
       check_mode: false
 
     # A new release or a changed patch lands in its own directory, so an unchanged
@@ -23,25 +23,25 @@
     # complete. patch-outcome is written last and marks the tree complete.
     - name: Name the koncreet release directory
       ansible.builtin.set_fact:
-        factory_koncreet_dir: >-
-          {{ factory_koncreet_prefix }}/{{ factory_latest.koncreet.version
-          }}-{{ factory_koncreet_patch_stat.stat.checksum[:12] }}
+        crewship_koncreet_dir: >-
+          {{ crewship_koncreet_prefix }}/{{ crewship_latest.koncreet.version
+          }}-{{ crewship_koncreet_patch_stat.stat.checksum[:12] }}
 
     - name: Stat the installed koncreet release
       ansible.builtin.stat:
-        path: "{{ factory_koncreet_dir }}/patch-outcome"
-      register: factory_koncreet_stat
+        path: "{{ crewship_koncreet_dir }}/patch-outcome"
+      register: crewship_koncreet_stat
       check_mode: false
 
     - name: Install the latest koncreet release with the Ubuntu 26.04 patch
       when:
-        - not factory_koncreet_stat.stat.exists
+        - not crewship_koncreet_stat.stat.exists
         - not ansible_check_mode
       become: true
       block:
         - name: Create the koncreet release directory
           ansible.builtin.file:
-            path: "{{ factory_koncreet_dir }}"
+            path: "{{ crewship_koncreet_dir }}"
             state: directory
             owner: root
             group: root
@@ -49,22 +49,22 @@
 
         - name: Fetch the koncreet tarball
           ansible.builtin.get_url:
-            url: "{{ factory_koncreet.url }}"
-            dest: "{{ factory_koncreet_dir }}.tar.gz"
-            checksum: "sha256:{{ factory_koncreet.sha256 }}"
+            url: "{{ crewship_koncreet.url }}"
+            dest: "{{ crewship_koncreet_dir }}.tar.gz"
+            checksum: "sha256:{{ crewship_koncreet.sha256 }}"
             mode: "0600"
 
         - name: Extract koncreet
           ansible.builtin.unarchive:
-            src: "{{ factory_koncreet_dir }}.tar.gz"
-            dest: "{{ factory_koncreet_dir }}"
+            src: "{{ crewship_koncreet_dir }}.tar.gz"
+            dest: "{{ crewship_koncreet_dir }}"
             remote_src: true
             owner: root
             group: root
 
         - name: Remove the koncreet tarball
           ansible.builtin.file:
-            path: "{{ factory_koncreet_dir }}.tar.gz"
+            path: "{{ crewship_koncreet_dir }}.tar.gz"
             state: absent
 
         # The patch never fails the apply: when upstream already supports 26.04 or
@@ -75,26 +75,26 @@
             cd koncreet || exit 1
             if grep -q '26\.04' lib/os.sh; then
               echo "patch skipped: this release already supports Ubuntu 26.04"
-            elif git apply {{ factory_koncreet_patch | quote }} 2>/dev/null; then
+            elif git apply {{ crewship_koncreet_patch | quote }} 2>/dev/null; then
               echo "patch applied: Ubuntu 26.04 support layered on this release"
             else
               echo "patch skipped: it no longer applies, installed as released"
             fi | tee ../patch-outcome.new && mv ../patch-outcome.new ../patch-outcome
           args:
-            chdir: "{{ factory_koncreet_dir }}"
+            chdir: "{{ crewship_koncreet_dir }}"
           environment:
             # Outside any repository, so git apply patches files like patch(1).
-            GIT_CEILING_DIRECTORIES: "{{ factory_koncreet_dir }}"
-          register: factory_koncreet_outcome
+            GIT_CEILING_DIRECTORIES: "{{ crewship_koncreet_dir }}"
+          register: crewship_koncreet_outcome
           changed_when: true
 
         - name: Report the koncreet release and patch outcome
           ansible.builtin.debug:
-            msg: "koncreet {{ factory_latest.koncreet.version }}: {{ factory_koncreet_outcome.stdout }}"
+            msg: "koncreet {{ crewship_latest.koncreet.version }}: {{ crewship_koncreet_outcome.stdout }}"
 
     - name: Link koncreet into /usr/local/bin
       ansible.builtin.file:
-        src: "{{ factory_koncreet_dir }}/koncreet/koncreet"
+        src: "{{ crewship_koncreet_dir }}/koncreet/koncreet"
         dest: /usr/local/bin/koncreet
         state: link
       become: true
@@ -103,7 +103,7 @@
     - name: Render the fleet koncreet configuration once
       ansible.builtin.template:
         src: koncreet.conf.j2
-        dest: "{{ factory_koncreet_config }}"
+        dest: "{{ crewship_koncreet_config }}"
         owner: root
         group: root
         mode: "0644"

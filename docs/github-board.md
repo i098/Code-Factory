@@ -22,7 +22,7 @@ Work item notes and status lines can contain private text. Use a private reposit
 4. Add the block to `.local/host.yml`. It needs the `firstmate` profile:
 
    ```yaml
-   factory:
+   crewship:
      github_board:
        repo: owner/board   # the board repository
        project: 3          # the Project number, owned by the same owner

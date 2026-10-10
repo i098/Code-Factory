@@ -39,7 +39,7 @@ docker compose --profile worker --profile data up -d     # + example Postgres an
 
 ## Seeded Firstmate and OMP configuration
 
-The `firstmate` profile copies each name in `factory_firstmate_config_names` (`ansible/group_vars/all.yml`) from this repository's `config/` into the Firstmate checkout's `config/`, which Firstmate gitignores. Preflight requires every source and verify requires every destination. The seeded files:
+The `firstmate` profile copies each name in `crewship_firstmate_config_names` (`ansible/group_vars/all.yml`) from this repository's `config/` into the Firstmate checkout's `config/`, which Firstmate gitignores. Preflight requires every source and verify requires every destination. The seeded files:
 
 | File | Value |
 | --- | --- |

@@ -1,5 +1,5 @@
 schema_version: 1
-factory:
+crewship:
   user: coder
   home: /home/coder
   workspace: /home/coder/Dev

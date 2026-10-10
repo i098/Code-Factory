@@ -12,7 +12,7 @@ The board daemon writes nothing in the Firstmate checkout.
 2. Add the block to `.local/host.yml`, or create the file with `./ship.sh dock --board`. All fields are optional:
 
    ```yaml
-   factory:
+   crewship:
      board:
        history: 256     # messages kept per topic (the default)
        cap_mb: 64       # memory for all messages; the unit's MemoryMax is this plus 64M

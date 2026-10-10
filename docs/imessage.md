@@ -71,7 +71,7 @@ The unit reads `~/super.env` with `EnvironmentFile=` when it starts. The credent
 Add this block to `.local/host.yml`, then run `./ship.sh launch`. The `firstmate` profile must be on.
 
 ```yaml
-factory:
+crewship:
   imessage:
     owner: "+<country code><number>"  # the owner's phone number, E.164 form
     owner_name: the owner           # optional; this is the default; how the desk prompt names him

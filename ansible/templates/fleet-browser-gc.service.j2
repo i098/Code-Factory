@@ -3,10 +3,10 @@
 
 [Unit]
 Description=Fleet browser gc - stop fallback tiers idle >= 30 min (Crewship managed)
-ConditionPathExists={{ factory_fleet_browsers_dir }}/fleet-browser
+ConditionPathExists={{ crewship_fleet_browsers_dir }}/fleet-browser
 
 [Service]
 Type=oneshot
 Environment=PATH=%h/.local/bin:%h/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart={{ factory_fleet_browsers_dir }}/fleet-browser gc
+ExecStart={{ crewship_fleet_browsers_dir }}/fleet-browser gc
 TimeoutStartSec=120

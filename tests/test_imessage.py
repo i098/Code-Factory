@@ -490,9 +490,9 @@ def load_ship():
 )
 def test_config_rejects_a_bridge_it_cannot_run(change, error):
     document = yaml.safe_load((ROOT / "config/default.yml").read_text())
-    document["factory"]["imessage"] = {"owner": "+10000000000"}
+    document["crewship"]["imessage"] = {"owner": "+10000000000"}
     load_ship().validate_config(document)
-    change(document["factory"])
+    change(document["crewship"])
     with pytest.raises(ValueError, match=error):
         load_ship().validate_config(document)
 

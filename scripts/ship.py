@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Crewship configuration, provisioning, and non-mutating readiness checks."""
+"""Crewship configuration, provisioning, and readiness checks."""
 
 import argparse
 import json
@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import jsonschema
@@ -17,6 +18,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 STALE_FIRSTMATE_URL = "https://github.com/i098/firstmate.git"
 LEGACY_BROWSER_KEYS = ("obscura_version", "obscura_sha256")
+CONFIG_KEY_RENAMES = {"factory": "crewship"}
 
 
 def validate_document(document, schema_name):
@@ -31,7 +33,7 @@ def validate_document(document, schema_name):
 
 def validate_config(document):
     validate_document(document, "crewship.schema.json")
-    config = document["factory"]
+    config = document["crewship"]
     home, workspace = Path(config["home"]), Path(config["workspace"])
     if (
         ".." in home.parts
@@ -86,15 +88,54 @@ def validate_config(document):
     return document
 
 
+def migrate_config(path, document):
+    """Rewrite known old config keys; preserve all other keys and values."""
+    if not isinstance(document, dict):
+        return document
+    renamed = {old: new for old, new in CONFIG_KEY_RENAMES.items() if old in document}
+    if not renamed:
+        return document
+    if any(new in document for new in renamed.values()):
+        raise ValueError("host config contains both old and new keys; resolve them before rewriting")
+    document = {renamed.get(key, key): value for key, value in document.items()}
+    backup = path.with_name(path.name + ".bak")
+    # Exclusive creation keeps the first backup and refuses an ambiguous retry.
+    try:
+        descriptor = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise ValueError(
+            f"Backup already exists: {backup}; keep it and move it aside before retrying {path}"
+        ) from None
+    with os.fdopen(descriptor, "wb") as stream:
+        stream.write(path.read_bytes())
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", dir=path.parent, prefix=f".{path.name}.", delete=False
+        ) as stream:
+            temporary = Path(stream.name)
+            yaml.safe_dump(document, stream, sort_keys=False)
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    print(
+        f"Rewrote {path} to Crewship config keys; original comments remain only in backup: {backup}",
+        file=sys.stderr,
+    )
+    return document
+
+
 def load_config(path):
     try:
         document = yaml.safe_load(path.read_text())
     except yaml.YAMLError:
         raise ValueError("malformed host YAML; configuration contents omitted") from None
+    document = migrate_config(path, document)
     validate_config(document)
-    if any(key in document["factory"].get("browsers", {}) for key in LEGACY_BROWSER_KEYS):
+    if any(key in document["crewship"].get("browsers", {}) for key in LEGACY_BROWSER_KEYS):
         print(
-            "WARNING: factory.browsers.obscura_version and factory.browsers.obscura_sha256 "
+            "WARNING: crewship.browsers.obscura_version and crewship.browsers.obscura_sha256 "
             "are no longer used and are ignored; Obscura always resolves to its latest release. "
             f"Remove them from {path} when convenient.",
             file=sys.stderr,
@@ -109,14 +150,14 @@ def initialize(args):
     home = args.home or (
         current.pw_dir if user == current.pw_name and current.pw_uid != 0 else f"/home/{user}"
     )
-    config["factory"].update(user=user, home=home, workspace=str(Path(home) / "Dev"))
+    config["crewship"].update(user=user, home=home, workspace=str(Path(home) / "Dev"))
     if args.container:
-        config["factory"].update(start_services=False, enable_linger=False)
+        config["crewship"].update(start_services=False, enable_linger=False)
         for profile in ("docker", "tailscale", "desktop", "firstmate", "chat"):
-            config["factory"]["profiles"][profile] = False
-        config["factory"]["browser_prune"]["enabled"] = False
+            config["crewship"]["profiles"][profile] = False
+        config["crewship"]["browser_prune"]["enabled"] = False
     if args.board:
-        config["factory"]["board"] = {}
+        config["crewship"]["board"] = {}
     destination = ROOT / ".local/host.yml"
     destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     # Validate before writing; a bad argument must not strand an unusable config.
@@ -154,7 +195,7 @@ def provision(document, check):
 
 
 def doctor(document):
-    config = document["factory"]
+    config = document["crewship"]
     home = Path(config["home"])
     environment = {
         **os.environ,
@@ -235,7 +276,7 @@ def doctor(document):
 
 def questions(document):
     """Open Firstmate on omp to ask the operator the new-host move questions."""
-    config = document["factory"]
+    config = document["crewship"]
     home = Path(config["home"])
     environment = {**os.environ, "PATH": f"{home / '.local/bin'}:{os.environ.get('PATH', '')}"}
     marker = home / ".local/share/code-factory/new-host-questions-done"
@@ -339,9 +380,9 @@ def main():
     dock.add_argument("--board", action="store_true", help="turn on the crew board (docs/board.md)")
     for name, text in (
         ("inspect", "check the host config against the schema and rules"),
-        ("chart", "preview what launch would change; changes nothing"),
+        ("chart", "preview provisioning changes; old config keys are rewritten once"),
         ("launch", "provision this host from the host config"),
-        ("survey", "check that each expected tool runs; changes nothing"),
+        ("survey", "check expected tools; old config keys are rewritten once"),
     ):
         command = commands.add_parser(name, help=text)
         command.add_argument("--config", type=Path, default=None)
@@ -365,7 +406,7 @@ def main():
             "run ./ship.sh dock and review .local/host.yml before launching, or pass an explicit --config"
         )
     result = provision(document, args.command == "chart")
-    config = document["factory"]
+    config = document["crewship"]
     if args.command == "launch" and config["profiles"]["firstmate"]:
         if config["firstmate"]["url"] == STALE_FIRSTMATE_URL:
             print(

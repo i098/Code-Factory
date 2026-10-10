@@ -32,42 +32,42 @@ DISABLED_FLAGS = ("start_services", "enable_linger")
 
 
 def check(path: Path) -> list[str]:
-    config = yaml.safe_load(path.read_text())["factory"]
+    config = yaml.safe_load(path.read_text())["crewship"]
     account = pwd.getpwuid(os.getuid())
     problems: list[str] = []
 
     if config["user"] != account.pw_name:
         problems.append(
-            f"factory.user={config['user']!r} but the build runs as {account.pw_name!r}"
+            f"crewship.user={config['user']!r} but the build runs as {account.pw_name!r}"
         )
     if config["home"] != account.pw_dir:
         problems.append(
-            f"factory.home={config['home']!r} but {account.pw_name!r} has home {account.pw_dir!r}"
+            f"crewship.home={config['home']!r} but {account.pw_name!r} has home {account.pw_dir!r}"
         )
 
     workspace = Path(config["workspace"])
     if not workspace.is_relative_to(Path(config["home"])):
-        problems.append(f"factory.workspace={workspace} is outside factory.home")
+        problems.append(f"crewship.workspace={workspace} is outside crewship.home")
     if not os.access(workspace, os.W_OK):
         problems.append(f"{workspace} is missing or not writable by {account.pw_name}")
 
     for flag in DISABLED_FLAGS:
         if config[flag] is not False:
-            problems.append(f"factory.{flag} must be false in an image: there is no systemd here")
+            problems.append(f"crewship.{flag} must be false in an image: there is no systemd here")
     for profile in HOST_ONLY_PROFILES:
         if config["profiles"][profile] is not False:
             problems.append(
-                f"factory.profiles.{profile} must be false: it needs host capabilities the worker denies"
+                f"crewship.profiles.{profile} must be false: it needs host capabilities the worker denies"
             )
     for profile in VOLUME_SHADOWED_PROFILES:
         if config["profiles"][profile] is not False:
             problems.append(
-                f"factory.profiles.{profile} must be false: the workspace is a volume, so a baked checkout is shadowed"
+                f"crewship.profiles.{profile} must be false: the workspace is a volume, so a baked checkout is shadowed"
             )
 
     if config["browser_prune"]["enabled"] is not False:
         problems.append(
-            "factory.browser_prune.enabled must be false: the pruner needs host browser process groups"
+            "crewship.browser_prune.enabled must be false: the pruner needs host browser process groups"
         )
 
     return problems

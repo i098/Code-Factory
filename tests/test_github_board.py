@@ -26,7 +26,7 @@ BOARD = {"repo": "owner/board", "project": 3}
 @pytest.fixture
 def configuration():
     document = yaml.safe_load((ROOT / "config/default.yml").read_text())
-    document["factory"]["github_board"] = dict(BOARD)
+    document["crewship"]["github_board"] = dict(BOARD)
     return document
 
 
@@ -45,13 +45,13 @@ def test_the_board_block_is_accepted(configuration):
     ],
 )
 def test_a_bad_board_block_is_rejected(configuration, change):
-    configuration["factory"]["github_board"].update(change)
+    configuration["crewship"]["github_board"].update(change)
     with pytest.raises(ValueError, match="github_board"):
         ship.validate_config(configuration)
 
 
 def test_the_board_needs_the_firstmate_profile(configuration):
-    configuration["factory"]["profiles"]["firstmate"] = False
+    configuration["crewship"]["profiles"]["firstmate"] = False
     with pytest.raises(ValueError, match="github_board requires the firstmate profile"):
         ship.validate_config(configuration)
 
@@ -204,17 +204,17 @@ def _apply(tmp_path, home, github_board):
             "handlers": [{"name": "Reload", "ansible.builtin.debug": {"msg": "reload"},
                           "listen": "reload user systemd"}],
         }]))
-    factory_cfg = {"user": "coder", "home": str(home)}
+    crewship_cfg = {"user": "coder", "home": str(home)}
     if github_board:
-        factory_cfg["github_board"] = github_board
+        crewship_cfg["github_board"] = github_board
     variables = {
-        "factory_cfg": factory_cfg,
-        "factory_local_bin": str(home / ".local/bin"),
-        "factory_user_units": str(home / ".config/systemd/user"),
-        "factory_firstmate_dir": str(home / "Dev/firstmate"),
-        "code_factory_repo": str(ROOT),
-        "factory_manage_services": False,
-        "factory_user_systemd_env": {},
+        "crewship_cfg": crewship_cfg,
+        "crewship_local_bin": str(home / ".local/bin"),
+        "crewship_user_units": str(home / ".config/systemd/user"),
+        "crewship_firstmate_dir": str(home / "Dev/firstmate"),
+        "crewship_repo": str(ROOT),
+        "crewship_manage_services": False,
+        "crewship_user_systemd_env": {},
     }
     result = subprocess.run(
         [Path(sys.executable).parent / "ansible-playbook", "-i", "localhost,", str(playbook),
