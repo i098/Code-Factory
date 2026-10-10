@@ -18,7 +18,7 @@ defaults:
 jobs:
   config-and-python:
     name: configuration and python checks (CI pool)
-    runs-on: [self-hosted, code-factory]
+    runs-on: [self-hosted, crewship]
     timeout-minutes: 20
     permissions:
       contents: read
