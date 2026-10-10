@@ -68,11 +68,17 @@
   become: true
 
 # skills/public and skills/private for omp and Claude Code (docs/omp.md#skills).
-# The installer replaces or removes only the skills its manifest records, and
-# prints one JSON object whose `changed` is the only changed signal.
+# With skills.private_source set, the installer first fills skills/private from
+# it, signed in as the account's own git and GitHub login. It replaces or
+# removes only the skills its manifest records, and prints one JSON object
+# whose `changed` is the only changed signal.
 - name: Install the Crewship skills for omp and Claude Code
   ansible.builtin.command:
-    argv: [python3, "{{ code_factory_repo }}/scripts/skills.py", --home, "{{ factory_cfg.home }}"]
+    argv: >-
+      {{ ['python3', code_factory_repo ~ '/scripts/skills.py', '--home', factory_cfg.home]
+         + (['--private-source', factory_cfg.skills.private_source,
+             '--private-ref', factory_cfg.skills.private_ref | default('HEAD')]
+            if factory_cfg.skills is defined else []) }}
   become: "{{ factory_become_target | bool }}"
   become_user: "{{ factory_cfg.user }}"
   register: factory_skills_run
