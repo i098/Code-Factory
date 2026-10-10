@@ -1,8 +1,8 @@
 #!/bin/bash
 # Send iMessage to the owner from the Firstmate line (docs/imessage.md).
 # Usage: fm-imessage [--reply N] [--no-thread] [--] 'text' | fm-imessage --typing | fm-imessage --react '👍'
-# Blank-line-separated paragraphs become separate bubbles; a list stays one bubble. The first bubble automatically
-# threads under his latest text if it is a thread reply; --no-thread opts out, but --reply N overrides both.
+# Blank-line-separated paragraphs become separate bubbles; a list stays one bubble. Sends are plain by default.
+# --reply N threads the first bubble only across later bubbles; --no-thread forces plain even with --reply N.
 # --typing shows the typing bubble while you compose (best effort); --react puts a tapback on his latest text.
 # Exit 0 = queued: the bridge sends in order and retries while the upstream is down. Exit non-zero = nothing queued.
 url=http://127.0.0.1:${FM_IMESSAGE_PORT:-8765}

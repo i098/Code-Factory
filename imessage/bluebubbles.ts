@@ -117,6 +117,19 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
     if (!built) throw Object.assign(new Error(`message ${guid} has nothing to show`), { permanent: true });
     return built;
   }
+  // The latest bubble in this chat from either side, not only messages the bridge received.
+  async last(chat: string): Promise<string | undefined> {
+    const found = await this.first((r) => this.call(r, "GET", `chat/${encodeURIComponent(chat)}/message`,
+      { sort: "DESC", limit: "1" }));
+    if (!Array.isArray(found)) throw new RelayError("could not read the latest chat message", false, 503);
+    const message: unknown = found[0];
+    if (message === undefined) return undefined;
+    if (!message || typeof message !== "object" || !("guid" in message) || typeof message.guid !== "string") {
+      throw new RelayError("the latest chat message has no GUID", false, 503);
+    }
+    return message.guid;
+  }
+
 
   // Queue one message by GUID, once. `data` is the message when a query already read it. The GUID is only pending here:
   // it is kept on disk by markSeen, once the bridge has handled the message, so a crash before that lets the catch-up

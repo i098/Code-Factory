@@ -9,7 +9,7 @@
 //   (memory.ts), which logs every text both ways.
 // Outbound: POST text to http://127.0.0.1:$FM_IMESSAGE_PORT/send (the fm-imessage command does this).
 //   The text goes to a durable outbox (outbox.ts) and the answer comes once it is on disk; one loop sends the outbox
-//   in order, threading the first bubble when his latest text is a thread reply, and tries again with backoff while the upstream
+//   in order, as plain messages by default, and tries again with backoff while the upstream
 //   fails. Measured on the free shared line: plain sends into the owner's own conversation work, while a
 //   conversation the service opened itself was refused. That text's conversation and message ids are kept in the
 //   state directory, so a restart can still reach him.
@@ -64,7 +64,7 @@ let deskRun: Bun.Subprocess | undefined;
 
 // A message by its transport, conversation and message ids, which outlive a restart. An item queued before there
 // were transports has no `line` and is Photon's.
-type Ref = { line?: string; space: string; id: string; threaded?: boolean };
+type Ref = { line?: string; space: string; id: string };
 // One outbox item for his text `id`: a tapback, or bubbles (`done` of them sent so far), the first one threaded to
 // his text `reply` when set. `kind` is whose memory line it makes (Firstmate's unless "desk"); `silent` makes none.
 // `guid` is the client GUID of its sends (BlueBubbles tempGuid). `at` is when it was queued. `maybe` maps each transport
@@ -77,6 +77,7 @@ type Line = {
   name: string;
   messages: AsyncIterable<LineMessage>;
   find(ref: Ref): Promise<LineMessage>;
+  last(space: string): Promise<string | undefined>; // latest bubble from either side, checked at delivery
   send(space: string, text: string, reply?: string, guid?: string): Promise<unknown>;
   sent?(space: string, text: string, since: number): Promise<boolean>; // whether a text went out since; throws when unknown
   react(ref: Ref, emoji: string): Promise<unknown>;
@@ -104,6 +105,7 @@ for (const name of TRANSPORTS) {
       name,
       messages: bb,
       find: (ref) => bb.message(ref.id),
+      last: (space) => bb.last(space),
       send: (space, text, reply, guid) => bb.send(space, text, reply, guid),
       sent: (space, text, since) => bb.sent(space, text, since),
       markSeen: (id) => bb.markSeen(id),
@@ -135,12 +137,17 @@ for (const name of TRANSPORTS) {
     if (!message) throw new Error(`message ${ref.id} not found`);
     return message;
   };
+  const photon = raw;
   lines.push({
     name,
     messages: (async function* () {
       for await (const [, message] of app.messages) yield message;
     })(),
     find,
+    async last(space) {
+      if (!photon) throw new Error("cannot check reply separation: Photon chat client is unavailable");
+      return (await photon.chats.get(space)).lastMessage?.guid;
+    },
     async send(space, text, reply) {
       // A reply target that is gone sends the bubble unthreaded.
       const thread = reply ? await find({ space, id: reply }).catch((e) => {
@@ -156,7 +163,7 @@ for (const name of TRANSPORTS) {
 const lineOf = (ref: Ref) => lines.find((line) => line.name === (ref.line ?? "photon"));
 // A Ref on a transport; a Photon one has no `line`, the same as the items queued before there were transports.
 const refOn = (name: string, space: string, id: string): Ref => (name === "photon" ? { space, id } : { line: name, space, id });
-// Each transport's latest text, kept so a restart can still reach him: space, id, time and reply status, one per line.
+// Each transport's latest text, kept so a restart can still reach him: space, id and time, one per line.
 // Photon keeps the file name it always had. A file without the time (the older format) counts as the oldest.
 const latestFile = (name: string) => (name === "photon" ? LATEST_FILE : `${LATEST_FILE}-${name}`);
 let latest: LineMessage | undefined; // his latest text on any transport: typing, tapbacks and the desk go there
@@ -165,12 +172,11 @@ let latestAt = -1;
 for (const line of lines) {
   const saved = Bun.file(latestFile(line.name));
   if (!(await saved.exists())) continue;
-  const [space = "", id = "", time = "", thread = ""] = (await saved.text()).trim().split("\n");
-  line.latest = { ...refOn(line.name, space, id), threaded: thread === "reply" };
+  const [space = "", id = "", time = ""] = (await saved.text()).trim().split("\n");
+  line.latest = refOn(line.name, space, id);
   if ((Number(time) || 0) > latestAt) [latestRef, latestAt] = [line.latest, Number(time) || 0];
 }
 if (latestRef) latest = await lineOf(latestRef)?.find(latestRef).catch((e) => void log("could not restore the latest text; sends still go to it")(e));
-if (latest && latestRef) latestRef.threaded = latest.content.type === "reply";
 const outbox = new Queue<Out>(OUTBOX_DIR, "outbox item", deliver, RETRY_MS);
 const downloads = new Queue<Ref>(DOWNLOADS_DIR, "attachment download", fetchAgain, RETRY_MS, (ref) => {
   if (!fileNote(`${ref.line ?? "photon"}-${ref.id}-lost`, `(an earlier attachment of message ${ref.id} could not be saved; the bridge gave up, so no path will follow)`)) {
@@ -219,13 +225,12 @@ Bun.serve({
     }
     const parts = bubbles(await req.text());
     if (!parts.length) return new Response("empty message", { status: 400 });
-    // ?reply=N overrides automatic threading; ?no-thread opts out of automatic threading only.
+    // ?reply=N targets his Nth latest text. ?no-thread forces plain, even with an explicit target.
     const replyTo = Number(url.searchParams.get("reply") ?? 0);
-    const target = replyTo > 0 ? recent[recent.length - replyTo]
-      : ref.threaded && !url.searchParams.has("no-thread") ? ref : undefined;
+    const target = replyTo > 0 ? recent[recent.length - replyTo] : undefined;
     if (replyTo > 0 && !target) return new Response(`nothing queued: only ${recent.length} text(s) kept since the service started\n`, { status: 400 });
     // A threaded reply goes out on the transport and in the conversation of the text it replies to.
-    return queue({ ...(target ?? ref), bubbles: parts, reply: target?.id }, `${parts.length} bubble(s)`);
+    return queue({ ...(target ?? ref), bubbles: parts, reply: url.searchParams.has("no-thread") ? undefined : target?.id }, `${parts.length} bubble(s)`);
   },
 });
 console.log(`fm-imessage: listening on 127.0.0.1:${PORT}, latest text ${latest ? "restored" : latestRef ? "known by id" : "unknown"}`);
@@ -308,7 +313,11 @@ function routes(o: Out, i: number, maybe: Record<string, string>): Route[] {
     const space = own ? o.space : line.latest?.space ?? line.home;
     if (!space || (only.length && !only.includes(line.name))) return [];
     const reply = own && i === 0 ? o.reply : undefined;
-    return [{ name: line.name, send: (text: string) => line.send(space, text, reply, guid).catch((e) => { if (!notSent(e)) maybe[line.name] = space; throw e; }) }];
+    return [{ name: line.name, send: async (text: string) => {
+      const last = reply ? await line.last(space) : undefined;
+      const thread = reply && last && last !== reply ? reply : undefined;
+      return line.send(space, text, thread, guid).catch((e) => { if (!notSent(e)) maybe[line.name] = space; throw e; });
+    } }];
   });
 }
 
@@ -413,7 +422,7 @@ async function handle(line: Line, message: LineMessage) {
   const { text, failed } = await noteText(message);
   console.log(`fm-imessage: inbound ${line.name} ${message.content.type} -> ${text === undefined ? "ignored" : "note"}`);
   if (text === undefined) return;
-  const ref = { ...refOn(line.name, message.space.id, message.id), threaded: message.content.type === "reply" };
+  const ref = refOn(line.name, message.space.id, message.id);
   if (!wake(`${line.name}-${message.id}`, text, ref)) return;
   heard(message.id, text);
   if (failed !== undefined) {
@@ -427,7 +436,7 @@ async function handle(line: Line, message: LineMessage) {
     latestAt = at;
     recent.push(ref);
     recent.splice(0, Math.max(0, recent.length - 10));
-    await Bun.write(latestFile(line.name), `${message.space.id}\n${message.id}\n${at}\n${ref.threaded ? "reply" : "plain"}\n`).catch(log("persist the latest text"));
+    await Bun.write(latestFile(line.name), `${message.space.id}\n${message.id}\n${at}\n`).catch(log("persist the latest text"));
   }
   await message.read().catch(log("mark read"));
 }
