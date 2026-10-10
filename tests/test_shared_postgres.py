@@ -33,6 +33,18 @@ def cli(home, *args, check=True):
     )
 
 
+def connection_url(home, project):
+    result = cli(home, project)
+    path = home / ".local/state/code-factory/secrets/shared-postgres" / (project + ".env")
+    assert result.stdout == str(path) + "\n"
+    assert result.stderr == ""
+    assert path.stat().st_mode & 0o777 == 0o600
+    key, url = path.read_text().strip().split("=", 1)
+    assert key == "DATABASE_URL"
+    assert urlsplit(url).password not in result.stdout + result.stderr
+    return url
+
+
 @pytest.mark.parametrize("enabled", [True, False, None])
 def test_schema_and_legacy_profile(enabled):
     config = yaml.safe_load((ROOT / "config/default.yml").read_text())
@@ -126,12 +138,15 @@ def query(url, sql):
 @lab
 def test_helper_is_concurrent_idempotent_and_isolates_projects(service):
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-        urls = list(pool.map(lambda _: cli(service, "example-app").stdout.strip(), range(4)))
+        urls = list(pool.map(lambda _: connection_url(service, "example-app"), range(4)))
     assert len(set(urls)) == 1
     first = urls[0]
-    second = cli(service, "another-app").stdout.strip()
+    second = connection_url(service, "another-app")
     assert query(first, "CREATE TABLE proof (n integer); INSERT INTO proof VALUES (42)").returncode == 0
-    assert cli(service, "example-app").stdout.strip() == first
+    path = service / ".local/state/code-factory/secrets/shared-postgres/example-app.env"
+    before = path.stat().st_mtime_ns
+    assert connection_url(service, "example-app") == first
+    assert path.stat().st_mtime_ns == before
     assert query(first, "SELECT n FROM proof").stdout.strip() == "42"
     assert query(second, "SELECT current_user").stdout.strip() == "crewship_another-app"
     assert query(second.rsplit("/", 1)[0] + "/crewship_example-app", "SELECT 1").returncode != 0
@@ -224,7 +239,7 @@ def test_ansible_on_off_and_idempotence(service, tmp_path):
     assert before == {str(p.relative_to(home)): (p.read_bytes(), p.stat().st_mtime_ns) for p in home.rglob("*") if p.is_file()}
     volume = subprocess.run(["docker", "volume", "inspect", "crewship-shared-postgres-data"], capture_output=True, text=True, check=True)
     assert json.loads(volume.stdout)[0]["Name"] == "crewship-shared-postgres-data"
-    assert query(cli(home, "example-app").stdout.strip(), "SELECT 1").stdout.strip() == "1"
+    assert query(connection_url(home, "example-app"), "SELECT 1").stdout.strip() == "1"
 
 
 @lab
