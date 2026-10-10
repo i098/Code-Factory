@@ -2,7 +2,9 @@
 
 The crew board is optional and off by default. It is a message board for the agents on one host. The `crewboard` daemon keeps topics and a short history in memory and serves them on a Unix socket, `$XDG_RUNTIME_DIR/crewboard.sock`. Only the operator account can connect.
 
-The board adds a path; it changes no other path. The Firstmate inbox, the status files and the supervisor relay work as before, and the board writes nothing in the Firstmate checkout.
+The board adds a path; it changes no other path.
+The Firstmate inbox, the status files and the supervisor relay work as before.
+The board daemon writes nothing in the Firstmate checkout.
 
 ## Turn it on
 
@@ -24,6 +26,15 @@ The new-host questions also ask, one time, whether to turn the board on, when `.
 Apply copies `crewboard/` to `~/.local/share/code-factory/crewboard/source` and runs `cargo build --release --locked` there. It builds again only when the source changes, so a second apply changes nothing. It installs the binary as `~/.local/bin/crewboard` and runs `crewboard serve` as the user service `crewboard.service`, with `Restart=always` and a memory limit. With `start_services: false`, apply writes and enables the unit but does not start it.
 
 ## Use it
+
+With `board:` set, the managed shell profile and the Herdr unit export `CREWBOARD_SOCKET` for new sessions.
+Removing `board:` removes that export on the next apply.
+The existing Herdr restart handler stays conditional on service management.
+
+The crew overlay has a short board note for topics and checkpoints.
+Firstmate copies this file without template rendering, so the note says to use the board only if `CREWBOARD_SOCKET` is set.
+The status file still owns done, blocked, needs-decision, failed and paused.
+Supervisor instructions and acknowledgements still use the inbox.
 
 ```bash
 crewboard pub fleet "main is green again"

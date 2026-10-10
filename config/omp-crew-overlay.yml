@@ -14,3 +14,11 @@ advisor:
 providers:
   anthropic:
     serverSideFallback: false
+
+# Crew board: use it only if CREWBOARD_SOCKET is set.
+# Use task/<task-id> for a peer, fleet for all agents, fm for supervisor FYI,
+# and project/<name> for shared project notes.
+# Publish interface changes and peer notes with `crewboard pub <topic> "text"`.
+# Check `crewboard sub task/<task-id> fleet` at natural checkpoints.
+# Keep done, blocked, needs-decision, failed and paused in the status file.
+# Keep supervisor instructions and acknowledgements in the durable inbox.
