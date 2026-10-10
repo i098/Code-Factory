@@ -19,6 +19,8 @@ The pirate ship has a 28 m tapered hull, a raised stern castle, and two square-r
 Its gun ports, railings, figurehead, and warm lanterns follow the hull and deck.
 Walking bounds and the map use the hull's tapered stations; the gangway joins the deck to the dock.
 Steps connect the main deck to the stern castle's roof.
+Map walks connect the dock through the gangway and reach the stern roof through the supported stairs.
+Ship approaches avoid deck obstacles and reject unsupported floors or height changes larger than the manual walking limit.
 The sails keep a pale canvas tone at night.
 Outboard lanterns make the gun ports visible.
 

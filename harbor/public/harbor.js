@@ -1229,7 +1229,13 @@ function face(id) {
   me.pitch = Math.max(-1.1, Math.min(1.1, Math.atan2(a.y + (a.ship ? bob : 0) - me.eye, Math.hypot(a.x - me.x, a.z - me.z))));
   jumped = id;
 }
-const nearestNode = (x, z) => NODES.reduce((b, n, i) => (Math.hypot(n[0] - x, n[1] - z) < Math.hypot(NODES[b][0] - x, NODES[b][1] - z) ? i : b), 0);
+function shipDockPoint([x, z]) {
+  return x >= SX - 3.1 && x <= 7 && z >= -16 && z < 14;
+}
+function nearestNode(x, z) {
+  if (shipDockPoint([x, z])) return x >= 3 ? 4 : 1;
+  return NODES.reduce((b, n, i) => (Math.hypot(n[0] - x, n[1] - z) < Math.hypot(NODES[b][0] - x, NODES[b][1] - z) ? i : b), 0);
+}
 // Exact slab test against the same open walking bounds used by blocked().
 function segmentBlocked(a, c, b) {
   let enter = 0, exit = 1;
@@ -1246,14 +1252,35 @@ function segmentBlocked(a, c, b) {
   }
   return enter < exit;
 }
+function shipSegmentClear(a, b) {
+  const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.05));
+  const obstacles = [];
+  for (const [list, lift] of [[world, 0], [ship, bob]]) {
+    for (const s of list) if (s.solid && segmentBlocked(a, b, s.bb)) obstacles.push([s, lift]);
+  }
+  let height = floorAt(...a), previous = a;
+  for (let i = 0; i <= steps; i++) {
+    const x = a[0] + (b[0] - a[0]) * i / steps, z = a[1] + (b[1] - a[1]) * i / steps;
+    const fy = floorAt(x, z);
+    const point = [x, z];
+    if (fy === null || Math.abs(fy - height) > 0.6 || obstacles.some(([s, lift]) =>
+      walkingSolid(s, Math.min(fy, height), lift) && segmentBlocked(previous, point, s.bb))) return false;
+    height = fy; previous = point;
+  }
+  return true;
+}
 function approach(from, to) {
   const fy = floorAt(5, 24.6);
   const obstacles = world.filter(s => walkingSolid(s, fy) && walkBound(s.bb, 3) >= -1 &&
     walkBound(s.bb, 0) <= 10 && walkBound(s.bb, 5) >= 21 && walkBound(s.bb, 2) <= 30);
-  const clear = (a, c) => !obstacles.some(s => segmentBlocked(a, c, s.bb));
+  const harbor = shipDockPoint(from) || shipDockPoint(to);
+  const clear = harbor ? shipSegmentClear : (a, c) => !obstacles.some(s => segmentBlocked(a, c, s.bb));
   if (clear(from, to)) return [to];
   const nodes = [from, to];
-  for (const { bb: b } of [fountainBasin, ...plazaHedges]) {
+  if (harbor) nodes.push(...NODES.slice(0, 7), [5, -15], [5, 0], [5, 10],
+    [SX + 1.7, -5.4], [SX + 1.7, -9.2], [SX, -12]);
+  const corners = harbor ? ship.filter(s => walkingSolid(s, DECK, bob)) : [fountainBasin, ...plazaHedges];
+  for (const { bb: b } of corners) {
     nodes.push([walkBound(b, 0) - 0.1, walkBound(b, 2) - 0.1], [walkBound(b, 3) + 0.1, walkBound(b, 2) - 0.1],
       [walkBound(b, 3) + 0.1, walkBound(b, 5) + 0.1], [walkBound(b, 0) - 0.1, walkBound(b, 5) + 0.1]);
   }

@@ -19,7 +19,11 @@ const element = {
   getContext: () => ({setTransform() {}, measureText: () => ({width: 6})})
 };
 const context = vm.createContext({
-  document: {getElementById: () => element, querySelectorAll: () => [],
+  document: {getElementById: () => element,
+    querySelectorAll: () => ['how', 'spyglass'].map(id => ({
+      dataset: {spot: id},
+      querySelector: tag => tag === 'a' ? {textContent: id, href: '#'} : {}
+    })),
     documentElement: {}, addEventListener() {},
     fonts: { load: () => Promise.resolve(), ready: Promise.resolve() }},
   matchMedia: () => ({matches: false, addEventListener() {}}),
@@ -131,5 +135,62 @@ const black = paintPart(ship.find(s => s.flag), 20.1);
 assert(black.every(v => v < 80), 'the pirate flag must retain a dark silhouette');
 const wood = paintPart(ship.find(s => s.hull), 0.15);
 assert(wood[0] - wood[1] > 20 && wood[1] - wood[2] > 20, 'the hull must keep its warm wood tone instead of using the cloth paint');
+"""
+    )
+
+
+def test_map_walks_use_supported_ship_and_dock_connections():
+    _run_ship_scene(
+        r"""
+const dock = [me.x, me.z];
+const starts = [dock, [-4,7], [-2.95,-3.5], [-4,2], [-5.1,1.2]];
+function checkSegment(a, b) {
+  const samples = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.01));
+  let previous = floorAt(...a);
+  for (let i = 0; i <= samples; i++) {
+    const x = a[0] + (b[0] - a[0]) * i / samples;
+    const z = a[1] + (b[1] - a[1]) * i / samples;
+    const height = floorAt(x, z);
+    assert.notEqual(height, null, `map walk crosses water at ${x},${z}`);
+    assert(!blocked(x, z, height), `map walk crosses a solid at ${x},${z}`);
+    assert(Math.abs(height - previous) <= 0.6, `map walk skips a height transition at ${x},${z}`);
+    previous = height;
+  }
+}
+function walk(id, start, dt) {
+  me.x = start[0]; me.z = start[1]; me.eye = floorAt(...start) + 1.6;
+  const destination = standFor(anchors[id]);
+  go(id);
+  assert(walkPath.length, `no route from ${start} to ${id}`);
+  let previous = start;
+  for (const waypoint of walkPath) {
+    checkSegment(previous, waypoint);
+    previous = waypoint;
+  }
+  let frames = 0;
+  while (walkPath.length && frames++ < 10000) {
+    const before = [me.x, me.z];
+    step(dt);
+    checkSegment(before, [me.x, me.z]);
+  }
+  assert.equal(walkPath.length, 0, 'map walk did not finish');
+  assert.equal(jumped, id, 'map walk did not face the destination');
+  assert.deepEqual([me.x, me.z], destination, 'map walk missed the destination');
+  return destination;
+}
+for (const dt of [0.02, 0.1]) {
+  for (const start of starts) {
+    assert(!blocked(...start, floorAt(...start)), 'the deck start must be reachable');
+    anchors.return = {x: start[0], y: floorAt(...start), z: start[1] + 2.5, r: 0,
+      ship: floorAt(...start) > 1.6};
+    for (const id of ['how', 'spyglass']) {
+      const end = walk(id, start, dt);
+      if (id === 'spyglass') assert.equal(floorAt(...end), 4.8, 'the spyglass walk must reach the stern roof');
+      const returned = walk('return', end, dt);
+      assert(Math.hypot(returned[0] - start[0], returned[1] - start[1]) < 1e-9,
+        'the return walk must reach the original start');
+    }
+  }
+}
 """
     )
