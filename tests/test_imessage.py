@@ -1226,6 +1226,12 @@ def wait_for(check, what, timeout=30):
         time.sleep(0.05)
 
 
+def publish_json(path, record):
+    pending = path.parent.parent / path.name
+    pending.write_text(json.dumps(record))
+    pending.replace(path)
+
+
 def fake_bridge(tmp_path):
     """bridge.ts against the fake spectrum-ts: the fake's directory, the state directory, the notes file, and
     start(n), inbound(mid, ...), cli(*args) and text(path) helpers."""
@@ -1275,7 +1281,7 @@ def fake_bridge(tmp_path):
 
     def inbound(mid, **fields):
         record = {"id": mid, "space": "chat-1", "sender": "+10000000000", **fields}
-        (fake / "inbound" / f"{mid}.json").write_text(json.dumps(record))
+        publish_json(fake / "inbound" / f"{mid}.json", record)
         wait_for(lambda: f"photon-{mid} " in text(notes), f"the note for {mid}")
 
     def cli(*args):
@@ -1426,7 +1432,7 @@ def test_bridge_files_his_edits_as_new_notes(tmp_path):
     def edit(seq, mid, new, **fields):
         event = {"type": "message.edited", "sequence": seq, "messageGuid": mid, "content": {"text": new},
                  "chatGuid": "any;-;+10000000000", "isFromMe": False, **fields}
-        (fake / "edits" / f"{seq:03}.json").write_text(json.dumps(event))
+        publish_json(fake / "edits" / f"{seq:03}.json", event)
 
     bridge = start(1)
     try:
@@ -1595,7 +1601,7 @@ class FallbackRig:
 
     def photon_text(self, mid, text):
         record = {"id": mid, "space": "chat-1", "sender": "+10000000000", "text": text}
-        (self.fake / "inbound" / f"{mid}.json").write_text(json.dumps(record))
+        publish_json(self.fake / "inbound" / f"{mid}.json", record)
         wait_for(lambda: f"photon-{mid} " in read_text(self.notes), f"the Photon note {mid}")
 
     def relay_message(self, guid, text, at, **fields):
@@ -1649,7 +1655,7 @@ def test_reply_read_timeout_uses_the_fallback_without_blocking_plain_sends(tmp_p
                  or "outbox item 1 failed" in read_text(rig.err), "the read-only failure result")
         assert "fallback answer" in read_text(rig.fake / "relay-sent")
         wait_for(lambda: "send plain behind it" in read_text(rig.fake / "sent"), "the unblocked plain send")
-        wait_for(lambda: not rig.outbox(), "the completed fallback queue")
+        wait_for(lambda: not list((rig.state / "outbox").glob("*.json")), "the completed fallback queue")
     finally:
         rig.close()
 
@@ -1799,7 +1805,7 @@ def test_bridge_falls_back_to_bluebubbles_and_back(tmp_path):
         wait_for(lambda: "send on photon again" in read_text(rig.fake / "sent"), "the Photon send")
         for _ in range(2):  # two relays, or one relay twice: one note
             rig.relay_text("g1", "from the icloud line", 1)
-        wait_for(lambda: not rig.outbox(), "an empty outbox")
+        wait_for(lambda: not list((rig.state / "outbox").glob("*.json")), "an empty outbox")
     finally:
         rig.close()
     assert read_text(rig.fake / "relay-sent").splitlines() == ["iMessage;-;+10000000000 on the fallback"]
@@ -1826,7 +1832,7 @@ def test_a_text_that_may_be_out_on_one_line_is_not_sent_on_another_after_a_resta
         rig.photon_down(False)
         rig.relay_mode("")
         rig.start()
-        wait_for(lambda: not rig.outbox(), "the outbox to empty")
+        wait_for(lambda: not list((rig.state / "outbox").glob("*.json")), "the outbox to empty")
     finally:
         rig.close()
     assert read_text(rig.fake / "relay-sent").splitlines() == ["iMessage;-;+10000000000 once only"]
@@ -1848,7 +1854,7 @@ def test_a_text_that_may_be_out_on_photon_waits_while_photon_does_not_start(tmp_
         rig.stop()
         (rig.fake / "spectrum-down").unlink()
         rig.start()
-        wait_for(lambda: not rig.outbox(), "the outbox to empty")
+        wait_for(lambda: not list((rig.state / "outbox").glob("*.json")), "the outbox to empty")
     finally:
         rig.close()
     assert read_text(rig.fake / "relay-sent") == ""
@@ -1866,7 +1872,7 @@ def test_a_text_the_check_proves_not_sent_goes_out_once_on_photon(tmp_path):
         rig.cli("once only")
         wait_for(lambda: rig.outbox() and rig.outbox()[0].get("maybe"), "the unsure state in the outbox item")
         rig.photon_down(False)
-        wait_for(lambda: not rig.outbox(), "the outbox to empty")
+        wait_for(lambda: not list((rig.state / "outbox").glob("*.json")), "the outbox to empty")
     finally:
         rig.close()
     assert read_text(rig.fake / "relay-sent") == ""
@@ -1883,7 +1889,7 @@ def test_a_stuck_tapback_is_dropped_and_the_sends_behind_it_go_out(tmp_path):
         rig.cli("--react", "👍")
         rig.cli("behind the tapback")
         wait_for(lambda: "behind the tapback" in read_text(rig.fake / "relay-sent"), "the send behind the tapback")
-        wait_for(lambda: not rig.outbox(), "an empty outbox")
+        wait_for(lambda: not list((rig.state / "outbox").glob("*.json")), "an empty outbox")
     finally:
         rig.close()
     dead = [json.loads(p.read_text()) for p in (rig.state / "outbox-dead").glob("*.json")]
