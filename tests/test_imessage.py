@@ -473,6 +473,441 @@ def test_location_carries_the_local_header(tmp_path):
     assert len(calls) == 1 and "-H X-Firstmate: 1" in calls[0] and calls[0].endswith("/location")
 
 
+BB = json.dumps(str(ROOT / "imessage/bluebubbles.ts"))
+
+# Fake BlueBubbles relays: local Bun servers with the API paths bluebubbles.ts calls, no network, no real
+# password. Relays share `icloud`, the texts the Apple Account sent, as Macs on one account do. A relay can go
+# down (connection refused), come back on its port, or take a send and never answer (`hang`).
+FAKE_BB = """
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+const icloud = [];
+function relay(password = "pw-test") {
+  const r = { password, calls: [], sent: [], messages: new Map(), files: new Map(), fail: {}, hang: false };
+  r.start = () => {
+    r.server = Bun.serve({ port: r.port ?? 0, async fetch(req) {
+      const u = new URL(req.url);
+      if (u.searchParams.get("password") !== r.password) return Response.json({ error: { message: "Unauthorized" } }, { status: 401 });
+      const path = u.pathname.replace("/api/v1/", "");
+      const body = req.method === "POST" ? await req.json().catch(() => null) : null;
+      r.calls.push(`${req.method} ${path}`);
+      const failing = Object.keys(r.fail).find((p) => path.startsWith(p) && r.fail[p]-- > 0);
+      if (failing) return Response.json({ error: { message: "Service temporarily unavailable" } }, { status: 500 });
+      if (path === "ping") return Response.json({ data: "pong" });
+      if (path === "message/text") {
+        r.sent.push(body);
+        icloud.push({ chat: body.chatGuid, text: body.message, at: Date.now() });
+        if (r.hang) return new Promise(() => {});
+        return Response.json({ data: { guid: `sent-${r.sent.length}`, tempGuid: body.tempGuid } });
+      }
+      if (path === "message/react") { r.sent.push(body); return Response.json({ data: {} }); }
+      if (path === "message/query") return Response.json({ data: [...r.messages.values()].filter((m) => m.dateCreated > body.after).sort((a, b) => (body.sort === "DESC" ? b.dateCreated - a.dateCreated : a.dateCreated - b.dateCreated)) });
+      let m = path.match(/^chat\\/([^/]+)\\/message$/);
+      if (m) return Response.json({ data: r.blind ? [] : icloud.filter((s) => s.chat === decodeURIComponent(m[1]) && s.at > Number(u.searchParams.get("after"))).map((s) => ({ isFromMe: true, text: s.text })) });
+      if (/^chat\\/[^/]+\\/(typing|read)$/.test(path)) return Response.json({ data: null });
+      m = path.match(/^attachment\\/([^/]+)\\/download$/);
+      if (m && r.slow && r.files.has(m[1])) {
+        const body = r.files.get(m[1]);
+        return new Response(new ReadableStream({ async start(c) { c.enqueue(new TextEncoder().encode(body.slice(0, 3))); await Bun.sleep(r.slow); c.enqueue(new TextEncoder().encode(body.slice(3))); c.close(); } }));
+      }
+      if (m) return r.files.has(m[1]) ? new Response(r.files.get(m[1])) : Response.json({ error: { message: "Attachment does not exist!" } }, { status: 404 });
+      m = path.match(/^message\\/([^/]+)$/);
+      if (m && r.messages.has(decodeURIComponent(m[1]))) return Response.json({ data: r.messages.get(decodeURIComponent(m[1])) });
+      return Response.json({ error: { message: "Message does not exist!" } }, { status: 404 });
+    } });
+    r.port = r.server.port;
+    r.url = `http://127.0.0.1:${r.port}`;
+  };
+  r.down = () => r.server.stop(true);
+  r.start();
+  return r;
+}
+const owner = "+15550000000", chat = `iMessage;-;${owner}`;
+const text = (guid, t, extra = {}) => ({ guid, text: t, isFromMe: false, dateCreated: Date.now(), handle: { address: owner }, chats: [{ guid: chat }], attachments: [], ...extra });
+const logs = [];
+function line(relays, opts = {}, dir = mkdtempSync(`${tmpdir()}/bb-`)) {
+  const bb = new BlueBubbles(relays.map((r) => ({ url: r.url, password: r.password })), dir,
+    { pingMs: 200, healthMs: 0, sendMs: 300, ...opts }, (l) => logs.push(l));
+  bb.got = [];
+  (async () => { for await (const m of bb) { bb.got.push(m); if (bb.ack !== false) bb.markSeen(m.id); } })();
+  bb.dir = dir;
+  return bb;
+}
+const hook = (bb, guid, isFromMe = false) => bb.webhook(new Request("http://agent/bluebubbles", { method: "POST", body: JSON.stringify({ type: "new-message", data: { guid, isFromMe } }) }));
+// Wait until every message accepted so far is queued: accept() on a seen GUID returns the queue's tail.
+const settle = async (bb, guid) => { await bb.accept(guid); await Bun.sleep(5); };
+// Bun.serve keeps the process alive, so each script prints its result and exits.
+const done = (v) => { console.log(JSON.stringify(v)); process.exit(0); };
+"""
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_send_typing_tapback_and_reply():
+    """Sends carry a tempGuid, a reply threads to its message, tapbacks map to BlueBubbles names, typing never fails."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(), bb = line([a]);
+await bb.send(chat, "hello");
+await bb.send(chat, "that one", "his-guid");
+await bb.react(chat, "his-guid", "❤️");
+let odd = null;
+try {{ await bb.react(chat, "his-guid", "🦄"); }} catch (e) {{ odd = e.message; }}
+a.fail["chat/"] = 2;
+await bb.typing(chat, "POST"); await bb.typing(chat, "DELETE");
+await bb.send(chat, "after a typing error");
+done({{ sent: a.sent, calls: a.calls.filter((c) => c !== "GET ping"), odd, logs }});
+""")
+    plain, reply, tapback, after = result["sent"]
+    assert plain["chatGuid"] == "iMessage;-;+15550000000" and plain["message"] == "hello" and plain["tempGuid"]
+    assert "selectedMessageGuid" not in plain
+    assert reply["selectedMessageGuid"] == "his-guid" and reply["message"] == "that one"
+    assert tapback == {"chatGuid": plain["chatGuid"], "selectedMessageGuid": "his-guid", "reaction": "love", "partIndex": 0}
+    assert "🦄" in result["odd"] and "❤️" in result["odd"]
+    assert after["message"] == "after a typing error"
+    assert any(c.startswith("POST chat/") and c.endswith("/typing") for c in result["calls"])
+    assert any(c.startswith("DELETE chat/") for c in result["calls"])
+    assert [line for line in result["logs"] if line.startswith("typing failed")]
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_inbound_is_read_back_and_deduplicated(tmp_path):
+    """Webhooks from every relay become one message each; a forged GUID yields nothing; the seen-set survives a restart."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(), b = relay();
+for (const r of [a, b]) {{
+  r.messages.set("m1", text("m1", "ship it"));
+  r.messages.set("m2", text("m2", "this one", {{ threadOriginatorGuid: "m1" }}));
+}}
+const dir = {json.dumps(str(tmp_path))};
+const bb = line([a, b], {{}}, dir);
+await hook(bb, "m1"); await hook(bb, "m1"); await settle(bb, "m1");
+await hook(bb, "m2"); await settle(bb, "m2");
+await hook(bb, "forged"); await hook(bb, "mine", true); await settle(bb, "m1");
+const after = line([b, a], {{}}, dir);
+await hook(after, "m1"); await hook(after, "m2"); await settle(after, "m1");
+done({{
+  got: bb.got.map((m) => [m.id, m.direction, m.sender.id, m.space.id, m.content]),
+  restarted: after.got.length,
+  reads: a.calls.filter((c) => c === "GET message/m1").length + b.calls.filter((c) => c === "GET message/m1").length,
+  logs,
+}});
+""")
+    assert result["got"] == [
+        ["m1", "inbound", "+15550000000", "iMessage;-;+15550000000", {"type": "text", "text": "ship it"}],
+        ["m2", "inbound", "+15550000000", "iMessage;-;+15550000000",
+         {"type": "reply", "content": {"type": "text", "text": "this one"}, "target": {"content": {"type": "text", "text": "ship it"}}}],
+    ]
+    assert result["restarted"] == 0
+    assert result["reads"] == 2  # m1 itself once, and once as the thread target of m2
+    assert any(line.startswith("could not read message forged") for line in result["logs"])
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_catch_up_files_a_message_whose_webhook_was_lost_once(tmp_path):
+    """A newer message arrives by webhook, an older one never does: a catch-up in the window files it, nothing twice."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(), b = relay();
+const now = Date.now();
+for (const r of [a, b]) {{
+  r.messages.set("old", text("old", "its webhook was lost", {{ dateCreated: now - 5 * 60_000 }}));
+  r.messages.set("new", text("new", "this one came by webhook", {{ dateCreated: now - 60_000 }}));
+  r.messages.set("stale", text("stale", "outside the window", {{ dateCreated: now - 30 * 60_000 }}));
+}}
+const dir = {json.dumps(str(tmp_path))};
+const bb = line([a, b], {{}}, dir);
+await hook(bb, "new"); await settle(bb, "new");
+await bb.catchUp(); await bb.catchUp(); await settle(bb, "old");
+const after = line([a, b], {{}}, dir);
+await after.catchUp(); await settle(after, "old");
+done({{ got: bb.got.map((m) => m.id), restarted: after.got.map((m) => m.id) }});
+""")
+    assert result["got"] == ["new", "old"]
+    assert result["restarted"] == []
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_a_message_is_kept_as_seen_only_after_the_bridge_handled_it(tmp_path):
+    """A bridge that exits before it files the note gets the message again from the catch-up, once; after the note, never."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay();
+a.messages.set("m1", text("m1", "filed once", {{ dateCreated: Date.now() - 60_000 }}));
+const dir = {json.dumps(str(tmp_path))};
+const crashed = line([a], {{}}, dir); crashed.ack = false;
+await crashed.catchUp(); await settle(crashed, "m1");
+const restarted = line([a], {{}}, dir);
+await restarted.catchUp(); await restarted.catchUp(); await settle(restarted, "m1");
+const later = line([a], {{}}, dir);
+await later.catchUp(); await settle(later, "m1");
+done({{ crashed: crashed.got.map((m) => m.id), restarted: restarted.got.map((m) => m.id), later: later.got.map((m) => m.id) }});
+""")
+    assert result == {"crashed": ["m1"], "restarted": ["m1"], "later": []}
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_the_inbound_download_is_short_and_the_queue_keeps_the_long_one():
+    """A slow attachment does not hold the inbound loop for downloadMs: its first read fails at callMs, the queue's read works."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ transient }} from {OUTBOX};
+{FAKE_BB}
+const a = relay();
+a.files.set("at1", "PNGDATA"); a.slow = 600;
+a.messages.set("m3", text("m3", "\\uFFFC", {{ attachments: [{{ guid: "at1", transferName: "pic.png", mimeType: "image/png" }}] }}));
+const bb = line([a], {{ callMs: 200, downloadMs: 5000 }});
+await hook(bb, "m3"); await settle(bb, "m3");
+const started = Date.now();
+const inline = await bb.got[0].content.read().catch((e) => e);
+const inlineMs = Date.now() - started;
+const queued = (await (await bb.message("m3")).content.read()).toString();
+done({{ inline: transient(inline) ?? null, inlineMs, queued }});
+""")
+    assert result["inline"] == "TIMEOUT" and result["inlineMs"] < 2000
+    assert result["queued"] == "PNGDATA"
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_attachment_comes_from_the_relay_that_has_it():
+    """A download tries every relay; its errors tell the bridge's download queue to retry or to give up."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ describe }} from {DESK};
+import {{ permanent, transient }} from {OUTBOX};
+{FAKE_BB}
+const a = relay(), b = relay();
+const pic = text("m3", "\\uFFFC", {{ attachments: [{{ guid: "at1", transferName: "pic one.png", mimeType: "image/png" }}] }});
+a.messages.set("m3", pic); b.messages.set("m3", pic);
+b.files.set("at1", "PNGDATA"); // only relay 2 has the file
+b.fail["attachment/"] = 1; // and it fails once first
+const bb = line([a, b]);
+await hook(bb, "m3"); await settle(bb, "m3");
+const save = async (c, id) => `${{id}}:${{c.name}}:${{(await c.read()).toString()}}`;
+const first = await describe(bb.got[0].content, bb.got[0].id, save);
+const again = await describe((await bb.message("m3")).content, "m3", save);
+b.files.delete("at1");
+const gone = await bb.download("at1").catch((e) => e);
+a.down(); b.down();
+const down = await bb.download("at1").catch((e) => e);
+done({{ first, again, gone: [gone.message, permanent(gone)], down: [down.message, transient(down) ?? null, permanent(down)] }});
+""")
+    assert result["first"].startswith("(sent an attachment that could not be saved yet")
+    assert result["again"] == "(sent an attachment, saved for Firstmate at m3:pic one.png:PNGDATA)"
+    assert result["gone"][0].startswith("relay 2") and result["gone"][1] is True  # moves to the dead-letter folder
+    assert result["down"] == ["no relay is reachable", "HTTP 503", False]  # the queue tries again later
+
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_a_404_is_final_only_when_every_relay_answered_it():
+    """A relay that is down, or whose body was cut off, may still have the file, so the queue must retry."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ permanent }} from {OUTBOX};
+{FAKE_BB}
+const a = relay(), b = relay(), c = relay(), d = relay();
+const both = await line([a, b]).download("none").catch((e) => e);
+b.down();
+const oneDown = await line([a, b]).download("none").catch((e) => e);
+c.files.set("big", "PNGDATA"); c.slow = 500;
+const cutThen404 = await line([c, d], {{ downloadMs: 200 }}).download("big").catch((e) => e);
+done({{ both: permanent(both), oneDown: [permanent(oneDown), oneDown.status], cutThen404: [permanent(cutThen404), cutThen404.status], secret: JSON.stringify([oneDown.message, cutThen404.message]).includes("pw-test") }});
+""")
+    assert result["both"] is True
+    assert result["oneDown"] == [False, 503]
+    assert result["cutThen404"] == [False, 503]
+    assert not result["secret"]
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_download_has_its_own_timeout_and_a_cut_body_is_a_relay_error():
+    """A body slower than callMs still arrives; one slower than downloadMs fails as a timeout the queue retries."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ permanent, transient }} from {OUTBOX};
+{FAKE_BB}
+const a = relay();
+a.files.set("big", "PNGDATA"); a.slow = 500;
+const patient = line([a], {{ callMs: 200, downloadMs: 3000 }});
+const ok = (await patient.download("big")).toString();
+const impatient = line([a], {{ callMs: 200, downloadMs: 200 }});
+const cut = await impatient.download("big").catch((e) => e);
+done({{ ok, cut: [cut.constructor.name, cut.message, transient(cut) ?? null, permanent(cut), cut.maybeSent], logs, secret: JSON.stringify([cut.message, logs]).includes("pw-test") }});
+""")
+    assert result["ok"] == "PNGDATA"
+    name, message, kind, perm, maybe_sent = result["cut"]
+    assert (name, kind, perm, maybe_sent) == ("RelayError", "TIMEOUT", False, False) and message.endswith("download interrupted after 200 ms")
+    assert not result["secret"] and not [line for line in result["logs"] if " is down: " in line]
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_fails_over_in_order_and_never_sends_twice():
+    """A down relay is skipped in config order; a send whose answer is lost is not repeated on the next relay."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(), b = relay(), c = relay();
+const bb = line([a, b, c]);
+a.down();
+await bb.send(chat, "one relay down");
+const downLogs = logs.filter((l) => l.startsWith("relay 1")).length;
+a.start(); b.hang = true;
+const ambiguous = line([b, c]);
+await ambiguous.send(chat, "answer lost");
+done({{
+  a: a.sent.map((s) => s.message), b: b.sent.map((s) => s.message), c: c.sent.map((s) => s.message), downLogs,
+  checked: [b, c].some((r) => r.calls.some((x) => x.startsWith("GET chat/"))), logs,
+}});
+""")
+    assert result["a"] == []
+    assert result["b"] == ["one relay down", "answer lost"]
+    assert result["c"] == []  # a relay showed the lost-answer send as sent, so it was not sent again
+    assert result["checked"]
+    assert result["downLogs"] == 1
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_asks_the_relay_that_may_have_sent_even_when_it_is_marked_down():
+    """A send that times out on relay 1 is checked on relay 1, not only on relay 2 whose iCloud copy lags; with no other relay, still."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(), b = relay(), c = relay();
+b.blind = true; // iCloud has not shown the text to relay 2 yet
+a.hang = true;
+const bb = line([a, b], {{ healthMs: 10_000 }});
+await bb.send(chat, "slow to answer");
+c.hang = true;
+const solo = line([c], {{ healthMs: 10_000 }});
+const since = Date.now();
+const failed = await solo.send(chat, "only relay").then(() => false, () => true);
+done({{ a: a.sent.map((s) => s.message), b: b.sent.map((s) => s.message), failed, later: await solo.sent(chat, "only relay", since) }});
+""")
+    assert result["a"] == ["slow to answer"]
+    assert result["b"] == []
+    assert result["failed"] and result["later"] is True
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_outage_then_recovery():
+    """With every relay down a send fails visibly and inbound waits; after recovery both work, each message once."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(), b = relay();
+const bb = line([a, b]);
+a.down(); b.down();
+let failed = null;
+try {{ await bb.send(chat, "during the outage"); }} catch (e) {{ failed = e.message; }}
+await bb.catchUp();
+a.messages.set("m4", text("m4", "sent while the relays were down")); b.messages.set("m4", a.messages.get("m4"));
+b.start();
+await bb.send(chat, "after the outage");
+await bb.catchUp(); await hook(bb, "m4"); await settle(bb, "m4");
+a.start();
+await bb.catchUp(); await settle(bb, "m4");
+done({{
+  failed, b: b.sent.map((s) => s.message), got: bb.got.map((x) => x.content.text), logs,
+  secret: logs.some((l) => l.includes("pw-test")) || (failed ?? "").includes("pw-test"),
+}});
+""")
+    assert result["failed"] == "no relay is reachable"
+    assert result["b"] == ["after the outage"]
+    assert result["got"] == ["sent while the relays were down"]
+    assert not result["secret"]
+    down = [line for line in result["logs"] if " is down: " in line]
+    assert len(down) == 2 and all(line.endswith("connection refused") for line in down)
+    assert any(line.startswith("relay 2") and line.endswith("is back") for line in result["logs"])
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_transports_fail_over_to_bluebubbles_and_back():
+    """Photon down: the bubble goes to the BlueBubbles line. Photon back: Photon again. An unsure error: no second send."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ failover }} from {DESK};
+{FAKE_BB}
+const a = relay(), bb = line([a]);
+const photon = {{ state: "down", sent: [], async send(t) {{
+  if (this.state === "down") throw Object.assign(new Error("UNAVAILABLE: [upstream] Service temporarily unavailable. Please retry."), {{ code: 14 }});
+  if (this.state === "dropped") throw Object.assign(new Error("14 UNAVAILABLE: Connection dropped"), {{ code: 14 }});
+  if (this.state === "unsure") throw new Error("DEADLINE_EXCEEDED: no answer");
+  this.sent.push(t);
+}} }};
+const routes = [{{ name: "photon", send: (t) => photon.send(t) }}, {{ name: "bluebubbles", send: (t) => bb.send(chat, t) }}];
+const lines = [], out = {{}};
+out.down = await failover(routes, "while photon is down", (l) => lines.push(l));
+photon.state = "up";
+out.back = await failover(routes, "photon is back", (l) => lines.push(l));
+photon.state = "unsure";
+try {{ await failover(routes, "maybe sent", (l) => lines.push(l)); }} catch (e) {{ out.unsure = e.message; }}
+photon.state = "dropped";
+try {{ await failover(routes, "dropped", (l) => lines.push(l)); }} catch (e) {{ out.dropped = e.message; }}
+a.down(); photon.state = "up";
+out.relaysDown = await failover([routes[1], routes[0]], "relays down", (l) => lines.push(l)).catch((e) => e.message);
+done({{ ...out, photon: photon.sent, relay: a.sent.map((s) => s.message), lines }});
+""")
+    assert result["down"] == "bluebubbles"
+    assert result["back"] == "photon"
+    assert result["unsure"].startswith("DEADLINE_EXCEEDED")
+    assert result["dropped"].endswith("Connection dropped")  # a bare UNAVAILABLE can follow a write: no fallback send
+    assert result["relaysDown"] == "photon"  # BlueBubbles first, no relay reachable: Photon takes it
+    assert result["photon"] == ["photon is back", "relays down"]
+    assert result["relay"] == ["while photon is down"]
+    assert len(result["lines"]) == 2 and result["lines"][0].startswith("photon could not send (UNAVAILABLE")
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_inbound_from_both_transports_once_each():
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ inbound }} from {DESK};
+{FAKE_BB}
+const a = relay();
+a.messages.set("g-shared", text("g-shared", "both lines saw this"));
+a.messages.set("g-icloud", text("g-icloud", "only on the iCloud line"));
+const bb = line([a]);
+const photonQueue = [{{ id: "p-1", content: {{ type: "text", text: "on photon" }} }}, {{ id: "g-shared", content: {{ type: "text", text: "both lines saw this" }} }}];
+const photon = {{ name: "photon", messages: (async function* () {{ for (const m of photonQueue) {{ await Bun.sleep(20); yield m; }} }})() }};
+const blue = {{ name: "bluebubbles", messages: bb }};
+const got = [];
+(async () => {{ for await (const [l, m] of inbound([photon, blue])) got.push([l.name, m.id]); }})();
+await Bun.sleep(5);
+await hook(bb, "g-shared"); await hook(bb, "g-icloud"); await settle(bb, "g-icloud");
+await Bun.sleep(80);
+done({{ got }});
+""")
+    got = result["got"]
+    assert sorted(m for _, m in got) == ["g-icloud", "g-shared", "p-1"]
+    assert ["photon", "p-1"] in got and ["bluebubbles", "g-icloud"] in got
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_a_message_the_bridge_failed_to_handle_is_delivered_again():
+    """A released message is not kept as seen, so the next catch-up queues it again; once handled, never again."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ inbound }} from {DESK};
+{FAKE_BB}
+const a = relay();
+a.messages.set("m1", text("m1", "retry me", {{ dateCreated: Date.now() - 60_000 }}));
+const bb = new BlueBubbles([{{ url: a.url, password: a.password }}], mkdtempSync(`${{tmpdir()}}/bb-`), {{ pingMs: 200, healthMs: 0 }}, () => {{}});
+const delivered = new Set(), got = [];
+(async () => {{
+  for await (const [, m] of inbound([{{ messages: bb }}], 1000, delivered)) {{
+    got.push(m.id);
+    if (got.length === 1) {{ delivered.delete(m.id); bb.release(m.id); }} else bb.markSeen(m.id);
+  }}
+}})();
+for (let i = 0; i < 3; i++) {{ await bb.catchUp(); await Bun.sleep(20); }}
+done({{ got }});
+""")
+    assert result["got"] == ["m1", "m1"]
+
+
+
 def load_ship():
     spec = importlib.util.spec_from_file_location("ship_imessage", ROOT / "scripts/ship.py")
     module = importlib.util.module_from_spec(spec)
@@ -497,6 +932,33 @@ def test_config_rejects_a_bridge_it_cannot_run(change, error):
         load_ship().validate_config(document)
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda b: b.pop("relays"),
+        lambda b: b.update(relays=[]),
+        lambda b: b["relays"][0].update(url="http://a:1234,b"),
+        lambda b: b["relays"][0].update(url="http://a:1234/?password=x"),
+        lambda b: b["relays"][0].update(password_env="lower"),
+        lambda b: b.pop("webhook_listen"),
+        lambda b: b.clear(),
+    ],
+)
+def test_config_takes_a_bluebubbles_relay_set(change):
+    document = yaml.safe_load((ROOT / "config/default.yml").read_text())
+    relays = [{"url": "http://relay-a:1234"}, {"url": "https://relay-b/bb/", "password_env": "RELAY_B_PASSWORD"}]
+    document["factory"]["imessage"] = {
+        "owner": "+10000000000",
+        "transports": ["photon", "bluebubbles"],
+        "bluebubbles": {"relays": relays, "webhook_listen": "relay-net-address:8766"},
+    }
+    load_ship().validate_config(document)
+    bluebubbles = document["factory"]["imessage"]["bluebubbles"]
+    change(bluebubbles)
+    if not bluebubbles:
+        document["factory"]["imessage"].pop("bluebubbles")
+    with pytest.raises(ValueError, match="imessage"):
+        load_ship().validate_config(document)
 OUTBOX = json.dumps(str(ROOT / "imessage/outbox.ts"))
 
 
@@ -645,7 +1107,10 @@ async function* lineEvents() {
   }
 }
 const line = { messages: { subscribeEvents: lineEvents } };
-export const Spectrum = async () => ({ messages: messages(), __internal: { platforms: new Map([["imessage", { client: [{ client: line }] }]]) } });
+export const Spectrum = async () => {
+  if (existsSync(`${dir}/spectrum-down`)) throw new Error("spectrum did not start");
+  return { messages: messages(), __internal: { platforms: new Map([["imessage", { client: [{ client: line }] }]]) } };
+};
 export const imessage = Object.assign(() => ({ space: { get: async (id) => space(id) } }), { config: () => ({}) });
 """
 
@@ -794,3 +1259,294 @@ def test_bridge_files_his_edits_as_new_notes(tmp_path):
         f"note --request-id photon-m1-edit-2 -- {head} [edited] member (was: adding a member)",
         f"note --request-id photon-m9-edit-5 -- {head} [edited] late (was: not known: the bridge did not see the text before the edit)",
     ]
+
+
+# A fake BlueBubbles relay for a whole-bridge test: it logs each send to FAKE_DIR/relay-sent (a text as
+# "<chat> <text>", a tapback as "react <message> <name>") and serves the messages in FAKE_DIR/relay/<guid>.json. While
+# FAKE_DIR/relay-mode holds "garbled", a send is taken but the answer is unreadable and the sent-texts query fails; while
+# it holds "lost", the answer is unreadable and the send never arrived; while it holds "hold-query", a message query waits
+# for FAKE_DIR/query-go. A message query returns the messages in FAKE_DIR/relay newer than its `after`.
+FAKE_RELAY = """
+import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+const dir = process.env.FAKE_DIR;
+const mode = () => (existsSync(`${dir}/relay-mode`) ? readFileSync(`${dir}/relay-mode`, "utf8").trim() : "");
+const sentLines = () => (existsSync(`${dir}/relay-sent`) ? readFileSync(`${dir}/relay-sent`, "utf8").split("\\n").filter(Boolean) : []);
+const server = Bun.serve({ port: 0, async fetch(req) {
+  const u = new URL(req.url), path = u.pathname.replace("/api/v1/", "");
+  if (u.searchParams.get("password") !== "pw-test") return new Response("no", { status: 401 });
+  if (path === "message/text") {
+    const b = await req.json();
+    if (mode() === "lost") return new Response("garbled");
+    appendFileSync(`${dir}/relay-sent`, `${b.chatGuid} ${b.message}\\n`);
+    return mode() === "garbled" ? new Response("garbled") : Response.json({ data: {} });
+  }
+  if (path === "message/react") {
+    const b = await req.json();
+    appendFileSync(`${dir}/relay-sent`, `react ${b.selectedMessageGuid} ${b.reaction}\\n`);
+    return Response.json({ data: {} });
+  }
+  if (/^chat\\/[^/]+\\/message$/.test(path)) {
+    return mode() === "garbled" ? new Response("down", { status: 500 }) : Response.json({ data: sentLines().map((l) => ({ isFromMe: true, text: l.slice(l.indexOf(" ") + 1) })) });
+  }
+  const m = path.match(/^message\\/([^/]+)$/);
+  if (m && existsSync(`${dir}/relay/${m[1]}.json`)) return Response.json({ data: JSON.parse(readFileSync(`${dir}/relay/${m[1]}.json`, "utf8")) });
+  if (path === "message/query") {
+    const b = await req.json();
+    while (mode() === "hold-query" && !existsSync(`${dir}/query-go`)) await Bun.sleep(20);
+    const found = readdirSync(`${dir}/relay`).map((f) => JSON.parse(readFileSync(`${dir}/relay/${f}`, "utf8"))).filter((m) => m.dateCreated > b.after);
+    return Response.json({ data: found });
+  }
+  return Response.json({ data: null });
+} });
+writeFileSync(`${dir}/relay-port`, String(server.port));
+"""
+
+
+def read_text(path):
+    return path.read_text() if path.exists() else ""
+
+
+class FallbackRig:
+    """The bridge on the photon and bluebubbles transports, over the fake spectrum-ts and a fake relay. It restarts."""
+
+    def __init__(self, tmp_path, **env):
+        self.app, self.fake, self.state, bin_dir = (tmp_path / d for d in ("app", "fake", "state", "bin"))
+        shutil.copytree(ROOT / "imessage", self.app, ignore=shutil.ignore_patterns("fm-*"))
+        pkg = self.app / "node_modules/spectrum-ts"
+        pkg.mkdir(parents=True)
+        exports = {".": "./index.js", "./providers/imessage": "./index.js"}
+        (pkg / "package.json").write_text(json.dumps({"name": "spectrum-ts", "type": "module", "exports": exports}))
+        (pkg / "index.js").write_text(FAKE_UPSTREAM)
+        for d in (self.fake / "inbound", self.fake / "messages", self.fake / "relay", bin_dir):
+            d.mkdir(parents=True)
+        (self.fake / "down").write_text("0")
+        self.notes = tmp_path / "notes"
+        for name, body in {"omp": "cat >/dev/null; echo SKIP", "fm-inbox": f'printf "%s\\n" "$*" >> {self.notes}'}.items():
+            (bin_dir / name).write_text(f"#!/bin/bash\n{body}\n")
+            (bin_dir / name).chmod(0o755)
+        ports = []
+        for _ in range(2):
+            with socket.socket() as s:
+                s.bind(("127.0.0.1", 0))
+                ports.append(s.getsockname()[1])
+        self.hook_port = ports[1]
+        self.env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "FAKE_DIR": str(self.fake)}
+        self.relay = subprocess.Popen(["bun", "-e", FAKE_RELAY], env=self.env)
+        wait_for(lambda: read_text(self.fake / "relay-port"), "the fake relay")
+        self.env |= {
+            "FM_HOME": str(tmp_path),
+            "FM_INBOX_CMD": str(bin_dir / "fm-inbox"),
+            "FM_IMESSAGE_OWNER": "+10000000000",
+            "FM_IMESSAGE_PORT": str(ports[0]),
+            "FM_IMESSAGE_RETRY_MS": "20",
+            "FM_IMESSAGE_TRANSPORTS": "photon bluebubbles",
+            "FM_BLUEBUBBLES_RELAYS": f"http://127.0.0.1:{read_text(self.fake / 'relay-port')},RELAY_PASSWORD",
+            "FM_BLUEBUBBLES_WEBHOOK": f"127.0.0.1:{ports[1]}",
+            "RELAY_PASSWORD": "pw-test",
+            "PHOTON_PROJECT_ID": "fake",
+            "PHOTON_PROJECT_SECRET": "fake",
+            "STATE_DIRECTORY": str(self.state),
+            **env,
+        }
+        self.out, self.err = tmp_path / "out", tmp_path / "err"
+        self.starts = 0
+        self.bridge = None
+
+    def start(self):
+        self.starts += 1
+        with self.out.open("a") as o, self.err.open("a") as e:
+            self.bridge = subprocess.Popen(["bun", "bridge.ts"], cwd=self.app, env=self.env, stdout=o, stderr=e)
+        wait_for(lambda: read_text(self.out).count("listening") == self.starts, "bridge start")
+
+    def stop(self):
+        if self.bridge:
+            self.bridge.terminate()
+            self.bridge.wait(10)
+            self.bridge = None
+
+    def close(self):
+        self.stop()
+        self.relay.terminate()
+        self.relay.wait(10)
+
+    def photon_down(self, down):
+        (self.fake / "down").write_text("1000000" if down else "0")
+
+    def relay_mode(self, mode):
+        (self.fake / "relay-mode").write_text(mode)
+
+    def cli(self, *args):
+        result = subprocess.run([str(SEND), *args], capture_output=True, text=True, env=self.env, timeout=30)
+        assert result.returncode == 0, result.stderr
+
+    def photon_text(self, mid, text):
+        record = {"id": mid, "space": "chat-1", "sender": "+10000000000", "text": text}
+        (self.fake / "inbound" / f"{mid}.json").write_text(json.dumps(record))
+        wait_for(lambda: f"photon-{mid} " in read_text(self.notes), f"the Photon note {mid}")
+
+    def relay_message(self, guid, text, at):
+        message = {"guid": guid, "text": text, "isFromMe": False, "dateCreated": at, "attachments": [],
+                   "handle": {"address": "+10000000000"}, "chats": [{"guid": "iMessage;-;+10000000000"}]}
+        (self.fake / "relay" / f"{guid}.json").write_text(json.dumps(message))
+
+    def relay_text(self, guid, text, at):
+        self.relay_message(guid, text, at)
+        hook = json.dumps({"type": "new-message", "data": {"guid": guid}})
+        subprocess.run(["curl", "-sS", "-d", hook, f"http://127.0.0.1:{self.hook_port}/bluebubbles"], check=True, capture_output=True)
+        wait_for(lambda: f"bluebubbles-{guid} " in read_text(self.notes), f"the BlueBubbles note {guid}")
+
+    def outbox(self):
+        return [json.loads(p.read_text()) for p in sorted((self.state / "outbox").glob("*.json"))]
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_bridge_falls_back_to_bluebubbles_and_back(tmp_path):
+    """Photon down: queued bubbles go out on the BlueBubbles line. Photon back: Photon again. Both lines feed the inbox."""
+    rig = FallbackRig(tmp_path)
+    try:
+        rig.start()
+        rig.photon_text("m1", "you there")
+        rig.photon_down(True)
+        rig.cli("on the fallback")
+        wait_for(lambda: read_text(rig.fake / "relay-sent"), "the fallback send")
+        rig.photon_down(False)
+        rig.cli("on photon again")
+        wait_for(lambda: "send on photon again" in read_text(rig.fake / "sent"), "the Photon send")
+        for _ in range(2):  # two relays, or one relay twice: one note
+            rig.relay_text("g1", "from the icloud line", 1)
+        wait_for(lambda: not rig.outbox(), "an empty outbox")
+    finally:
+        rig.close()
+    assert read_text(rig.fake / "relay-sent").splitlines() == ["iMessage;-;+10000000000 on the fallback"]
+    assert read_text(rig.fake / "sent").splitlines() == ["send on photon again"]
+    assert read_text(rig.notes).count("bluebubbles-g1 ") == 1
+    assert "photon could not send (" in read_text(rig.err) and "on the bluebubbles fallback" in read_text(rig.err)
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_a_text_that_may_be_out_on_one_line_is_not_sent_on_another_after_a_restart(tmp_path):
+    """Photon is down, the relay takes the text but its answer is lost, then Photon is back: the text is not sent twice."""
+    rig = FallbackRig(tmp_path)
+    try:
+        rig.start()
+        rig.photon_text("m1", "you there")
+        rig.photon_down(True)
+        rig.relay_mode("garbled")
+        rig.cli("once only")
+        wait_for(lambda: read_text(rig.fake / "relay-sent"), "the relay send")
+        wait_for(lambda: rig.outbox() and rig.outbox()[0].get("maybe"), "the unsure state in the outbox item")
+        item = rig.outbox()[0]
+        assert item["maybe"] == {"bluebubbles": "iMessage;-;+10000000000"} and item["since"] > 0 and item["guid"]
+        rig.stop()
+        rig.photon_down(False)
+        rig.relay_mode("")
+        rig.start()
+        wait_for(lambda: not rig.outbox(), "the outbox to empty")
+    finally:
+        rig.close()
+    assert read_text(rig.fake / "relay-sent").splitlines() == ["iMessage;-;+10000000000 once only"]
+    assert read_text(rig.fake / "sent") == ""
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_a_text_that_may_be_out_on_photon_waits_while_photon_does_not_start(tmp_path):
+    """The restart after an unsure Photon send finds Photon down: the bubble is not sent on BlueBubbles, and Photon sends it once later."""
+    rig = FallbackRig(tmp_path)
+    (rig.state / "outbox").mkdir(parents=True)
+    item = {"space": "chat-1", "id": "m1", "bubbles": ["pinned"], "guid": "g-1", "maybe": {"photon": "chat-1"}, "since": 1}
+    (rig.state / "outbox/1.json").write_text(json.dumps(item))
+    (rig.fake / "spectrum-down").touch()
+    try:
+        rig.start()
+        wait_for(lambda: "outbox item 1 failed (try 2)" in read_text(rig.err), "a retry while Photon is not running")
+        assert read_text(rig.fake / "relay-sent") == "" and rig.outbox()[0]["maybe"] == {"photon": "chat-1"}
+        rig.stop()
+        (rig.fake / "spectrum-down").unlink()
+        rig.start()
+        wait_for(lambda: not rig.outbox(), "the outbox to empty")
+    finally:
+        rig.close()
+    assert read_text(rig.fake / "relay-sent") == ""
+    assert read_text(rig.fake / "sent").splitlines() == ["send pinned"]
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_a_text_the_check_proves_not_sent_goes_out_once_on_photon(tmp_path):
+    """The relay's answer is lost and the text never arrived: the retry's check says so, and Photon then sends it once."""
+    rig = FallbackRig(tmp_path)
+    try:
+        rig.start()
+        rig.photon_text("m1", "you there")
+        rig.photon_down(True)
+        rig.relay_mode("lost")
+        rig.cli("once only")
+        wait_for(lambda: rig.outbox() and rig.outbox()[0].get("maybe"), "the unsure state in the outbox item")
+        rig.photon_down(False)
+        wait_for(lambda: not rig.outbox(), "the outbox to empty")
+    finally:
+        rig.close()
+    assert read_text(rig.fake / "relay-sent") == ""
+    assert read_text(rig.fake / "sent").splitlines() == ["send once only"]
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_a_stuck_tapback_is_dropped_and_the_sends_behind_it_go_out(tmp_path):
+    """A tapback on a down transport moves to the dead-letter folder after its maximum age; later sends use the fallback."""
+    rig = FallbackRig(tmp_path, FM_IMESSAGE_REACT_MAX_MS="300")
+    try:
+        rig.start()
+        rig.photon_text("m1", "you there")
+        rig.photon_down(True)
+        rig.cli("--react", "👍")
+        rig.cli("behind the tapback")
+        wait_for(lambda: "behind the tapback" in read_text(rig.fake / "relay-sent"), "the send behind the tapback")
+        wait_for(lambda: not rig.outbox(), "an empty outbox")
+    finally:
+        rig.close()
+    dead = [json.loads(p.read_text()) for p in (rig.state / "outbox-dead").glob("*.json")]
+    assert [d["react"] for d in dead] == ["👍"]
+    assert "react" not in read_text(rig.fake / "sent")
+    assert len(re.findall(r"tapback 👍 older than", read_text(rig.err))) == 1
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_a_restart_targets_his_newest_text_on_any_transport(tmp_path):
+    """The tapback after a restart goes to the newest text, on the BlueBubbles line; an untimed latest file counts as oldest."""
+    rig = FallbackRig(tmp_path)
+    try:
+        rig.start()
+        rig.photon_text("m1", "on photon")
+        rig.relay_text("g1", "later, on the icloud line", int(time.time() * 1000) + 5000)
+        wait_for(lambda: (rig.state / "latest-bluebubbles").exists(), "the BlueBubbles latest file")
+        assert len((rig.state / "latest").read_text().split()) == 3  # space, id, time
+        rig.stop()
+        (rig.state / "latest").write_text("chat-1\nm1\n")  # the format before the time was kept
+        rig.start()
+        rig.cli("--react", "❤️")
+        wait_for(lambda: "react g1 love" in read_text(rig.fake / "relay-sent"), "the tapback on the newest text")
+        rig.stop()
+        (rig.state / "latest-bluebubbles").unlink()  # only the untimed file is left: it is used
+        rig.start()
+        rig.cli("--react", "👍")
+        wait_for(lambda: "react m1 👍" in read_text(rig.fake / "sent"), "the tapback on the only text")
+    finally:
+        rig.close()
+    assert "react m1 ❤️" not in read_text(rig.fake / "sent")
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_a_replayed_older_text_never_becomes_his_latest(tmp_path):
+    """A BlueBubbles text whose webhook was lost is filed by the catch-up after a newer Photon text; the tapback still goes to Photon."""
+    rig = FallbackRig(tmp_path)
+    rig.relay_message("g1", "lost webhook, sent earlier", int(time.time() * 1000) - 5 * 60_000)
+    rig.relay_mode("hold-query")
+    try:
+        rig.start()
+        rig.photon_text("m1", "newer, on photon")
+        (rig.fake / "query-go").touch()
+        wait_for(lambda: "bluebubbles-g1 " in read_text(rig.notes), "the replayed BlueBubbles note")
+        rig.cli("--react", "👍")
+        wait_for(lambda: "react m1 👍" in read_text(rig.fake / "sent"), "the tapback on the Photon text")
+    finally:
+        rig.close()
+    assert "react" not in read_text(rig.fake / "relay-sent")
+    assert not (rig.state / "latest-bluebubbles").exists()
+    assert read_text(rig.notes).count("bluebubbles-g1 ") == 1

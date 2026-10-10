@@ -96,7 +96,7 @@
         - factory_cfg.profiles.firstmate | bool
       tags: [firstmate]
 
-    - name: Optional iMessage bridge to Firstmate over a Photon Spectrum line
+    - name: Optional iMessage bridge to Firstmate over Photon or BlueBubbles
       ansible.builtin.import_tasks: tasks/imessage.yml
       become: "{{ factory_become_target | bool }}"
       become_user: "{{ factory_cfg.user }}"
