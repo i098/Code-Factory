@@ -82,6 +82,23 @@ python3 -m http.server --directory harbor/dist 8000
 
 Then open <http://localhost:8000>.
 
+## Link preview
+
+`index.html` sets the Open Graph and Twitter card tags, with absolute https://crewship.si URLs.
+The preview image `public/og.png` (1200x630) is committed, so the build and the deploy need no browser.
+`og-image.mjs` draws it with the real renderer from a fixed camera, without the sign or the mini map, and sets the title and the tagline over the scene.
+It also draws `public/apple-touch-icon.png` (180x180) from `public/favicon.svg`.
+After a scene change, regenerate both PNGs in the Playwright container and commit them:
+
+```bash
+python3 harbor/build.py
+docker run --rm --ipc=host --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/harbor:/harbor" -w /harbor \
+  mcr.microsoft.com/playwright:v1.64.0-noble node og-image.mjs
+```
+
+The container needs `harbor/node_modules/playwright` (see [Browser checks](#browser-checks)).
+`tests/test_harbor_build.py` checks the tags, the URLs, and the image sizes.
+
 ## Browser checks
 
 The check loads the built page in Playwright WebKit at desktop and iPhone portrait and landscape sizes.
