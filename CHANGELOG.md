@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-10
+
+### Added
+
+- Default omp rules: `rules/public/` (committed) and `rules/private/` (git-ignored) rule files, installed to omp's global rules folder by the `agents` profile with the skills installer; `skills.private_source` also fills `rules/private/` from the `rules/` folder of that source, a private rule wins over a public one of the same name, and rules added by hand are never touched.
+  The browser rules install only when `fleet_browsers` or `fleet_guards` enables the ladder; disabling it removes only manifest-owned copies ([#89](https://github.com/i098/Crewship/issues/89)).
+- Opt-in crew board configuration now exports `CREWBOARD_SOCKET` to new shells and Herdr agents ([#119](https://github.com/i098/Crewship/issues/119)).
+
+### Changed
+
+- Renamed the repository-only names that still said factory: `containers/factory.container.yml` is `containers/crewship.container.yml`, `schemas/factory.schema.json` is `schemas/crewship.schema.json` (with its `$id`), the Python project is `crewship`, and the docs say Crewship; host config keys, paths and unit names do not change ([#96](https://github.com/i098/Crewship/issues/96)).
+- README: the Features list shows each opt-in feature with an "(opt-in)" tag, and a new collapsed Default config part lists what a fresh host gets; `tests/test_readme.py` checks both against the host config schema, `config/default.yml`, and `config/omp.yml` ([#100](https://github.com/i098/Crewship/issues/100)).
+- The README puts documentation links in the Features list and links issue forms from its footer ([#108](https://github.com/i098/Crewship/issues/108)).
+
+### Fixed
+
+- `harbor/`: the island ground has no square patches of bare earth, moss or flowers; the grass mixes its greens blade by blade and the flowers are small dots ([#81](https://github.com/i098/Crewship/issues/81)).
+- The npm publish workflow no longer fails when the release PR already set `npm/package.json` to the release version; it checks that the version matches the tag and stops with an error before the publish when they differ ([#122](https://github.com/i098/Crewship/issues/122)).
+- Fixed Python test collection by loading the renamed Crewship schema in the README checks ([#129](https://github.com/i098/Crewship/issues/129)).
+
 ## [0.3.0] - 2026-10-10
 
 ### Added
@@ -85,7 +105,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - iMessage front desk waits a 4-second quiet period, sends multi-bubble replies, and keeps the full intake ([#25](https://github.com/i098/Crewship/pull/25), [#28](https://github.com/i098/Crewship/pull/28)).
 - Firstmate inbox wake patches apply on top of upstream main ([#30](https://github.com/i098/Crewship/pull/30)).
 
-[Unreleased]: https://github.com/i098/Crewship/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/i098/Crewship/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/i098/Crewship/releases/tag/v0.4.0
 [0.3.0]: https://github.com/i098/Crewship/releases/tag/v0.3.0
 [0.2.0]: https://github.com/i098/Crewship/releases/tag/v0.2.0
 [0.1.0]: https://github.com/i098/Crewship/releases/tag/v0.1.0
