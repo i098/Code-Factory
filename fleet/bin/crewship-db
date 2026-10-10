@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Shared Postgres: <project> prints a URL; --seed writes worktree .env.local files.
 
---apply [--check] [--no-start] converges the optional host service.
+--check-docker verifies target-account access; --apply [--check] [--no-start]
+converges the optional host service.
 """
 
 import fcntl
@@ -150,6 +151,18 @@ def seed():
 
 
 def main(argv):
+    if argv == ["--check-docker"]:
+        try:
+            result = docker("info", optional=True)
+        except OSError:
+            result = None
+        if result is None or result.returncode:
+            raise RuntimeError(
+                "Shared Postgres requires explicit Docker access for this account: "
+                "a writable /var/run/docker.sock or sudo -n docker, and a running daemon. "
+                "Crewship does not grant Docker privileges."
+            )
+        return
     if argv[:1] == ["--apply"]:
         if set(argv[1:]) - {"--check", "--no-start"}:
             raise ValueError(__doc__)

@@ -16,6 +16,14 @@ crewship:
     shared_postgres: true
 ```
 
+Before convergence, give the configured target account explicit Docker access by an administrator's choice.
+The helper requires a writable `/var/run/docker.sock` or working `sudo -n docker` access, and a running Docker daemon.
+Both options give root-equivalent access; Crewship grants neither by default.
+If you explicitly configure `crewship_docker_group_users`, start a new login session before you apply this profile.
+Run `python3 fleet/bin/crewship-db --check-docker` from the repository as the target account to check access without changing resources.
+The profile checks this prerequisite before convergence, including previews and deferred service starts.
+Project creation and automatic seeding use the same account and require the same access.
+
 Run `./ship.sh chart` to preview, then `./ship.sh launch` to apply.
 The guided setup also offers this profile and names the host config to edit.
 An unchanged second apply reports no changes for this service.
@@ -63,6 +71,8 @@ Outside these managed directories, copy the output of `crewship-db <project>` in
 Apps that do not load `.env.local` must load `DATABASE_URL` themselves.
 When both profiles run, the Supabase seeder runs the Postgres seeder after it copies its environment template.
 The Supabase comparison ignores the Postgres-managed entries, so unchanged runs do not rewrite files or create extra backups.
+Both seeders use the same file lock for environment comparisons and writes.
+The Supabase seeder releases that lock before it calls the Postgres helper.
 
 ## Data and upgrades
 
