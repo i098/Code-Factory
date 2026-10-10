@@ -15,18 +15,20 @@ const assert = require('node:assert/strict');
 const element = {
   hidden: false, classList: { add() {}, toggle() {} }, focus() {}, addEventListener() {},
   firstElementChild: {}, clientWidth: 600, clientHeight: 400,
+  style: {setProperty() {}},
   getContext: () => ({setTransform() {}, measureText: () => ({width: 6})})
 };
 const context = vm.createContext({
   document: {getElementById: () => element, querySelectorAll: () => [],
-    documentElement: {}, addEventListener() {}},
+    documentElement: {}, addEventListener() {},
+    fonts: { load: () => Promise.resolve(), ready: Promise.resolve() }},
   matchMedia: () => ({matches: false, addEventListener() {}}),
   getComputedStyle: () => ({getPropertyValue: () => 'monospace'}),
   devicePixelRatio: 1, innerWidth: 600, performance: {now: () => 0},
   IntersectionObserver: class {observe() {}}, ResizeObserver: class {observe() {}},
   requestAnimationFrame() {}, console, window: {}, assert, addEventListener() {}
 });
-vm.runInContext(fs.readFileSync(process.argv[2], 'utf8') + '\n' + process.argv[3], context);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8') + '\nmeasure();\n' + process.argv[3], context);
 """,
         text=True,
         check=True,
