@@ -73,6 +73,7 @@ Host sizing and every auto pruner are listed in [Capacity and pruners](../capaci
 GitHub Actions (`.github/workflows/ci.yml`) runs on pushes to `main`, on every pull request, and on manual dispatch:
 
 - `uv sync --locked --group dev`, then `ruff check` and `pytest`.
+- The [shared Postgres service verification](../shared-postgres.md#verification).
 - `tests/test_herdr_patch.py` again on Python 3.9, the version macOS ships, because [herdr-patch](../../herdr-patch/README.md) also runs on the operator's computer.
 - `bash config/omp-as-pi/test.sh`, the offline tests of the omp-as-pi wrapper ([no-mistakes pipeline agent](../omp.md#no-mistakes-pipeline-agent)).
 - `./ship.sh inspect` for `config/default.yml` and `containers/crewship.container.yml`.
