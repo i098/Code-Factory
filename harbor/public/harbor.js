@@ -1446,44 +1446,30 @@ function clearLinks(nodes, obstacles) {
   return links;
 }
 let approachGraph;
-function detourGraph(obstacles, nearby) {
-  if (approachGraph?.bob !== bob || approachGraph.roll !== roll || approachGraph.count !== obstacles.length) {
-    approachGraph = { bob, roll, count: obstacles.length, graphs: new Map() };
-  }
-  const key = nearby.map(s => s.id).join(), cached = approachGraph.graphs.get(key);
-  if (cached) return cached;
-  const nodes = NODES.filter(walkable);
-  for (const { bb } of nearby) nodes.push(...detourCorners(bb));
-  const graph = { nodes, edges: routeEdges(nodes, clearLinks(nodes, obstacles)) };
-  approachGraph.graphs.set(key, graph);
-  return graph;
+function rebuildRoutes() {
+  const obstacles = routeObstacles(), nodes = NODES.filter(walkable);
+  for (const { bb } of obstacles) nodes.push(...detourCorners(bb));
+  approachGraph = { obstacles, nodes, edges: routeEdges(nodes, clearLinks(nodes, obstacles)),
+    worldCount: world.length, shipCount: ship.length };
+  return approachGraph;
+}
+function detourGraph() {
+  if (!approachGraph || approachGraph.worldCount !== world.length || approachGraph.shipCount !== ship.length) return rebuildRoutes();
+  return approachGraph;
 }
 function nearestClear(point, nodes, obstacles) {
-  let best = -1, distance = Infinity;
-  for (let i = 0; i < nodes.length; i++) {
-    const d = Math.hypot(point[0] - nodes[i][0], point[1] - nodes[i][1]);
-    if (d < distance && clear(point, nodes[i], obstacles)) { best = i; distance = d; }
-  }
-  return best;
+  const order = nodes.map((n, i) => [i, Math.hypot(point[0] - n[0], point[1] - n[1])]);
+  order.sort((a, b) => a[1] - b[1]);
+  for (const [i] of order) if (clear(point, nodes[i], obstacles)) return i;
+  return -1;
 }
-function nearSegment(from, to, b) {
-  return walkBound(b, 3) >= Math.min(from[0], to[0]) - 3 && walkBound(b, 0) <= Math.max(from[0], to[0]) + 3 &&
-    walkBound(b, 5) >= Math.min(from[1], to[1]) - 3 && walkBound(b, 2) <= Math.max(from[1], to[1]) + 3;
-}
-function detourRoute(from, to, obstacles, nearby) {
-  const { nodes, edges } = detourGraph(obstacles, nearby);
+function approach(from, to) {
+  const { obstacles, nodes, edges } = detourGraph();
+  if (clear(from, to, obstacles)) return [to];
   const a = nearestClear(from, nodes, obstacles), b = nearestClear(to, nodes, obstacles);
   if (a < 0 || b < 0) return [];
   const path = route(a, b, nodes, edges);
   return path.length ? [...path, to] : [];
-}
-function approach(from, to) {
-  const obstacles = routeObstacles();
-  if (clear(from, to, obstacles)) return [to];
-  const nearby = obstacles.filter(s => nearSegment(from, to, s.bb));
-  const path = detourRoute(from, to, obstacles, nearby);
-  // Distant corners may be needed round a long wall or a coastline; never stop at the local search.
-  return path.length ? path : detourRoute(from, to, obstacles, obstacles);
 }
 function routeEdges(nodes, links) {
   const edges = nodes.map(() => []);
@@ -2145,6 +2131,8 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
+// Bob and roll change height, not walking topology. Build the corner graph before animation starts.
+rebuildRoutes();
 // A font that fails to load does not stop the scene.
 document.fonts.load(`11px ${MONO}`).catch(() => {}).then(() => document.fonts.ready).then(() => {
   measure();
