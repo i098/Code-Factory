@@ -15,7 +15,7 @@ ROOT = HARBOR.parent
 REPO = "https://github.com/i098/Crewship"
 MARK = "<!-- points: harbor/build.py fills this list from README.md and CHANGELOG.md -->"
 
-# Each Features link -> the object in the scene that shows it. Other docs go on the docs board.
+# Each Features link maps to its scene object; unmapped docs share a summary and index link.
 SCENE = {
     "docs/configuration.md": ("helm", "The helm"),
     "docs/dependencies.md": ("hold", "The cargo hold"),
