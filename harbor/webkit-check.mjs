@@ -1,6 +1,7 @@
 // Loads the built page (dist/) in Playwright WebKit as an iPhone and fails on a crash, an uncaught
 // error, a fallback to the plain page, or a multi-glyph fillText (WebKit keeps every distinct string
-// it draws, which grew iOS Safari tabs until they were killed). Run harbor/build.py first.
+// it draws, which grew iOS Safari tabs until they were killed), or a grid change after the first draw.
+// Run harbor/build.py first.
 import { readFile } from "node:fs/promises";
 import { webkit, devices } from "playwright";
 
@@ -22,14 +23,38 @@ await page.addInitScript(() => {
 await page.route("http://harbor.test/**", async (route) => {
   const path = new URL(route.request().url()).pathname.slice(1) || "index.html";
   const type = { html: "text/html", js: "text/javascript", css: "text/css" }[path.split(".").pop()];
+  if (path === "harbor.js") {
+    // Record the real grid and projection. Force slow frames to exercise the old adaptive zoom path.
+    const source = await readFile(new URL(path, dist), "utf8");
+    return route.fulfill({ contentType: type, body: source + `
+window.frames = [];
+window.lateMeasures = 0;
+const measureGrid = measure;
+measure = function() { if (window.frames.length) window.lateMeasures++; measureGrid(); };
+const renderScene = render;
+render = function() {
+  const start = performance.now();
+  renderScene();
+  window.frames.push([cols, rows, cellW, cellH, cam.tanH, cam.tanV, canvas.width, canvas.height]);
+  while (performance.now() - start < 25) {}
+};
+` });
+  }
   await route.fulfill({ body: await readFile(new URL(path, dist)), contentType: type });
 });
 await page.goto("http://harbor.test/");
-await page.waitForTimeout(5000);
-if (!page.isClosed()) {
+try {
+  await page.waitForFunction(() => window.frames?.length >= 30, null, { timeout: 30000 });
+} catch (e) {
+  errors.push(`the scene did not draw 30 frames: ${e.message}`);
+}
+if (!page.isClosed() && !errors.length) {
   const { scene, longest } = await page.evaluate(() => ({ scene: !document.getElementById("stage").hidden, longest: window.longest }));
   if (!scene) errors.push("the scene fell back to the plain page");
   if (longest !== 1) errors.push(`fillText drew ${longest} glyphs at once; touch devices must draw one at a time`);
+  const { frames, lateMeasures } = await page.evaluate(() => ({ frames: window.frames, lateMeasures: window.lateMeasures }));
+  if (frames.some((frame) => frame.some((value, i) => value !== frames[0][i]))) errors.push("the grid or field of view changed after the first draw");
+  if (lateMeasures) errors.push(`the canvas layout changed ${lateMeasures} times after the first draw`);
 }
 await browser.close();
 if (errors.length) {

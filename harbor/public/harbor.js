@@ -585,7 +585,7 @@ function trace(list, col, ox, oy, oz, dx, dy, dz) {
 // ---- Night lighting ----------------------------------------------------------------------
 // Lamps, lit windows, the ship's lantern and portholes, and the beacon light what is near them, falling off
 // with distance, and the solids near each light cast its shadows. The moon adds a dim, soft fill; the
-// lighthouse beam sweeps the harbor. Phones drop the shadow rays first when frames run long.
+// lighthouse beam sweeps the harbor.
 let shadows = !touchFirst.matches;
 function casters(list, x, y, z, r) {
   return list.filter(({ bb: b }) => {
@@ -675,7 +675,7 @@ for (const [list, lift] of [[world, 0], [ship, 1]]) {
 }
 for (const a of Object.values(anchors)) { a.x /= a.n; a.y /= a.n; a.z /= a.n; }
 
-let cols = 0, rows = 0, cellW = 8, cellH = 13, scale = 1, target = null, padX = 0, padY = 0;
+let cols = 0, rows = 0, cellW = 8, cellH = 13, target = null, padX = 0, padY = 0, aspect = 1, viewW = 0, viewH = 0;
 const MONO = getComputedStyle(document.documentElement).getPropertyValue("--mono");
 const BASE = { "": "#5c6a88", k: "#e9eefb", w: "#3f78b8", d: "#22406a", m: "#a9c8f0", o: "#dba66b", s: "#efe6cf",
   t: "#a3adc2", l: "#ffd479", r: "#e0705f", b: "#62a8e0", f: "#3a4562", h: "#7ee0c3", g: "#6fbf73", y: "#e3d3a3", n: "#9b8a62",
@@ -694,8 +694,12 @@ for (const [k, c] of Object.entries(BASE)) {
 function measure() {
   // Phones and tablets draw at most 2 device pixels per CSS pixel: a 3x canvas costs more memory than it shows.
   const dpr = touchFirst.matches ? Math.min(2, devicePixelRatio || 1) : devicePixelRatio || 1, w = stage.clientWidth, h = stage.clientHeight;
-  canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
-  const px = Math.max(6.5, Math.min(11, innerWidth * 0.0068)) * scale;
+  // Reset the backing store only for a real size change, immediately before drawing.
+  if (canvas.width !== Math.round(w * dpr)) canvas.width = Math.round(w * dpr);
+  if (canvas.height !== Math.round(h * dpr)) canvas.height = Math.round(h * dpr);
+  const px = Math.max(6.5, Math.min(11, innerWidth * 0.0068));
+  aspect = w / h;
+  viewW = w; viewH = h;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.font = `${px}px ${MONO}`;
   ctx.textBaseline = "top";
@@ -711,7 +715,7 @@ function measure() {
 let G, C, ID, D, SP;
 const cam = {};
 function render() {
-  const aspect = (cols * cellW) / (rows * cellH), tanV = 0.62, tanH = tanV * aspect;
+  const tanV = 0.62, tanH = tanV * aspect;
   const cy = Math.cos(me.yaw), sy = Math.sin(me.yaw), cp = Math.cos(me.pitch), sp = Math.sin(me.pitch);
   const fx = sy * cp, fy = sp, fz = cy * cp, rx = cy, rz = -sy, ux = -sp * sy, uy = cp, uz = -sp * cy;
   Object.assign(cam, { x: me.x, y: me.eye, z: me.z, f: [fx, fy, fz], r: [rx, 0, rz], u: [ux, uy, uz], tanH, tanV });
@@ -1398,9 +1402,13 @@ function step(dt) {
 }
 
 // ---- Loop --------------------------------------------------------------------------------
-let last = performance.now(), dirty = true, visible = true, slow = 0, fast = 0;
+let last = performance.now(), dirty = true, visible = true, slow = 0, layoutDirty = false, resizeTimer;
 new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(stage);
-new ResizeObserver(() => { measure(); dirty = true; }).observe(stage);
+const resize = new ResizeObserver(() => {
+  if (stage.clientWidth === viewW && stage.clientHeight === viewH) return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { layoutDirty = true; dirty = true; }, 120);
+});
 reduced.addEventListener("change", () => { dirty = true; });
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
@@ -1412,6 +1420,7 @@ function frame(now) {
   rc = Math.cos(roll); rs = Math.sin(roll);
   const walked = step(dt);
   if (visible && cols && (walked || dirty || !still)) {
+    if (layoutDirty) { measure(); layoutDirty = false; }
     dirty = false;
     setGangway();
     moveLights();
@@ -1422,18 +1431,14 @@ function frame(now) {
     render();
     const ms = performance.now() - t0;
     slow = ms > 20 ? slow + 1 : 0;
-    fast = ms < 9 ? fast + 1 : 0;
-    // Adaptive resolution: when frames run long drop the shadow rays, then grow the glyphs (fewer cells);
-    // when they run short for a while, shrink the glyphs again (more cells), down to the finest grid.
-    if (slow > 20 && (shadows || scale < 2.2)) {
-      if (shadows) shadows = false;
-      else { scale *= 1.15; measure(); }
-      slow = 0;
-    } else if (fast > 90 && scale > 1) {
-      scale = Math.max(1, scale / 1.1); measure(); fast = 0;
-    }
+    // Slow frames can drop shadow rays, but never change the grid or clear a drawn frame.
+    if (slow > 20 && shadows) { shadows = false; slow = 0; dirty = true; }
   }
   requestAnimationFrame(frame);
 }
-measure();
-requestAnimationFrame(frame);
+document.fonts.load(`11px ${MONO}`).then(() => document.fonts.ready).then(() => {
+  measure();
+  resize.observe(stage);
+  last = performance.now();
+  requestAnimationFrame(frame);
+});
