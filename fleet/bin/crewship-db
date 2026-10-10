@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""Shared Postgres: <project> prints an env file path; --seed writes worktree .env.local files.
+
+--check-docker verifies target-account access; --apply [--check] [--no-start]
+converges the optional host service.
+"""
+
+import fcntl
+import json
+import os
+import re
+import secrets
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+HOME = Path.home()
+STATE = HOME / ".local/state/code-factory/shared-postgres"
+SECRETS = HOME / ".local/state/code-factory/secrets/shared-postgres"
+COMPOSE = STATE / "compose.json"
+PROJECTS = STATE / "projects-dir"
+CONTAINER = "crewship-shared-postgres"
+IMAGE = "postgres:latest"
+PORT = 25432
+MARK = "# crewship-shared-postgres"
+
+
+def docker(*args, input=None, optional=False):
+    prefix = ["docker"] if os.access("/var/run/docker.sock", os.W_OK) else ["sudo", "-n", "docker"]
+    result = subprocess.run([*prefix, *args], input=input, capture_output=True, text=True)
+    if result.returncode and not optional:
+        # SQL errors can include passwords. Never forward Docker or psql output.
+        raise RuntimeError("Docker operation failed; check the shared Postgres service")
+    return result
+
+
+def write_changed(path, text):
+    if path.exists() and path.read_text() == text and path.stat().st_mode & 0o777 == 0o600:
+        return False
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False) as file:
+            temporary = Path(file.name)
+            file.write(text)
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return True
+
+
+def password(path):
+    if not path.exists():
+        write_changed(path, secrets.token_hex(24) + "\n")
+    path.chmod(0o600)
+    value = path.read_text().strip()
+    if not re.fullmatch(r"[a-f0-9]{48}", value):
+        raise RuntimeError("Invalid stored database password")
+    return value
+
+
+def compose_document():
+    return {
+        "name": "crewship-shared-postgres",
+        "services": {"postgres": {
+            "image": IMAGE,
+            "container_name": CONTAINER,
+            "restart": "unless-stopped",
+            "environment": {
+                "POSTGRES_PASSWORD_FILE": "/run/secrets/postgres_password",
+                "POSTGRES_INITDB_ARGS": "--data-checksums",
+            },
+            "secrets": ["postgres_password"],
+            "ports": [f"127.0.0.1:{PORT}:5432"],
+            "volumes": ["data:/var/lib/postgresql"],
+            "healthcheck": {
+                "test": ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "postgres"],
+                "interval": "2s", "timeout": "5s", "retries": 60,
+            },
+        }},
+        "volumes": {"data": {"name": "crewship-shared-postgres-data"}},
+        "secrets": {"postgres_password": {"file": str(SECRETS / "superuser")}},
+    }
+
+
+def apply(check=False, start=True):
+    text = json.dumps(compose_document(), indent=2) + "\n"
+    projects = str(Path(os.environ.get("CREWSHIP_PROJECTS_DIR", HOME / "Dev/firstmate/projects"))) + "\n"
+    if check:
+        if (not COMPOSE.exists() or COMPOSE.read_text() != text
+                or not PROJECTS.exists() or PROJECTS.read_text() != projects
+                or not (SECRETS / "superuser").exists()):
+            print("configure shared Postgres")
+        return
+    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    SECRETS.mkdir(parents=True, exist_ok=True, mode=0o700)
+    password(SECRETS / "superuser")
+    changed = write_changed(COMPOSE, text)
+    if write_changed(PROJECTS, projects) or changed:
+        print("configure shared Postgres")
+    if start:
+        before = docker("inspect", "--format", "{{.Id}} {{.State.Running}}", CONTAINER, optional=True)
+        docker("compose", "-f", str(COMPOSE), "up", "-d", "--pull", "always", "--wait")
+        after = docker("inspect", "--format", "{{.Id}} {{.State.Running}}", CONTAINER)
+        if before.returncode or before.stdout != after.stdout:
+            print("start shared Postgres")
+
+
+def project_url(project):
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,47}", project):
+        raise ValueError("Project must be 1-48 letters, digits, underscores or hyphens, starting with a letter")
+    if not COMPOSE.exists():
+        raise RuntimeError("Enable the shared_postgres profile and apply it first")
+    name = "crewship_" + project
+    secret = password(SECRETS / (project + ".password"))
+    # The host lock serializes concurrent lanes. gexec creates only missing objects.
+    # Restricted identifiers and hex passwords cannot inject SQL.
+    sql = fr"""SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', '{name}', '{secret}')
+WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{name}')\gexec
+SELECT format('CREATE DATABASE %I OWNER %I', '{name}', '{name}')
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{name}')\gexec
+SELECT format('REVOKE CONNECT, TEMPORARY ON DATABASE %I FROM PUBLIC', '{name}')
+WHERE EXISTS (
+  SELECT FROM pg_database, aclexplode(coalesce(datacl, acldefault('d', datdba))) acl
+  WHERE datname = '{name}' AND acl.grantee = 0
+    AND acl.privilege_type IN ('CONNECT', 'TEMPORARY')
+)\gexec
+"""
+    docker("exec", "-i", "--user", "postgres", CONTAINER, "psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "-d", "postgres", input=sql)
+    return f"postgresql://{name}:{secret}@127.0.0.1:{PORT}/{name}"
+
+
+def seed():
+    worktrees = {
+        git.parent for pattern in ("*/*/*/.git", "firstmate-*/*/firstmate/projects/*/.git")
+        for git in (HOME / ".treehouse").glob(pattern)
+    }
+    if PROJECTS.exists():
+        worktrees.update(git.parent for git in Path(PROJECTS.read_text().strip()).glob("*/.git"))
+    urls = {}
+    for worktree in sorted(worktrees):
+        project = worktree.name
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,47}", project):
+            continue
+        if project not in urls:
+            urls[project] = project_url(project)
+        path = worktree / ".env.local"
+        try:
+            original = path.read_text() if path.exists() else ""
+            lines = [line for line in original.splitlines()
+                     if line != MARK and not re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=", line)]
+            text = "\n".join([*lines, MARK, "DATABASE_URL=" + urls[project]]) + "\n"
+            write_changed(path, text)
+        except OSError:
+            continue
+
+
+def main(argv):
+    if argv == ["--check-docker"]:
+        try:
+            result = docker("info", optional=True)
+        except OSError:
+            result = None
+        if result is None or result.returncode:
+            raise RuntimeError(
+                "Shared Postgres requires explicit Docker access for this account: "
+                "a writable /var/run/docker.sock or sudo -n docker, and a running daemon. "
+                "Crewship does not grant Docker privileges."
+            )
+        return
+    if argv[:1] == ["--apply"]:
+        if set(argv[1:]) - {"--check", "--no-start"}:
+            raise ValueError(__doc__)
+        apply(check="--check" in argv, start="--no-start" not in argv)
+        return
+    if argv == ["--seed"] or len(argv) == 1 and not argv[0].startswith("-"):
+        SECRETS.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with (SECRETS / ".lock").open("a") as lock:
+            os.chmod(lock.name, 0o600)
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if argv == ["--seed"]:
+                seed()
+            else:
+                url = project_url(argv[0])
+                path = SECRETS / (argv[0] + ".env")
+                write_changed(path, "DATABASE_URL=" + url + "\n")
+                print(path)
+        return
+    raise ValueError(__doc__)
+
+
+if __name__ == "__main__":
+    try:
+        main(sys.argv[1:])
+    except (OSError, RuntimeError, ValueError) as error:
+        print(f"crewship-db: {error}", file=sys.stderr)
+        sys.exit(1)

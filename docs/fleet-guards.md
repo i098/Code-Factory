@@ -21,10 +21,11 @@ Sizing per lane count and the full list of pruners are in
 
 ## What is provisioned
 
-The stack directory, environment seeder, lane heap cap and CLI shim require `shared_supabase`.
+The Supabase stack directory, Supabase environment seeder, lane heap cap and CLI shim require `shared_supabase`.
 The Docker guard, reapers and storage guard require `fleet_guards`.
 Each profile manages only its own units.
 The Docker defaults and Firstmate spawn floor belong to their respective profiles.
+See [Shared Postgres](shared-postgres.md#worktree-environment) for the separate database seeder and the behavior when both profiles run.
 
 | Path (under the account home) | Purpose |
 | --- | --- |

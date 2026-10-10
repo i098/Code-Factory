@@ -110,6 +110,8 @@ To update a patch, edit its file in a pull request. To drop a patch, delete its 
 - Worker base `ubuntu:latest` (the newest Ubuntu LTS), pulled from `mirror.gcr.io/library/ubuntu:latest`, Google's Docker Hub mirror with no anonymous pull limit, plus apt: bash, build-essential, ca-certificates, curl, git, iproute2, jq, less, libssl-dev, openssh-client, pkg-config, procps, python3, python3-apt, python3-venv, sudo, tar, unzip, xz-utils, zstd.
 - Optional compose backing services, never installed by apply: `postgres:18-bookworm`, `redis:8-alpine`, from the same mirror, digest-pinned because a floating Postgres tag would move a data volume across major versions it cannot read.
 - CI pool job containers (`maintenance/ci-pool.py`, only with `crewship.ci_pool`): the official `ghcr.io/actions/actions-runner:latest`, pulled again when a new image is available. It is the runner GitHub publishes, so it is not checksum-verified here; see [CI pool](ci-pool.md).
+- Shared Postgres (`profiles.shared_postgres` only): the official `postgres:latest`, pulled once per apply with Compose, like the CI pool's latest-image pattern.
+  A new major version needs a manual database upgrade; see [Shared Postgres](shared-postgres.md#data-and-upgrades).
 
 ## Assumed on the host
 

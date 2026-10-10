@@ -94,13 +94,14 @@ flowchart TB
     recipe[Provisioning recipe] --> config[Tool configuration]
     recipe --> worker[Isolated worker]
     worker --> volumes[Compose data volumes]
-    profile[Shared Supabase profile] --> stack[Shared stack]
+    profile[Shared database profiles] --> stack[Shared backend]
     stack --> env[Worktree env seeder]
     env --> apps[Worktree apps]
     apps -->|application traffic| stack
     auth[Authentication and state] -.->|outside recipe| host[Host account]
 ```
 
-Authentication and mutable state stay outside the recipe; optional shared Supabase supplies worktree apps with one backend.
+Authentication and mutable state stay outside the recipe.
+See [Shared Supabase](fleet-guards.md#shared-supabase) and [Shared Postgres](shared-postgres.md) for the optional worktree backends.
 
 [Agent architecture reference](agents/architecture.md)

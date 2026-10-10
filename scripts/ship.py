@@ -52,6 +52,9 @@ def validate_config(document):
     if config["profiles"].get("fleet_guards"):
         if not (config["profiles"]["docker"] and config["profiles"]["firstmate"]):
             raise ValueError("fleet guards require the docker and firstmate profiles")
+    if config["profiles"].get("shared_postgres"):
+        if not (config["profiles"]["docker"] and config["profiles"]["firstmate"]):
+            raise ValueError("shared Postgres requires the docker and firstmate profiles")
     if config["profiles"].get("shared_supabase"):
         if not (config["profiles"]["docker"] and config["profiles"]["firstmate"]):
             raise ValueError("shared Supabase requires the docker and firstmate profiles")
@@ -362,6 +365,13 @@ def questions(document, config_path):
             "They are off by default and need Docker, Firstmate, and an existing fixture volume "
             "or archive. If yes, set crewship.profiles.shared_supabase to true in "
             f"{config_path} and follow {ROOT / 'docs/fleet-guards.md'}."
+        )
+    if not config["profiles"].get("shared_postgres"):
+        prompt += (
+            " Then ask one short question: enable the optional shared Postgres database? "
+            "It is off by default and needs Docker and Firstmate. "
+            "If yes, set crewship.profiles.shared_postgres to true in "
+            f"{config_path} and follow {ROOT / 'docs/shared-postgres.md'}."
         )
     returncode = subprocess.run([omp, prompt], cwd=firstmate, env=environment).returncode
     if returncode:
