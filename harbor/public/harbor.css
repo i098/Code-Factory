@@ -74,7 +74,7 @@ code, kbd { font-family: var(--mono); font-size: 0.9em; }
 
 .pad {
   display: none;
-  position: absolute; right: 10px; bottom: 10px;
+  position: absolute; left: calc(10px + env(safe-area-inset-left)); bottom: calc(10px + env(safe-area-inset-bottom));
   width: 84px; height: 84px; border-radius: 50%;
   border: 1px solid rgba(126, 224, 195, 0.35);
   background: rgba(10, 15, 28, 0.25);
