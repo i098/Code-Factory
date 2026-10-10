@@ -10,17 +10,20 @@ const dist = new URL("dist/", import.meta.url);
 const browser = await webkit.launch();
 await mkdir(new URL("proof/", dist), { recursive: true });
 const errors = [];
-for (const [name, width, height, touch] of [
+for (const [name, width, height, touch, scale = 1] of [
   ["desktop", 1440, 900, false],
   ["portrait", 390, 844, true],
   ["landscape", 844, 390, true],
-  ["narrow-portrait", 320, 568, true],
-  ["narrow-landscape", 568, 320, true]
+  ["narrow-portrait", 320, 568, true, 1.15 ** 6],
+  ["narrow-landscape", 568, 320, true, 1.15 ** 6],
+  ["short-landscape", 568, 256, true, 1.15 ** 6],
+  ["shortest-landscape", 568, 192, true, 1.15 ** 6]
 ]) {
 const page = await browser.newPage({
   ...(touch ? devices["iPhone 13"] : {}),
   viewport: { width, height }
 });
+const expectedInsets = touch ? (width > height ? [0, 47, 21, 47] : [47, 0, 34, 0]) : [0, 0, 0, 0];
 page.on("pageerror", (e) => errors.push(`uncaught: ${e.message}`));
 page.on("crash", () => errors.push("the page crashed"));
 page.on("console", (m) => m.type() === "error" && errors.push(`console: ${m.text()}`));
@@ -44,12 +47,34 @@ await page.context().route("**/*", async (route) => {
     // Force slow frames to check that the exterior grid and projection stay fixed.
     const source = await readFile(new URL(path, dist), "utf8");
     return route.fulfill({ contentType: type, body: source + `
+["top", "right", "bottom", "left"].forEach((side, n) => stage.style.setProperty("--safe-" + side, ${JSON.stringify(expectedInsets)}[n] + "px"));
+const drawPopup = drawSign;
+drawSign = function() {
+  window.signGlyphs = 0;
+  const fill = ctx.fillText;
+  ctx.fillText = function(text, ...args) { window.signGlyphs += text.trim().length; return fill.call(this, text, ...args); };
+  try { drawPopup(); } finally { ctx.fillText = fill; }
+};
 window.frames = [];
 window.introClocks = [];
 window.firstFrameBlack = false;
 window.lateMeasures = 0;
 const measureGrid = measure;
-measure = function() { if (window.frames.length) window.lateMeasures++; measureGrid(); };
+measure = function() {
+  if (window.frames.length) window.lateMeasures++;
+  measureGrid();
+  if (${scale} !== 1) {
+    cellH *= ${scale};
+    ctx.font = cellH + "px " + MONO;
+    cellW = ctx.measureText("M").width;
+    cols = Math.floor(stage.clientWidth / cellW);
+    rows = Math.floor(stage.clientHeight / cellH);
+    padX = (stage.clientWidth - cols * cellW) / 2;
+    padY = (stage.clientHeight - rows * cellH) / 2;
+    G = new Array(cols * rows); C = new Array(cols * rows);
+    ID = new Int32Array(cols * rows); D = new Float32Array(cols * rows); SP = new Array(cols * rows);
+  }
+};
 const renderScene = render;
 render = function() {
   const start = performance.now();
@@ -74,6 +99,7 @@ window.harborCheck = {
   bounds() {
     return {
       box: signBox,
+      glyphs: window.signGlyphs,
       x: padX + signBox.i * cellW, y: padY + signBox.j * cellH,
       width: signBox.w * cellW, height: signBox.h * cellH,
       safe: [safe.top, safe.right, safe.bottom, safe.left], screenWidth: stage.clientWidth, screenHeight: stage.clientHeight,
@@ -84,6 +110,8 @@ window.harborCheck = {
         x: padX + (signBox.i + 2) * cellW,
         y: padY + (signBox.j + 1 + start + height / 2) * cellH,
         href: a.href, height: height * cellH,
+        hit: signHit(padX + (signBox.i + 2) * cellW,
+          padY + (signBox.j + 1 + start + height / 2) * cellH)?.href,
         top: padY + (signBox.j + 1 + start) * cellH,
         bottom: padY + (signBox.j + 1 + start + height) * cellH,
         left: padX + (signBox.i + 1) * cellW,
@@ -144,11 +172,6 @@ if (outside.inside || !outside.clear || outside.z >= 20.75 || outside.yaw !== Ma
 }
 if (!page.isClosed() && !errors.length) {
 await page.emulateMedia({ reducedMotion: "reduce" });
-if (touch) await page.evaluate(() => {
-  const stage = document.getElementById("stage");
-  const insets = innerWidth > innerHeight ? [0, 47, 21, 47] : [47, 0, 34, 0];
-  ["top", "right", "bottom", "left"].forEach((side, n) => stage.style.setProperty(`--safe-${side}`, `${insets[n]}px`));
-});
 const overlaps = (a, b) => b && a.x < b.x + b.width && a.x + a.width > b.x
   && a.y < b.y + b.height && a.y + a.height > b.y;
 for (const id of [null, ...await page.evaluate(() => window.harborCheck.ids)]) {
@@ -161,16 +184,21 @@ for (const id of [null, ...await page.evaluate(() => window.harborCheck.ids)]) {
     return window.harborCheck.bounds();
   }, id);
   clearTimeout(timeout);
+  assert.deepEqual(bounds.safe, expectedInsets, `${name}/${id}: safe insets were not measured`);
+  assert(bounds.glyphs > 0, `${name}/${id}: sign did not draw`);
   const [top, right, bottom, left] = bounds.safe;
   assert(bounds.x >= left && bounds.y >= top, `${name}/${id}: sign starts outside the safe area`);
   assert(bounds.x + bounds.width <= bounds.screenWidth - right, `${name}/${id}: sign extends past the safe area: ${JSON.stringify(bounds)}`);
   assert(bounds.y + bounds.height <= bounds.screenHeight - bottom, `${name}/${id}: sign extends below the safe area`);
-  assert(!overlaps(bounds, bounds.map), `${name}/${id}: sign covers the map`);
-  assert(!overlaps(bounds, bounds.pad), `${name}/${id}: sign covers the move pad`);
+  if (!bounds.box.overlay) {
+    assert(!overlaps(bounds, bounds.map), `${name}/${id}: sign covers the map`);
+    assert(!overlaps(bounds, bounds.pad), `${name}/${id}: sign covers the move pad`);
+  }
   await page.screenshot({ path: new URL(`proof/${name}-${id || "welcome"}.png`, dist).pathname });
   assert.equal(bounds.links.length, id ? 1 : 3, `${id}: a sign link is missing`);
   for (const link of bounds.links) {
-    if (touch) assert(link.height >= 44, `${id}: touch link is too short`);
+    assert.equal(link.hit, link.href, `${name}/${id}: link is not hit-testable`);
+    if (touch && !bounds.box.overlay) assert(link.height >= 44, `${id}: touch link is too short`);
     assert(link.top >= bounds.y && link.bottom <= bounds.y + bounds.height, `${id}: link region extends outside the frame`);
     assert(link.left >= bounds.x && link.right <= bounds.x + bounds.width, `${id}: link region extends outside the frame`);
     const popup = page.waitForEvent("popup");
@@ -180,6 +208,18 @@ for (const id of [null, ...await page.evaluate(() => window.harborCheck.ids)]) {
     await opened.waitForLoadState();
     assert.equal(opened.url(), link.href, `${id}: grid tap opened the wrong link`);
     await opened.close();
+  }
+  for (const link of await page.locator("#card a").all()) {
+    await link.focus();
+    const focus = await page.evaluate(() => ({
+      x: document.getElementById("stage").scrollLeft,
+      y: document.getElementById("stage").scrollTop,
+      bounds: window.harborCheck.bounds(),
+      href: document.activeElement.href
+    }));
+    assert.equal(focus.x, 0, `${name}/${id}: keyboard focus scrolled the stage horizontally`);
+    assert.equal(focus.y, 0, `${name}/${id}: keyboard focus scrolled the stage vertically`);
+    assert(focus.bounds.links.some((link) => link.href === focus.href), `${name}/${id}: focused link has no sign`);
   }
 }
 await page.locator('#manifest [data-spot="docsboard"] a').focus();
