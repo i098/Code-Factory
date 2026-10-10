@@ -124,8 +124,8 @@ window.harborCheck = {
       width: signBox.w * cellW, height: signBox.h * cellH,
       safe: [safe.top, safe.right, safe.bottom, safe.left], screenWidth: stage.clientWidth, screenHeight: stage.clientHeight,
       pad: pad.offsetParent ? pad.getBoundingClientRect().toJSON() : null,
-      map: { x: padX + mapBox.oi * cellW, y: padY + mapBox.oj * cellH,
-        width: mapBox.w * cellW, height: mapBox.h * cellH },
+      map: mapBox ? { x: padX + mapBox.oi * cellW, y: padY + mapBox.oj * cellH,
+        width: mapBox.w * cellW, height: mapBox.h * cellH } : null,
       links: signLinks.map(({start, height, a}) => ({
         x: padX + (signBox.i + 2) * cellW,
         y: padY + (signBox.j + 1 + start + height / 2) * cellH,
@@ -180,6 +180,24 @@ const painted = await page.evaluate(() => {
 });
 if (!painted) errors.push("the idle room cleared after looking around");
 if (!room.inside || !room.clear) errors.push("touch walking did not enter a clear room");
+const indoor = await page.evaluate(() => {
+  const before = window.harborCheck.state();
+  const focus = window.harborCheck.focusLink('#manifest [data-spot="docsboard"] a', "mast");
+  return { before, after: window.harborCheck.state(), focus };
+});
+assert(indoor.before.inside && indoor.after.inside, `${name}: manifest focus left the house`);
+assert.deepEqual([indoor.after.x, indoor.after.z], [indoor.before.x, indoor.before.z],
+  `${name}: manifest focus moved the player`);
+assert.equal(indoor.focus.target, "docsboard", `${name}: indoor manifest focus selected the wrong sign`);
+assert(indoor.focus.drawn, `${name}: indoor focused sign did not draw`);
+const indoorBounds = await page.evaluate(() => window.harborCheck.bounds());
+assert.equal(indoorBounds.map, null, `${name}: indoor sign retained a map exclusion rectangle`);
+assert.equal(indoorBounds.links.length, 1, `${name}: indoor sign link is missing`);
+for (const link of indoorBounds.links) {
+  assert.equal(link.hit, link.href, `${name}: indoor sign link is not hit-testable`);
+  assert(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y) === document.getElementById("scene"),
+    { x: link.x, y: link.y }), `${name}: indoor sign tap point is covered by an HTML control`);
+}
 await page.evaluate(() => {
   const {x, z} = window.harborCheck.state();
   window.harborCheck.place(x, z, Math.PI);
