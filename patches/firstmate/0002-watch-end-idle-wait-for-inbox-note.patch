@@ -1,5 +1,5 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Code Factory <noreply@example.invalid>
+From: Crewship <noreply@example.invalid>
 Date: Thu, 8 Oct 2026 07:46:33 +0000
 Subject: [PATCH 2/2] fix(watch): end the idle wait within a second for a
  captain inbox note

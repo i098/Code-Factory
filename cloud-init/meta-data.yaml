@@ -12,7 +12,7 @@
 # instance-id identifies this deployment to cloud-init: changing it makes
 # cloud-init treat the next boot as a new instance and run the prerequisites
 # again. Give each machine its own value.
-instance-id: code-factory-0001
+instance-id: crewship-0001
 
 # No hostname is imposed here. Uncomment and set it if you want cloud-init to
 # name the machine instead of keeping the image default.

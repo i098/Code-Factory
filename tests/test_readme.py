@@ -138,10 +138,10 @@ def test_default_config_lists_the_current_defaults():
 
     hook_env = ci_pool.HOOK_ENV
     assert (
-        f"- Hooks: `code-factory-quality-gate` at omp turn end, SessionStart banners from "
+        f"- Hooks: `crewship-quality-gate` at omp turn end, SessionStart banners from "
         f"{ticks(provisions.OMP_PLUGINS)}, `{hook_env}` (opt-in with the [CI pool](docs/ci-pool.md))"
     ) in lines
-    assert "code-factory-quality-gate" in extensions
+    assert "crewship-quality-gate" in extensions
 
     def named(prefix):
         return {line.split("`")[1] for line in lines if line.startswith(prefix)}

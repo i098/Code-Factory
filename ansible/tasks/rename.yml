@@ -1,0 +1,281 @@
+---
+# One-time migration of a host installed before the Crewship rename
+# (docs/recovery.md#upgrade-from-a-pre-rename-install). account.yml imports it
+# for an account that already existed, before it creates any path under a new
+# name. Old units are stopped, their files and enablement links deleted, and
+# each old path moves to its new name; the normal tasks then install and
+# enable the new units. Data is never deleted or overwritten: a host with both
+# an old path and its new name stops here for a human. A migrated or new host
+# finds nothing old and changes nothing.
+
+- name: Migrate the pre-rename names
+  vars:
+    # Old path, new path. An entry inside a directory that moves comes before
+    # that directory.
+    crewship_renamed_paths:
+      - ["{{ crewship_share_dir | dirname }}/code-factory/pruner-venv/.code-factory-runtime.json",
+         "{{ crewship_share_dir | dirname }}/code-factory/pruner-venv/.crewship-runtime.json"]
+      - ["{{ crewship_share_dir | dirname }}/code-factory", "{{ crewship_share_dir }}"]
+      - ["{{ crewship_cfg.home }}/.local/state/code-factory", "{{ crewship_cfg.home }}/.local/state/crewship"]
+      - ["{{ crewship_cfg.home }}/.cache/code-factory", "{{ crewship_cfg.home }}/.cache/crewship"]
+      - ["{{ crewship_user_units }}/no-mistakes-daemon-.service.d/code-factory.conf",
+         "{{ crewship_user_units }}/no-mistakes-daemon-.service.d/crewship.conf"]
+      - ["{{ crewship_user_units }}/headroom.service.d/code-factory-thinking-guard.conf",
+         "{{ crewship_user_units }}/headroom.service.d/crewship-thinking-guard.conf"]
+      - ["{{ crewship_user_units }}/pxpipe.service.d/code-factory-thinking-guard.conf",
+         "{{ crewship_user_units }}/pxpipe.service.d/crewship-thinking-guard.conf"]
+      - ["{{ crewship_omp_sidebar_extension | dirname }}/code-factory-herdr-sidebar.ts", "{{ crewship_omp_sidebar_extension }}"]
+      - ["{{ crewship_omp_quality_gate_extension | dirname }}/code-factory-quality-gate.ts", "{{ crewship_omp_quality_gate_extension }}"]
+      - [/usr/local/lib/code-factory, /usr/local/lib/crewship]
+      - [/var/lib/code-factory, /var/lib/crewship]
+    # Replaced by crewship-vnc.service and crewship-novnc.service.
+    crewship_renamed_units: [code-factory-vnc.service, code-factory-novnc.service]
+    # The old name in user unit files and in managed block markers.
+    crewship_renamed_word: code-factory
+    # Write under the old paths while they run; herdr.yml starts the timer again.
+    crewship_renamed_writer_units: [herdr-spaces.timer, herdr-spaces.service]
+    crewship_renamed_existing: >-
+      {{ crewship_renamed_path_stat.results | selectattr('stat.exists') | map(attribute='item') | list }}
+    crewship_renamed_home_re: "^{{ crewship_cfg.home | regex_escape }}/"
+  block:
+    - name: Find the pre-rename paths and their new names
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        get_checksum: false
+      become: true
+      loop: "{{ crewship_renamed_paths | flatten }}"
+      register: crewship_renamed_path_stat
+      check_mode: false
+
+    - name: Stop when a pre-rename path and its new name both exist
+      ansible.builtin.assert:
+        that: crewship_renamed_conflicts | length == 0
+        fail_msg: >-
+          Both the old and the new path exist: {{ crewship_renamed_conflicts | join(', ') }}.
+          Provisioning never overwrites or deletes data. Merge each old path
+          into its new name or remove one of them by hand, then re-run.
+        quiet: true
+      vars:
+        crewship_renamed_conflicts: >-
+          {{ crewship_renamed_paths | selectattr('0', 'in', crewship_renamed_existing)
+             | selectattr('1', 'in', crewship_renamed_existing) | map('join', ' and ') | list }}
+
+    - name: Find the units to stop before the move
+      ansible.builtin.stat:
+        path: "{{ crewship_user_units }}/{{ item }}"
+        get_checksum: false
+      become: true
+      loop: >-
+        {{ crewship_renamed_units + (crewship_renamed_writer_units
+           if crewship_renamed_paths | map('first') | select('in', crewship_renamed_existing) | list else []) }}
+      register: crewship_renamed_unit_stat
+      check_mode: false
+
+    - name: Stop the units that use the pre-rename paths
+      ansible.builtin.systemd_service:
+        scope: user
+        name: "{{ item.item }}"
+        state: stopped
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      environment: "{{ crewship_user_systemd_env }}"
+      loop: "{{ crewship_renamed_unit_stat.results | selectattr('stat.exists') | list }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: crewship_manage_services | bool
+
+    # Deleting the static enablement link is the disable.
+    - name: Delete the pre-rename units and their enablement links
+      ansible.builtin.file:
+        path: "{{ crewship_user_units }}/{{ item[1] }}{{ item[0] }}"
+        state: absent
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      loop: "{{ crewship_renamed_units | product(['', 'default.target.wants/']) | list }}"
+      loop_control:
+        label: "{{ item[1] }}{{ item[0] }}"
+      notify: reload user systemd
+
+    - name: Stop the chrome-devtools-axi bridges that run from the pre-rename directory
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import os, re, select, signal, sys
+            bridge = re.compile(re.escape(sys.argv[1]) + r"/(chrome-devtools-axi/[^/]+|npm)"
+                                r"/node_modules/chrome-devtools-axi/dist/bin/chrome-devtools-axi-bridge\.js")
+            for pid in filter(str.isdigit, os.listdir("/proc")):
+                try:
+                    fd = os.pidfd_open(int(pid))
+                except OSError:
+                    continue
+                try:
+                    with open(f"/proc/{pid}/cmdline", "rb") as stream:
+                        args = [os.fsdecode(arg) for arg in stream.read().split(b"\0")[:-1]]
+                    if os.stat(f"/proc/{pid}").st_uid != os.getuid() or len(args) != 2 or not bridge.fullmatch(args[1]):
+                        continue
+                    signal.pidfd_send_signal(fd, signal.SIGTERM)
+                    poll = select.poll()
+                    poll.register(fd, select.POLLIN)
+                    print(pid, args[1], "stopped" if poll.poll(10000) else "shutdown requested")
+                except OSError:
+                    continue
+                finally:
+                    os.close(fd)
+          - "{{ crewship_share_dir | dirname }}/{{ crewship_renamed_word }}"
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      register: crewship_renamed_bridges
+      changed_when: crewship_renamed_bridges.stdout | length > 0
+
+    - name: Report the stopped pre-rename bridges
+      ansible.builtin.debug:
+        msg: "chrome-devtools-axi bridge {{ item }}"
+      loop: "{{ crewship_renamed_bridges.stdout_lines | default([]) }}"
+
+    - name: Move the pre-rename home paths to their new names
+      ansible.builtin.command:
+        argv: [mv, -T, "{{ item[0] }}", "{{ item[1] }}"]
+        creates: "{{ item[1] }}"
+        removes: "{{ item[0] }}"
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      loop: "{{ crewship_renamed_paths | selectattr('0', 'match', crewship_renamed_home_re) | list }}"
+
+    - name: Move the pre-rename system paths to their new names
+      ansible.builtin.command:
+        argv: [mv, -T, "{{ item[0] }}", "{{ item[1] }}"]
+        creates: "{{ item[1] }}"
+        removes: "{{ item[0] }}"
+      become: true
+      loop: "{{ crewship_renamed_paths | rejectattr('0', 'match', crewship_renamed_home_re) | list }}"
+
+    # The installer refuses to replace a command link that points outside its
+    # own directory, so links into the old directory follow it.
+    - name: Find the command links into the pre-rename directory
+      ansible.builtin.command:
+        argv:
+          - find
+          - "{{ crewship_local_bin }}"
+          - -maxdepth
+          - "1"
+          - -lname
+          - "{{ crewship_share_dir | dirname }}/{{ crewship_renamed_word }}/*"
+          - -printf
+          - '%p\n%l\n'
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      register: crewship_renamed_links
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Point the command links at the new directory
+      ansible.builtin.file:
+        path: "{{ item[0] }}"
+        src: "{{ item[1] | replace(crewship_share_dir | dirname ~ '/' ~ crewship_renamed_word ~ '/', crewship_share_dir ~ '/', 1) }}"
+        state: link
+        force: true
+        follow: false
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      loop: "{{ crewship_renamed_links.stdout_lines | default([]) | batch(2) | list }}"
+      loop_control:
+        label: "{{ item[0] }}"
+
+    - name: Find the koncreet link
+      ansible.builtin.stat:
+        path: /usr/local/bin/koncreet
+        follow: false
+        get_checksum: false
+      register: crewship_renamed_koncreet
+      check_mode: false
+
+    - name: Point the koncreet link at the new directory
+      ansible.builtin.file:
+        path: /usr/local/bin/koncreet
+        src: "{{ crewship_renamed_koncreet.stat.lnk_target | replace('/usr/local/lib/' ~ crewship_renamed_word ~ '/', '/usr/local/lib/crewship/', 1) }}"
+        state: link
+        force: true
+        follow: false
+      become: true
+      when: (crewship_renamed_koncreet.stat.lnk_target | default('')).startswith('/usr/local/lib/' ~ crewship_renamed_word ~ '/')
+
+    # Rendered units are rewritten again by their own tasks; this also carries
+    # unmanaged units, such as the proxy services, over to the moved paths.
+    - name: Find user unit files that name the pre-rename paths
+      ansible.builtin.find:
+        paths: "{{ crewship_user_units }}"
+        recurse: true
+        contains: ".*{{ crewship_renamed_word }}"
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      register: crewship_renamed_unit_files
+      check_mode: false
+
+    - name: Rewrite the pre-rename paths in user unit files
+      ansible.builtin.replace:
+        path: "{{ item.path }}"
+        regexp: "{{ crewship_renamed_word }}"
+        replace: crewship
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      loop: "{{ crewship_renamed_unit_files.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+      register: crewship_renamed_unit_rewrites
+
+    - name: Reload user systemd after the unit file rewrite
+      ansible.builtin.systemd_service:
+        scope: user
+        daemon_reload: true
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      environment: "{{ crewship_user_systemd_env }}"
+      when:
+        - crewship_manage_services | bool
+        - crewship_renamed_unit_rewrites is changed
+
+    # try-restart leaves inactive units stopped. A prefix drop-in such as
+    # no-mistakes-daemon-.service is skipped: its daemon restarts by hand.
+    - name: Restart the running user services whose units name the moved paths
+      ansible.builtin.command:
+        argv: "{{ ['systemctl', '--user', 'try-restart'] + crewship_renamed_services }}"
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      environment: "{{ crewship_user_systemd_env }}"
+      changed_when: true
+      when:
+        - crewship_manage_services | bool
+        - crewship_renamed_services | length > 0
+      vars:
+        crewship_renamed_services: >-
+          {{ crewship_renamed_unit_rewrites.results | default([]) | selectattr('changed')
+             | map(attribute='item.path') | map('relpath', crewship_user_units)
+             | map('split', '.d/') | map('first') | reject('search', '/')
+             | select('search', '[^-][.]service$') | unique | list }}
+
+    # A new marker would add a second managed block beside the old one.
+    - name: Find the pre-rename managed block markers
+      ansible.builtin.find:
+        paths: ["{{ crewship_cfg.home }}", "{{ crewship_cfg.home }}/.ssh"]
+        patterns: [.profile, config]
+        hidden: true
+        contains: "# (BEGIN|END) {{ crewship_renamed_word }} "
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      register: crewship_renamed_markers
+      check_mode: false
+
+    - name: Rename the managed block markers
+      ansible.builtin.replace:
+        path: "{{ item.path }}"
+        regexp: "^# (BEGIN|END) {{ crewship_renamed_word }} "
+        replace: '# \1 crewship '
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      loop: "{{ crewship_renamed_markers.files }}"
+      loop_control:
+        label: "{{ item.path }}"

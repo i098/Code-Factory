@@ -1,6 +1,6 @@
 # Dependencies
 
-Everything the recipe installs, grouped by where it comes from. Nothing is pinned: every `./ship.sh launch` resolves each tool's newest release once and installs exactly that, so re-running apply upgrades an existing host. Every download is verified against the checksum its publisher posts for that exact release, and a release without one fails the apply instead of installing an unverified artifact (the optional Koncreet is skipped with a warning instead). The one exception is the three omp marketplace plugins (ponytail, i-have-adhd, caveman): no publisher checksums them. The installer records the releases it resolved in `~/.local/share/code-factory/resolved.json`, which the container smoke compares against; `ansible/tasks/verify.yml` also asserts that the herdr service and omp run the resolved releases. `./ship.sh chart` installs none of this.
+Everything the recipe installs, grouped by where it comes from. Nothing is pinned: every `./ship.sh launch` resolves each tool's newest release once and installs exactly that, so re-running apply upgrades an existing host. Every download is verified against the checksum its publisher posts for that exact release, and a release without one fails the apply instead of installing an unverified artifact (the optional Koncreet is skipped with a warning instead). The one exception is the three omp marketplace plugins (ponytail, i-have-adhd, caveman): no publisher checksums them. The installer records the releases it resolved in `~/.local/share/crewship/resolved.json`, which the container smoke compares against; `ansible/tasks/verify.yml` also asserts that the herdr service and omp run the resolved releases. `./ship.sh chart` installs none of this.
 
 ## Repository tooling
 
@@ -11,16 +11,16 @@ Everything the recipe installs, grouped by where it comes from. Nothing is pinne
 
 ## Latest releases
 
-`scripts/provisions.py`. Native tools are linked into `~/.local/bin`; npm tools are each installed with `npm install` into `~/.local/share/code-factory/<tool>/<version>` (npm checks the registry integrity) and linked from there. Superseded versions stay on disk.
+`scripts/provisions.py`. Native tools are linked into `~/.local/bin`; npm tools are each installed with `npm install` into `~/.local/share/crewship/<tool>/<version>` (npm checks the registry integrity) and linked from there. Superseded versions stay on disk.
 
 - Always: herdr ([herdrdev/herdr](https://github.com/herdrdev/herdr/releases/latest)), bun ([oven-sh/bun](https://github.com/oven-sh/bun/releases/latest), the x64 `baseline` build), uv ([astral-sh/uv](https://github.com/astral-sh/uv/releases/latest)), btop ([aristocratos/btop](https://github.com/aristocratos/btop/releases/latest), the static musl build, linked as `btop-bin`; `btop` is the launcher in [btop](herdr.md#btop)), sentrux ([sentrux/sentrux](https://github.com/sentrux/sentrux/releases/latest), the binary plus the same release's `grammars-<platform>.tar.gz`, whose grammars are linked into `~/.sentrux/plugins/<language>/grammars/` so sentrux never downloads them itself, unverified, on first run), fallow ([fallow-rs/fallow](https://github.com/fallow-rs/fallow/releases/latest), the static musl binary `fallow-linux-<arch>-musl`, for the [quality gate](omp.md#quality-gate)), verified against the GitHub release-asset digest. A herdr upgrade rewrites and restarts `herdr.service`.
 - Always: node, the newest release in the [nodejs.org index](https://nodejs.org/dist/index.json) (not the LTS line), verified against that release's `SHASUMS256.txt`.
 - `agents` profile, native: gh ([cli/cli](https://github.com/cli/cli/releases/latest)), treehouse ([kunchenguid/treehouse](https://github.com/kunchenguid/treehouse/releases/latest)), verified against the GitHub release-asset digest.
 - `agents` profile, native: gws, the Google Workspace CLI ([googleworkspace/cli](https://github.com/googleworkspace/cli/releases/latest), the static musl build), verified against the `<asset>.sha256` file the release publishes. Signing in Google accounts is manual: see [Google Workspace CLI](google-workspace.md).
 - `agents` profile, no-mistakes ([kunchenguid/no-mistakes](https://github.com/kunchenguid/no-mistakes/releases)): the one tool that tracks the prerelease channel. Each apply resolves the newest non-draft release, betas included (not only the latest stable one), and verifies it against the GitHub release-asset digest.
-- `agents` profile, npm: omp (`@oh-my-pi/pi-coding-agent`), chrome-devtools-axi, gh-axi, lavish-axi, quota-axi, tasks-axi, acpx (runs `omp acp`; see [no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)), and chrome-devtools-mcp (the MCP build chrome-devtools-axi launches through `CHROME_DEVTOOLS_AXI_MCP_PATH`, which points at `~/.local/share/code-factory/chrome-devtools-mcp/current`, a link the installer re-points at each release, so a new release never changes the Herdr unit or the `.profile` block and never restarts `herdr.service`). The fleet requires at least quota-axi 0.1.54 and tasks-axi 0.2.6.
+- `agents` profile, npm: omp (`@oh-my-pi/pi-coding-agent`), chrome-devtools-axi, gh-axi, lavish-axi, quota-axi, tasks-axi, acpx (runs `omp acp`; see [no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)), and chrome-devtools-mcp (the MCP build chrome-devtools-axi launches through `CHROME_DEVTOOLS_AXI_MCP_PATH`, which points at `~/.local/share/crewship/chrome-devtools-mcp/current`, a link the installer re-points at each release, so a new release never changes the Herdr unit or the `.profile` block and never restarts `herdr.service`). The fleet requires at least quota-axi 0.1.54 and tasks-axi 0.2.6.
 - `agents` profile, no-mistakes pi adapter check: every apply downloads four pi adapter source files of the no-mistakes release it installs from `raw.githubusercontent.com` (each fetch gives up after 30 seconds) and compares them with the sha256 pins in `config/omp-as-pi/check-adapter.sh`. A source that differs from its pin, or is gone from the tag (HTTP 404), switches the gate agent to `acp:omp`; a network error, a timeout or any other HTTP status leaves the agent setting as it is and prints a warning; neither fails the apply (see [no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)).
-- Retired: codex and pnpm are no longer installed (bun is the single package manager and runner; omp is the pi agent). An apply on a host that still has them removes the `codex`, `pnpm` and `pnpx` links in `~/.local/bin` that point into the old `~/.local/share/code-factory/npm` prefix and changes `defaultAgent` in `~/.acpx/config.json` from `codex` to `omp` when it is still `codex`. The old prefix stays on disk, like every superseded install, so shells and AXI bridges started before the upgrade keep their files; delete it by hand when nothing uses it. Commands of the same name installed any other way are left alone.
+- Retired: codex and pnpm are no longer installed (bun is the single package manager and runner; omp is the pi agent). An apply on a host that still has them removes the `codex`, `pnpm` and `pnpx` links in `~/.local/bin` that point into the old `~/.local/share/crewship/npm` prefix and changes `defaultAgent` in `~/.acpx/config.json` from `codex` to `omp` when it is still `codex`. The old prefix stays on disk, like every superseded install, so shells and AXI bridges started before the upgrade keep their files; delete it by hand when nothing uses it. Commands of the same name installed any other way are left alone.
 - `agents` profile, omp plugins: ponytail ([DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail)), i-have-adhd ([ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd)) and caveman ([JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman)) from their GitHub marketplaces, installed once and upgraded with `omp plugin upgrade` on every apply. These are the only installs that are not checksum-verified: no publisher posts a checksum for them, so they track each author's default branch and load as agent instructions and hooks. The operator accepted this to keep them at the latest commit.
 - `chat` profile: concord ([chojs23/concord](https://github.com/chojs23/concord/releases/latest), `concord-<arch>-unknown-linux-gnu.tar.xz`) and slk ([gammons/slk](https://github.com/gammons/slk/releases/latest), `slk_<version>_linux_<arch>.tar.gz`), verified against the GitHub release-asset digest. See [Chat clients](chat.md).
 - `development` profile: rustup-init, the version in rustup's [stable release](https://static.rust-lang.org/rustup/release-stable.toml), verified against the `.sha256` published beside it, installing the Rust `stable` toolchain (minimal profile + rustfmt + clippy). Every apply moves the toolchain to the newest stable.
@@ -56,7 +56,7 @@ The profile needs Docker and Firstmate; its fixture and safe removal steps are i
 
 Every host that starts services (`start_services: true`); the container worker image skips it.
 
-- [Koncreet](https://github.com/jimididit/koncreet), the latest release's `koncreet.tar.gz`, verified against the GitHub release-asset digest (`ansible/tasks/koncreet.yml`). It installs as root into `/usr/local/lib/code-factory/koncreet/<version>-<patch hash>/` with `/usr/local/bin/koncreet` linked to it, and `patches/koncreet/ubuntu-26.04.patch` is layered on top. It is optional: when its lookup, checksum, or download fails, apply warns and skips it. Apply never runs it; [Host hardening](security.md#host-hardening) has the manual run.
+- [Koncreet](https://github.com/jimididit/koncreet), the latest release's `koncreet.tar.gz`, verified against the GitHub release-asset digest (`ansible/tasks/koncreet.yml`). It installs as root into `/usr/local/lib/crewship/koncreet/<version>-<patch hash>/` with `/usr/local/bin/koncreet` linked to it, and `patches/koncreet/ubuntu-26.04.patch` is layered on top. It is optional: when its lookup, checksum, or download fails, apply warns and skips it. Apply never runs it; [Host hardening](security.md#host-hardening) has the manual run.
 
 ## Chrome autopruner
 
@@ -68,7 +68,7 @@ Every host that starts services (`start_services: true`); the container worker i
 
 `crewship.imessage` set ([iMessage bridge](imessage.md)).
 
-- spectrum-ts, the npm registry's latest release, installed with `bun add --exact` into `~/.local/share/code-factory/imessage` (`ansible/tasks/imessage.yml`). bun is a core tool.
+- spectrum-ts, the npm registry's latest release, installed with `bun add --exact` into `~/.local/share/crewship/imessage` (`ansible/tasks/imessage.yml`). bun is a core tool.
 
 ## Crew board
 
@@ -84,7 +84,7 @@ Every host that starts services (`start_services: true`); the container worker i
 
 ### Firstmate patch layer
 
-`patches/firstmate/` holds fixes that upstream Firstmate does not have yet. Apply builds one local commit per patch on top of `origin/main`, in file-name order. Each commit takes its author, date, and message from the patch file, plus a `Code-Factory-Patch: <file name>` trailer, so an unchanged host gets the same commits again and the apply changes nothing.
+`patches/firstmate/` holds fixes that upstream Firstmate does not have yet. Apply builds one local commit per patch on top of `origin/main`, in file-name order. Each commit takes its author, date, and message from the patch file, plus a `Crewship-Patch: <file name>` trailer, so an unchanged host gets the same commits again and the apply changes nothing.
 
 | Patch | What it does |
 | --- | --- |
@@ -97,7 +97,7 @@ How apply handles each case:
 - Upstream moved: apply builds the layer again on the new `origin/main`. It applies each patch three-way, so upstream edits near a patch do not break it.
 - Upstream already has a patch's change: apply prints `skipped, upstream already has it: <file>` and makes no commit for it.
 - A patch no longer applies: the play stops and names the patch. The checkout stays as it was. Update the patch for the new upstream code, or drop it.
-- Local commits: every commit on `main` that is not upstream must carry the `Code-Factory-Patch` trailer. Apply replaces all of them with the rebuilt layer, so an edited, added, or dropped patch needs no manual step. Apply refuses any commit without the trailer, and a dirty tree or another branch, and never resets, stashes, or cleans.
+- Local commits: every commit on `main` that is not upstream must carry the `Crewship-Patch` trailer. Apply replaces all of them with the rebuilt layer, so an edited, added, or dropped patch needs no manual step. Apply refuses any commit without the trailer, and a dirty tree or another branch, and never resets, stashes, or cleans.
 
 Verification requires `main` to be exactly `origin/main` plus the patch layer.
 

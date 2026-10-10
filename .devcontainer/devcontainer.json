@@ -30,8 +30,8 @@
 
   // A named volume never exposes Git/Docker-ignored host checkout files.
   // Clone projects here after authenticating inside the container. The filtered
-  // Crewship source snapshot remains available at /opt/code-factory.
-  "workspaceMount": "source=code-factory-dev-workspace,target=/home/coder/Dev,type=volume",
+  // Crewship source snapshot remains available at /opt/crewship.
+  "workspaceMount": "source=crewship-dev-workspace,target=/home/coder/Dev,type=volume",
   "workspaceFolder": "/home/coder/Dev",
   "mounts": [],
 
@@ -46,8 +46,8 @@
   ],
 
   "containerEnv": {
-    "CREWSHIP_ROOT": "/opt/code-factory",
-    "CREWSHIP_CONFIG": "/opt/code-factory/containers/crewship.container.yml"
+    "CREWSHIP_ROOT": "/opt/crewship",
+    "CREWSHIP_CONFIG": "/opt/crewship/containers/crewship.container.yml"
   },
 
   // Version probes only: no agent login, no first-run profile creation, no

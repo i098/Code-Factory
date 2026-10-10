@@ -23,7 +23,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 const BLANK = "\u2800";
-const SOURCE = "code-factory:sidebar";
+const SOURCE = "crewship:sidebar";
 const PR_REFRESH_MS = 5 * 60 * 1000;
 const SIZE_REFRESH_MS = 10 * 1000;
 const PARTS = ["pr", "issue", "add", "del", "files"];

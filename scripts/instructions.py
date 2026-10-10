@@ -19,7 +19,7 @@ from pathlib import Path
 TEXT = Path(__file__).resolve().parents[1] / "config/AGENTS.md"
 TARGETS = (".claude/CLAUDE.md", ".omp/agent/AGENTS.md", ".codex/AGENTS.md")
 RTK = ".claude/RTK.md"
-MANIFEST = ".local/share/code-factory/instructions.json"
+MANIFEST = ".local/share/crewship/instructions.json"
 
 
 def sha(data):

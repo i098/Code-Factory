@@ -6,8 +6,8 @@
 [Unit]
 Description=Crewship noVNC bridge (127.0.0.1:{{ crewship_cfg.desktop.novnc_port }}, loopback only)
 Documentation=https://github.com/novnc/websockify
-Requires=code-factory-vnc.service
-After=code-factory-vnc.service
+Requires=crewship-vnc.service
+After=crewship-vnc.service
 
 [Service]
 Type=simple

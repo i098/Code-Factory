@@ -343,7 +343,7 @@ def link_binary(home, name, target):
     if os.path.lexists(link):
         old = link.resolve()
         if not link.is_symlink() or not (
-            old.is_relative_to(home / ".local/share/code-factory")
+            old.is_relative_to(home / ".local/share/crewship")
             or old.is_relative_to(home / ".cargo")
         ):
             raise ValueError(
@@ -364,7 +364,7 @@ def install_asset(home, name, spec, key):
     ):
         raise ValueError("unsafe tool name/version")
     asset = spec["assets"][key]
-    final = home / ".local/share/code-factory/tools" / name / version / key
+    final = home / ".local/share/crewship/tools" / name / version / key
     stamp = final / ".asset.json"
     expected = hashlib.sha256(json.dumps(asset, sort_keys=True).encode()).hexdigest()
     valid = False
@@ -446,7 +446,7 @@ def npm_latest_install(home, tool, version, environment):
         raise ValueError(f"unsafe {tool} version")
     # ponytail: superseded versions stay on disk so running agents keep their files;
     # prune them by hand or add a sweep if disk use matters.
-    final = home / ".local/share/code-factory" / tool / version
+    final = home / ".local/share/crewship" / tool / version
     package = final / "node_modules" / package_name / "package.json"
     changed = False
     if not package.is_file() or json.loads(package.read_text()).get("version") != version:
@@ -490,7 +490,7 @@ def point_current(target):
 
 def retire_legacy_npm(home):
     """Remove the codex, pnpm and pnpx links into the dropped npm prefix; the prefix stays for live shells."""
-    legacy = home / ".local/share/code-factory/npm"
+    legacy = home / ".local/share/crewship/npm"
     changed = False
     for name in ("codex", "pnpm", "pnpx"):
         link = home / ".local/bin" / name
@@ -637,7 +637,7 @@ def main():
         "HOME": str(home),
         "PATH": str(home / ".local/bin") + ":/usr/local/bin:/usr/bin:/bin",
     }
-    prefix = home / ".local/share/code-factory"
+    prefix = home / ".local/share/crewship"
     prefix.mkdir(parents=True, exist_ok=True)
     with (prefix / ".install.lock").open("a") as guard:
         fcntl.flock(guard, fcntl.LOCK_EX)

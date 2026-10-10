@@ -16,8 +16,9 @@
 #   document, the user unit's ExecStart resolved and executed, a real headless
 #   `herdr server` brought up and shut down over its API socket, the repository
 #   CLI (validate, invalid-input rejection, init overwrite refusal), a second
-#   installer pass reporting changed=false and a second `./ship.sh launch`
-#   reporting changed=0. No source-text assertions.
+#   installer pass reporting changed=false, a `./ship.sh launch` that migrates
+#   a pre-rename layout, and a second `./ship.sh launch` reporting changed=0.
+#   No source-text assertions.
 #
 # Never used: --privileged, --pid=host, --network=host, the host Docker socket,
 # or any bind of host home, credentials or browser profiles. No agent CLI is
@@ -35,7 +36,7 @@
 #                     secret and run env, never baked into the image)
 # Environment knobs (container mode):
 #   CF_SMOKE_ONLY           comma-separated check names
-#   CF_SMOKE_APPLY_TIMEOUT  seconds for the second ansible pass (default 1800)
+#   CF_SMOKE_APPLY_TIMEOUT  seconds for each ansible pass (default 1800)
 #   CF_SMOKE_SERVER_WAIT    seconds to wait for the herdr server (default 30)
 
 set -euo pipefail
@@ -49,7 +50,7 @@ KEEP=${CF_SMOKE_KEEP:-}
 IMAGE_REF=${CF_SMOKE_IMAGE:-}
 
 usage() {
-    sed -n '2,39p' "${SCRIPT_PATH}" | sed 's/^# \{0,1\}//'
+    sed -n '2,40p' "${SCRIPT_PATH}" | sed 's/^# \{0,1\}//'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -68,7 +69,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "${MODE}" = auto ]; then
-    if [ -n "${CREWSHIP_IMAGE:-}" ] || [ -f /etc/code-factory-image ]; then
+    if [ -n "${CREWSHIP_IMAGE:-}" ] || [ -f /etc/crewship-image ]; then
         MODE=container
     else
         MODE=host
@@ -130,7 +131,7 @@ host_mode() {
             --env CF_SMOKE_APPLY_TIMEOUT="${CF_SMOKE_APPLY_TIMEOUT:-1800}" \
             --env CF_SMOKE_SERVER_WAIT="${CF_SMOKE_SERVER_WAIT:-30}" \
             --env GITHUB_TOKEN \
-            "${SMOKE_TAG}" /opt/code-factory/tests/container-smoke.sh --in-container || rc=$?
+            "${SMOKE_TAG}" /opt/crewship/tests/container-smoke.sh --in-container || rc=$?
 
     if [ "${rc}" -eq 124 ]; then
         printf 'smoke container exceeded CF_SMOKE_TIMEOUT=%s seconds\n' "${CF_SMOKE_TIMEOUT:-2700}" >&2
@@ -144,7 +145,7 @@ host_mode() {
 CREWSHIP_USER_EXPECTED=${CREWSHIP_USER:-coder}
 CREWSHIP_HOME_EXPECTED=${CREWSHIP_HOME:-/home/coder}
 CREWSHIP_WORKSPACE_EXPECTED=${CREWSHIP_WORKSPACE:-${CREWSHIP_HOME_EXPECTED}/Dev}
-CF_ROOT=${CREWSHIP_ROOT:-/opt/code-factory}
+CF_ROOT=${CREWSHIP_ROOT:-/opt/crewship}
 CF_CONFIG=${CREWSHIP_CONFIG:-${CF_ROOT}/containers/crewship.container.yml}
 
 CHECKS_TOTAL=0
@@ -211,7 +212,7 @@ cf_python() {
 # Every tool tracks its latest release. The installer records the releases it installed in RESOLVED_STAMP; checks compare
 # against that record, so an upstream release published after the build cannot
 # turn them red.
-RESOLVED_STAMP="${HOME}/.local/share/code-factory/resolved.json"
+RESOLVED_STAMP="${HOME}/.local/share/crewship/resolved.json"
 resolved_version() {
     jq -er "$1" "${RESOLVED_STAMP}"
 }
@@ -219,7 +220,7 @@ resolved_version() {
 # The contract computes the Herdr service binary from the installed release,
 # never from PATH.
 herdr_installed_bin() {
-    printf '%s/.local/share/code-factory/tools/herdr/%s/%s/herdr\n' \
+    printf '%s/.local/share/crewship/tools/herdr/%s/%s/herdr\n' \
         "${HOME}" "$(resolved_version .herdr.version)" "$(platform_tag)"
 }
 
@@ -353,7 +354,7 @@ check_resolved_releases() {
         chrome-devtools-mcp; do
         package=${tool#*:}; tool=${tool%%:*}
         version=$(resolved_version ".\"${tool}\"")
-        prefix="${HOME}/.local/share/code-factory/${tool}/${version}"
+        prefix="${HOME}/.local/share/crewship/${tool}/${version}"
         case "$(readlink -f "${HOME}/.local/bin/${tool}")" in
             "${prefix}"/*) ;;
             *) fail "${tool} resolves to $(readlink -f "${HOME}/.local/bin/${tool}"), expected the resolved release under ${prefix}" ;;
@@ -370,7 +371,7 @@ check_herdr_install_layout() {
     link="${HOME}/.local/bin/herdr"
     target=$(readlink -f "${link}")
     platform=$(platform_tag)
-    expected_prefix="${HOME}/.local/share/code-factory/tools/herdr/"
+    expected_prefix="${HOME}/.local/share/crewship/tools/herdr/"
     case "${target}" in
         "${expected_prefix}"*/"${platform}"/herdr) ;;
         *) fail "herdr resolves to ${target}, expected ${expected_prefix}<version>/${platform}/herdr" ;;
@@ -711,6 +712,97 @@ check_ansible_second_pass_idempotent() {
     ' || fail "second ./ship.sh launch did not report changed=0/failed=0/unreachable=0"
 }
 
+# A host installed before the Crewship rename. The old name comes from the
+# migration table in ansible/tasks/rename.yml, so no path is listed twice.
+# ansible-second-pass runs next and proves the second apply changes nothing.
+check_rename_migration() {
+    local old units share state out rc link path renamed unit bridge bridge_pid other_pid
+    old=$(cf_python -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))[0]["vars"]["crewship_renamed_word"])' \
+        "${CF_ROOT}/ansible/tasks/rename.yml") || fail "cannot read the old name from ansible/tasks/rename.yml"
+    units="${HOME}/.config/systemd/user"
+    share="${HOME}/.local/share"
+    state="${HOME}/.local/state"
+    launch() { ( cd "${CF_ROOT}" && timeout "${CF_SMOKE_APPLY_TIMEOUT:-1800}" ./ship.sh launch --config "${CF_CONFIG}" 2>&1 ); }
+
+    # Every renamed path that exists goes back to its old name, then the old
+    # layout gets data, the desktop units and a proxy drop-in that hosts have.
+    renamed=("${share}/crewship" "${state}/crewship" "${HOME}/.cache/crewship" /var/lib/crewship
+        "${units}/no-mistakes-daemon-.service.d/crewship.conf" "${units}/headroom.service.d/crewship-thinking-guard.conf"
+        "${HOME}/.omp/agent/extensions/crewship-herdr-sidebar.ts" "${HOME}/.omp/agent/extensions/crewship-quality-gate.ts")
+    for path in "${renamed[@]}"; do
+        [ ! -e "${path}" ] || sudo mv -T "${path}" "${path//crewship/${old}}"
+    done
+    for link in "${HOME}"/.local/bin/*; do
+        case "$(readlink "${link}")" in
+            "${share}/crewship/"*) ln -sfn "$(readlink "${link}" | sed "s#^${share}/crewship/#${share}/${old}/#")" "${link}" ;;
+        esac
+    done
+    mkdir -p "${state}/${old}/secrets" "${HOME}/.cache/${old}" "${units}/headroom.service.d"
+    printf 'kept\n' >"${share}/${old}/rename-probe"
+    printf 'secret\n' >"${state}/${old}/secrets/postgres_password"
+    printf 'cached\n' >"${HOME}/.cache/${old}/rename-probe"
+    sudo mkdir -p "/var/lib/${old}"
+    printf 'prerequisites\n' | sudo tee "/var/lib/${old}/cloud-init-prerequisites" >/dev/null
+    printf '[Service]\nExecStartPre="%s/%s/proxy-fixes/headroom-check.py"\n' "${share}" "${old}" \
+        >"${units}/headroom.service.d/${old}-thinking-guard.conf"
+    grep -rl "${share}/crewship/" "${units}" | xargs -r sed -i "s#${share}/crewship/#${share}/${old}/#g"
+    for unit in vnc novnc; do
+        printf '[Service]\nExecStart=/bin/true\n' >"${units}/${old}-${unit}.service"
+        ln -sfn "${units}/${old}-${unit}.service" "${units}/default.target.wants/${old}-${unit}.service"
+        renamed+=("${units}/crewship-${unit}.service" "${units}/default.target.wants/crewship-${unit}.service")
+    done
+    sed -i "s/^# \(BEGIN\|END\) crewship managed environment\$/# \1 ${old} managed environment/; s#${share}/crewship/#${share}/${old}/#g" \
+        "${HOME}/.profile"
+
+    # A bridge that runs from the old directory, and a process that only names its path.
+    bridge="${share}/${old}/chrome-devtools-axi/0.0.0-smoke/node_modules/chrome-devtools-axi/dist/bin/chrome-devtools-axi-bridge.js"
+    mkdir -p "${bridge%/*}"
+    printf 'setInterval(() => {}, 1000);\n' >"${bridge}"
+    node "${bridge}" </dev/null >/dev/null 2>&1 &
+    bridge_pid=$!
+    node -e 'setInterval(() => {}, 1000);' "${bridge}" </dev/null >/dev/null 2>&1 &
+    other_pid=$!
+    running() { [ -e "/proc/$1" ] && ! grep -q '^State:[[:space:]]*Z' "/proc/$1/status"; }
+
+    # An old path beside its new name stops the apply and moves nothing.
+    mkdir "${HOME}/.cache/crewship"
+    rc=0
+    out=$(launch) || rc=$?
+    [ "${rc}" -ne 0 ] || fail "the apply ran although an old path and its new name both exist"
+    grep -q 'Both the old and the new path exist' <<<"${out}" || { printf '%s\n' "${out}" | tail -n 40; fail "the apply failed for another reason"; }
+    [ -f "${share}/${old}/rename-probe" ] && [ ! -e "${share}/crewship" ] || fail "the refused apply moved data"
+    [ -f "${units}/${old}-vnc.service" ] && [ -L "${units}/default.target.wants/${old}-vnc.service" ] || fail "the refused apply deleted the old units"
+    running "${bridge_pid}" || fail "the refused apply stopped a bridge"
+    rmdir "${HOME}/.cache/crewship"
+
+    rc=0
+    out=$(launch) || rc=$?
+    [ "${rc}" -eq 0 ] || { printf '%s\n' "${out}" | tail -n 40; fail "./ship.sh launch on the old layout exited ${rc}"; }
+    ! running "${bridge_pid}" || fail "the bridge that runs from the old directory still runs"
+    grep -qF "${bridge_pid} ${bridge} stopped" <<<"${out}" || fail "the apply did not log the stopped bridge"
+    running "${other_pid}" || fail "the apply stopped a process that only names the old bridge path"
+    kill "${other_pid}"
+    wait "${bridge_pid}" "${other_pid}" || true
+    rm -rf "${share}/crewship/chrome-devtools-axi/0.0.0-smoke"
+
+    [ "$(cat "${share}/crewship/rename-probe")" = kept ] || fail "the share directory data did not move"
+    [ "$(cat "${state}/crewship/secrets/postgres_password")" = secret ] || fail "the state directory data did not move"
+    [ "$(cat "${HOME}/.cache/crewship/rename-probe")" = cached ] || fail "the cache directory data did not move"
+    [ "$(cat /var/lib/crewship/cloud-init-prerequisites)" = prerequisites ] || fail "the system directory data did not move"
+    # The desktop profile is off in a container, so only its old units must go.
+    for path in "${renamed[@]}"; do
+        case "${path}" in
+            *-vnc.service|*-novnc.service) ;;
+            *) [ -e "${path}" ] || fail "${path} is missing" ;;
+        esac
+        [ ! -e "${path//crewship/${old}}" ] && [ ! -L "${path//crewship/${old}}" ] || fail "${path//crewship/${old}} is still present"
+    done
+    ! grep -rq "${old}" "${units}" "${HOME}/.profile" || fail "a user unit or ~/.profile still names ${old}: $(grep -rl "${old}" "${units}" "${HOME}/.profile" | tr '\n' ' ')"
+    [ "$(grep -c '^# BEGIN crewship managed environment$' "${HOME}/.profile")" = 1 ] || fail "~/.profile does not have exactly one managed block"
+    [ -z "$(find "${HOME}/.local/bin" -xtype l)" ] || fail "dangling command links: $(find "${HOME}/.local/bin" -xtype l | tr '\n' ' ')"
+    printf 'old layout migrated in one apply: data moved, old units and paths gone, links and units on the new paths\n'
+}
+
 # The managed ~/.profile block is what a real interactive session gets, so it is
 # probed through an actual login shell rather than read as text.
 check_login_shell_environment() {
@@ -735,7 +827,7 @@ check_agent_gate() {
         "${HOME}/.no-mistakes/config.yaml" "${HOME}/.no-mistakes/omp-as-pi/omp-as-pi" || fail "~/.no-mistakes/config.yaml makes neither omp-as-pi nor acp:omp the gate agent"
     "${HOME}/.no-mistakes/omp-as-pi/omp-as-pi" --omp-as-pi-check || fail "the omp-as-pi preflight failed"
     [ -f "${HOME}/.omp/agent/extensions/fm-no-pattern-kill.ts" ] || fail "the pattern-kill guard omp extension is not installed"
-    [ -f "${HOME}/.omp/agent/extensions/code-factory-quality-gate.ts" ] || fail "the quality gate omp extension is not installed"
+    [ -f "${HOME}/.omp/agent/extensions/crewship-quality-gate.ts" ] || fail "the quality gate omp extension is not installed"
     jq -e '.agents.omp.command == "omp acp"' "${HOME}/.acpx/config.json" >/dev/null || fail "~/.acpx/config.json does not map omp to omp acp"
     [ -x "${HOME}/.local/bin/acpx" ] || fail "acpx is not installed in ~/.local/bin"
     cf_python -c 'import sys, yaml; s = yaml.safe_load(open(sys.argv[1]))["statusLine"]; assert s["leftSegments"][-1] == "status" and s["showHookStatus"] is False' \
@@ -801,6 +893,7 @@ container_mode() {
     run_check ship-inspect-invalid         check_ship_inspect_rejects_invalid
     run_check ship-dock-no-overwrite       check_ship_dock_refuses_overwrite
     run_check installer-idempotent         check_installer_idempotent
+    run_check rename-migration             check_rename_migration
     run_check ansible-second-pass          check_ansible_second_pass_idempotent
 
     printf '\n== %s/%s checks ran, %s failed\n' "${CHECKS_RUN}" "${CHECKS_TOTAL}" "${CHECKS_FAILED}"

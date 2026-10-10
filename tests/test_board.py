@@ -86,7 +86,7 @@ def _apply(tmp_path, home, board, check=False):
         "crewship_cfg": crewship_cfg,
         "crewship_local_bin": str(home / ".local/bin"),
         "crewship_user_units": str(home / ".config/systemd/user"),
-        "crewship_board_dir": str(home / ".local/share/code-factory/crewboard"),
+        "crewship_board_dir": str(home / ".local/share/crewship/crewboard"),
         "crewship_repo": str(ROOT),
         "crewship_manage_services": False,
         "crewship_user_systemd_env": {},
@@ -107,7 +107,7 @@ def test_apply_builds_once_and_removing_the_key_leaves_no_trace(tmp_path):
     cargo.write_text(FAKE_CARGO)
     cargo.chmod(0o755)
     units = home / ".config/systemd/user"
-    build = home / ".local/share/code-factory/crewboard"
+    build = home / ".local/share/crewship/crewboard"
     files = [
         units / "crewboard.service",
         units / "default.target.wants/crewboard.service",

@@ -20,7 +20,7 @@
 #     the play and leaves the checkout as it was
 #   * an existing checkout is never force-checked-out, reset, stashed or
 #     cleaned. Dirty trees, other branches and local commits without the
-#     Code-Factory-Patch trailer are refused and the play stops so a human can
+#     Crewship-Patch trailer are refused and the play stops so a human can
 #     look; commits with it are the old layer and are rebuilt
 #   * an unchanged host is a no-op: the layer commits take their author, date
 #     and message from the patch files, so they get the same sha every run

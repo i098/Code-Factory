@@ -53,7 +53,7 @@ crewship:
 When `mac_ssh` is not set, apply skips this step. When it is set, apply does three things as the Crewship account:
 
 - It generates `~/.ssh/id_ed25519_mac` with `ssh-keygen` (from `openssh-client`) if the file does not exist. It never replaces an existing key. Do not copy this key to another host; each host gets its own.
-- It writes a `Host mac` entry between `code-factory Host mac` markers at the top of `~/.ssh/config`, with `IdentitiesOnly yes` and `ConnectTimeout 5`. It does not change other entries.
+- It writes a `Host mac` entry between `crewship Host mac` markers at the top of `~/.ssh/config`, with `IdentitiesOnly yes` and `ConnectTimeout 5`. It does not change other entries.
 - It writes a line for the Mac's `~/.ssh/authorized_keys` to `~/.ssh/id_ed25519_mac.authorized_keys` and prints it. The line is restricted with `from="<this host's tailnet IP>"`, so the key works only from this host. If the host is not on the tailnet yet, the line has a placeholder. Join the tailnet and run apply again to get the address.
 
 Apply does not change the Mac.
@@ -133,7 +133,7 @@ A new host gets its own key; never copy `~/.ssh/id_ed25519_mac` from the old hos
 1. Run apply on the new host with the same `mac_ssh` values. It generates a new key and writes the new line.
 2. Add the new line to the Mac's `~/.ssh/authorized_keys`: at the Mac, as in step 3 of the setup, or from a host that already has access: `ssh mac 'cat >> ~/.ssh/authorized_keys' < new-host.authorized_keys`, where `new-host.authorized_keys` is a copy of the new host's line file. The line is public, so you can copy it with `scp`.
 3. Run `ssh mac true` on the new host.
-4. At cutover, remove the old host's line from the Mac's `~/.ssh/authorized_keys`. Each line ends with the comment `<user>@<hostname> code-factory mac`, which names the host. Keep the old line until the new host works.
+4. At cutover, remove the old host's line from the Mac's `~/.ssh/authorized_keys`. Each line ends with the comment `<user>@<hostname>`, the project name and the word `mac`; the hostname identifies the host. A key made before the Crewship rename carries the earlier project name. Keep the old line until the new host works.
 
 ### From a Mac to the host
 

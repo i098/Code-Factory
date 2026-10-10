@@ -24,7 +24,7 @@ The [Firstmate patch layer](dependencies.md#firstmate-patch-layer) adds the opti
 
 The new-host questions also ask, one time, whether to turn the board on, when `.local/host.yml` has no `board` block. See [New-host questions](configuration.md#new-host-questions).
 
-Apply copies `crewboard/` to `~/.local/share/code-factory/crewboard/source` and runs `cargo build --release --locked` there. It builds again only when the source changes, so a second apply changes nothing. It installs the binary as `~/.local/bin/crewboard` and runs `crewboard serve` as the user service `crewboard.service`, with `Restart=always` and a memory limit. With `start_services: false`, apply writes and enables the unit but does not start it.
+Apply copies `crewboard/` to `~/.local/share/crewship/crewboard/source` and runs `cargo build --release --locked` there. It builds again only when the source changes, so a second apply changes nothing. It installs the binary as `~/.local/bin/crewboard` and runs `crewboard serve` as the user service `crewboard.service`, with `Restart=always` and a memory limit. With `start_services: false`, apply writes and enables the unit but does not start it.
 
 ## Use it
 
@@ -67,7 +67,7 @@ The status file remains the durable ledger for working, done, needs-decision, bl
 
 ## Turn it off
 
-Remove the `board` block from `.local/host.yml` and run `./ship.sh launch`. Apply stops `crewboard.service`, and removes the unit, `~/.local/bin/crewboard` and `~/.local/share/code-factory/crewboard`. The socket goes away when the service stops.
+Remove the `board` block from `.local/host.yml` and run `./ship.sh launch`. Apply stops `crewboard.service`, and removes the unit, `~/.local/bin/crewboard` and `~/.local/share/crewship/crewboard`. The socket goes away when the service stops.
 
 ## Troubleshooting
 
