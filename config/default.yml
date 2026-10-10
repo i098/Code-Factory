@@ -17,6 +17,7 @@ crewship:
     desktop: false
     fleet_guards: false
     shared_supabase: false
+    shared_postgres: false
     fleet_browsers: false
     chat: true
   herdr:

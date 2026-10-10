@@ -1034,7 +1034,7 @@ function measure() {
   padX = (w - cols * cellW) / 2; padY = (h - rows * cellH) / 2;
   const style = getComputedStyle(stage);
   for (const edge of Object.keys(safe)) safe[edge] = parseFloat(style.getPropertyValue(`--safe-${edge}`)) || 0;
-  stage.style.setProperty("--map-width", `${32 * cellW + 8}px`);
+  signWidth = 0;
   G = new Array(cols * rows); C = new Array(cols * rows);
   ID = new Int32Array(cols * rows); D = new Float32Array(cols * rows); SP = new Array(cols * rows);
   DG = new Array(cols * rows); DC = new Array(cols * rows);
@@ -1061,9 +1061,9 @@ function render() {
   const mid = (rows >> 1) * cols + (cols >> 1);
   const spot = SP[mid], looked = spot && D[mid] < (RANGE[spot] || 12);
   show(moved ? jumped || (looked ? spot : nearby()) : null);
-  // The label floats by what you look at (the crosshair) or, when you walk up to it, by its centre.
-  label(looked && spot === target ? [cols >> 1, rows >> 1] : target && project(anchors[target]));
   minimap();
+  // Anchor the sign to the aimed surface, or the object's projected centre.
+  label(looked && spot === target ? [cols >> 1, rows >> 1] : target && project(anchors[target]));
   draw(mid);
 }
 // Each tile of one row by TILE_W columns keeps only the solids whose screen rectangle reaches it.
@@ -1161,39 +1161,106 @@ function project(a) {
   return [Math.round(((dot(cam.r) / z / cam.tanH + 1) / 2) * cols), Math.round(((1 - dot(cam.u) / z / cam.tanV) / 2) * rows)];
 }
 
-// Places the label up and to the side of the object, inside the screen, with a leader line drawn in text.
+// Signs use scene cells, including their frame, text and link hit regions.
 const LINE = new Map();
+let signBox = null, signRows = [], signLinks = [], signWidth = "", signInset = 2;
+function signLayout(width, mode, available) {
+  const key = `${width}/${mode}/${available}`;
+  if (key === signWidth) return;
+  signWidth = key;
+  signInset = mode ? 1 : 2;
+  signRows = [];
+  signLinks = [];
+  const wrap = (text, cls) => {
+    while (text.length > width) {
+      const space = text.lastIndexOf(" ", width);
+      const end = space > 0 ? space : width;
+      signRows.push([text.slice(0, end), cls]);
+      text = text.slice(end).trimStart();
+    }
+    signRows.push([text, cls]);
+  };
+  const short = (text) => text.length > width ? text.slice(0, width - 1) + "…" : text;
+  const links = [...card.querySelectorAll("a")];
+  const body = mode < 3 || available >= links.length + 4;
+  wrap(mode >= 2 ? short(card.querySelector("h3").textContent) : card.querySelector("h3").textContent, "l");
+  if (body) wrap(mode >= 2 ? short(card.querySelector("p").textContent) : card.querySelector("p").textContent, "k");
+  if (!mode) signRows.push(["", "t"]);
+  const linkHeight = Math.min(touchFirst.matches ? Math.ceil(44 / cellH) : 1,
+    mode === 3 ? Math.max(1, Math.floor((available - signRows.length - 2) / links.length)) : Infinity);
+  for (const a of links) {
+    const start = signRows.length;
+    wrap(mode === 3 ? short(`[${a.textContent}]`) : `[${a.textContent}]`, "h");
+    const height = Math.max(signRows.length - start, linkHeight);
+    while (signRows.length < start + height) signRows.push(["", "h"]);
+    signLinks.push({ start, height, a });
+  }
+}
 function label(at) {
   LINE.clear();
-  card.hidden = mapMode === 2 || (!!target && !at);
-  if (!target || !at) { card.style.transform = ""; return; }
-  at = [Math.max(0, Math.min(cols - 1, at[0])), Math.max(0, Math.min(rows - 1, at[1]))];
-  // On a phone the label stays above the move pad in the bottom corner.
-  const W = stage.clientWidth, H = pad.offsetParent ? pad.offsetTop : stage.clientHeight;
-  card.style.setProperty("--label-height", `${Math.min(H, stage.clientHeight - safe.bottom) - safe.top - 16}px`);
-  const w = card.offsetWidth, h = card.offsetHeight;
-  const px = padX + (at[0] + 0.5) * cellW, py = padY + (at[1] + 0.5) * cellH, gap = 56;
-  const x0 = safe.left + 8, x1 = W - safe.right - 8, y0 = safe.top + 8, y1 = Math.min(H - 8, stage.clientHeight - safe.bottom - 8);
-  let left = px + gap + w > x1 ? px - gap - w : px + gap, top = py - gap - h < y0 ? py + gap : py - gap - h;
-  left = Math.max(x0, Math.min(x1 - w, left)); top = Math.max(y0, Math.min(y1 - h, top));
-  // Keep clear of the mini map in the top right corner.
-  const mapLeft = mapBox ? padX + mapBox.oi * cellW - 8 : W, mapBottom = mapBox ? padY + (mapBox.oj + mapBox.h) * cellH + 8 : 0;
-  if (mapMode !== 2 && left + w > mapLeft && top < mapBottom) {
-    if (mapBottom + h < y1) top = mapBottom; else left = Math.max(x0, mapLeft - w);
+  signBox = null;
+  card.hidden = mapMode === 2;
+  if (card.hidden || !card.firstChild) return;
+  const {top, right, bottom, left} = safe;
+  const i0 = Math.max(1, Math.ceil((left - padX) / cellW));
+  const i1 = Math.min(cols - 1, Math.floor((stage.clientWidth - right - padX) / cellW));
+  const j0 = Math.max(1, Math.ceil((top - padY) / cellH));
+  const j1 = Math.min(rows - 1, Math.floor((stage.clientHeight - bottom - padY) / cellH));
+  const controls = pad.offsetParent ? pad.getBoundingClientRect() : null;
+  const padLeft = controls ? Math.floor((controls.left - 12 - padX) / cellW) : i1;
+  const padTop = controls ? Math.floor((controls.top - 12 - padY) / cellH) : j1;
+  const below = mapBox ? Math.max(j0, mapBox.oj + mapBox.h + 1) : j0;
+  const side = Math.min(i1, mapBox ? mapBox.oi - 1 : i1, padLeft);
+  const anchor = at && [Math.max(i0, Math.min(i1 - 1, at[0])), Math.max(j0, Math.min(j1 - 1, at[1]))];
+  const areas = [
+    [i0, below, i1, Math.min(j1, padTop)],
+    [i0, below, Math.min(i1, padLeft), j1],
+    [i0, j0, side, j1]
+  ];
+  for (let mode = 0; mode < 3 && !signBox; mode++) {
+    for (const area of areas) {
+      signBox = signFit(anchor, ...area, mode);
+      if (signBox) break;
+    }
   }
-  card.style.transform = `translate(${left}px, ${top}px)`;
-  // Leader from the object to the nearest point of the label's edge, one glyph per cell.
-  const ex = Math.max(left, Math.min(left + w, px)), ey = Math.max(top, Math.min(top + h, py));
-  let i = at[0], j = at[1];
-  const i1 = Math.round((ex - padX) / cellW - 0.5), j1 = Math.round((ey - padY) / cellH - 0.5);
-  const di = Math.abs(i1 - i), dj = Math.abs(j1 - j), si = Math.sign(i1 - i), sj = Math.sign(j1 - j);
-  LINE.set(j * cols + i, "*");
-  for (let err = di - dj, n = Math.max(di, dj); n > 1; n--) {
-    const e2 = 2 * err, mi = e2 > -dj, mj = e2 < di;
-    if (mi) { err -= dj; i += si; }
-    if (mj) { err += di; j += sj; }
-    LINE.set(j * cols + i, mi && mj ? (si === sj ? "\\" : "/") : mi ? "-" : "|");
+  if (!signBox) {
+    const clearLeft = controls ? Math.max(i0, Math.ceil((controls.right + 12 - padX) / cellW)) : i0;
+    signBox = signFit(anchor, clearLeft, j0, i1, j1, 3);
   }
+  if (signBox && anchor) signLeader(...anchor);
+}
+function signFit(at, i0, j0, i1, j1, mode = 0) {
+  const width = Math.min(52, i1 - i0 - (mode ? 2 : 4));
+  if (width < 1 || j1 <= j0) return null;
+  signLayout(width, mode, j1 - j0);
+  const w = Math.max(...signRows.map(([text]) => text.length)) + signInset * 2, h = signRows.length + 2;
+  if (h > j1 - j0) return null;
+  const [ai, aj] = at || [i0, j0];
+  const i = at ? ai + 4 + w > i1 ? ai - 4 - w : ai + 4 : i0;
+  const j = at ? aj - h - 2 < j0 ? aj + 2 : aj - h - 2 : j0;
+  return { i: Math.max(i0, Math.min(i1 - w, i)), j: Math.max(j0, Math.min(j1 - h, j)), w, h, overlay: mode === 3 };
+}
+function signLeader(ai, aj) {
+  const { i, j, w, h } = signBox;
+  // Leader from the object to the nearest frame cell.
+  const ei = Math.max(i, Math.min(i + w - 1, ai)), ej = Math.max(j, Math.min(j + h - 1, aj));
+  let x = ai, y = aj;
+  const dx = Math.abs(ei - x), dy = Math.abs(ej - y), sx = Math.sign(ei - x), sy = Math.sign(ej - y);
+  LINE.set(y * cols + x, "*");
+  for (let err = dx - dy, n = Math.max(dx, dy); n > 1; n--) {
+    const e2 = 2 * err, mx = e2 > -dy, my = e2 < dx;
+    if (mx) { err -= dy; x += sx; }
+    if (my) { err += dx; y += sy; }
+    LINE.set(y * cols + x, mx && my ? (sx === sy ? "\\" : "/") : mx ? "-" : "|");
+  }
+}
+function signHit(x, y) {
+  if (!signBox) return null;
+  const r = canvas.getBoundingClientRect();
+  const i = (x - r.left - padX) / cellW - signBox.i;
+  const j = (y - r.top - padY) / cellH - signBox.j - 1;
+  if (i < 1 || i >= signBox.w - 1) return null;
+  return signLinks.find((link) => j >= link.start && j < link.start + link.height)?.a || null;
 }
 
 // ---- Mini map: the island in text, every point of interest, and you; M picks, M again fills the screen.
@@ -1700,7 +1767,7 @@ function update(c, i, j, mid, onMap) {
   DG[c] = ch; DC[c] = cls;
   return true;
 }
-// Draws the intro in full, then updates each whole row before painting and draws the mini map above it.
+// Draws the intro in full, then updates each whole row before painting and draws the mini map and sign above it.
 function draw(mid) {
   if (introProgress < 1) {
     ctx.fillStyle = BACKGROUND;
@@ -1718,6 +1785,7 @@ function draw(mid) {
     ctx.fillStyle = BACKGROUND;
     ctx.fillRect(0, 0, viewW, viewH);
   }
+  forgetSign();
   for (let j = 0; j < rows; j++) {
     const onMap = mapBox && j >= mapBox.oj && j < mapBox.oj + mapBox.h;
     let first = cols, last = -1;
@@ -1730,6 +1798,16 @@ function draw(mid) {
     }
   }
   drawMap();
+  drawSign();
+}
+// The sign is drawn over the scene every frame, so the cells it covered draw again once it moves or closes.
+let signDrawn = null;
+function forgetSign() {
+  const b = signDrawn, same = b && signBox && b.i === signBox.i && b.j === signBox.j && b.w === signBox.w && b.h === signBox.h;
+  if (b && !same) {
+    for (let j = Math.max(0, b.j); j < Math.min(rows, b.j + b.h); j++) DG.fill(undefined, j * cols + Math.max(0, b.i), j * cols + Math.min(cols, b.i + b.w));
+  }
+  signDrawn = signBox && { ...signBox };
 }
 function introDistance(i, j) {
   return i / cols * 0.75 + j / rows * 0.25 - (introProgress * 1.35 - 0.2);
@@ -1784,6 +1862,22 @@ function drawMap() {
   }
   ctx.restore();
 }
+function drawSign() {
+  if (!signBox) return;
+  const { i, j, w, h } = signBox;
+  ctx.fillStyle = "#060a14";
+  ctx.fillRect(padX + i * cellW, padY + j * cellH, w * cellW, h * cellH);
+  paint("+" + "-".repeat(w - 2) + "+", "t", i, j);
+  const focused = signLinks.find(({ a }) => a.href === document.activeElement?.href);
+  signRows.forEach(([text, cls], n) => {
+    paint("|", "t", i, j + n + 1);
+    const active = focused && n >= focused.start && n < focused.start + focused.height;
+    if (active && signInset === 2) paint(">", "l", i + 1, j + n + 1);
+    paint(text, active ? "l" : cls, i + signInset, j + n + 1);
+    paint("|", "t", i + w - 1, j + n + 1);
+  });
+  paint("+" + "-".repeat(w - 2) + "+", "t", i, j + h - 1);
+}
 // WebKit keeps every distinct string fillText draws: on iOS Safari runs of glyphs grow the tab by
 // about 10 MB a second until iOS kills it. Touch devices draw glyph by glyph, a set of strings that stays small.
 function paint(run, cls, i, j) {
@@ -1817,26 +1911,21 @@ function show(id) {
   if (key === shown) return;
   shown = key;
   target = id;
-  card.classList.toggle("intro", !id);
+  signWidth = 0;
   if (!id) {
-    // The intro folds away on the first step, tap or click; its text and links come from the page header.
-    const hint = touchFirst.matches ? "The pad walks, a drag looks around, the map in the corner jumps to any point."
-      : "WASD or arrows walk, R and F look up and down, the mouse looks around, Enter opens what you point at, M opens the map.";
     if (moved) { card.replaceChildren(); return; }
     card.replaceChildren(
       node("h3", document.querySelector(".top h1").textContent),
       node("p", document.querySelector(".tagline").textContent),
-      node("p", hint, "hint"),
-      node("p", [...document.querySelector(".top nav").cloneNode(true).childNodes], "links"));
+      document.querySelector(".top nav").cloneNode(true));
     return;
   }
-  const s = spots[id];
-  const link = node("a", `Open: ${s.title} \u2192`);
+  const s = spots[id], link = node("a", id === "docsboard" ? "Docs index" : "Open");
+  link.setAttribute("aria-label", `Open: ${s.title}`);
   link.target = "_blank";
   link.rel = "noopener";
   link.href = s.href;
-  card.replaceChildren(node("h3", s.title), s.body.cloneNode(true),
-    node("p", [link, touchFirst.matches ? " \u00b7 tap to open" : " \u00b7 Enter opens it"], "hint"));
+  card.replaceChildren(node("h3", s.title), s.body.cloneNode(true), link);
 }
 
 // ---- Input -------------------------------------------------------------------------------
@@ -1859,12 +1948,25 @@ const look = (dx, dy, k) => {
   moved = true; jumped = null; walkPath = [];
   dirty = true;
 };
-// A click only starts mouse look; Enter opens what you point at. On a phone a tap on the label opens it.
-canvas.addEventListener("click", () => {
+// Grid links open on desktop and touch without starting mouse look.
+canvas.addEventListener("click", (e) => {
+  const link = signHit(e.clientX, e.clientY);
+  if (link) { link.click(); return; }
   if (!mapMode && !touchFirst.matches && stage.requestPointerLock) stage.requestPointerLock();
   stage.focus({ preventScroll: true });
 });
-card.addEventListener("click", (e) => { if (touchFirst.matches && !e.target.closest("a")) open(); });
+document.getElementById("page").addEventListener("focusin", (e) => {
+  const id = e.target.closest("[data-spot]")?.dataset.spot;
+  if (id && anchors[id]) {
+    setMap(0); walkPath = []; walkTo = null;
+    moved = true; face(id); dirty = true;
+  }
+});
+card.addEventListener("focusin", () => {
+  setMap(0); walkPath = []; walkTo = null;
+  if (target) jumped = target;
+  dirty = true;
+});
 document.addEventListener("mousemove", (e) => {
   if (document.pointerLockElement === stage) look(e.movementX, e.movementY, 0.0022);
   else hoverMap(e.clientX, e.clientY);
@@ -1879,10 +1981,11 @@ function steer(e) {
   releaseDoorInput();
   knob.style.transform = `translate(${x * half * 0.6}px, ${y * half * 0.6}px)`;
 }
-// The intro card folds away on the first tap or click, as it does on the first step.
-stage.addEventListener("pointerdown", (e) => { if (!e.target.closest(".card")) { moved = true; dirty = true; } });
+// Link presses do not dismiss the intro or start a touch drag.
 stage.addEventListener("pointerdown", (e) => {
-  if (e.target.closest(".card") || tapMap(e.clientX, e.clientY)) return;
+  if (e.target.closest("a") || signHit(e.clientX, e.clientY)) return;
+  moved = true; dirty = true;
+  if (tapMap(e.clientX, e.clientY)) return;
   if (e.pointerType === "mouse") return;
   if (pad.contains(e.target)) {
     padId = e.pointerId; steer(e);

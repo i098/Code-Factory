@@ -83,6 +83,9 @@ jobs:
       - name: Python tests
         run: uv run pytest
 
+      - name: Shared Postgres disposable service smoke
+        run: bash tests/shared-postgres-smoke.sh
+
       # herdr-patch also runs on the operator's computer: macOS ships Python 3.9.
       - name: herdr-patch tests on Python 3.9
         run: uvx --python 3.9 pytest tests/test_herdr_patch.py

@@ -1,9 +1,11 @@
 # harbor
 
 `harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship, dock, island, and house, drawn as text.
-Exterior objects open floating labels for Crewship features, and an ASCII mini map provides routes to them.
-The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
+Each object shows an ASCII sign anchored to its surface.
+The sign uses the scene's character grid, font and colors, with clickable links.
+An ASCII mini map leads to each object.
 See [how.html](public/how.html) for the renderer and controls.
+The off-screen HTML list and current sign keep links available to screen readers and keyboard users.
 An uncaught error or rejected promise in `harbor.js`, or a failure to load it, hides the scene and shows the plain page.
 Errors and rejected promises from other scripts or resources, such as browser add-ons, do not.
 JavaScript hides the plain page before the first paint; visitors without JavaScript still see it.
@@ -43,11 +45,24 @@ It is plain HTML, CSS and JavaScript in `public/`, with no dependencies. Nothing
 ## Content from the repository
 
 `build.py` (Python standard library) copies `public/` to `dist/` and fills the points of interest from the README's Features list and More docs row.
-It also adds the quick start, the repository, the latest release with the next changes from `CHANGELOG.md`, and how.html.
+It also adds the quick start, the repository, the latest release from `CHANGELOG.md`, and how.html.
 A link with an object in the scene (mapped in `build.py`'s `SCENE`) opens on that object.
-A link with no mapping never blocks the build: it prints a warning and appears on the docs board beside the HOW board.
+A link with no mapping prints a warning but never blocks the build.
 The docs board shows on the mini map like the other points.
 Add an object and a `SCENE` entry to give the link its own place.
+The build limits each sign to a title, a short description and one link.
+Unmapped pages share a short summary with a count and one link to the README feature index.
+The welcome sign has three project links.
+Signs first reflow below or beside the map, clear of the move pad and safe-area edges.
+If space is limited, signs remove spacing and shorten the visible copy.
+If no clear rectangle fits, compact signs can cover the map but keep their links clear of the move pad.
+Signs remain within the safe area.
+Touch links retain 44-pixel hit regions where space permits.
+Click or tap a sign link to open it.
+Focus a feature-list link to show its sign.
+The sign highlights the focused link without scrolling the scene.
+Link focus closes the map and cancels pending automatic walking.
+See [how.html](public/how.html) for the movement and Enter controls.
 
 ## Preview
 
@@ -60,11 +75,18 @@ Then open <http://localhost:8000>.
 
 ## Browser checks
 
-CI loads the built page in Playwright WebKit as an iPhone, with `webkit-check.mjs`.
+The check loads the built page in Playwright WebKit at desktop and iPhone portrait and landscape sizes.
+The check fails on a crash, an uncaught error, a console error, a fallback to the plain page, or a multi-glyph `fillText` call on touch.
 The check also fails if the first 30 slow exterior frames change the grid, cell size, field of view, or canvas layout.
 The check walks through the house door and back with the touch pad.
-It fails on a crash, an uncaught error, a console error, a fallback to the plain page, or a multi-glyph `fillText` call.
 It also checks that the first intro frame is black and that the scene keeps moving during the intro.
+Inside the house, it checks that manifest focus keeps the player in place and draws a sign with hit-testable links.
+It checks every sign against safe-area edges and checks map and move pad clearance before the final overlay placement.
+It includes 320×568 phones in both orientations and landscape heights of 256 and 192 pixels.
+It checks measured safe insets, visible signs, link hit regions, and keyboard focus without stage scrolling.
+It also checks feature-link focus with the full map open and an arrival selection pending.
+It fails if rendering stalls.
+It taps or clicks every link and opens the docs index with the keyboard.
 See [how.html](public/how.html) for the rendering limits on touch devices.
 
 CI also loads the page in Playwright Chromium in a 3651x2160 window at DPR 2, with `chromium-check.mjs`.

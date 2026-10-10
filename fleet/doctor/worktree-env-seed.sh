@@ -16,21 +16,34 @@ set -u
 SRC="$HOME/oss-fleet/shared-supabase/swarms-platform.env.local"
 MARK='# fleet-shared-supabase'
 LOG="$HOME/oss-fleet/doctor/worktree-env-seed.log"
+DB_ASSIGN='^[[:space:]]*(export[[:space:]]+)?DATABASE_URL[[:space:]]*='
 log() { printf '[%s] %s\n' "$(date -u +%FT%TZ)" "$*" >> "$LOG"; }
 
 [ -f "$SRC" ] || { log "source $SRC missing"; exit 1; }
 grep -qF "$MARK" "$SRC" || { log "source lacks marker '$MARK' - refusing"; exit 1; }
 
-seed_one() {
+seed_one() (
   local wt=$1 f=$1/.env.local
-  if [ -f "$f" ] && grep -qF "$MARK" "$f" && cmp -s "$SRC" "$f"; then
-    return 0
+  umask 077
+  local secrets="$HOME/.local/state/code-factory/secrets/shared-postgres"
+  # Status 70 keeps lock errors fatal; checkout write errors are best-effort.
+  mkdir -p "$secrets" || exit 70
+  exec 9>>"$secrets/.lock" || exit 70
+  flock -x 9 || exit 70
+  if [ -f "$f" ] && grep -qF "$MARK" "$f"; then
+    if cmp -s "$SRC" "$f"; then return 0; fi
+    # Postgres owns these two lines; compare the rest without rewriting them.
+    if grep -qxF '# crewship-shared-postgres' "$f" &&
+       cmp -s <(grep -vE "$DB_ASSIGN" "$SRC") \
+              <(grep -vE "$DB_ASSIGN|^# crewship-shared-postgres$" "$f"); then
+      return 0
+    fi
   fi
   if [ -f "$f" ]; then
     cp -p "$f" "$f.pre-shared-$(date -u +%Y%m%dT%H%M%SZ)"
   fi
   install -m 600 "$SRC" "$f" && log "seeded $f"
-}
+)
 
 # Heap cap for what a lane runs through bun, npm or npx (next dev, tsc): those
 # put every ancestor directory's node_modules/.bin on PATH, existing or not, so
@@ -67,11 +80,18 @@ for slot in "$HOME"/.treehouse/swarms-platform-*/*/; do
     [ -d "$wt" ] || continue
   fi
   [ -e "$wt/package.json" ] || continue
-  seed_one "$wt"
+  seed_one "$wt" || { [ "$?" -ne 70 ] || exit 1; }
   seed_node_cap "${slot%/}"
 done
 # Firstmate's primary checkout of the project.
 for wt in "$HOME"/.treehouse/firstmate-*/*/firstmate/projects/swarms-platform; do
-  [ -e "$wt/package.json" ] && seed_one "$wt"
+  if [ -e "$wt/package.json" ]; then
+    seed_one "$wt" || { [ "$?" -ne 70 ] || exit 1; }
+  fi
 done
+# Restore DATABASE_URL after Supabase copies its template when both profiles run.
+if [ -f "$HOME/.local/state/code-factory/shared-postgres/compose.json" ] &&
+   [ -x "$HOME/.local/bin/crewship-db" ]; then
+  "$HOME/.local/bin/crewship-db" --seed || exit 1
+fi
 exit 0
