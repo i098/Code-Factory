@@ -103,12 +103,12 @@ const hash = (a, b) => { const h = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
 // Harbor: quay, breakwater, the dock and what stands on them.
 // The road network: junctions and the links between them. It is drawn on the island and is the route
 // the mini map walks you along (deck, gangway, dock, avenue, plaza, breakwater path).
-const NODES = [[-0.3, -6], [-0.3, -1.2], [-0.3, 5.5], [1.9, -1.2], [4.2, -1.2], [5, 13.5], [5, 19.6], [5, 24.6], [-5, 19.6],
-  [-16, 19.6], [-28, 19.6], [-30, 10], [-30, -14], [14, 19.6], [20, 19.6]];
-const LINKS = [[0, 1], [1, 2], [1, 3], [3, 4], [4, 5], [5, 6], [6, 7], [6, 8], [8, 9], [9, 10], [10, 11], [11, 12], [6, 13], [13, 14]];
+const NODES = [[-0.3, -6], [-0.3, -1.2], [-0.3, 5.5], [1.9, -1.2], [4.2, -1.2], [5, 13.5], [5, 19.6], [7.1, 24.6], [-5, 19.6],
+  [-16, 19.6], [-28, 19.6], [-30, 10], [-30, -14], [14, 19.6], [20, 19.6], [7.1, 21.7]];
+const LINKS = [[0, 1], [1, 2], [1, 3], [3, 4], [4, 5], [5, 6], [6, 15], [6, 8], [8, 9], [9, 10], [10, 11], [11, 12], [6, 13], [13, 14], [15, 7]];
 // Island ways (the links past the dock): concrete from the dock head to the plaza and along the centre of
 // the avenue, narrow dirt trails beyond. [ax, az, dx, dz, length², concrete, length]
-const CONCRETE = new Set(["5,6", "6,7", "6,8", "6,13"]);
+const CONCRETE = new Set(["5,6", "6,15", "15,7", "6,8", "6,13"]);
 const ROADS = LINKS.slice(5).map(([a, b]) => {
   const [ax, az] = NODES[a], dx = NODES[b][0] - ax, dz = NODES[b][1] - az;
   const l2 = dx * dx + dz * dz;
@@ -346,9 +346,44 @@ for (const x of [-4, 12]) {
 // A mailbox by the office and a notice board on the quay that leads to how this page is built.
 box(world, -0.55, 1.2, 21.4, -0.45, 2.2, 21.5, "t", { spot: "mailbox" });
 box(world, -0.8, 2.2, 21.2, -0.2, 2.7, 21.7, "r", { spot: "mailbox" });
+
+// Plaza fountain: an octagonal stone basin, a raised rim, and four falling streams.
+// Water changes texture with the existing clock; reduced motion freezes that clock.
+function fountainWater(x, y, z) {
+  if (y > 1.75) return Math.sin(y * 14 - T * 5) > 0.7 ? "m:" : "w|";
+  const ripple = Math.sin(Math.hypot(x - 5, z - 24.6) * 16 - T * 3);
+  return ripple > 0.65 ? "m~" : "w.";
+}
+function fountain() {
+  const basin = column(world, 5, 24.6, 1.5, 1.5, 1.2, 1.64, "s",
+    { tex: (x, y, z, nx, ny) => ny < 0.5 && y < 1.38 ? "-" : null });
+  column(world, 5, 24.6, 1.29, 1.29, 1.64, 1.7, "w",
+    { solid: false, dim: 2.4, tex: fountainWater });
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4, b = (i + 1) * Math.PI / 4;
+    const end = (angle, y) => [5 + 1.42 * Math.cos(angle), y, 24.6 + 1.42 * Math.sin(angle)];
+    beam(world, end(a, 1.73), end(b, 1.73), "s", {}, 0.17);
+    beam(world, end(a, 1.94), end(b, 1.94), "t", {}, 0.09);
+  }
+  column(world, 5, 24.6, 0.4, 0.24, 1.7, 2.55, "s",
+    { tex: (x, y) => Math.abs(y - 1.95) < 0.06 || Math.abs(y - 2.4) < 0.04 ? "-" : null });
+  column(world, 5, 24.6, 0.24, 0.5, 2.55, 2.75, "t");
+  column(world, 5, 24.6, 0.065, 0.04, 2.75, 3.35, "m", { solid: false, dim: 2.4, tex: fountainWater });
+  for (let i = 0; i < 4; i++) {
+    const a = i * Math.PI / 2, c = Math.cos(a), s = Math.sin(a);
+    const crest = [5 + c * 0.48, 3.1, 24.6 + s * 0.48];
+    beam(world, [5, 3.35, 24.6], crest, "m", { dim: 2.4, tex: fountainWater }, 0.04);
+    beam(world, crest, [5 + c * 0.95, 1.73, 24.6 + s * 0.95], "m",
+      { dim: 2.4, tex: fountainWater }, 0.04);
+  }
+  return basin;
+}
+const fountainBasin = fountain();
 // Landscaping: hedges round the plaza, round trees, lamps along the avenue, a fence on the quay front.
+const plazaHedges = [];
 for (const [x0, x1, z0, z1] of [[1, 2.2, 22, 27.4], [7.8, 9, 22, 27.4], [2.2, 3.4, 27.6, 28.4], [6.6, 7.8, 27.6, 28.4]]) {
-  box(world, x0, 1.2, z0, x1, 1.9, z1, "g", { tex: (x, y, z) => (hash(Math.floor(x * 3), Math.floor(z * 3 + y * 3)) < 0.3 ? "-" : null) });
+  const hedge = box(world, x0, 1.2, z0, x1, 1.9, z1, "g", { tex: (x, y, z) => (hash(Math.floor(x * 3), Math.floor(z * 3 + y * 3)) < 0.3 ? "-" : null) });
+  plazaHedges.push(hedge);
 }
 // Broadleaf trees: a barked trunk, three branches and a layered canopy of leafy ellipsoids that sway.
 const canopies = [];
@@ -459,13 +494,15 @@ function floorAt(x, z) {
   const y = terrainY(x, z);
   return y > 0.1 ? y : null;
 }
+const walkBound = (b, k) => b[k] + (k < 3 ? -0.25 : 0.25);
+const walkingSolid = (s, fy, lift = 0) => s.solid && s.bb[1] + lift < fy + 1.7 && s.bb[4] + lift > fy + 0.3;
 function blocked(x, z, fy) {
   for (const list of [world, ship]) {
     const lift = list === ship ? bob : 0;
     for (const s of list) {
       const b = s.bb;
-      if (s.solid && x > b[0] - 0.25 && x < b[3] + 0.25 && z > b[2] - 0.25 && z < b[5] + 0.25 &&
-        b[1] + lift < fy + 1.7 && b[4] + lift > fy + 0.3) return true;
+      if (walkingSolid(s, fy, lift) && x > walkBound(b, 0) && x < walkBound(b, 3) &&
+        z > walkBound(b, 2) && z < walkBound(b, 5)) return true;
     }
   }
   return false;
@@ -813,6 +850,8 @@ function mapTerrain() {
 function mapMarks() {
   for (const s of world) footprint(s, s.mat === "l" ? "l" : s.mat);
   for (const s of ship) footprint(s, s.mat === "l" ? "l" : "o");
+  const f = toMap(5, 24.6);
+  if (mapInside(f)) mapPut(f[0] + 1, f[1] + 1, "O", "w");
   ORDER.forEach(mapPoint);
   if (mapMode === 2) mapLabels();
   const p = toMap(me.x, me.z);
@@ -835,10 +874,17 @@ function mapPoint(id, n) {
 // Names on the big map, right of their point, else left of it, else left out where the ship crowds them.
 function mapLabels() {
   const taken = new Set(ORDER.map((id) => toMap(anchors[id].x, anchors[id].z).join()));
+  const f = toMap(5, 24.6);
+  taken.add(f.join());
   ORDER.forEach((id, n) => {
     const p = toMap(anchors[id].x, anchors[id].z), text = spots[id].title.slice(0, 16);
     const free = (i0) => i0 >= 0 && i0 + text.length < mapBox.iw && [...text].every((_, k) => !taken.has(`${i0 + k},${p[1]}`));
-    const i0 = [p[0] + 2, p[0] - 1 - text.length].find(free);
+    const places = [p[0] + 2, p[0] - 1 - text.length];
+    if (p[1] === f[1]) {
+      if (places[0] <= f[0] && f[0] < places[0] + text.length) places[0] = f[0] + 1;
+      if (places[1] <= f[0] && f[0] < places[1] + text.length) places[1] = f[0] - text.length;
+    }
+    const i0 = places.find(free);
     if (!mapInside(p) || i0 === undefined) return;
     [...text].forEach((ch, k) => { taken.add(`${i0 + k},${p[1]}`); mapPut(i0 + k + 1, p[1] + 1, ch, mapMode && n === pick ? "h" : "k"); });
   });
@@ -860,8 +906,15 @@ let walkPath = [], walkTo = null;
 function go(id) {
   const stand = standFor(anchors[id]);
   setMap(0); moved = true; dirty = true; jumped = null;
+  walkPath = []; walkTo = null;
   if (reduced.matches) { me.x = stand[0]; me.z = stand[1]; me.eye = floorAt(...stand) + 1.6; face(id); return; }
-  walkPath = [...route(nearestNode(me.x, me.z), nearestNode(...stand)), stand];
+  const path = route(nearestNode(me.x, me.z), nearestNode(...stand));
+  if (!path.length) return;
+  const first = approach([me.x, me.z], path[0]);
+  if (!first.length) return;
+  const last = approach(path[path.length - 1], stand);
+  if (!last.length) return;
+  walkPath = [...first, ...path.slice(1), ...last];
   walkTo = id;
 }
 function face(id) {
@@ -871,20 +924,54 @@ function face(id) {
   jumped = id;
 }
 const nearestNode = (x, z) => NODES.reduce((b, n, i) => (Math.hypot(n[0] - x, n[1] - z) < Math.hypot(NODES[b][0] - x, NODES[b][1] - z) ? i : b), 0);
-// Shortest road route between two junctions (Dijkstra over a handful of nodes).
-function route(from, to) {
-  const dist = NODES.map(() => Infinity), prev = [], todo = new Set(NODES.keys());
+// Exact slab test against the same open walking bounds used by blocked().
+function segmentBlocked(a, c, b) {
+  let enter = 0, exit = 1;
+  for (const k of [0, 2]) {
+    const p = a[k / 2], d = c[k / 2] - p, low = walkBound(b, k), high = walkBound(b, k + 3);
+    if (d === 0) {
+      if (p <= low || p >= high) return false;
+    } else {
+      const t0 = (low - p) / d, t1 = (high - p) / d;
+      enter = Math.max(enter, Math.min(t0, t1));
+      exit = Math.min(exit, Math.max(t0, t1));
+      if (enter >= exit) return false;
+    }
+  }
+  return enter < exit;
+}
+function approach(from, to) {
+  const fy = floorAt(5, 24.6);
+  const obstacles = world.filter(s => walkingSolid(s, fy) && walkBound(s.bb, 3) >= -1 &&
+    walkBound(s.bb, 0) <= 10 && walkBound(s.bb, 5) >= 21 && walkBound(s.bb, 2) <= 30);
+  const clear = (a, c) => !obstacles.some(s => segmentBlocked(a, c, s.bb));
+  if (clear(from, to)) return [to];
+  const nodes = [from, to];
+  for (const { bb: b } of [fountainBasin, ...plazaHedges]) {
+    nodes.push([walkBound(b, 0) - 0.1, walkBound(b, 2) - 0.1], [walkBound(b, 3) + 0.1, walkBound(b, 2) - 0.1],
+      [walkBound(b, 3) + 0.1, walkBound(b, 5) + 0.1], [walkBound(b, 0) - 0.1, walkBound(b, 5) + 0.1]);
+  }
+  const links = [];
+  for (let a = 0; a < nodes.length; a++) {
+    for (let c = a + 1; c < nodes.length; c++) if (clear(nodes[a], nodes[c])) links.push([a, c]);
+  }
+  return route(0, 1, nodes, links).slice(1);
+}
+// Shortest route between two nodes (Dijkstra over a handful of nodes).
+function route(from, to, nodes = NODES, links = LINKS) {
+  const dist = nodes.map(() => Infinity), prev = [], todo = new Set(nodes.keys());
   dist[from] = 0;
   while (todo.size) {
     const u = [...todo].reduce((a, b) => (dist[a] < dist[b] ? a : b));
     todo.delete(u);
-    for (const [a, b] of LINKS) {
-      const v = a === u ? b : b === u ? a : -1, d = v < 0 ? 0 : dist[u] + Math.hypot(NODES[v][0] - NODES[u][0], NODES[v][1] - NODES[u][1]);
+    for (const [a, b] of links) {
+      const v = a === u ? b : b === u ? a : -1, d = v < 0 ? 0 : dist[u] + Math.hypot(nodes[v][0] - nodes[u][0], nodes[v][1] - nodes[u][1]);
       if (v >= 0 && todo.has(v) && d < dist[v]) { dist[v] = d; prev[v] = u; }
     }
   }
+  if (dist[to] === Infinity) return [];
   const path = [];
-  for (let v = to; v !== undefined; v = prev[v]) path.unshift(NODES[v]);
+  for (let v = to; v !== undefined; v = prev[v]) path.unshift(nodes[v]);
   return path;
 }
 // One frame of the auto-walk: head for the next waypoint, turning smoothly; face the object on arrival.
@@ -975,6 +1062,13 @@ function shadeLand(c, odd, t, dx, dy, dz) {
 // Brightness changes the ground textures ask for: kerbs and flowers brighter, joints, ruts and wet sand darker.
 const GRAIN = { _: 1.35, "=": 1.3, "*": 1.5, "~": 1.25, "+": 1.1, "-": 1.1, ".": 1, ",": 0.85, ":": 0.7, ";": 0.8, '"': 0.9, "'": 0.95, "`": 0.9, " ": 1 };
 const paleGroundMark = (tex) => tex === "s|" || tex === "s-" || tex === "s=" || tex === "k~";
+function textureColor(s, tex, b, fog, warm) {
+  if (s.tex === fountainWater) return tex[0] + tier(Math.max(0.34, b), 0);
+  if (s === TERRAIN && paleGroundMark(tex)) {
+    return tex[0] + tier(Math.max(b, (tex === "k~" ? 0.5 : 0.35) * fog), warm);
+  }
+  return null;
+}
 function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
   const s = hitS, P = s.P, k = hitK, t = hitT;
   const lnx = k >= 0 ? P[k] : hitN[0], lny = k >= 0 ? P[k + 1] : hitN[1], nz = k >= 0 ? P[k + 2] : hitN[2];
@@ -994,13 +1088,13 @@ function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
     const ao = ny > 0.7 ? 1 : Math.min(1, 0.55 + 0.5 * (wy - (onShip ? bob + DECK : floorAt(wx, pz) ?? 0)));
     const fog = Math.exp(-t * 0.016), b = (lit * dim * ao * (0.8 + 0.2 * Math.max(0, -(nx * dx + ny * dy + nz * dz)))) * fog + 0.02 * (1 - fog);
     cls = mat + tier(b, warm);
-    // Grass blades lean with the wind.
+    // Grass blades lean with the wind; fountain water keeps its texture glyphs below.
     const grass = ny > 0.7 && (mat === "g" || mat === "G" || mat === "M") && s === TERRAIN;
     ch = grass && b > 0.03 ? blade(px, pz, odd) : glyph(b, odd);
-    // Keep pale mortar, curb stones and shore foam readable without adding light sources.
-    if (s === TERRAIN && paleGroundMark(tex)) {
+    const texture = textureColor(s, tex, b, fog, warm);
+    if (texture) {
       ch = tex[1];
-      cls = mat + tier(Math.max(b, (tex === "k~" ? 0.5 : 0.35) * fog), warm);
+      cls = texture;
     }
   }
   // Floors get a negative id: they outline what stands on them but draw no edges themselves.

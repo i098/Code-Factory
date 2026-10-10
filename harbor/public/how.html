@@ -25,6 +25,7 @@
   <li><b>Light.</b> It is night: lamps, lit windows, the lantern and the beacon light what is near them, fall off with distance and cast shadows from the solids around them; the lighthouse beam sweeps; the moon gives a dim fill. The sea shows Fresnel reflection, moon and lamp highlights and foam. Fog and contact shadows add depth.</li>
   <li><b>Characters.</b> Brightness usually picks a glyph from the density ramp <code> .`',:;~-=+*#%@▒▓█</code> and one of eight colour levels per material.
   Grass uses blade glyphs; pale paving marks and foam keep their texture glyphs with a minimum brightness that decreases in fog.
+  Fountain water uses animated texture glyphs instead of the density ramp.
   An edge glyph (<code>| - / \ _</code>) is drawn wherever one surface meets a farther one.</li>
   <li><b>Frame loop.</b> <code>requestAnimationFrame</code> moves you, the sea and the ship and redraws the grid on a canvas.
   Devices with <code>(pointer: coarse)</code> draw one glyph per <code>fillText</code> call to limit WebKit's text cache.
