@@ -1614,10 +1614,10 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
-// A font that fails to load does not stop the scene; a startup error stays an uncaught harbor.js error.
-document.fonts.load(`11px ${MONO}`).catch(() => {}).then(() => document.fonts.ready).then(() => requestAnimationFrame(() => {
+// A font that fails to load does not stop the scene.
+document.fonts.load(`11px ${MONO}`).catch(() => {}).then(() => document.fonts.ready).then(() => {
   measure();
   resize.observe(stage);
   last = performance.now();
   requestAnimationFrame(frame);
-}));
+});

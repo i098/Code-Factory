@@ -4,7 +4,7 @@
 Exterior objects open floating labels for Crewship features, and an ASCII mini map provides routes to them.
 The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
 See [how.html](public/how.html) for the renderer and controls.
-An uncaught error in `harbor.js`, or a failure to load it, hides the scene and shows the plain page.
+An uncaught error or rejected promise in `harbor.js`, or a failure to load it, hides the scene and shows the plain page.
 Errors and rejected promises from other scripts or resources, such as browser add-ons, do not.
 JavaScript hides the plain page before the first paint; visitors without JavaScript still see it.
 The scene starts with a 1.2-second glyph-noise sweep that fades in from black without moving the camera or resizing the grid.

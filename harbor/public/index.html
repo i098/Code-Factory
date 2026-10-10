@@ -17,6 +17,7 @@ function plainFallback() {
 }
 // Only the scene's own errors show the plain page: browser add-ons add failing resources and promises too.
 addEventListener("error", (e) => (e.filename || e.target.src || "").endsWith("/harbor.js") && plainFallback(), true);
+addEventListener("unhandledrejection", (e) => String(e.reason?.stack).includes("/harbor.js") && plainFallback());
 </script>
 <link rel="stylesheet" href="harbor.css">
 <script type="module" src="harbor.js"></script>
