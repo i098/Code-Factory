@@ -1,8 +1,10 @@
 import importlib.util
+import re
 import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 SPEC = importlib.util.spec_from_file_location(
     "skills", Path(__file__).parents[1] / "scripts/skills.py"
@@ -155,3 +157,29 @@ def test_private_local_directory_source_fills_private(tmp_path):
     assert (source / "private/solo/SKILL.md").read_text() == "local solo"
     for root in skills.ROOTS:
         assert (home / root / "solo/SKILL.md").read_text() == "local solo"
+
+
+# Shapes of private detail, never the real values: a home directory, an email,
+# a tailnet host, a non-loopback IPv4, a GitHub owner URL, a secrets file, and
+# the word for the person who owns a fleet.
+PRIVATE = re.compile(
+    r"(/home/|/Users/|/root/|[\w.+-]+@[\w-]+\.[a-z]{2,}|\.ts\.net\b"
+    r"|\b(?!127\.)\d{1,3}(\.\d{1,3}){3}\b|github\.com/[\w-]+|\w+\.env\b|\bcaptain\b)",
+    re.IGNORECASE,
+)
+
+
+def test_public_skills_are_named_and_hold_no_private_details():
+    shapes = ["/home/x", "a@b.io", "h.ts.net", "10.1.2.3", "github.com/x", "k.env", "Captain"]
+    assert all(PRIVATE.search(s) for s in shapes)
+    assert not PRIVATE.search("http://127.0.0.1:9222")
+    public = Path(__file__).parents[1] / "skills/public"
+    files = [p for p in public.rglob("*") if p.is_file()]
+    assert files
+    for path in files:
+        text = path.read_text()
+        hit = PRIVATE.search(text)
+        assert not hit, f"{path.relative_to(public)}: {hit.group(0)!r}"
+        if path.name == "SKILL.md":
+            meta = yaml.safe_load(text.split("---")[1])
+            assert meta["name"] == path.parent.name, path
