@@ -12,10 +12,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Generic global instructions in `config/AGENTS.md`, installed by the `agents` profile as `~/.claude/CLAUDE.md`, `~/.omp/agent/AGENTS.md` and `~/.codex/AGENTS.md`; a file changed on the host is moved to a timestamped backup first, and an unchanged apply changes nothing ([#86](https://github.com/i098/Crewship/issues/86)).
 - README: a Built with section that lists each third-party project Crewship installs or builds on, with a link and its license ([#73](https://github.com/i098/Crewship/issues/73)).
 
-### Changed
-
-- Renamed the repository-only names that still said factory: `containers/factory.container.yml` is `containers/crewship.container.yml`, `schemas/factory.schema.json` is `schemas/crewship.schema.json` (with its `$id`), the Python project is `crewship`, and the docs say Crewship. Host config keys, paths and unit names do not change ([#96](https://github.com/i098/Crewship/issues/96)).
-
 ## [0.2.0] - 2026-10-09
 
 ### Added
