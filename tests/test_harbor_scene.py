@@ -81,7 +81,7 @@ function walkToSpot(id, start, dt) {
     autoStep(dt);
     for (let i = 0; i <= 10; i++) {
       const x = x0 + (me.x - x0) * i / 10, z = z0 + (me.z - z0) * i / 10;
-      if (x > 1 && x < 9 && z > 22 && z < 30) {
+      if (x >= 0 && x <= 10 && z >= 21 && z <= 30) {
         assert(!blocked(x, z, floorAt(x, z)), 'auto-walk crosses the basin or plaza hedges');
       }
     }
@@ -91,10 +91,26 @@ function walkToSpot(id, start, dt) {
   assert.deepEqual([me.x, me.z], stand, 'auto-walk missed its destination');
 }
 const plazaPoints = [[2.9, 24.6], [7.1, 24.6], [5, 22.5], [5, 26.7],
-  [5, 29.5], [3.8, 29.5], [6.2, 29.5], [5, 27.5], [2.9, 29.5], [7.1, 29.5]];
+  [5, 29.5], [3.8, 29.5], [6.2, 29.5], [5, 27.5], [2.9, 29.5], [7.1, 29.5],
+  [0.5, 28], [9.5, 28], [0.5, 21.5], [9.5, 21.5]];
 for (const start of plazaPoints) {
   for (const id of ORDER) walkToSpot(id, start, 0.1);
   for (const end of plazaPoints) {
+    const approachPath = [start, ...approach(start, end)];
+    assert.deepEqual(approachPath[approachPath.length - 1], end, 'approach missed its endpoint');
+    for (let k = 1; k < approachPath.length; k++) {
+      const [ax, az] = approachPath[k - 1], [bx, bz] = approachPath[k];
+      const cells = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.05));
+      for (let i = 0; i <= cells; i++) {
+        const x = ax + (bx - ax) * i / cells, z = az + (bz - az) * i / cells;
+        const fy = floorAt(x, z);
+        assert.notEqual(fy, null, 'approach leaves walkable ground');
+        assert(!blocked(x, z, fy), 'approach enters a hedge or solid cell');
+        const surface = ground(x, fy, z, 0, 1);
+        assert(surface[0] === 't' || surface === 's_' || surface.endsWith("'") ||
+          ['r*', 'b*', 's*'].includes(surface), 'approach leaves paving or grass');
+      }
+    }
     anchors.approach = {x: end[0], y: 1.2, z: end[1] + 2.5, r: 0, ship: 0};
     walkToSpot('approach', start, 0.02);
   }

@@ -313,10 +313,10 @@ function fountain() {
 }
 const fountainBasin = fountain();
 // Landscaping: hedges round the plaza, round trees, lamps along the avenue, a fence on the quay front.
-const northHedges = [];
+const plazaHedges = [];
 for (const [x0, x1, z0, z1] of [[1, 2.2, 22, 27.4], [7.8, 9, 22, 27.4], [2.2, 3.4, 27.6, 28.4], [6.6, 7.8, 27.6, 28.4]]) {
   const hedge = box(world, x0, 1.2, z0, x1, 1.9, z1, "g", { tex: (x, y, z) => (hash(Math.floor(x * 3), Math.floor(z * 3 + y * 3)) < 0.3 ? "-" : null) });
-  if (z0 > fountainBasin.bb[5]) northHedges.push(hedge);
+  plazaHedges.push(hedge);
 }
 // Broadleaf trees: a barked trunk, three branches and a layered canopy of leafy ellipsoids that sway.
 const canopies = [];
@@ -840,16 +840,23 @@ function face(id) {
 }
 const nearestNode = (x, z) => NODES.reduce((b, n, i) => (Math.hypot(n[0] - x, n[1] - z) < Math.hypot(NODES[b][0] - x, NODES[b][1] - z) ? i : b), 0);
 function approach(from, to) {
-  const obstacles = [fountainBasin, ...northHedges].map(({ bb: b }) =>
-    [b[0] - 0.25, b[1], b[2] - 0.25, b[3] + 0.25, b[4], b[5] + 0.25]);
-  const bounds = obstacles[0];
-  const clear = (a, c) => obstacles.every(b => boxEntry(b, a[0], (b[1] + b[4]) / 2, a[1],
-    1 / (c[0] - a[0]), Infinity, 1 / (c[1] - a[1])) > 1);
+  const clear = (a, c) => {
+    const cells = Math.max(1, Math.ceil(Math.hypot(c[0] - a[0], c[1] - a[1]) / 0.1));
+    for (let i = 0; i <= cells; i++) {
+      const x = a[0] + (c[0] - a[0]) * i / cells, z = a[1] + (c[1] - a[1]) * i / cells;
+      if (x >= 0 && x <= 10 && z >= 21 && z <= 30) {
+        const fy = floorAt(x, z);
+        if (fy === null || blocked(x, z, fy)) return false;
+      }
+    }
+    return true;
+  };
   if (clear(from, to)) return [to];
-  const nodes = [from, to, [bounds[0] - 0.1, bounds[2] - 0.1], [bounds[3] + 0.1, bounds[2] - 0.1],
-    [bounds[3] + 0.1, bounds[5] + 0.1], [bounds[0] - 0.1, bounds[5] + 0.1],
-    [(obstacles[1][3] + obstacles[2][0]) / 2, obstacles[1][2] - 0.1],
-    [(obstacles[1][3] + obstacles[2][0]) / 2, obstacles[1][5] + 0.1]];
+  const nodes = [from, to];
+  for (const { bb: b } of [fountainBasin, ...plazaHedges]) {
+    nodes.push([b[0] - 0.35, b[2] - 0.35], [b[3] + 0.35, b[2] - 0.35],
+      [b[3] + 0.35, b[5] + 0.35], [b[0] - 0.35, b[5] + 0.35]);
+  }
   const links = [];
   for (let a = 0; a < nodes.length; a++) {
     for (let c = a + 1; c < nodes.length; c++) if (clear(nodes[a], nodes[c])) links.push([a, c]);
