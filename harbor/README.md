@@ -11,6 +11,7 @@ Walk back through the inside door to return just outside, facing the island.
 Keyboard and touch movement share the door transition; walls and furniture block walking, and the map stays hidden inside.
 Release the movement keys and touch pad after a door crossing to move again.
 The renderer adjusts detail from rendering cost and missed room frames, relative to the measured display refresh rate.
+During slower room callbacks, it skips one repaint to measure the display period without painting load.
 
 The plaza fountain has an octagonal stone rim, a central spout, and water that uses the existing animation clock.
 Its basin blocks walking, and a blue `O` marks it on the mini map.

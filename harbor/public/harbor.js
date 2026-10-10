@@ -1493,7 +1493,7 @@ function step(dt) {
 
 // ---- Loop --------------------------------------------------------------------------------
 let last = performance.now(), dirty = true, visible = true, slow = 0, fast = 0, layoutDirty = false, resizeTimer;
-let refreshMs = Infinity, paintedLastFrame = false;
+let refreshMs = Infinity, paintedLastFrame = false, probeMs = 0;
 new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(stage);
 const resize = new ResizeObserver(() => {
   if (stage.clientWidth === viewW && stage.clientHeight === viewH) return;
@@ -1517,12 +1517,18 @@ function adaptResolution(ms, late) {
     scale = Math.max(1, scale / 1.1); layoutDirty = dirty = true; fast = 0;
   }
 }
+function roomFrameLate(frameMs) {
+  if (frameMs > 0) refreshMs = paintedLastFrame ? Math.min(frameMs, refreshMs * 1.001) : frameMs;
+  const late = insideHouse && (paintedLastFrame ? frameMs : probeMs) > refreshMs * 1.5;
+  probeMs = 0;
+  paintedLastFrame = false;
+  return late;
+}
 function frame(now) {
   const frameMs = now - last;
   const dt = Math.min(0.1, frameMs / 1000);
-  if (frameMs > 0) refreshMs = paintedLastFrame ? Math.min(frameMs, refreshMs * 1.001) : frameMs;
-  const late = insideHouse && paintedLastFrame && frameMs > refreshMs * 1.5;
-  paintedLastFrame = false;
+  const probing = probeMs > 0;
+  const late = roomFrameLate(frameMs);
   last = now;
   const still = reduced.matches;
   if (!still) T += dt;
@@ -1532,6 +1538,12 @@ function frame(now) {
   const walked = step(dt);
   // The room has no animated objects; repaint only after movement, looking, or resizing.
   if (visible && cols && (walked || dirty || (!insideHouse && !still))) {
+    if (late && (slow === 0 || slow === 20) && !probing) {
+      probeMs = frameMs;
+      dirty = true;
+      requestAnimationFrame(frame);
+      return;
+    }
     if (layoutDirty) { measure(); layoutDirty = false; }
     dirty = false;
     if (!insideHouse) {

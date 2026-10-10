@@ -233,22 +233,44 @@ for (const roomScene of [false, true]) {
   }
 }
 insideHouse = true; renderCost = 2;
-scale = 1; shadows = true; slow = fast = 0;
+let paintQueued = false;
+render = () => { clock += renderCost; paintQueued = true; };
+const paintFrame = (period, paintDelay = 0) => {
+  const interval = period + (paintQueued ? paintDelay : 0);
+  paintQueued = false;
+  dirty = true; last = clock; clock += interval; frame(clock);
+};
+scale = 1; shadows = false; slow = fast = 0;
 refreshMs = Infinity; paintedLastFrame = false;
-const paintFrame = (interval) => { dirty = true; last = clock; clock += interval; frame(clock); };
+keys.add('tr');
 paintFrame(1000 / 60);
-for (let i = 0; i < 42; i++) paintFrame(1000 / 30);
-assert(!shadows && scale > 1, 'deferred painting that drops 60 Hz frames must reduce detail');
-const coarseScale = scale;
-for (let i = 0; i < 91; i++) paintFrame(1000 / 60);
-assert(scale < coarseScale, 'detail must recover when deferred painting stops dropping frames');
-dirty = false;
-frame(clock += 1000 / 30);
-dirty = false;
-frame(clock += 1000 / 30);
+const startYaw = me.yaw;
+for (let i = 0; i < 126; i++) paintFrame(1000 / 30);
+assert.equal(scale, 1, 'a native 60 Hz to 30 Hz switch during held turning must not reduce detail');
+assert(me.yaw > startYaw, 'cadence sampling must not interrupt held turning');
 scale = 1.5; slow = fast = 0;
-for (let i = 0; i < 91; i++) paintFrame(1000 / 30);
-assert(scale < 1.5, 'idle frames must calibrate a changed native display refresh rate');
+for (let i = 0; i < 100; i++) paintFrame(1000 / 30);
+assert(scale < 1.5, 'detail must recover at the changed native cadence during held turning');
+scale = 1.5; slow = fast = 0;
+for (let i = 0; i < 100; i++) paintFrame(1000 / 60);
+assert(scale < 1.5, 'detail must recover when the display returns to 60 Hz');
+keys.clear();
+scale = 1; shadows = false; slow = fast = 0;
+refreshMs = Infinity; paintedLastFrame = false; paintQueued = false;
+paintFrame(1000 / 60);
+for (let i = 0; i < 12; i++) paintFrame(1000 / 60, 1000 / 60);
+for (let i = 0; i < 126; i++) paintFrame(1000 / 30);
+assert.equal(scale, 1, 'a native cadence change must clear prior painting-overload evidence before coarsening');
+for (const period of [1000 / 60, 1000 / 30]) {
+  scale = 1; shadows = true; slow = fast = 0;
+  refreshMs = Infinity; paintedLastFrame = false; paintQueued = false;
+  paintFrame(period);
+  for (let i = 0; i < 60; i++) paintFrame(period, period);
+  assert(!shadows && scale > 1, 'deferred painting must reduce detail after an unloaded cadence sample');
+  const coarseScale = scale;
+  for (let i = 0; i < 100; i++) paintFrame(period);
+  assert(scale < coarseScale, 'detail must recover when deferred painting stops dropping frames');
+}
 """
     subprocess.run(
         ["node", "-e", setup + source + check],
