@@ -1397,46 +1397,113 @@ function nearestNode(x, z) {
   return NODES.reduce((b, n, i) => (Math.hypot(n[0] - x, n[1] - z) < Math.hypot(NODES[b][0] - x, NODES[b][1] - z) ? i : b), 0);
 }
 // Exact slab test against the same open walking bounds used by blocked().
-function segmentBlocked(a, c, b) {
+function slabInterval(a, c, b) {
   let enter = 0, exit = 1;
   for (const k of [0, 2]) {
     const p = a[k / 2], d = c[k / 2] - p, low = walkBound(b, k), high = walkBound(b, k + 3);
     if (d === 0) {
-      if (p <= low || p >= high) return false;
+      if (p <= low || p >= high) return null;
     } else {
       const t0 = (low - p) / d, t1 = (high - p) / d;
       enter = Math.max(enter, Math.min(t0, t1));
       exit = Math.min(exit, Math.max(t0, t1));
-      if (enter >= exit) return false;
+      if (enter >= exit) return null;
     }
   }
-  return enter < exit;
+  return enter < exit ? [enter, exit] : null;
+}
+const alongSegment = (a, c, t) => [a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t];
+function floorCuts(a, c, enter = 0, exit = 1) {
+  const cuts = [enter, exit];
+  for (const f of FLOORS) {
+    for (let k = 0; k < 4; k++) {
+      const axis = k >> 1, d = c[axis] - a[axis], t = (f[k] - a[axis]) / d;
+      if (d !== 0 && t > enter && t < exit) cuts.push(t);
+    }
+  }
+  return cuts.sort((a, b) => a - b);
+}
+function terrainRange(a, c) {
+  const x = (a[0] + c[0]) / 2, z = (a[1] + c[1]) / 2;
+  const radius = Math.hypot(c[0] - a[0], c[1] - a[1]) / 2;
+  const distance = landDistance(x, z), spread = radius * 1.25;
+  const low = 1.2 - 2.8 * smooth((distance + spread + 6) / 7.5);
+  const high = 1.2 - 2.8 * smooth((distance - spread + 6) / 7.5);
+  const x0 = Math.min(a[0], c[0]), x1 = Math.max(a[0], c[0]);
+  const wallMin = smooth((x0 + 8) / 1.5) * smooth((9 - x1) / 1.5);
+  const wallMax = smooth((x1 + 8) / 1.5) * smooth((9 - x0) / 1.5);
+  const y0 = 1.2 - (14 - Math.min(a[1], c[1])) * 1.6;
+  const y1 = 1.2 - (14 - Math.max(a[1], c[1])) * 1.6;
+  return [Math.max(-1.6, low + Math.min(0, y0 - low) * wallMax),
+    Math.max(-1.6, high + Math.min(0, y1 - high) * wallMin)];
+}
+function floorRange(a, c) {
+  const [x, z] = alongSegment(a, c, 0.5);
+  const f = FLOORS.find(([x0, x1, z0, z1]) => x >= x0 && x < x1 && z >= z0 && z < z1);
+  if (!f) return terrainRange(a, c);
+  const y0 = f[4](...a), y1 = f[4](...c);
+  return [Math.min(y0, y1), Math.max(y0, y1)];
+}
+function floorIntervalCovered(a, c) {
+  if (floorRange(a, c)[0] > 0.1) return true;
+  const middle = alongSegment(a, c, 0.5);
+  if (floorAt(...middle) === null || Math.hypot(c[0] - a[0], c[1] - a[1]) < 1e-7) return false;
+  return floorIntervalCovered(a, middle) && floorIntervalCovered(middle, c);
+}
+function floorCovered(a, c) {
+  const cuts = floorCuts(a, c);
+  for (let i = 1; i < cuts.length; i++) {
+    if (floorAt(...alongSegment(a, c, cuts[i])) === null) return false;
+    if (!floorIntervalCovered(alongSegment(a, c, cuts[i - 1]), alongSegment(a, c, cuts[i]))) return false;
+  }
+  return true;
+}
+function solidInterval(a, c, s, lift) {
+  const [low, high] = floorRange(a, c);
+  if (s.bb[1] + lift >= high + 1.7 || s.bb[4] + lift <= low + 0.3) return false;
+  const middle = alongSegment(a, c, 0.5), fy = floorAt(...middle);
+  if (fy !== null && walkingSolid(s, fy, lift)) return true;
+  if (Math.hypot(c[0] - a[0], c[1] - a[1]) < 1e-7) return true;
+  return solidInterval(a, middle, s, lift) || solidInterval(middle, c, s, lift);
+}
+function segmentBlocked(a, c, s) {
+  const interval = slabInterval(a, c, s.bb);
+  if (!interval) return false;
+  const cuts = floorCuts(a, c, ...interval), lift = ship.includes(s) ? bob : 0;
+  for (const t of cuts) {
+    if (t <= interval[0] || t >= interval[1]) continue;
+    const fy = floorAt(...alongSegment(a, c, t));
+    if (fy !== null && walkingSolid(s, fy, lift)) return true;
+  }
+  for (let i = 1; i < cuts.length; i++) {
+    if (solidInterval(alongSegment(a, c, cuts[i - 1]), alongSegment(a, c, cuts[i]), s, lift)) return true;
+  }
+  return false;
 }
 function walkable([x, z]) {
   const fy = floorAt(x, z);
   return fy !== null && !blocked(x, z, fy);
 }
-function routeObstacles() {
-  const obstacles = [];
-  for (const list of [world, ship]) {
-    for (const s of list) {
-      const b = s.bb, fy = floorAt((b[0] + b[3]) / 2, (b[2] + b[5]) / 2);
-      if (fy !== null && walkingSolid(s, fy, list === ship ? bob : 0)) obstacles.push(s);
-    }
+function routeObstacle(s, lift) {
+  if (!s.solid) return false;
+  const b = s.bb, a = [walkBound(b, 0), walkBound(b, 2)], c = [walkBound(b, 3), walkBound(b, 5)];
+  let [low, high] = terrainRange(a, c);
+  for (const [x0, x1, z0, z1, height] of FLOORS) {
+    if (a[0] >= x1 || c[0] < x0 || a[1] >= z1 || c[1] < z0) continue;
+    const y0 = height(Math.max(a[0], x0)), y1 = height(Math.min(c[0], x1));
+    low = Math.min(low, y0, y1); high = Math.max(high, y0, y1);
   }
-  return obstacles;
+  return b[1] + lift < high + 1.7 && b[4] + lift > Math.max(0.1, low) + 0.3;
+}
+function routeObstacles() {
+  return [...world.filter(s => routeObstacle(s, 0)), ...ship.filter(s => routeObstacle(s, bob))];
 }
 function detourCorners(b) {
   const x0 = walkBound(b, 0), x1 = walkBound(b, 3), z0 = walkBound(b, 2), z1 = walkBound(b, 5);
   return [[x0, z0], [x1, z0], [x1, z1], [x0, z1]].filter(walkable);
 }
 function clear(a, c, obstacles) {
-  if (!walkable(a) || !walkable(c) || obstacles.some(s => segmentBlocked(a, c, s.bb))) return false;
-  const steps = Math.max(1, Math.ceil(Math.hypot(c[0] - a[0], c[1] - a[1]) / 0.1));
-  for (let i = 0; i <= steps; i++) {
-    if (floorAt(a[0] + (c[0] - a[0]) * i / steps, a[1] + (c[1] - a[1]) * i / steps) === null) return false;
-  }
-  return true;
+  return walkable(a) && walkable(c) && floorCovered(a, c) && !obstacles.some(s => segmentBlocked(a, c, s));
 }
 function clearLinks(nodes, obstacles) {
   const links = [];
@@ -1449,12 +1516,7 @@ let approachGraph;
 function rebuildRoutes() {
   const obstacles = routeObstacles(), nodes = NODES.filter(walkable);
   for (const { bb } of obstacles) nodes.push(...detourCorners(bb));
-  approachGraph = { obstacles, nodes, edges: routeEdges(nodes, clearLinks(nodes, obstacles)),
-    worldCount: world.length, shipCount: ship.length };
-  return approachGraph;
-}
-function detourGraph() {
-  if (!approachGraph || approachGraph.worldCount !== world.length || approachGraph.shipCount !== ship.length) return rebuildRoutes();
+  approachGraph = { obstacles, nodes, edges: routeEdges(nodes, clearLinks(nodes, obstacles)) };
   return approachGraph;
 }
 function nearestClear(point, nodes, obstacles) {
@@ -1464,7 +1526,7 @@ function nearestClear(point, nodes, obstacles) {
   return -1;
 }
 function approach(from, to) {
-  const { obstacles, nodes, edges } = detourGraph();
+  const { obstacles, nodes, edges } = approachGraph;
   if (clear(from, to, obstacles)) return [to];
   const a = nearestClear(from, nodes, obstacles), b = nearestClear(to, nodes, obstacles);
   if (a < 0 || b < 0) return [];

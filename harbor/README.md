@@ -36,9 +36,9 @@ Outboard lanterns make the gun ports visible.
 The plaza fountain has an octagonal stone rim, a central spout, and water that uses the existing animation clock.
 Its basin blocks walking, and a blue `O` marks it on the mini map.
 The fountain marker leaves map labels and selected point markers clear.
-Map walks check each road and approach segment against the walking collision bounds.
+Map walks check each road and approach segment against the walking collision bounds at the local floor height and require continuous ground coverage.
 Detour corners come from every walking obstacle, including trees, hedges, the basin, the house, dock cargo, and ship fixtures.
-The page builds the corner graph before animation starts and rebuilds it only when the world or ship object count changes.
+The page builds the corner graph once before animation starts.
 Ship bob and roll do not rebuild the graph during a map click.
 If a road route or any segment has no clear path, the map walk stops without moving the player.
 
