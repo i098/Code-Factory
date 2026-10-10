@@ -169,17 +169,33 @@ function ground(x, y, z, nx, ny) {
 // The island is one height field: a plateau at 1.2 m whose edges slope down through sand beaches into the sea
 // all the way round, with a wobbly coastline, and a steep stone harbour wall only where the dock needs deep water.
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+// Signed distance from (x, z) to a rounded rectangle; Math.sqrt, not Math.hypot, as it runs many times per ray.
+function roundedBox(x, z, cx, cz, hx, hz, r) {
+  const qx = Math.abs(x - cx) - hx + r, qz = Math.abs(z - cz) - hz + r, ox = Math.max(qx, 0), oz = Math.max(qz, 0);
+  return Math.sqrt(ox * ox + oz * oz) + Math.min(Math.max(qx, qz), 0) - r;
+}
 function landDistance(x, z) {
-  const box = (cx, cz, hx, hz, r) => {
-    const qx = Math.abs(x - cx) - hx + r, qz = Math.abs(z - cz) - hz + r;
-    return Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - r;
-  };
-  return Math.min(box(-8, 31, 53, 23, 12), box(-36, -11, 16, 31, 9)) + 0.6 * Math.sin(x * 0.19 + z * 0.07) + 0.45 * Math.sin(z * 0.23 - x * 0.13);
+  return Math.min(roundedBox(x, z, -8, 31, 53, 23, 12), roundedBox(x, z, -36, -11, 16, 31, 9)) + 0.6 * Math.sin(x * 0.19 + z * 0.07) + 0.45 * Math.sin(z * 0.23 - x * 0.13);
 }
 function terrainY(x, z) {
   const h = 1.2 - 2.8 * smooth((landDistance(x, z) + 6) / 7.5);
   const wall = smooth((x + 8) / 1.5) * smooth((9 - x) / 1.5), wallY = 1.2 - (14 - z) * 1.6;
   return Math.max(-1.6, wall > 0 && wallY < h ? h + (wallY - h) * wall : h);
+}
+// The ray march, the shoreline and the water depth read the island from a 0.25 m height grid, bilinear, filled a
+// row at a time on first use. Above the waves it is within 6 cm of terrainY, which slope normals still use.
+const HG = 4, HX0 = -70, HZ0 = -50, HW = 130 * HG + 1, HH = 110 * HG + 1, HEIGHTS = new Float32Array(HW * HH), HREADY = new Uint8Array(HH);
+function heightRow(k) {
+  for (let i = 0; i < HW; i++) HEIGHTS[k * HW + i] = terrainY(HX0 + i / HG, HZ0 + k / HG);
+  HREADY[k] = 1;
+}
+function marchY(x, z) {
+  const u = (x - HX0) * HG, w = (z - HZ0) * HG, i = Math.floor(u), k = Math.floor(w);
+  if (i < 0 || k < 0 || i >= HW - 1 || k >= HH - 1) return -1.6;
+  if (!HREADY[k]) heightRow(k);
+  if (!HREADY[k + 1]) heightRow(k + 1);
+  const fu = u - i, fw = w - k, p = k * HW + i;
+  return (HEIGHTS[p] * (1 - fu) + HEIGHTS[p + 1] * fu) * (1 - fw) + (HEIGHTS[p + HW] * (1 - fu) + HEIGHTS[p + HW + 1] * fu) * fw;
 }
 // Ground texture by where you are: the stone harbour wall, sand on the beaches, ground on the plateau.
 function landTex(x, y, z, nx, ny) {
@@ -666,9 +682,11 @@ function blobEntry(e, ox, oy, oz, dx, dy, dz) {
   entryK = -4; entryN[0] = nx / l; entryN[1] = ny / l; entryN[2] = nz / l;
   return t;
 }
+// Solids come nearest first, so once the nearest possible point of the next one is past the hit, none can come closer.
 function trace(list, col, ox, oy, oz, dx, dy, dz) {
   const ix = 1 / dx, iy = 1 / dy, iz = 1 / dz;
   for (const s of list) {
+    if (s.closest >= hitT) break;
     if (col < s.i0 || col > s.i1 || boxEntry(s.bb, ox, oy, oz, ix, iy, iz) > hitT) continue;
     const t = hit(s, ox, oy, oz, dx, dy, dz);
     if (t < hitT) { hitT = t; hitK = entryK; hitS = s; if (entryK < 0) { hitN[0] = entryN[0]; hitN[1] = entryN[1]; hitN[2] = entryN[2]; } }
@@ -687,7 +705,7 @@ function casters(list, x, y, z, r) {
   });
 }
 function lamp(x, y, z, i, r, inShip = false) {
-  return { x, y, z, i, r2: r * r, inShip, near: casters(inShip ? ship : world, x, y, z, r), wx: x, wy: y, wz: z };
+  return { x, y, z, i, r2: r * r, inShip, near: casters(inShip ? ship : world, x, y, z, r), tiles: new Map(), wx: x, wy: y, wz: z };
 }
 const centre = ({ bb: b }) => [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2];
 const LIGHTS = [
@@ -741,8 +759,20 @@ function shadowed(L, ox, oy, oz, dx, dy, dz, dist) {
     [ox, oy, dx, dy] = [rc * x + rs * y + SX, -rs * x + rc * y, rc * dx + rs * dy, -rs * dx + rc * dy];
   }
   const ix = 1 / dx, iy = 1 / dy, iz = 1 / dz;
-  for (const s of L.near) if (boxEntry(s.bb, ox, oy, oz, ix, iy, iz) < dist && hit(s, ox, oy, oz, dx, dy, dz) < dist) return true;
+  for (const s of tileCasters(L, ox, oz)) if (boxEntry(s.bb, ox, oy, oz, ix, iy, iz) < dist && hit(s, ox, oy, oz, dx, dy, dz) < dist) return true;
   return false;
+}
+// The light's casters that can stand between it and any point above or below the 1 m plan tile at (x, z): those whose box
+// meets the plan rectangle spanning the tile and the light. Boxes already allow for swaying and floating.
+function tileCasters(L, x, z) {
+  const tx = Math.floor(x), tz = Math.floor(z), key = tx * 4096 + tz;
+  let list = L.tiles.get(key);
+  if (!list) {
+    const x0 = Math.min(tx, L.x), x1 = Math.max(tx + 1, L.x), z0 = Math.min(tz, L.z), z1 = Math.max(tz + 1, L.z);
+    list = L.near.filter(({ bb: b }) => b[0] <= x1 && b[3] >= x0 && b[2] <= z1 && b[5] >= z0);
+    L.tiles.set(key, list);
+  }
+  return list;
 }
 // Brightness of the sweeping beam where it falls on the ground at (x, z).
 function beamOn(x, z) {
@@ -795,7 +825,7 @@ function measure() {
   // Phones and tablets draw at most 2 device pixels per CSS pixel: a 3x canvas costs more memory than it shows.
   // Cap the backing-store area, not each dimension; large high-DPR windows otherwise exceed browser canvas limits.
   const w = stage.clientWidth, h = stage.clientHeight;
-  const dpr = Math.min(touchFirst.matches ? 2 : Infinity, devicePixelRatio || 1, Math.sqrt(4096 * 4096 / (w * h)));
+  dpr = Math.min(touchFirst.matches ? 2 : Infinity, devicePixelRatio || 1, Math.sqrt(4096 * 4096 / (w * h)));
   // Reset the backing store only for a real size change, immediately before drawing; flooring keeps the cap.
   if (canvas.width !== Math.floor(w * dpr)) canvas.width = Math.floor(w * dpr);
   if (canvas.height !== Math.floor(h * dpr)) canvas.height = Math.floor(h * dpr);
@@ -814,6 +844,7 @@ function measure() {
   stage.style.setProperty("--map-width", `${32 * cellW + 8}px`);
   G = new Array(cols * rows); C = new Array(cols * rows);
   ID = new Int32Array(cols * rows); D = new Float32Array(cols * rows); SP = new Array(cols * rows);
+  DG = new Array(cols * rows); DC = new Array(cols * rows);
   dirty = true; // Changing canvas size clears it, including an idle room's last frame.
 }
 
@@ -828,19 +859,24 @@ function render() {
   // Camera origin in the ship frame (rotate by -roll about the ship's long axis, after the bob).
   cam.lx = rc * (me.x - SX) + rs * (me.eye - bob) + SX; cam.ly = -rs * (me.x - SX) + rc * (me.eye - bob);
   const scenery = insideHouse ? room : world, vessel = insideHouse ? NONE : ship;
-  cull(scenery, false); cull(vessel, true);
+  const seenWorld = cull(scenery, false), seenShip = cull(vessel, true);
+  // Each tile of one row by TILE_W columns keeps only the solids whose screen rectangle reaches it.
   for (let j = 0, c = 0; j < rows; j++) {
     const v = (1 - (2 * j + 1) / rows) * tanV;
-    rowWorld = scenery.filter((s) => s.j0 <= j && j <= s.j1); rowShip = vessel.filter((s) => s.j0 <= j && j <= s.j1);
-    for (let i = 0; i < cols; i++, c++) {
-      // Cells behind the noise are not visible yet; cast only the live scene revealed by the sweep.
-      if (introProgress < 1 && introDistance(i, j) > 0) {
-        put(c, " ", "f", 0, Infinity); SP[c] = null;
-        continue;
+    const inRowWorld = seenWorld.filter((s) => s.j0 <= j && j <= s.j1), inRowShip = seenShip.filter((s) => s.j0 <= j && j <= s.j1);
+    for (let a = 0; a < cols; a += TILE_W) {
+      const b = a + TILE_W - 1;
+      rowWorld = inRowWorld.filter((s) => s.i0 <= b && a <= s.i1); rowShip = inRowShip.filter((s) => s.i0 <= b && a <= s.i1);
+      for (let i = a; i <= b && i < cols; i++, c++) {
+        // Cells behind the noise are not visible yet; cast only the live scene revealed by the sweep.
+        if (introProgress < 1 && introDistance(i, j) > 0) {
+          put(c, " ", "f", 0, Infinity); SP[c] = null;
+          continue;
+        }
+        const h = ((2 * i + 1) / cols - 1) * tanH;
+        const dx = fx + rx * h + ux * v, dy = fy + uy * v, dz = fz + rz * h + uz * v, n = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        cast(c, i, (i + j) & 1, dx / n, dy / n, dz / n);
       }
-      const h = ((2 * i + 1) / cols - 1) * tanH;
-      const dx = fx + rx * h + ux * v, dy = fy + uy * v, dz = fz + rz * h + uz * v, n = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      cast(c, i, (i + j) & 1, dx / n, dy / n, dz / n);
     }
   }
   if (!insideHouse) gulls();
@@ -853,26 +889,60 @@ function render() {
   draw(mid);
 }
 
-// Screen rectangle of each solid's bounding box this frame, so a ray only tests solids that can cover its cell.
-let rowWorld = [], rowShip = [];
-function cull(list, inShip) {
+// Screen rectangle of each solid's bounding box this frame, so a ray only tests solids that can cover its cell,
+// and the solids in view, nearest first by the distance from the camera to their box.
+let rowWorld = [], rowShip = []; // the solids of the screen tile being cast
+const TILE_W = 8;
+const boxView = new Float64Array(24), NEAR = 0.01; // per box corner: right and up offsets from the camera, and depth
+const rect = [0, 0, 0, 0]; // screen columns and rows a box covers: i0, i1, j0, j1
+// Grows `rect` by a point `a` right, `u` up and `d` ahead of the camera.
+function grow(a, u, d) {
+  const si = (a / d / cam.tanH + 1) * cols / 2, sj = (1 - u / d / cam.tanV) * rows / 2;
+  rect[0] = Math.min(rect[0], si); rect[1] = Math.max(rect[1], si); rect[2] = Math.min(rect[2], sj); rect[3] = Math.max(rect[3], sj);
+}
+// Puts the corners of box b in boxView and grows `rect` by those in front; returns how many are behind the near plane.
+function viewCorners(b, inShip) {
   const [f0, f1, f2] = cam.f, [r0, , r2] = cam.r, [u0, u1, u2] = cam.u;
+  let behind = 0;
+  for (let k = 0; k < 8; k++) {
+    let x = k & 1 ? b[3] : b[0], y = k & 2 ? b[4] : b[1];
+    const z = k & 4 ? b[5] : b[2];
+    if (inShip) { const lx = x - SX; x = SX + rc * lx - rs * y; y = rs * lx + rc * y + bob; }
+    const px = x - cam.x, py = y - cam.y, pz = z - cam.z, d = px * f0 + py * f1 + pz * f2;
+    boxView[k * 3] = px * r0 + pz * r2; boxView[k * 3 + 1] = px * u0 + py * u1 + pz * u2; boxView[k * 3 + 2] = d;
+    if (d < NEAR) behind++;
+    else grow(boxView[k * 3], boxView[k * 3 + 1], d);
+  }
+  return behind;
+}
+// A box partly behind you: the box edges that cross the near plane bound the rest. A box at least 0.2 m away has
+// nothing on screen closer than NEAR in depth, so the clipped box covers every cell it can.
+function growClipped() {
+  for (let k = 0; k < 8; k++) {
+    for (let bit = 1; bit < 8; bit <<= 1) {
+      const n = k | bit, dk = boxView[k * 3 + 2], dn = boxView[n * 3 + 2], f = (NEAR - dk) / (dn - dk);
+      if (n !== k && (dk < NEAR) !== (dn < NEAR)) grow(boxView[k * 3] + f * (boxView[n * 3] - boxView[k * 3]), boxView[k * 3 + 1] + f * (boxView[n * 3 + 1] - boxView[k * 3 + 1]), NEAR);
+    }
+  }
+}
+function cull(list, inShip) {
+  const ox = inShip ? cam.lx : cam.x, oy = inShip ? cam.ly : cam.y, oz = cam.z, seen = [];
   for (const s of list) {
     const b = s.bb;
-    let i0 = Infinity, i1 = -Infinity, j0 = Infinity, j1 = -Infinity, behind = 0;
-    for (let k = 0; k < 8; k++) {
-      let x = k & 1 ? b[3] : b[0], y = k & 2 ? b[4] : b[1];
-      const z = k & 4 ? b[5] : b[2];
-      if (inShip) { const lx = x - SX; x = SX + rc * lx - rs * y; y = rs * lx + rc * y + bob; }
-      const px = x - cam.x, py = y - cam.y, pz = z - cam.z, d = px * f0 + py * f1 + pz * f2;
-      if (d < 0.2) { behind++; continue; }
-      const si = ((px * r0 + pz * r2) / d / cam.tanH + 1) * cols / 2, sj = (1 - (px * u0 + py * u1 + pz * u2) / d / cam.tanV) * rows / 2;
-      i0 = Math.min(i0, si); i1 = Math.max(i1, si); j0 = Math.min(j0, sj); j1 = Math.max(j1, sj);
+    const ex = Math.max(b[0] - ox, 0, ox - b[3]), ey = Math.max(b[1] - oy, 0, oy - b[4]), ez = Math.max(b[2] - oz, 0, oz - b[5]);
+    s.closest = Math.sqrt(ex * ex + ey * ey + ez * ez);
+    rect[0] = rect[2] = Infinity; rect[1] = rect[3] = -Infinity;
+    const behind = viewCorners(b, inShip);
+    if (behind === 8) continue; // wholly behind you
+    if (s.closest < 0.2) { s.i0 = s.j0 = -1; s.i1 = cols; s.j1 = rows; } // around you: test everywhere
+    else {
+      if (behind) growClipped();
+      s.i0 = Math.floor(rect[0]) - 1; s.i1 = Math.ceil(rect[1]) + 1; s.j0 = Math.floor(rect[2]) - 1; s.j1 = Math.ceil(rect[3]) + 1;
     }
-    if (behind === 8) { s.i0 = s.j0 = 1; s.i1 = s.j1 = 0; } // wholly behind you
-    else if (behind) { s.i0 = s.j0 = -1; s.i1 = cols; s.j1 = rows; } // around you: test everywhere
-    else { s.i0 = Math.floor(i0) - 1; s.i1 = Math.ceil(i1) + 1; s.j0 = Math.floor(j0) - 1; s.j1 = Math.ceil(j1) + 1; }
+    if (s.i1 < 0 || s.i0 >= cols || s.j1 < 0 || s.j0 >= rows) continue; // beside, above or below the view
+    seen.push(s);
   }
+  return seen.sort((a, c) => a.closest - c.closest);
 }
 
 // A few gulls circle over the harbor, drawn only where they are against the sky.
@@ -1164,22 +1234,24 @@ function tapMap(cx, cy) {
 // One ray: the nearest of the solids, the moving sea surface and the sky decides the cell.
 function cast(c, i, odd, dx, dy, dz) {
   if (insideHouse) { castRoom(c, i, odd, dx, dy, dz); return; }
-  hitT = Infinity; hitS = null;
+  // A downward ray meets the island or the sea before it sinks below the lowest wave, so no solid past that shows.
+  hitT = dy < 0 ? (cam.y + SEA) / -dy : Infinity; hitS = null;
   trace(rowWorld, i, cam.x, cam.y, cam.z, dx, dy, dz);
   const wS = hitS;
   const ldx = rc * dx + rs * dy, ldy = -rs * dx + rc * dy;
   trace(rowShip, i, cam.lx, cam.ly, cam.z, ldx, ldy, dz);
-  const tw = surfaceHit(dx, dy, dz, hitT);
+  const tw = surfaceHit(dx, dy, dz, hitS ? hitT : Infinity);
   SP[c] = null;
   if (hitS && hitT < tw) shadeSolid(c, odd, hitS !== wS, dx, dy, dz, ldx, ldy);
   else if (tw < Infinity && onLand) shadeLand(c, odd, tw, dx, dy, dz);
   else if (tw < Infinity) shadeWater(c, tw, dx, dy, dz);
   else shadeSky(c, dx, dy, dz);
 }
-// The island under a ray: its normal from the slope of the height field, then shaded like any solid.
+// The island under a ray: its normal from the slope of the height field, then shaded like any solid. The plateau
+// top (the height grid at 1.2 m all round) is flat, so only slopes sample the height field.
 function shadeLand(c, odd, t, dx, dy, dz) {
-  const x = cam.x + dx * t, z = cam.z + dz * t, e = 0.15;
-  const hx = (terrainY(x + e, z) - terrainY(x - e, z)) / (2 * e), hz = (terrainY(x, z + e) - terrainY(x, z - e)) / (2 * e), l = Math.sqrt(hx * hx + 1 + hz * hz);
+  const x = cam.x + dx * t, z = cam.z + dz * t, e = 0.15, flat = marchY(x, z) > 1.2 - 1e-6;
+  const hx = flat ? 0 : (terrainY(x + e, z) - terrainY(x - e, z)) / (2 * e), hz = flat ? 0 : (terrainY(x, z + e) - terrainY(x, z - e)) / (2 * e), l = Math.sqrt(hx * hx + 1 + hz * hz);
   hitS = TERRAIN; hitK = -5; hitT = t; hitN[0] = -hx / l; hitN[1] = 1 / l; hitN[2] = -hz / l;
   shadeSolid(c, odd, false, dx, dy, dz, dx, dy);
 }
@@ -1238,7 +1310,7 @@ function blade(x, z, odd) {
 const tier = (b, warm) => (warm > 0.55 && b > 0.2 ? "w" : "") + Math.min(7, Math.floor(b * 9));
 // How close water at (x, z) is to the shore, from 0 (deep, the bed 1.6 m down) to 1 (the waterline).
 function shallows(x, z) {
-  return Math.min(1, Math.max(0, (terrainY(x, z) + 1.6) / 1.6));
+  return Math.min(1, Math.max(0, (marchY(x, z) + 1.6) / 1.6));
 }
 
 // ---- The sea: a height field of summed travelling waves (amplitude, direction, wave number, speed, phase),
@@ -1263,17 +1335,18 @@ function seaNormal(x, z) {
 // Distance along the ray to the island or the sea, whichever it meets first (onLand says which), or
 // Infinity if a solid at `limit` comes first. Steps grow with distance; a crossing is refined by bisection.
 let onLand = false;
-const surface = (x, z) => Math.max(terrainY(x, z), seaHeight(x, z));
+// Is the point below the island or the sea? Waves never rise above SEA, so higher points skip them.
+const under = (x, y, z) => y < marchY(x, z) || (y < SEA && y < seaHeight(x, z));
 function surfaceHit(dx, dy, dz, limit) {
   if (dy > -1e-4) return Infinity;
   let a = Math.max(0, (1.3 - cam.y) / dy);
   const end = Math.min(limit, 260);
   for (let i = 0; i < 56 && a < end; i++) {
     let b = Math.min(end, a + 0.25 + a * 0.08);
-    if (cam.y + b * dy < surface(cam.x + b * dx, cam.z + b * dz)) {
-      for (let k = 0; k < 5; k++) { const m = (a + b) / 2; if (cam.y + m * dy < surface(cam.x + m * dx, cam.z + m * dz)) b = m; else a = m; }
+    if (under(cam.x + b * dx, cam.y + b * dy, cam.z + b * dz)) {
+      for (let k = 0; k < 5; k++) { const m = (a + b) / 2; if (under(cam.x + m * dx, cam.y + m * dy, cam.z + m * dz)) b = m; else a = m; }
       const x = cam.x + b * dx, z = cam.z + b * dz;
-      onLand = terrainY(x, z) >= seaHeight(x, z);
+      onLand = marchY(x, z) >= seaHeight(x, z);
       return b;
     }
     a = b;
@@ -1327,11 +1400,11 @@ function beamGlow(dx, dy, dz) {
   return Math.max(0, 1 - Math.sqrt(gx * gx + gy * gy + gz * gz) / (0.4 + tc * 0.012)) * (1 - tc / BEAM.reach);
 }
 function shadeSky(c, dx, dy, dz) {
-  const m = dx * MOON[0] + dy * MOON[1] + dz * MOON[2], el = Math.asin(dy);
+  const m = dx * MOON[0] + dy * MOON[1] + dz * MOON[2], el = Math.asin(dy), glow = beamGlow(dx, dy, dz);
   const r = hash(Math.floor(Math.atan2(dx, dz) * 150), Math.floor(el * 150)) * 2.5;
   if (m > 0.9988) put(c, m > 0.99935 ? "@" : "%", "k", 0, Infinity);
   else if (el > 0.04 && r < 0.03) put(c, r < 0.006 ? "*" : ".", "k", 0, Infinity);
-  else if (beamGlow(dx, dy, dz) > 0.15) put(c, glyph(beamGlow(dx, dy, dz) * 0.8, 0), "l" + Math.min(7, 2 + Math.floor(beamGlow(dx, dy, dz) * 6)), 0, Infinity);
+  else if (glow > 0.15) put(c, glyph(glow * 0.8, 0), "l" + Math.min(7, 2 + Math.floor(glow * 6)), 0, Infinity);
   else put(c, el < 0.035 ? "." : " ", "f", 0, Infinity);
 }
 function put(c, ch, cls, id, depth) { G[c] = ch; C[c] = cls; ID[c] = id; D[c] = depth; }
@@ -1353,19 +1426,47 @@ function outline(c, i, j) {
   const off = (n, inside) => !inside || SP[n] !== target;
   return slope(off(c - 1, i > 0), off(c + 1, i < cols - 1), off(c - cols, j > 0), off(c + cols, j < rows - 1));
 }
-// Draws rows, then the mini map after the intro or a dark overlay during it.
+// What each cell showed when last drawn. A frame draws again only the stretches of a row that changed: each is
+// cleared and clipped to whole device pixels and drawn with one neighbour either side, so it matches a full redraw.
+let DG, DC, dpr = 1;
+const BACKGROUND = "#060a14";
+const snap = (v) => Math.round(v * dpr) / dpr;
+// Puts what cell c shows this frame (the aim mark, the label leader, an outline or edge, else its glyph) in DG and
+// DC; true when that changed. The scene leaves the mini map's cells blank.
+function update(c, i, j, mid, onMap) {
+  const aim = c === mid, hud = onMap && MAPCELLS.has(c);
+  const mark = hud ? " " : aim ? "+" : (LINE.size && LINE.get(c)) || outline(c, i, j);
+  const cls = hud ? "" : aim ? (target ? "h" : "k") : mark ? "h" : C[c], ch = mark || edge(c, i, j) || G[c];
+  if (ch === DG[c] && cls === DC[c]) return false;
+  DG[c] = ch; DC[c] = cls;
+  return true;
+}
+// Draws the intro in full, then the changed scene and the mini map on its own backing above it.
 function draw(mid) {
-  ctx.fillStyle = "#060a14";
-  ctx.fillRect(0, 0, viewW, viewH);
-  const tick = Math.floor(introProgress * 24);
-  for (let j = 0; j < rows; j++) drawRow(mid, j, tick);
-  if (introProgress === 1) drawMap();
-  else {
+  if (introProgress < 1) {
+    ctx.fillStyle = BACKGROUND;
+    ctx.fillRect(0, 0, viewW, viewH);
+    const tick = Math.floor(introProgress * 24);
+    for (let j = 0; j < rows; j++) drawRow(mid, j, tick);
     ctx.fillStyle = "#000";
     ctx.globalAlpha = 1 - introProgress * introProgress;
     ctx.fillRect(0, 0, viewW, viewH);
     ctx.globalAlpha = 1;
+    DG.fill(undefined);
+    return;
   }
+  for (let j = 0; j < rows; j++) {
+    const onMap = mapBox && j >= mapBox.oj && j < mapBox.oj + mapBox.h;
+    let from = -1, last = -9;
+    for (let i = 0; i < cols; i++) {
+      if (!update(j * cols + i, i, j, mid, onMap)) continue;
+      if (from >= 0 && i - last > 3) { redraw(j, from, last); from = -1; }
+      if (from < 0) from = i;
+      last = i;
+    }
+    if (from >= 0) redraw(j, from, last);
+  }
+  drawMap();
 }
 function introDistance(i, j) {
   return i / cols * 0.75 + j / rows * 0.25 - (introProgress * 1.35 - 0.2);
@@ -1387,11 +1488,28 @@ function drawRow(mid, j, tick) {
   }
   paint(run, cur, from, j);
 }
+function redraw(j, i0, i1) {
+  const x0 = snap(padX + i0 * cellW), x1 = snap(padX + (i1 + 1) * cellW), y0 = snap(padY + j * cellH), y1 = snap(padY + (j + 1) * cellH);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip();
+  ctx.fillStyle = BACKGROUND; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  const a = Math.max(0, i0 - 1), e = Math.min(cols - 1, i1 + 1);
+  let run = "", cur = DC[j * cols + a], from = a;
+  for (let i = a, c = j * cols + a; i <= e; i++, c++) {
+    if (DC[c] !== cur) { paint(run, cur, from, j); run = ""; cur = DC[c]; from = i; }
+    run += DG[c];
+  }
+  paint(run, cur, from, j);
+  ctx.restore();
+}
+// The scene leaves the map's cells blank, so its backing (the background colour) and glyphs are drawn every frame.
 function drawMap() {
   const b = mapBox;
   if (!b) return;
-  ctx.fillStyle = "rgba(6, 10, 20, 0.94)";
-  ctx.fillRect(padX + b.oi * cellW, padY + b.oj * cellH, b.w * cellW, b.h * cellH);
+  const x0 = snap(padX + b.oi * cellW), x1 = snap(padX + (b.oi + b.w) * cellW), y0 = snap(padY + b.oj * cellH), y1 = snap(padY + (b.oj + b.h) * cellH);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip();
+  ctx.fillStyle = BACKGROUND; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
   for (let j = b.oj; j < b.oj + b.h; j++) {
     let run = "", cur = "", from = b.oi;
     for (let i = b.oi; i < b.oi + b.w; i++) {
@@ -1401,6 +1519,7 @@ function drawMap() {
     }
     paint(run, cur, from, j);
   }
+  ctx.restore();
 }
 // WebKit keeps every distinct string fillText draws: on iOS Safari runs of glyphs grow the tab by
 // about 10 MB a second until iOS kills it. Touch devices draw glyph by glyph, a set of strings that stays small.
