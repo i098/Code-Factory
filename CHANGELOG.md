@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README: the install part is labeled command blocks, and host sizing is one sentence ([#91](https://github.com/i098/Crewship/issues/91)).
 - Deployments link each GHCR image push to the package page and each landing page deploy to https://crewship.si instead of its `workers.dev` address ([#102](https://github.com/i098/Crewship/issues/102)).
 - The README tagline, the landing page description, and the npm package description are now "Orchestrate hundreds of agents effortlessly - hardware is the limit." ([#105](https://github.com/i098/Crewship/issues/105)).
+- The README now links to CREDITS.md for the full third-party list ([#115](https://github.com/i098/Crewship/issues/115)).
 
 ### Fixed
 
