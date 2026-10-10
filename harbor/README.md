@@ -5,8 +5,8 @@
 The plaza fountain has an octagonal stone rim, a central spout, and water that uses the existing animation clock.
 Its basin blocks walking, and a blue `O` marks it on the mini map.
 The fountain marker leaves map labels and selected point markers clear.
-Map walks check complete approach segments against the walking collision bounds and route around the basin and all four hedges.
-If an approach has no clear path, the map walk stops without moving the player.
+Map walks check complete approach segments against the plaza walking collision bounds and route around the basin and all four hedges.
+If a road route or either approach has no clear path, the map walk stops without moving the player.
 Detour completeness remains in [#150](https://github.com/i098/Crewship/issues/150).
 
 It is plain HTML, CSS and JavaScript in `public/`, with no dependencies. Nothing here is part of a host or an image: `.dockerignore` excludes `harbor/`, the playbook never copies it, and `tests/test_harbor_isolation.py` checks both.

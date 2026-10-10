@@ -885,7 +885,7 @@ function approach(from, to) {
   }
   return route(0, 1, nodes, links).slice(1);
 }
-// Shortest road route between two junctions (Dijkstra over a handful of nodes).
+// Shortest route between two nodes (Dijkstra over a handful of nodes).
 function route(from, to, nodes = NODES, links = LINKS) {
   const dist = nodes.map(() => Infinity), prev = [], todo = new Set(nodes.keys());
   dist[from] = 0;
@@ -1008,7 +1008,7 @@ function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
     const ao = ny > 0.7 ? 1 : Math.min(1, 0.55 + 0.5 * (wy - (onShip ? bob + DECK : floorAt(wx, pz) ?? 0)));
     const fog = Math.exp(-t * 0.016), b = (lit * dim * ao * (0.8 + 0.2 * Math.max(0, -(nx * dx + ny * dy + nz * dz)))) * fog + 0.02 * (1 - fog);
     cls = mat + tier(b, warm);
-    // Grass is drawn as blades leaning with the wind; everything else picks its glyph from the density ramp.
+    // Grass blades lean with the wind; fountain water keeps its texture glyphs below.
     const grass = ny > 0.7 && (mat === "g" || mat === "G" || mat === "M") && s === TERRAIN;
     ch = grass && b > 0.03 ? blade(px, pz, odd) : glyph(b, odd);
     if (s.tex === fountainWater) {

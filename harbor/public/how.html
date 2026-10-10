@@ -19,7 +19,9 @@
 <ul>
   <li><b>Renderer.</b> Every frame casts one ray per character cell from your eye. Buildings, the dock and the hull are convex solids made of planes; masts, barrels, trees and the lighthouse are true cones with smooth normals. The sea is a height field of travelling waves, ray marched per cell; the ship and the boats ride it.</li>
   <li><b>Light.</b> It is night: lamps, lit windows, the lantern and the beacon light what is near them, fall off with distance and cast shadows from the solids around them; the lighthouse beam sweeps; the moon gives a dim fill. The sea shows Fresnel reflection, moon and lamp highlights and foam. Fog and contact shadows add depth.</li>
-  <li><b>Characters.</b> Brightness picks a glyph from the density ramp <code> .`',:;~-=+*#%@▒▓█</code> and one of eight colour levels per material; an edge glyph (<code>| - / \ _</code>) is drawn wherever one surface meets a farther one.</li>
+  <li><b>Characters.</b> Brightness picks a glyph from the density ramp <code> .`',:;~-=+*#%@▒▓█</code> and one of eight colour levels per material.
+    Fountain water uses animated texture glyphs instead of the density ramp.
+    An edge glyph (<code>| - / \ _</code>) is drawn wherever one surface meets a farther one.</li>
   <li><b>Frame loop.</b> <code>requestAnimationFrame</code> moves you, the sea and the ship and redraws the grid on a canvas, one fill per run of one colour. The grid adapts to the frame time: slow devices drop the shadow rays, then get larger glyphs (fewer cells); fast ones get a finer grid. With reduced motion the scene stands still and redraws only when you move.</li>
   <li><b>Controls.</b> WASD or arrows walk and turn, R and F look up and down, the mouse looks around, Enter opens what you point at. On a phone the pad walks and a drag looks. The label floats beside what you point at, with a leader line in text.</li>
   <li><b>Mini map.</b> M picks a point on the text map in the corner, M again fills the screen with it; arrows choose, Enter jumps there. On a phone, tap a point.</li>
