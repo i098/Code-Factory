@@ -1355,15 +1355,15 @@ function mapLabels() {
 }
 const toMap = (x, z) => [Math.floor(((x - WORLD.x0) / (WORLD.x1 - WORLD.x0)) * mapBox.iw), Math.floor(((WORLD.z1 - z) / (WORLD.z1 - WORLD.z0)) * mapBox.ih)];
 const fromMap = (i, j) => [WORLD.x0 + (i / mapBox.iw) * (WORLD.x1 - WORLD.x0), WORLD.z1 - (j / mapBox.ih) * (WORLD.z1 - WORLD.z0)];
-// A free spot 2.5 to 8 m from an object, on the same level (deck or land), to stand and look at it from.
+// Find a free viewing spot on the same level; ship landmarks must fit on the narrow deck.
 function standFor(a) {
-  for (const r of [2.5, 4, 6, 8, 12, 16].filter((r) => r >= Math.min(a.r * 2.5, a.ship ? 6 : 16))) {
+  for (const r of [2.5, 4, 6, 8, 12, 16].filter((r) => a.ship || r >= Math.min(a.r * 2.5, 16))) {
     for (let k = 0; k < 8; k++) {
       const x = a.x + r * Math.sin(k * 0.785), z = a.z - r * Math.cos(k * 0.785), fy = floorAt(x, z);
       if (fy !== null && (fy > 1.6) === !!a.ship && !blocked(x, z, fy)) return [x, z];
     }
   }
-  return [me.x, me.z];
+  return null;
 }
 // Walks to a point of interest along the roads (or jumps there with reduced motion), then faces it.
 let walkPath = [], walkTo = null;
@@ -1371,6 +1371,7 @@ function go(id) {
   const stand = standFor(anchors[id]);
   setMap(0); moved = true; dirty = true; jumped = null;
   walkPath = []; walkTo = null;
+  if (!stand) return;
   if (reduced.matches) { me.x = stand[0]; me.z = stand[1]; me.eye = floorAt(...stand) + 1.6; face(id); return; }
   const path = route(nearestNode(me.x, me.z), nearestNode(...stand));
   if (!path.length) return;

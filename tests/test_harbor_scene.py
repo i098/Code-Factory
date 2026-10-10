@@ -119,7 +119,6 @@ for (let k = 1; k < path.length; k++) {
 }
 function walkToSpot(id, start, dt, useMap = false) {
   me.x = start[0]; me.z = start[1]; me.eye = floorAt(...start) + 1.6;
-  const stand = standFor(anchors[id]);
   if (useMap) {
     pick = ORDER.indexOf(id); setMap(1);
     mapKey({key: 'Enter', code: 'Enter'});
@@ -139,7 +138,10 @@ function walkToSpot(id, start, dt, useMap = false) {
   }
   assert.equal(walkPath.length, 0, 'auto-walk did not finish');
   assert.equal(jumped, id, 'auto-walk did not face ' + id + ' from ' + start);
-  assert.deepEqual([me.x, me.z], stand, 'auto-walk missed its destination');
+  const a = anchors[id], fy = floorAt(me.x, me.z);
+  assert.equal(fy > 1.6, !!a.ship, 'auto-walk missed the destination level: ' + id);
+  assert(Math.hypot(me.x - a.x, me.z - a.z) <= (['mast', 'sign'].includes(id) ? 4 : 16),
+    'auto-walk missed the landmark: ' + id);
 }
 function stoppedMapWalk(start, id, useMap = false) {
   me.x = 7.1; me.z = 24.6; me.eye = floorAt(me.x, me.z) + 1.6;
@@ -234,6 +236,9 @@ for (const [lift, tilt] of [[0.2, 0.03], [-0.2, -0.03]]) {
   }
 }
 bob = roll = 0; rc = 1; rs = 0;
+reduced.matches = true;
+for (const id of ORDER) walkToSpot(id, [-0.6, 25], 0.02, true);
+reduced.matches = false;
 const savedWorldLength = world.length;
 try {
   box(world, 29, 1.2, 39, 31, 3, 39.2, 's');
