@@ -236,7 +236,7 @@ def doctor(document):
     return 1 if failed else 0
 
 
-def questions(document):
+def questions(document, config_path):
     """Open Firstmate on omp to ask the operator the new-host move questions."""
     config = document["factory"]
     home = Path(config["home"])
@@ -323,7 +323,7 @@ def questions(document):
             " Then ask one short question: enable the optional shared Supabase stack and CLI? "
             "They are off by default and need Docker, Firstmate, and an existing fixture volume "
             "or archive. If yes, set factory.profiles.shared_supabase to true in "
-            f"{ROOT / '.local/host.yml'} and follow {ROOT / 'docs/fleet-guards.md'}."
+            f"{config_path} and follow {ROOT / 'docs/fleet-guards.md'}."
         )
     returncode = subprocess.run([omp, prompt], cwd=firstmate, env=environment).returncode
     if returncode:
@@ -364,7 +364,8 @@ def main():
         if (ROOT / ".local/host.yml").exists()
         else ROOT / "config/default.yml"
     )
-    document = load_config(path.resolve())
+    path = path.resolve()
+    document = load_config(path)
     if args.command == "inspect":
         print(f"Valid host configuration: {path}")
         return 0
@@ -385,7 +386,7 @@ def main():
                 file=sys.stderr,
             )
         if result == 0:
-            questions(document)
+            questions(document, path)
     return result
 
 

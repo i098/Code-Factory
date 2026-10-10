@@ -22,6 +22,7 @@ FEATURES = {
     "factory.profiles.tailscale": "docs/security.md#remote-access",
     "factory.profiles.desktop": "docs/recovery.md#desktop-access",
     "factory.profiles.fleet_guards": "docs/fleet-guards.md",
+    "factory.profiles.shared_supabase": "docs/fleet-guards.md#shared-supabase",
     "factory.profiles.fleet_browsers": "docs/fleet-guards.md#browser-ladder",
     "factory.data_dir": "docs/configuration.md#data-disk",
     "factory.firstmate.checklist": "docs/configuration.md#new-host-questions",

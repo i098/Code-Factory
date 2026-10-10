@@ -231,3 +231,86 @@ def test_opt_in_installs_the_stack_and_a_second_apply_changes_nothing(tmp_path):
     assert apply(home, scripts=True, shared_supabase=False, fleet_guards=False) == 0
     assert calls.read_text() == ""
     assert {p: p.read_bytes() for p in before} == before
+
+
+@pytest.mark.parametrize("stop_code", [0, 7])
+def test_manual_removal_stops_the_stack_before_deleting_files(home, stop_code):
+    shared = home / "oss-fleet/shared-supabase"
+    cli = shared / "node_modules/.bin/supabase"
+    cli.parent.mkdir(parents=True)
+    bin_dir = home / ".local/bin"
+    bin_dir.mkdir(parents=True)
+    running = home / "running-units"
+    running.mkdir()
+    units = home / ".config/systemd/user"
+    suffixes = [
+        "shared-supabase.service", "shared-supabase-check.service",
+        "shared-supabase-check.timer", "worktree-env-seed.service",
+        "worktree-env-seed.timer", "worktree-env-seed.path",
+    ]
+    installed = []
+    for prefix in ("crewship", "flotilla"):
+        for suffix in suffixes:
+            name = f"{prefix}-{suffix}"
+            path = units / name
+            path.write_text("[Unit]\n")
+            installed.append(path)
+            wants = "timers.target.wants" if suffix.endswith(".timer") else "default.target.wants"
+            link = units / wants / name
+            if not link.is_symlink():
+                link.symlink_to(path)
+            installed.append(link)
+            if suffix != "shared-supabase.service":
+                (running / name).touch()
+    for path in [
+        bin_dir / "supabase", home / "oss-fleet/doctor/worktree-env-seed.sh",
+        shared / "check.sh", shared / "guard.sql",
+    ]:
+        path.write_text("installed\n")
+        installed.append(path)
+    cli.write_text(
+        '#!/bin/sh\n'
+        'test "$#" = 3 && test "$1" = stop && test "$2" = --workdir && '
+        'test "$3" = "$HOME/oss-fleet/shared-supabase" || exit 8\n'
+        'for unit in "$HOME/running-units/"*; do test ! -e "$unit" || exit 9; done\n'
+        'test -f "$HOME/.config/systemd/user/crewship-shared-supabase.service" || exit 10\n'
+        'test -f "$HOME/.config/systemd/user/flotilla-shared-supabase.service" || exit 10\n'
+        f'exit_code={stop_code}\n'
+        'test "$exit_code" = 0 || exit "$exit_code"\n'
+        'rm "$HOME/stack-running"\n'
+    )
+    cli.chmod(0o755)
+    installed.append(cli)
+    systemctl = bin_dir / "systemctl"
+    systemctl.write_text(
+        '#!/bin/sh\n'
+        'test "$1" = --user || exit 1\nshift\n'
+        'case "$1" in\n'
+        'disable) shift 2 ;;\n'
+        'stop) shift ;;\n'
+        'daemon-reload) exit 0 ;;\n'
+        '*) exit 1 ;;\nesac\n'
+        'for unit; do rm -f "$HOME/running-units/$unit"; done\n'
+    )
+    systemctl.chmod(0o755)
+    stack = home / "stack-running"
+    stack.touch()
+    volume = home / "fixture-volume"
+    volume.write_text("fixture data\n")
+    before = {path: path.read_bytes() for path in installed}
+    commands = (ROOT / "docs/fleet-guards.md").read_text().split("### Manual removal", 1)[1]
+    commands = commands.split("```bash\n", 1)[1].split("```", 1)[0]
+    result = subprocess.run(
+        ["bash", "-c", commands],
+        env={**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == stop_code, result.stderr
+    assert stack.exists() == bool(stop_code)
+    if stop_code:
+        assert {path: path.read_bytes() for path in installed} == before
+        assert all(path.is_symlink() for path in installed if ".wants" in str(path.parent))
+    else:
+        assert all(not path.exists() and not path.is_symlink() for path in installed)
+    assert volume.read_text() == "fixture data\n"

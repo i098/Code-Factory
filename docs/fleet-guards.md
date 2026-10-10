@@ -74,12 +74,17 @@ They leave Docker volumes, fixture archives and worktree environment files in pl
 Do not use `--no-backup` or any Docker volume removal command.
 
 ```bash
+(
 for prefix in crewship flotilla; do
   systemctl --user disable --now \
     "$prefix-shared-supabase-check.timer" \
     "$prefix-worktree-env-seed.timer" "$prefix-worktree-env-seed.path"
   systemctl --user stop "$prefix-shared-supabase-check.service" \
     "$prefix-worktree-env-seed.service" "$prefix-shared-supabase.service"
+done
+"$HOME/oss-fleet/shared-supabase/node_modules/.bin/supabase" stop \
+  --workdir "$HOME/oss-fleet/shared-supabase" || exit
+for prefix in crewship flotilla; do
   for suffix in shared-supabase.service shared-supabase-check.service \
     shared-supabase-check.timer worktree-env-seed.service \
     worktree-env-seed.timer worktree-env-seed.path; do
@@ -93,6 +98,7 @@ rm -f "$HOME/.local/bin/supabase" "$HOME/oss-fleet/doctor/worktree-env-seed.sh"
 rm -rf "$HOME/oss-fleet/shared-supabase/node_modules"
 rm -f "$HOME/oss-fleet/shared-supabase/check.sh" \
   "$HOME/oss-fleet/shared-supabase/guard.sql"
+)
 ```
 
 
