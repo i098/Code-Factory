@@ -52,6 +52,7 @@
       {{ factory_agent_config_stat.results
          | selectattr('stat.exists', 'defined')
          | selectattr('stat.exists')
+         | selectattr('item.first_write')
          | map(attribute='item.dest') | list | join(', ') | default('none', true) }}
       already exist and were not rewritten (first-write-only inputs).
 
