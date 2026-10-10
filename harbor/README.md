@@ -1,6 +1,12 @@
 # harbor
 
-`harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship at the dock, drawn as text in the browser every frame. Each object opens a floating label for one Crewship feature, an ASCII mini map jumps to any of them, and [how.html](public/how.html) explains how it is built. The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
+`harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship at the dock, drawn as text in the browser every frame.
+Each object shows an ASCII sign anchored to its surface.
+The sign uses the scene's character grid, font and colors, with clickable links.
+An ASCII mini map leads to each object.
+[how.html](public/how.html) explains the scene.
+The off-screen HTML list and current sign keep links available to screen readers and keyboard users.
+The page shows this content without JavaScript.
 An uncaught error hides the scene and shows the plain page.
 
 The island has staggered plaza paving, scattered stones and grass tufts, varied tree canopies, textured bark, and foam along the shore.
@@ -17,11 +23,17 @@ It is plain HTML, CSS and JavaScript in `public/`, with no dependencies. Nothing
 ## Content from the repository
 
 `build.py` (Python standard library) copies `public/` to `dist/` and fills the points of interest from the README's Features list and More docs row.
-It also adds the quick start, the repository, the latest release with the next changes from `CHANGELOG.md`, and how.html.
+It also adds the quick start, the repository, the latest release from `CHANGELOG.md`, and how.html.
 A link with an object in the scene (mapped in `build.py`'s `SCENE`) opens on that object.
 A link with no mapping never blocks the build: it prints a warning and appears on the docs board beside the HOW board.
 The docs board shows on the mini map like the other points.
 Add an object and a `SCENE` entry to give the link its own place.
+The build limits each sign to a title, a short description and one link.
+Unmapped pages share a short summary with a count and one link to the README docs index.
+The welcome sign has three project links.
+Signs stay inside the phone's safe area, above the move pad and clear of the mini map.
+Touch links have a hit region at least 44 pixels high.
+Enter opens the selected object, and focused HTML links retain their native keyboard behavior.
 
 ## Preview
 
@@ -37,6 +49,7 @@ Then open <http://localhost:8000>.
 CI loads the built page in Playwright WebKit as an iPhone, with `webkit-check.mjs`.
 The check also fails if the first 30 slow frames change the grid, cell size, field of view, or canvas layout.
 It still checks crashes, uncaught errors, console errors, the plain-page fallback, and multi-glyph `fillText` calls.
+It also checks each sign's bounds, taps every link, and opens the docs index with the keyboard.
 See [how.html](public/how.html) for the rendering limits on touch devices.
 To run the check locally:
 
