@@ -37,6 +37,7 @@
 - [Capacity and auto pruners](docs/capacity.md): host sizing per lane count, and cleanup timers
 - [Data disk](docs/configuration.md#data-disk): Docker and the npm and pip caches on a second disk (opt-in)
 - [Self-hosted CI pool](docs/ci-pool.md): GitHub Actions runners, one job per fresh container (opt-in)
+- [Crew board](docs/board.md): host-local message board for agents on one host (opt-in)
 - [Chat clients](docs/chat.md): Concord (Discord) and slk (Slack) in the terminal
 - [GitHub board](docs/github-board.md): agent work as issues on a Project board, and a shared message board (opt-in)
 - [iMessage bridge](docs/imessage.md): text Firstmate from your phone (opt-in)
@@ -72,7 +73,7 @@
 - Skills and rules: [`skills/`](skills/) for omp and Claude Code, [`config/AGENTS.md`](config/AGENTS.md) for Claude Code, omp, and Codex
 - Profiles on: `agents`, `development`, `firstmate`, `docker`, `chat`
 - Profiles off (opt-in): `tailscale`, `desktop`, `fleet_guards`, `fleet_browsers`
-- Unset (opt-in): `data_dir`, `firstmate.checklist`, `mac_ssh`, `imessage`, `github_board`, `ci_pool`
+- Unset (opt-in): `data_dir`, `firstmate.checklist`, `mac_ssh`, `skills`, `imessage`, `github_board`, `board`, `ci_pool`
 - Full files: [`config/default.yml`](config/default.yml), [`config/omp.yml`](config/omp.yml)
 
 </details>

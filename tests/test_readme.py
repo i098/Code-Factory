@@ -25,8 +25,10 @@ FEATURES = {
     "factory.data_dir": "docs/configuration.md#data-disk",
     "factory.firstmate.checklist": "docs/configuration.md#new-host-questions",
     "factory.mac_ssh": "docs/security.md#ssh-to-a-mac",
+    "factory.skills": "docs/omp.md#skills",
     "factory.imessage": "docs/imessage.md",
     "factory.github_board": "docs/github-board.md",
+    "factory.board": "docs/board.md",
     "factory.ci_pool": "docs/ci-pool.md",
 }
 EXCLUDED = {
