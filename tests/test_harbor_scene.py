@@ -41,7 +41,7 @@ const context = vm.createContext({
   devicePixelRatio: 1, innerWidth: 600, performance: {now: () => 0},
   IntersectionObserver: class {observe() {}},
   ResizeObserver: class {observe() {}}, requestAnimationFrame() {},
-  console, window: {}, assert
+  console, window: {}, assert, addEventListener() {}
 });
 vm.runInContext(fs.readFileSync(process.argv[2], 'utf8') + `
 cols = 100; rows = 120; pick = ORDER.indexOf('antenna');

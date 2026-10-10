@@ -1,7 +1,6 @@
 ---
-# The fleet guards' user units (factory_fleet_units). Older releases installed
-# the same units as flotilla-*: every apply stops any that remain, deletes their
-# files and enablement links, and deletes the old Docker guard's allowlist.
+# Only enabled profiles select units for rendering and legacy retirement.
+# Disabled profiles leave their units and enablement links unchanged.
 # flotilla-shared-supabase.service is never stopped: its ExecStop runs
 # `supabase stop`, and the shared stack must keep running through the rename.
 # Its file is deleted instead and crewship-shared-supabase.service adopts the
@@ -97,6 +96,7 @@
     path: "{{ factory_fleet_doctor_dir }}/docker-guard-allow.txt"
     state: absent
   become: true
+  when: factory_cfg.profiles.fleet_guards | bool
 
 - name: Render the fleet units
   ansible.builtin.template:
@@ -143,7 +143,5 @@
   ansible.builtin.debug:
     msg: >-
       start_services is false: fleet units are written and statically enabled
-      but not started here. On a real host crewship-shared-supabase.service
-      brings the stack up at login and generates
-      {{ factory_shared_supabase_dir }}/swarms-platform.env.local.
+      but not started here. Enabled units start at the next user login.
   when: not (factory_manage_services | bool)

@@ -483,7 +483,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 const icloud = [];
 function relay(password = "pw-test") {
-  const r = { password, calls: [], sent: [], messages: new Map(), files: new Map(), fail: {}, hang: false };
+  const r = { password, privateApi: true, calls: [], sent: [], messages: new Map(), files: new Map(), fail: {}, hang: false };
   r.start = () => {
     r.server = Bun.serve({ port: r.port ?? 0, async fetch(req) {
       const u = new URL(req.url);
@@ -493,7 +493,10 @@ function relay(password = "pw-test") {
       r.calls.push(`${req.method} ${path}`);
       const failing = Object.keys(r.fail).find((p) => path.startsWith(p) && r.fail[p]-- > 0);
       if (failing) return Response.json({ error: { message: "Service temporarily unavailable" } }, { status: 500 });
-      if (path === "ping") return Response.json({ data: "pong" });
+      if (path === "server/info") return Response.json({ data: { private_api: r.privateApi, helper_connected: r.privateApi } });
+      if (!r.privateApi && (path === "message/react" || path.endsWith("/typing") || (path === "message/text" && body.selectedMessageGuid))) {
+        return Response.json({ error: { message: "Please make sure you have completed the setup for the Private API" } }, { status: 500 });
+      }
       if (path === "message/text") {
         r.sent.push(body);
         icloud.push({ chat: body.chatGuid, text: body.message, at: Date.now() });
@@ -556,7 +559,7 @@ try {{ await bb.react(chat, "his-guid", "🦄"); }} catch (e) {{ odd = e.message
 a.fail["chat/"] = 2;
 await bb.typing(chat, "POST"); await bb.typing(chat, "DELETE");
 await bb.send(chat, "after a typing error");
-done({{ sent: a.sent, calls: a.calls.filter((c) => c !== "GET ping"), odd, logs }});
+done({{ sent: a.sent, calls: a.calls, odd, logs }});
 """)
     plain, reply, tapback, after = result["sent"]
     assert plain["chatGuid"] == "iMessage;-;+15550000000" and plain["message"] == "hello" and plain["tempGuid"]
@@ -568,6 +571,91 @@ done({{ sent: a.sent, calls: a.calls.filter((c) => c !== "GET ping"), odd, logs 
     assert any(c.startswith("POST chat/") and c.endswith("/typing") for c in result["calls"])
     assert any(c.startswith("DELETE chat/") for c in result["calls"])
     assert [line for line in result["logs"] if line.startswith("typing failed")]
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_without_private_api_skips_actions_and_sends_plain_reply():
+    """A relay without the Private API sends replies without a thread and never receives typing or tapback requests."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(); a.privateApi = false;
+a.messages.set("his-guid", text("his-guid", "hello"));
+const bb = line([a]);
+const message = await bb.message("his-guid");
+await message.space.startTyping(); await message.space.stopTyping();
+const reaction = await message.react("❤️").catch((e) => e.message);
+const reply = await message.reply("plain reply").catch((e) => e.message);
+done({{ calls: a.calls, sent: a.sent, reaction: reaction ?? null, reply: reply ?? null, logs }});
+""")
+    assert not [call for call in result["calls"] if call.endswith("/typing") or call == "POST message/react"]
+    assert result["reaction"] is None and result["reply"] is None
+    assert [item["message"] for item in result["sent"]] == ["plain reply"]
+    assert "selectedMessageGuid" not in result["sent"][0] and "partIndex" not in result["sent"][0]
+    assert len(result["logs"]) == 1 and "Private API" in result["logs"][0]
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_private_api_is_per_relay_and_refreshes_on_health_checks():
+    """Startup reads every relay; a state change takes effect on the next health check and logs only once."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(), b = relay(); a.privateApi = false;
+const bb = line([a, b]);
+bb.start(); await bb.catchUp();
+await bb.typing(chat, "POST"); await bb.react(chat, "his-guid", "👍");
+a.fail["message/text"] = 1;
+await bb.send(chat, "fallback thread", "his-guid");
+const initial = [a.calls.slice(), b.calls.slice()];
+a.privateApi = true; b.privateApi = false;
+await bb.catchUp(); await bb.catchUp();
+await bb.typing(chat, "POST"); await bb.typing(chat, "DELETE");
+await bb.react(chat, "his-guid", "👍");
+await bb.send(chat, "thread on", "his-guid");
+a.down();
+await bb.typing(chat, "POST"); await bb.react(chat, "his-guid", "👍");
+await bb.send(chat, "thread off", "his-guid");
+done({{ initial, calls: [a.calls, b.calls], sent: [a.sent, b.sent], capabilityLogs: logs.filter((l) => l.includes("Private API")) }});
+""")
+    first, second = result["initial"]
+    assert "GET server/info" in first and "GET server/info" in second
+    assert not [call for call in first if call.endswith("/typing") or call == "POST message/react"]
+    assert sum(call.endswith("/typing") for call in second) == 1 and "POST message/react" in second
+    assert result["sent"][0][0]["reaction"] == "like"
+    assert result["sent"][0][1]["selectedMessageGuid"] == "his-guid"
+    tapback, threaded, plain = result["sent"][1]
+    assert tapback["reaction"] == "like" and tapback["selectedMessageGuid"] == "his-guid"
+    assert threaded["message"] == "fallback thread" and threaded["selectedMessageGuid"] == "his-guid"
+    assert plain["message"] == "thread off" and "selectedMessageGuid" not in plain and "partIndex" not in plain
+    assert sum(call.endswith("/typing") for call in result["calls"][0]) == 2
+    assert [call for call in result["calls"][1] if call.endswith("/typing") or call == "POST message/react"] == [
+        call for call in second if call.endswith("/typing") or call == "POST message/react"
+    ]
+    assert len(result["capabilityLogs"]) == 3
+    assert "relay 1" in result["capabilityLogs"][0] and "is off" in result["capabilityLogs"][0]
+    assert any("relay 1" in line and "is on" in line for line in result["capabilityLogs"])
+    assert any("relay 2" in line and "is off" in line for line in result["capabilityLogs"])
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_private_api_cache_expires_during_active_sends():
+    """Successful traffic does not keep an old capability alive beyond the health-check interval."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+let now = Date.now(); Date.now = () => now;
+const a = relay(), bb = line([a], {{ healthMs: 1000 }});
+await bb.send(chat, "first thread", "his-guid");
+now += 500; await bb.send(chat, "busy");
+a.privateApi = false;
+now += 501; await bb.send(chat, "plain after refresh", "his-guid");
+done({{ sent: a.sent, probes: a.calls.filter((c) => c === "GET server/info").length, logs }});
+""")
+    assert result["sent"][0]["selectedMessageGuid"] == "his-guid"
+    assert "selectedMessageGuid" not in result["sent"][2]
+    assert result["probes"] == 2
+    assert len(result["logs"]) == 1 and "is off" in result["logs"][0]
 
 
 @pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
@@ -1274,6 +1362,7 @@ const sentLines = () => (existsSync(`${dir}/relay-sent`) ? readFileSync(`${dir}/
 const server = Bun.serve({ port: 0, async fetch(req) {
   const u = new URL(req.url), path = u.pathname.replace("/api/v1/", "");
   if (u.searchParams.get("password") !== "pw-test") return new Response("no", { status: 401 });
+  if (path === "server/info") return Response.json({ data: { private_api: true, helper_connected: true } });
   if (path === "message/text") {
     const b = await req.json();
     if (mode() === "lost") return new Response("garbled");

@@ -61,7 +61,8 @@ Fleet guards (`fleet/`) are runtime scripts deployed to `~/oss-fleet/` on the bo
 1. Write the script in `fleet/doctor/` or `fleet/browsers/`.
 2. Add a `.j2` unit template in `ansible/templates/`.
 3. Wire it in `ansible/tasks/fleet_guards.yml` (or `fleet-browsers.yml`).
-4. Add it to `factory_fleet_units` and/or `factory_fleet_enabled_units` (or `factory_fleet_browser_units` / `factory_fleet_browser_enabled_units`) in `group_vars/all.yml`.
+4. Add guard units to `factory_fleet_guard_units` and enabled units to `factory_fleet_guard_enabled_units` in `ansible/group_vars/all.yml`.
+   Use `factory_fleet_browser_units` and `factory_fleet_browser_enabled_units` for the browser ladder.
 5. Update `docs/fleet-guards.md`.
 
 ## Commits and branches

@@ -50,6 +50,9 @@ def validate_config(document):
     if config["profiles"].get("fleet_guards"):
         if not (config["profiles"]["docker"] and config["profiles"]["firstmate"]):
             raise ValueError("fleet guards require the docker and firstmate profiles")
+    if config["profiles"].get("shared_supabase"):
+        if not (config["profiles"]["docker"] and config["profiles"]["firstmate"]):
+            raise ValueError("shared Supabase requires the docker and firstmate profiles")
         fixture = config.get("fleet", {}).get("fixture_archive", "")
         if fixture and ".." in Path(fixture).parts:
             raise ValueError("fleet.fixture_archive must not traverse; give a plain path")
@@ -233,7 +236,7 @@ def doctor(document):
     return 1 if failed else 0
 
 
-def questions(document):
+def questions(document, config_path):
     """Open Firstmate on omp to ask the operator the new-host move questions."""
     config = document["factory"]
     home = Path(config["home"])
@@ -315,6 +318,13 @@ def questions(document):
             " Then ask one short question: turn on the crew board, a host-local message "
             f"board for agent-to-agent messages? If yes, follow {ROOT / 'docs/board.md'}."
         )
+    if not config["profiles"].get("shared_supabase"):
+        prompt += (
+            " Then ask one short question: enable the optional shared Supabase stack and CLI? "
+            "They are off by default and need Docker, Firstmate, and an existing fixture volume "
+            "or archive. If yes, set factory.profiles.shared_supabase to true in "
+            f"{config_path} and follow {ROOT / 'docs/fleet-guards.md'}."
+        )
     returncode = subprocess.run([omp, prompt], cwd=firstmate, env=environment).returncode
     if returncode:
         print(
@@ -354,7 +364,8 @@ def main():
         if (ROOT / ".local/host.yml").exists()
         else ROOT / "config/default.yml"
     )
-    document = load_config(path.resolve())
+    path = path.resolve()
+    document = load_config(path)
     if args.command == "inspect":
         print(f"Valid host configuration: {path}")
         return 0
@@ -375,7 +386,7 @@ def main():
                 file=sys.stderr,
             )
         if result == 0:
-            questions(document)
+            questions(document, path)
     return result
 
 

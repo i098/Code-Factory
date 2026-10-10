@@ -32,7 +32,8 @@
 - [Herdr workspace](docs/herdr.md): a sidebar of spaces and agents, with live status for each lane
 - [omp agents](docs/omp.md): sign-in, model roles, fallbacks, and the advisor
 - [Private skills](docs/omp.md#skills): host-only skills in `skills/private/` (opt-in)
-- [Fleet guards](docs/fleet-guards.md): shared Supabase, Docker guard, dev-server reaper, storage guard, spawn memory floor (opt-in)
+- [Fleet guards](docs/fleet-guards.md): Docker guard, dev-server reaper, storage guard, spawn memory floor (opt-in)
+- [Shared Supabase](docs/fleet-guards.md#shared-supabase): shared stack and CLI (opt-in)
 - [Browser ladder](docs/fleet-guards.md#browser-ladder): Obscura, Chrome, and noVNC tiers for agent browsers (opt-in)
 - [Capacity and auto pruners](docs/capacity.md): host sizing per lane count, and cleanup timers
 - [Data disk](docs/configuration.md#data-disk): Docker and the npm and pip caches on a second disk (opt-in)
@@ -57,8 +58,11 @@
 <details>
 <summary><b>Default config</b></summary>
 
-- Agent harness: [omp](docs/omp.md), default model `anthropic/claude-opus-5-5:xhigh`, advisor off
-- Models: `anthropic/claude-fable-5-1`, `anthropic/claude-haiku-5-5`, `anthropic/claude-opus-5-5`, `anthropic/claude-sonnet-5-5`, `kimi-code/k3`
+- Agent harness: [omp](docs/omp.md), home model `anthropic/claude-opus-5-5:xhigh`, advisor off
+- Models: dynamic per-task selection; small `anthropic/claude-haiku-5-5`, `openai-codex/gpt-6-luna`; ordinary (default) `anthropic/claude-sonnet-5-5`, `openai-codex/gpt-6.1-sol`; hard only `anthropic/claude-opus-5-5`.
+- The spawning agent picks the thinking level.
+- Codex context: 272K default, 1M maximum, `extendedContext` on.
+  The current bundled omp catalog limits the effective maximum to 872K.
 - omp plugins: `ponytail`, `i-have-adhd`, `caveman`
 - omp extension `code-factory-quality-gate`: [sentrux and fallow check](docs/omp.md#quality-gate) at each turn end
 - omp extension `aa-mode-icons`: [mode and hook icons](docs/omp.md#status-line-icons) on the status line
@@ -70,10 +74,12 @@
 - Firstmate patch `0003-brief-crewboard`: adds the optional [crew board instructions](docs/board.md#firstmate-instructions)
 - Hooks: `code-factory-quality-gate` at omp turn end, SessionStart banners from `ponytail`, `i-have-adhd`, `caveman`, `ACTIONS_RUNNER_HOOK_JOB_STARTED` (opt-in with the [CI pool](docs/ci-pool.md))
 - Pipeline gates: [no-mistakes](docs/omp.md#no-mistakes-pipeline-agent) and `ponytail-review`
+- Gate models: per-run pins; routine `openai-codex/gpt-6.1-sol:medium`; ordinary (default) `anthropic/claude-sonnet-5-5:high`; hard `anthropic/claude-opus-5-5:high`.
+  The verified Pi-only adapter preserves per-run model choices and fails on wrapper refusal.
 - Skills and rules: [`skills/`](skills/) for omp and Claude Code, [`config/AGENTS.md`](config/AGENTS.md) for Claude Code, omp, and Codex; public files install with the `agents` profile and private files take precedence ([omp](docs/omp.md#skills)).
 - omp rules ([TTSR](docs/omp.md#rules)): `always-on-skills`, `asd-ste100`, `use-native-stacked-prs`; with the browser ladder: `drive-the-browser-yourself`, `fleet-browser-default-tier`.
 - Profiles on: `agents`, `development`, `firstmate`, `docker`, `chat`
-- Profiles off (opt-in): `tailscale`, `desktop`, `fleet_guards`, `fleet_browsers`
+- Profiles off (opt-in): `tailscale`, `desktop`, `fleet_guards`, `shared_supabase`, `fleet_browsers`
 - Unset (opt-in): `data_dir`, `firstmate.checklist`, `mac_ssh`, `skills`, `imessage`, `github_board`, `board`, `ci_pool`
 - Full files: [`config/default.yml`](config/default.yml), [`config/omp.yml`](config/omp.yml)
 
