@@ -1,0 +1,152 @@
+---
+# Optional crew board (factory.board, docs/board.md): builds crewboard/ with
+# cargo and runs `crewboard serve` as a user service on %t/crewboard.sock.
+# Without the key, every apply stops and removes the service, the binary and
+# the build directory, so turning the board off is one apply.
+#
+#   * the build runs from a copy of crewboard/ under the account's home, and
+#     only when the source checksum differs from the one recorded after the
+#     last good build, so a second apply reports changed=0
+#   * cargo comes from the development profile (validate_config enforces it)
+
+- name: Install the crew board
+  when: factory_cfg.board is defined
+  block:
+    - name: Ensure the crew board directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ factory_board_dir }}/source"
+        - "{{ factory_local_bin }}"
+        - "{{ factory_user_units }}/default.target.wants"
+
+    - name: Copy the crew board source
+      ansible.builtin.copy:
+        src: "{{ code_factory_repo }}/crewboard/{{ item }}"
+        dest: "{{ factory_board_dir }}/source/"
+        mode: preserve
+        remote_src: true
+      loop: [Cargo.toml, Cargo.lock, src]
+
+    - name: Checksum the crew board source
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail &&
+          find Cargo.toml Cargo.lock src -type f -print0 | sort -z
+          | xargs -0 sha256sum | sha256sum | cut -d' ' -f1
+        chdir: "{{ code_factory_repo }}/crewboard"
+        executable: /bin/bash
+      register: factory_board_source
+      changed_when: false
+      check_mode: false
+
+    - name: Read the checksum of the last crew board build
+      ansible.builtin.slurp:
+        src: "{{ factory_board_dir }}/built.sha256"
+      register: factory_board_built
+      failed_when: false
+      check_mode: false
+
+    - name: Record whether the crew board needs a build
+      ansible.builtin.set_fact:
+        factory_board_stale: >-
+          {{ factory_board_built.content is not defined
+             or (factory_board_built.content | b64decode | trim) != factory_board_source.stdout }}
+
+    - name: Report the crew board build that check mode cannot perform
+      ansible.builtin.debug:
+        msg: "check mode: would run `cargo build --release --locked` in {{ factory_board_dir }}/source."
+      when:
+        - ansible_check_mode
+        - factory_board_stale | bool
+
+    - name: Build the crew board
+      ansible.builtin.command:
+        argv:
+          - "{{ factory_cfg.home }}/.cargo/bin/cargo"
+          - build
+          - --release
+          - --locked
+          - --target-dir
+          - "{{ factory_board_dir }}/target"
+        chdir: "{{ factory_board_dir }}/source"
+      environment:
+        PATH: "{{ factory_cfg.home }}/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+      changed_when: true
+      when:
+        - not ansible_check_mode
+        - factory_board_stale | bool
+
+    - name: Record the checksum of the crew board build
+      ansible.builtin.copy:
+        content: "{{ factory_board_source.stdout }}\n"
+        dest: "{{ factory_board_dir }}/built.sha256"
+        mode: "0644"
+      when: not (ansible_check_mode and factory_board_stale | bool)
+
+    - name: Install the crewboard command
+      ansible.builtin.copy:
+        src: "{{ factory_board_dir }}/target/release/crewboard"
+        dest: "{{ factory_local_bin }}/crewboard"
+        mode: "0755"
+        remote_src: true
+      when: not (ansible_check_mode and factory_board_stale | bool)
+      notify: restart crewboard
+
+    - name: Render the crew board unit
+      ansible.builtin.template:
+        src: crewboard.service.j2
+        dest: "{{ factory_user_units }}/crewboard.service"
+        mode: "0644"
+      notify:
+        - reload user systemd
+        - restart crewboard
+
+    - name: Statically enable the crew board
+      ansible.builtin.file:
+        src: "{{ factory_user_units }}/crewboard.service"
+        dest: "{{ factory_user_units }}/default.target.wants/crewboard.service"
+        state: link
+        force: true
+        follow: false
+
+    - name: Enable and start the crew board
+      ansible.builtin.systemd_service:
+        scope: user
+        name: crewboard.service
+        enabled: true
+        state: started
+      environment: "{{ factory_user_systemd_env }}"
+      when: factory_manage_services | bool
+
+- name: Remove the crew board
+  when: factory_cfg.board is not defined
+  block:
+    - name: Look for an installed crew board unit
+      ansible.builtin.stat:
+        path: "{{ factory_user_units }}/crewboard.service"
+        get_checksum: false
+      register: factory_board_unit
+
+    - name: Stop the crew board
+      ansible.builtin.systemd_service:
+        scope: user
+        name: crewboard.service
+        state: stopped
+      environment: "{{ factory_user_systemd_env }}"
+      when:
+        - factory_manage_services | bool
+        - factory_board_unit.stat.exists
+
+    - name: Remove the crew board unit, command and build directory
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ factory_user_units }}/default.target.wants/crewboard.service"
+        - "{{ factory_user_units }}/crewboard.service"
+        - "{{ factory_local_bin }}/crewboard"
+        - "{{ factory_board_dir }}"
+      notify: reload user systemd

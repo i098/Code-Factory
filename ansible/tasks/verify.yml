@@ -109,7 +109,11 @@
                  factory_local_bin ~ '/slk',
                  factory_cfg.home ~ '/.config/concord/config.toml',
                  factory_cfg.home ~ '/.config/slk/config.toml']
-                if (factory_cfg.profiles.chat | bool) else []) }}
+                if (factory_cfg.profiles.chat | bool) else [])
+             + ([factory_local_bin ~ '/crewboard',
+                 factory_user_units ~ '/crewboard.service',
+                 factory_user_units ~ '/default.target.wants/crewboard.service']
+                if (factory_cfg.board is defined) else []) }}
 
     - name: Stat every expected output
       ansible.builtin.stat:
@@ -457,7 +461,8 @@
               if ((factory_cfg.profiles.agents | bool)
                   and (factory_cfg.browser_prune.enabled | bool)) else [])
            + (['code-factory-vnc.service', 'code-factory-novnc.service']
-              if (factory_cfg.profiles.desktop | bool) else []) }}
+              if (factory_cfg.profiles.desktop | bool) else [])
+           + (['crewboard.service'] if (factory_cfg.board is defined) else []) }}
       register: factory_verify_units
       changed_when: false
       failed_when: false
