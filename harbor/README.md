@@ -38,6 +38,7 @@ Touch links retain 44-pixel hit regions where space permits.
 Click or tap a sign link to open it.
 Focus a feature-list link to show its sign.
 The sign highlights the focused link without scrolling the scene.
+Link focus closes the map and cancels pending automatic walking.
 See [how.html](public/how.html) for the movement and Enter controls.
 
 ## Preview
@@ -57,6 +58,7 @@ The check also fails if the first 30 slow frames change the grid, cell size, fie
 It checks every sign against safe-area edges and checks map and move pad clearance before the final overlay placement.
 It includes 320×568 phones in both orientations and landscape heights of 256 and 192 pixels.
 It checks measured safe insets, visible signs, link hit regions, and keyboard focus without stage scrolling.
+It also checks feature-link focus with the full map open and an arrival selection pending.
 It fails if rendering stalls.
 It taps or clicks every link and opens the docs index with the keyboard.
 See [how.html](public/how.html) for the rendering limits on touch devices.

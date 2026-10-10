@@ -51,8 +51,13 @@ await page.context().route("**/*", async (route) => {
 const drawPopup = drawSign;
 drawSign = function() {
   window.signGlyphs = 0;
+  window.highlightedHref = null;
   const fill = ctx.fillText;
-  ctx.fillText = function(text, ...args) { window.signGlyphs += text.trim().length; return fill.call(this, text, ...args); };
+  ctx.fillText = function(text, ...args) {
+    window.signGlyphs += text.trim().length;
+    if (text.startsWith("[") && ctx.fillStyle === COLORS.l) window.highlightedHref = document.activeElement.href;
+    return fill.call(this, text, ...args);
+  };
   try { drawPopup(); } finally { ctx.fillText = fill; }
 };
 window.frames = [];
@@ -86,6 +91,22 @@ window.harborCheck = {
     if (id) go(id);
     else { moved = false; jumped = null; show(null); }
     render(); dirty = false;
+  },
+  focusState() {
+    step(1 / 60);
+    render();
+    return {
+      map: mapMode, pending: walkPath.length, destination: walkTo, target,
+      drawn: !!signBox && window.signGlyphs > 0, highlighted: window.highlightedHref,
+      href: document.activeElement.href,
+      x: stage.scrollLeft, y: stage.scrollTop
+    };
+  },
+  focusLink(selector, pendingId) {
+    walkPath = [[me.x, me.z]];
+    walkTo = pendingId;
+    document.querySelector(selector).focus();
+    return this.focusState();
   },
   bounds() {
     return {
@@ -168,18 +189,33 @@ for (const id of [null, ...await page.evaluate(() => window.harborCheck.ids)]) {
     assert.equal(opened.url(), link.href, `${id}: grid tap opened the wrong link`);
     await opened.close();
   }
-  for (const link of await page.locator("#card a").all()) {
-    await link.focus();
-    const focus = await page.evaluate(() => ({
-      x: document.getElementById("stage").scrollLeft,
-      y: document.getElementById("stage").scrollTop,
-      bounds: window.harborCheck.bounds(),
-      href: document.activeElement.href
-    }));
+  for (let n = 0; n < bounds.links.length; n++) {
+    const focus = await page.evaluate(({ n, id }) =>
+      window.harborCheck.focusLink("#card a:nth-of-type(" + (n + 1) + ")", window.harborCheck.ids.find((other) => other !== id)),
+      { n, id });
     assert.equal(focus.x, 0, `${name}/${id}: keyboard focus scrolled the stage horizontally`);
     assert.equal(focus.y, 0, `${name}/${id}: keyboard focus scrolled the stage vertically`);
-    assert(focus.bounds.links.some((link) => link.href === focus.href), `${name}/${id}: focused link has no sign`);
+    assert.equal(focus.pending, 0, `${name}/${id}: card focus retained an auto-walk`);
+    assert.equal(focus.destination, null, `${name}/${id}: card focus retained an arrival selection`);
+    assert(focus.drawn, `${name}/${id}: focused sign did not draw`);
+    assert.equal(focus.highlighted, focus.href, `${name}/${id}: focused sign link was not highlighted`);
   }
+}
+for (const id of await page.evaluate(() => window.harborCheck.ids)) {
+  await page.locator("#stage").focus();
+  await page.keyboard.press("m");
+  await page.keyboard.press("m");
+  const focus = await page.evaluate((id) =>
+    window.harborCheck.focusLink('#manifest [data-spot="' + id + '"] a',
+      window.harborCheck.ids.find((other) => other !== id)), id);
+  assert.equal(focus.map, 0, `${name}/${id}: manifest focus did not close the full map`);
+  assert.equal(focus.pending, 0, `${name}/${id}: manifest focus retained an auto-walk`);
+  assert.equal(focus.destination, null, `${name}/${id}: manifest focus retained an arrival selection`);
+  assert.equal(focus.target, id, `${name}/${id}: arrival replaced the focused sign`);
+  assert(focus.drawn, `${name}/${id}: focused sign did not draw`);
+  assert.equal(focus.highlighted, focus.href, `${name}/${id}: manifest link did not highlight its sign`);
+  assert.equal(focus.x, 0, `${name}/${id}: manifest focus scrolled the stage horizontally`);
+  assert.equal(focus.y, 0, `${name}/${id}: manifest focus scrolled the stage vertically`);
 }
 await page.locator('#manifest [data-spot="docsboard"] a').focus();
 const keyboardPopup = page.waitForEvent("popup");
