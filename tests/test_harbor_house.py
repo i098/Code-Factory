@@ -101,7 +101,7 @@ def test_house_entry_exit_and_room_collisions():
     setup = r"""
 const assert = require('node:assert/strict');
 const element = {
-  hidden: false, classList: {add() {}, toggle() {}}, focus() {}, addEventListener() {},
+  hidden: false, classList: {add() {}, remove() {}, toggle() {}}, focus() {}, addEventListener() {},
   firstElementChild: {style: {}}, clientWidth: 600, clientHeight: 400,
   replaceChildren() {}, getContext: () => ({setTransform() {}, measureText: () => ({width: 6})})
 };
@@ -115,6 +115,7 @@ const performance = {now: () => clock};
 const IntersectionObserver = class {observe() {}}, ResizeObserver = class {observe() {}};
 function requestAnimationFrame() {}
 function addEventListener() {}
+function removeEventListener() {}
 const window = {};
 """
     check = r"""
