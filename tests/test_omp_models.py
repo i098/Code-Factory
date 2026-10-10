@@ -35,8 +35,11 @@ def merge_models(home, check=False):
     return int(result.stdout.rsplit("changed=", 1)[1].split()[0])
 
 
-@pytest.mark.parametrize("existing", [False, True])
-def test_model_merge_keeps_user_entries_and_is_idempotent(tmp_path, existing):
+@pytest.mark.parametrize("sources", [
+    (), ("yml",), ("yaml",), ("json",), ("yaml", "json"),
+    ("yml", "yaml"), ("yml", "json"), ("yml", "yaml", "json"),
+])
+def test_model_merge_keeps_user_entries_and_is_idempotent(tmp_path, sources):
     target = tmp_path / ".omp/agent/models.yml"
     target.parent.mkdir(parents=True)
     custom = {"providers": {
@@ -49,18 +52,27 @@ def test_model_merge_keeps_user_entries_and_is_idempotent(tmp_path, existing):
             },
         },
     }}
-    if existing:
-        target.write_text(yaml.safe_dump(custom))
-    before = target.read_bytes() if existing else None
+    originals = {}
+    for extension in sources:
+        source = target.with_suffix(f".{extension}")
+        entry = {"providers": {
+            **custom["providers"],
+            "source": {"baseUrl": f"https://{extension}.example.com"},
+        }}
+        source.write_text(json.dumps(entry) if extension == "json" else yaml.safe_dump(entry))
+        originals[source] = source.read_bytes()
+    before = target.read_bytes() if target.exists() else None
     assert merge_models(tmp_path, check=True) == 1
     assert (target.read_bytes() if target.exists() else None) == before
+    assert all(source.read_bytes() == content for source, content in originals.items())
     assert merge_models(tmp_path) == 1
     merged = yaml.safe_load(target.read_text())
     shipped = yaml.safe_load((ROOT / "config/omp-models.yml").read_text())
     overrides = merged["providers"]["openai-codex"]["modelOverrides"]
     for model, values in shipped["providers"]["openai-codex"]["modelOverrides"].items():
         assert overrides[model].items() >= values.items()
-    if existing:
+    if sources:
+        assert merged["providers"]["source"] == {"baseUrl": f"https://{sources[0]}.example.com"}
         assert merged["providers"]["private-provider"] == custom["providers"]["private-provider"]
         assert merged["providers"]["openai-codex"]["models"] == [{"id": "user-model"}]
         assert overrides["user-model"] == {"contextWindow": 64000}
@@ -69,6 +81,27 @@ def test_model_merge_keeps_user_entries_and_is_idempotent(tmp_path, existing):
     written = target.read_bytes()
     assert merge_models(tmp_path) == 0
     assert target.read_bytes() == written
+    assert all(source.read_bytes() == content for source, content in originals.items()
+               if source != target)
+
+
+@pytest.mark.parametrize("extension", ["yaml", "json"])
+def test_model_merge_migrates_even_when_overrides_are_already_present(tmp_path, extension):
+    target = tmp_path / ".omp/agent/models.yml"
+    target.parent.mkdir(parents=True)
+    shipped = yaml.safe_load((ROOT / "config/omp-models.yml").read_text())
+    source = target.with_suffix(f".{extension}")
+    source.write_text(json.dumps(shipped) if extension == "json" else yaml.safe_dump(shipped))
+    original = source.read_bytes()
+    assert merge_models(tmp_path, check=True) == 1
+    assert not target.exists()
+    assert source.read_bytes() == original
+    assert merge_models(tmp_path) == 1
+    assert yaml.safe_load(target.read_text()) == shipped
+    written = target.read_bytes()
+    assert merge_models(tmp_path) == 0
+    assert target.read_bytes() == written
+    assert source.read_bytes() == original
 
 
 def test_shipped_model_configuration_schema():

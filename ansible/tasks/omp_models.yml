@@ -1,18 +1,24 @@
 ---
 - name: Check for existing omp models
   ansible.builtin.stat:
-    path: "{{ factory_cfg.home }}/.omp/agent/models.yml"
+    path: "{{ factory_cfg.home }}/.omp/agent/{{ item }}"
     get_checksum: false
   become: true
+  loop:
+    - models.yml
+    - models.yaml
+    - models.json
   register: factory_omp_models_stat
   check_mode: false
 
 - name: Read existing omp models
+  vars:
+    existing: "{{ factory_omp_models_stat.results | selectattr('stat.exists') | list }}"
   ansible.builtin.slurp:
-    path: "{{ factory_cfg.home }}/.omp/agent/models.yml"
+    path: "{{ existing[0].stat.path }}"
   become: true
   register: factory_omp_models_raw
-  when: factory_omp_models_stat.stat.exists
+  when: existing | length > 0
   check_mode: false
 
 - name: Merge shipped overrides into omp models
@@ -27,4 +33,4 @@
     group: "{{ factory_group }}"
     mode: "0600"
   become: true
-  when: wanted != current
+  when: wanted != current or not factory_omp_models_stat.results[0].stat.exists

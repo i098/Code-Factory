@@ -9,6 +9,8 @@ With the `agents` profile on, `./ship.sh launch`:
 1. Installs the latest published omp, resolved from the npm registry on every apply, plus the omp plugins ponytail, i-have-adhd and caveman, upgraded on every apply (see [Dependencies](dependencies.md#latest-releases)).
 2. Copies [`config/omp.yml`](../config/omp.yml) to `~/.omp/agent/config.yml` (directory `0700`, file `0600`), and [`config/omp-lsp.json`](../config/omp-lsp.json) to `~/.omp/agent/lsp.json`, which disables the markdown language server (marksman): it costs each session about 90 MB, and markdown diagnostics add nothing to agent work.
    Every apply also merges [`config/omp-models.yml`](../config/omp-models.yml) into `~/.omp/agent/models.yml`, preserving user providers and unshipped model keys.
+   It reads the first existing configuration in omp's order: `models.yml`, `models.yaml`, then legacy `models.json`.
+   It writes the merged configuration to `models.yml` and leaves the other source files unchanged.
    The Codex overrides set a 272K default window and a 1M maximum window.
    omp limits the effective window to the provider's supported input window.
    The config seed enables `extendedContext: true`; existing hosts must enable it in their own config.

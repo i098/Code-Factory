@@ -111,6 +111,29 @@ def test_default_config_lists_the_current_defaults():
     ]:
         assert line in lines
 
+    dispatch = json.loads((ROOT / "config/crew-dispatch.json").read_text())
+    mechanical, ordinary, hard = [
+        [choice["model"] for choice in rule["use"]] for rule in dispatch["rules"]
+    ]
+    assert (
+        f"- Crewmate models: mechanical {ticks(mechanical)}; "
+        f"ordinary (default) {ticks(ordinary)}; hard {ticks(hard)}."
+    ) in lines
+    assert [choice["model"] for choice in dispatch["default"]] == ordinary
+    model_overrides = yaml.safe_load((ROOT / "config/omp-models.yml").read_text())
+    windows = model_overrides["providers"]["openai-codex"]["modelOverrides"]
+    for window in windows.values():
+        assert (
+            f"- Codex context: {window['contextWindow'] // 1000}K default, "
+            f"{window['maxContextWindow'] // 1000000}M maximum, "
+            f"`extendedContext` {'on' if omp['extendedContext'] else 'off'}."
+        ) in lines
+    gate = yaml.safe_load((ROOT / "config/no-mistakes-omp.yml").read_text())
+    assert (
+        f"- Gate models: routine `{ordinary[1]}:medium`; "
+        f"ordinary (default) `{gate['modelRoles']['default']}`; hard `{hard[0]}:high`."
+    ) in lines
+
     hook_env = ci_pool.HOOK_ENV
     assert (
         f"- Hooks: `code-factory-quality-gate` at omp turn end, SessionStart banners from "
