@@ -98,8 +98,8 @@ export function notSent(e: unknown): boolean {
 
 // Send `text` on the first route that takes it, in order. A failure that surely did not send moves on to the next
 // route and is logged as one line; any other failure stops, so a text is never sent twice. Returns the route's
-// name. When no route takes it, the first route's error is thrown: the primary transport decides whether the
-// outbox retries the item or moves it to the dead-letter folder.
+// name. An unsure failure is thrown unchanged. When every failure surely did not send, the first route's error
+// decides whether the outbox retries the item or moves it to the dead-letter folder.
 export async function failover(routes: Route[], text: string, log: (line: string) => void): Promise<string> {
   const errors: unknown[] = [];
   for (const route of routes) {
@@ -108,7 +108,8 @@ export async function failover(routes: Route[], text: string, log: (line: string
       return route.name;
     } catch (e) {
       errors.push(e);
-      if (!notSent(e) || route === routes.at(-1)) break;
+      if (!notSent(e)) throw e;
+      if (route === routes.at(-1)) break;
       log(`${route.name} could not send (${e instanceof Error ? e.message.split("\n")[0] : String(e)}); trying the next transport`);
     }
   }

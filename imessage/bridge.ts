@@ -9,7 +9,7 @@
 //   (memory.ts), which logs every text both ways.
 // Outbound: POST text to http://127.0.0.1:$FM_IMESSAGE_PORT/send (the fm-imessage command does this).
 //   The text goes to a durable outbox (outbox.ts) and the answer comes once it is on disk; one loop sends the outbox
-//   in order, as plain messages into the space of his latest text, and tries again with backoff while the upstream
+//   in order, as plain messages by default, and tries again with backoff while the upstream
 //   fails. Measured on the free shared line: plain sends into the owner's own conversation work, while a
 //   conversation the service opened itself was refused. That text's conversation and message ids are kept in the
 //   state directory, so a restart can still reach him.
@@ -77,6 +77,7 @@ type Line = {
   name: string;
   messages: AsyncIterable<LineMessage>;
   find(ref: Ref): Promise<LineMessage>;
+  separated(space: string, id: string): Promise<boolean>;
   send(space: string, text: string, reply?: string, guid?: string): Promise<unknown>;
   sent?(space: string, text: string, since: number): Promise<boolean>; // whether a text went out since; throws when unknown
   react(ref: Ref, emoji: string): Promise<unknown>;
@@ -104,6 +105,7 @@ for (const name of TRANSPORTS) {
       name,
       messages: bb,
       find: (ref) => bb.message(ref.id),
+      separated: (space, id) => bb.separated(space, id),
       send: (space, text, reply, guid) => bb.send(space, text, reply, guid),
       sent: (space, text, since) => bb.sent(space, text, since),
       markSeen: (id) => bb.markSeen(id),
@@ -135,12 +137,18 @@ for (const name of TRANSPORTS) {
     if (!message) throw new Error(`message ${ref.id} not found`);
     return message;
   };
+  const photon = raw;
   lines.push({
     name,
     messages: (async function* () {
       for await (const [, message] of app.messages) yield message;
     })(),
     find,
+    async separated(space, id) {
+      if (!photon) throw new Error("cannot check reply separation: Photon chat client is unavailable");
+      const last = (await photon.chats.get(space)).lastMessage?.guid;
+      return !!last && last !== id;
+    },
     async send(space, text, reply) {
       // A reply target that is gone sends the bubble unthreaded.
       const thread = reply ? await find({ space, id: reply }).catch((e) => {
@@ -156,8 +164,8 @@ for (const name of TRANSPORTS) {
 const lineOf = (ref: Ref) => lines.find((line) => line.name === (ref.line ?? "photon"));
 // A Ref on a transport; a Photon one has no `line`, the same as the items queued before there were transports.
 const refOn = (name: string, space: string, id: string): Ref => (name === "photon" ? { space, id } : { line: name, space, id });
-// Each transport's latest text, kept so a restart can still reach him: space, id and the time, one per line. Photon
-// keeps the file name it always had. A file without the time (the older format) counts as the oldest.
+// Each transport's latest text, kept so a restart can still reach him: space, id and time, one per line.
+// Photon keeps the file name it always had. A file without the time (the older format) counts as the oldest.
 const latestFile = (name: string) => (name === "photon" ? LATEST_FILE : `${LATEST_FILE}-${name}`);
 let latest: LineMessage | undefined; // his latest text on any transport: typing, tapbacks and the desk go there
 let latestRef: Ref | undefined; // the ids of `latest`, kept even when it cannot be fetched after a restart
@@ -218,13 +226,12 @@ Bun.serve({
     }
     const parts = bubbles(await req.text());
     if (!parts.length) return new Response("empty message", { status: 400 });
-    // A plain message by default. ?reply=N threads the first bubble to his Nth most recent text, only when
-    // Firstmate addresses something a few bubbles up.
+    // ?reply=N targets his Nth latest text. ?no-thread forces plain, even with an explicit target.
     const replyTo = Number(url.searchParams.get("reply") ?? 0);
     const target = replyTo > 0 ? recent[recent.length - replyTo] : undefined;
     if (replyTo > 0 && !target) return new Response(`nothing queued: only ${recent.length} text(s) kept since the service started\n`, { status: 400 });
     // A threaded reply goes out on the transport and in the conversation of the text it replies to.
-    return queue({ ...(target ?? ref), bubbles: parts, reply: target?.id }, `${parts.length} bubble(s)`);
+    return queue({ ...(target ?? ref), bubbles: parts, reply: url.searchParams.has("no-thread") ? undefined : target?.id }, `${parts.length} bubble(s)`);
   },
 });
 console.log(`fm-imessage: listening on 127.0.0.1:${PORT}, latest text ${latest ? "restored" : latestRef ? "known by id" : "unknown"}`);
@@ -294,19 +301,27 @@ async function sendBubble(o: Out, i: number, save: (o: Out) => void) {
   }
 }
 
-// Where bubble `i` of item `o` can go, in transport order, only on the transports in `maybe` when it has any: on its own
-// transport into its conversation (the first bubble threaded to `reply`), on any other into his latest conversation
-// there, or else into its home chat. A send that fails with a possible delivery adds its transport and conversation to
-// `maybe`.
+// Where bubble `i` of item `o` can go: the first bubble with an explicit reply target tries its own transport first,
+// otherwise transport order. Only transports in `maybe` qualify when it has any. Other transports use his latest
+// conversation there, or their home chat. A send that may have gone out adds its transport and conversation to `maybe`.
 function routes(o: Out, i: number, maybe: Record<string, string>): Route[] {
   const guid = o.guid && `${o.guid}-${i}`;
   const only = Object.keys(maybe);
-  return lines.flatMap((line) => {
+  const preferred = i === 0 && o.reply ? lineOf(o) : undefined;
+  const ordered = preferred ? [preferred, ...lines.filter((line) => line !== preferred)] : lines;
+  return ordered.flatMap((line) => {
     const own = line === lineOf(o);
     const space = own ? o.space : line.latest?.space ?? line.home;
     if (!space || (only.length && !only.includes(line.name))) return [];
     const reply = own && i === 0 ? o.reply : undefined;
-    return [{ name: line.name, send: (text: string) => line.send(space, text, reply, guid).catch((e) => { if (!notSent(e)) maybe[line.name] = space; throw e; }) }];
+    return [{ name: line.name, send: async (text: string) => {
+      // A read-only lookup cannot have sent text, so its failure can use a fallback.
+      const separated = reply ? await line.separated(space, reply).catch((e: unknown) => {
+        throw Object.assign(e instanceof Error ? e : new Error(String(e)), { maybeSent: false });
+      }) : false;
+      const thread = separated ? reply : undefined;
+      return line.send(space, text, thread, guid).catch((e) => { if (!notSent(e)) maybe[line.name] = space; throw e; });
+    } }];
   });
 }
 
@@ -434,7 +449,7 @@ async function handle(line: Line, message: LineMessage) {
 // period. False when the inbox refused the note: he is asked to send it again.
 function wake(requestId: string, text: string, ref: Ref): boolean {
   if (!fileNote(requestId, text)) {
-    put({ ...ref, bubbles: ["firstmate did not get that, send it again"], reply: ref.id, silent: true });
+    put({ ...ref, bubbles: ["firstmate did not get that, send it again"], silent: true });
     return false;
   }
   const id = remember("owner", text);
