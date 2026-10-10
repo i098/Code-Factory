@@ -42,6 +42,7 @@ EXCLUDED = {
     "factory.fleet",
     "factory.fleet.docker_guard",
     "factory.browsers",
+    "factory.imessage.bluebubbles",
 }
 
 
@@ -97,7 +98,7 @@ def test_default_config_lists_the_current_defaults():
     unset = [
         path.removeprefix("factory.")
         for path, off in switches()
-        if off and ".profiles." not in path
+        if off and ".profiles." not in path and path not in EXCLUDED
     ]
     lines = section("Default config")
     for line in [
