@@ -809,7 +809,9 @@ function label(at) {
   if (!target || !at) { card.style.transform = ""; return; }
   at = [Math.max(0, Math.min(cols - 1, at[0])), Math.max(0, Math.min(rows - 1, at[1]))];
   // On a phone the label stays above the move pad in the bottom corner.
-  const W = stage.clientWidth, H = stage.clientHeight - (pad.offsetParent ? pad.offsetHeight + 12 : 0), w = card.offsetWidth, h = card.offsetHeight;
+  const W = stage.clientWidth, H = pad.offsetParent ? pad.offsetTop : stage.clientHeight;
+  card.style.setProperty("--label-height", `${Math.min(H, stage.clientHeight - safe.bottom) - safe.top - 16}px`);
+  const w = card.offsetWidth, h = card.offsetHeight;
   const px = padX + (at[0] + 0.5) * cellW, py = padY + (at[1] + 0.5) * cellH, gap = 56;
   const x0 = safe.left + 8, x1 = W - safe.right - 8, y0 = safe.top + 8, y1 = Math.min(H - 8, stage.clientHeight - safe.bottom - 8);
   let left = px + gap + w > x1 ? px - gap - w : px + gap, top = py - gap - h < y0 ? py + gap : py - gap - h;
