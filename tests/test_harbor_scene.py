@@ -28,6 +28,7 @@ const assert = require('node:assert/strict');
 const element = {
   hidden: false, classList: { add() {}, toggle() {} }, focus() {}, addEventListener() {},
   firstElementChild: {}, clientWidth: 600, clientHeight: 400,
+  style: {setProperty() {}},
   getContext: () => ({setTransform() {}, measureText: () => ({width: 6})})
 };
 const manifest = JSON.parse(process.argv[3]).map(([id, title]) => ({
