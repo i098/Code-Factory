@@ -1,9 +1,24 @@
-Closes #153
+Closes #161
 
-- Enter the framed house door and leave through the inside door.
-- Add a warm lamp, clear blue bed, table, and night window against darker walls and floor.
-- Share keyboard and touch collisions; hide the map inside. Remove the dead movement branch found by one ponytail review round.
-- Preview: https://cf-harbor-interior-crewship.jerry-2c0.workers.dev
-- Screenshots: [door](https://cf-harbor-interior-crewship.jerry-2c0.workers.dev/evidence/harbor-after-door.png), [room](https://cf-harbor-interior-crewship.jerry-2c0.workers.dev/evidence/harbor-inside-window.png), [lamp](https://cf-harbor-interior-crewship.jerry-2c0.workers.dev/evidence/harbor-inside-door.png), [outside](https://cf-harbor-interior-crewship.jerry-2c0.workers.dev/evidence/harbor-back-outside.png).
+The scene tests only visible objects and redraws only changed cells.
+Touch devices still draw one glyph per fillText and cap DPR at 2.
 
-Proof: 9 harbor tests, iPhone WebKit touch entry/exit, and four inspected desktop views; phone WebKit island FPS: 26.63 before, 27.54 after.
+Recorded hot-path profile before the change (Chromium CPU profile, full grid):
+- Primary-ray object tests: 32-48%.
+- Shadow rays: 6-24%.
+- Terrain/sea march: 13-16%.
+- Glyph drawing: about 5% on desktop.
+
+Recorded object tests per frame, before and after:
+- Box tests: 390k-509k to 42k-59k.
+- Exact tests: 291k-372k to 26k-38k.
+
+Recorded frame rates, before and after:
+- WebKit iPhone 15 Pro emulation on the loaded Linux host: 9.4-11.5 to 18.6-25.5 fps.
+- Desktop Chromium at 1440x900 on that host: 6.6-10.4 to 17-27 fps.
+- Apple M5 headless Chromium at 1440x900: 46-54 fps with shadows dropped to steady 60 fps with shadows kept.
+- iOS Simulator Safari (iPhone 15 Pro, Simulator): 59.1-60 to steady 60 fps, with p95 at 17 ms.
+
+Simulator acceptance is approved.
+These results do not include a physical iPhone measurement.
+The owner checks the preview on his own iPhone before merge.
