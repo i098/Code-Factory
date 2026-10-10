@@ -27,7 +27,9 @@ artifacts/
 .claude/
 .codex/
 .ssh/
-# Private skills stay on the host (skills/private/README.md).
+# Private skills and rules stay on the host (skills/private/README.md, rules/private/README.md).
 skills/private/*
 !skills/private/README.md
+rules/private/*
+!rules/private/README.md
 target/
