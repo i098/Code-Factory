@@ -77,7 +77,7 @@ type Line = {
   name: string;
   messages: AsyncIterable<LineMessage>;
   find(ref: Ref): Promise<LineMessage>;
-  last(space: string): Promise<string | undefined>; // latest bubble from either side, checked at delivery
+  separated(space: string, id: string): Promise<boolean>;
   send(space: string, text: string, reply?: string, guid?: string): Promise<unknown>;
   sent?(space: string, text: string, since: number): Promise<boolean>; // whether a text went out since; throws when unknown
   react(ref: Ref, emoji: string): Promise<unknown>;
@@ -105,7 +105,7 @@ for (const name of TRANSPORTS) {
       name,
       messages: bb,
       find: (ref) => bb.message(ref.id),
-      last: (space) => bb.last(space),
+      separated: (space, id) => bb.separated(space, id),
       send: (space, text, reply, guid) => bb.send(space, text, reply, guid),
       sent: (space, text, since) => bb.sent(space, text, since),
       markSeen: (id) => bb.markSeen(id),
@@ -144,9 +144,10 @@ for (const name of TRANSPORTS) {
       for await (const [, message] of app.messages) yield message;
     })(),
     find,
-    async last(space) {
+    async separated(space, id) {
       if (!photon) throw new Error("cannot check reply separation: Photon chat client is unavailable");
-      return (await photon.chats.get(space)).lastMessage?.guid;
+      const last = (await photon.chats.get(space)).lastMessage?.guid;
+      return !!last && last !== id;
     },
     async send(space, text, reply) {
       // A reply target that is gone sends the bubble unthreaded.
@@ -315,10 +316,10 @@ function routes(o: Out, i: number, maybe: Record<string, string>): Route[] {
     const reply = own && i === 0 ? o.reply : undefined;
     return [{ name: line.name, send: async (text: string) => {
       // A read-only lookup cannot have sent text, so its failure can use a fallback.
-      const last = reply ? await line.last(space).catch((e: unknown) => {
+      const separated = reply ? await line.separated(space, reply).catch((e: unknown) => {
         throw Object.assign(e instanceof Error ? e : new Error(String(e)), { maybeSent: false });
-      }) : undefined;
-      const thread = reply && last && last !== reply ? reply : undefined;
+      }) : false;
+      const thread = separated ? reply : undefined;
       return line.send(space, text, thread, guid).catch((e) => { if (!notSent(e)) maybe[line.name] = space; throw e; });
     } }];
   });

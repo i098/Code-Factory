@@ -118,18 +118,32 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
     return built;
   }
 
-  // The latest bubble in this chat from either side, not only messages the bridge received.
-  async last(chat: string): Promise<string | undefined> {
-    const found = await this.first((r) => this.call(r, "POST", "message/query", undefined,
-      { chatGuid: chat, sort: "DESC", limit: 1,
-        where: [{ statement: "(message.associated_message_guid IS NULL OR message.associated_message_guid = '')", args: {} }] }));
-    if (!Array.isArray(found)) throw new RelayError("could not read the latest chat message", false, 503);
-    const message: unknown = found[0];
-    if (message === undefined) return undefined;
-    if (!message || typeof message !== "object" || !("guid" in message) || typeof message.guid !== "string") {
-      throw new RelayError("the latest chat message has no GUID", false, 503);
+  async separated(chat: string, guid: string): Promise<boolean> {
+    const target = await this.read(guid);
+    if (target?.guid !== guid || !Number.isFinite(target.dateCreated) || !target.chats?.some((c) => c.guid === chat)) {
+      throw new RelayError("could not read the reply target's chat and time", false, 503);
     }
-    return message.guid;
+    let checked = false;
+    let error: unknown;
+    for (const r of await this.healthy()) {
+      try {
+        const found = await this.call(r, "POST", "message/query", undefined,
+          { chatGuid: chat, sort: "DESC", limit: 1,
+            where: [{ statement: "(message.associated_message_guid IS NULL OR message.associated_message_guid = '')", args: {} }] });
+        if (!Array.isArray(found)) throw new RelayError("could not read chat history", false, 503);
+        const message = found[0] as BBMessage | undefined;
+        if (message && (typeof message.guid !== "string" || !Number.isFinite(message.dateCreated))) {
+          throw new RelayError("could not read the chat message's GUID and time", false, 503);
+        }
+        if (message && message.guid !== guid && message.dateCreated! > target.dateCreated!) return true;
+        checked = true;
+      } catch (e) {
+        error = e;
+      }
+    }
+    if (error) throw error;
+    if (!checked) throw new RelayError("could not check reply separation; no relay answered", false, 503);
+    return false;
   }
 
   // Queue one message by GUID, once. `data` is the message when a query already read it. The GUID is only pending here:

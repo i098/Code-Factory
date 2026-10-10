@@ -1491,8 +1491,6 @@ const server = Bun.serve({ port: 0, async fetch(req) {
     const recent = history().filter((m) => m.chats.some((c) => c.guid === chat)).sort((a, b) => b.dateCreated - a.dateCreated);
     return Response.json({ data: recent.slice(0, Number(u.searchParams.get("limit") || 50)) });
   }
-  const m = path.match(/^message\\/([^/]+)$/);
-  if (m && existsSync(`${dir}/relay/${m[1]}.json`)) return Response.json({ data: JSON.parse(readFileSync(`${dir}/relay/${m[1]}.json`, "utf8")) });
   if (path === "message/query") {
     const b = await req.json();
     if (b.chatGuid) {
@@ -1509,6 +1507,9 @@ const server = Bun.serve({ port: 0, async fetch(req) {
     const found = readdirSync(`${dir}/relay`).map((f) => JSON.parse(readFileSync(`${dir}/relay/${f}`, "utf8"))).filter((m) => m.dateCreated > b.after);
     return Response.json({ data: found });
   }
+  const m = path.match(/^message\\/([^/]+)$/);
+  if (m && existsSync(`${dir}/relay/${m[1]}.json`)) return Response.json({ data: JSON.parse(readFileSync(`${dir}/relay/${m[1]}.json`, "utf8")) });
+  if (m) return new Response("message not found", { status: 404 });
   return Response.json({ data: null });
 } });
 writeFileSync(`${dir}/relay-port`, String(server.port));
@@ -1648,7 +1649,7 @@ def test_reply_read_timeout_uses_the_fallback_without_blocking_plain_sends(tmp_p
                  or "outbox item 1 failed" in read_text(rig.err), "the read-only failure result")
         assert "fallback answer" in read_text(rig.fake / "relay-sent")
         wait_for(lambda: "send plain behind it" in read_text(rig.fake / "sent"), "the unblocked plain send")
-        assert not rig.outbox()
+        wait_for(lambda: not rig.outbox(), "the completed fallback queue")
     finally:
         rig.close()
 
@@ -1689,6 +1690,67 @@ def test_reply_does_not_count_a_bluebubbles_tapback_as_a_later_bubble(tmp_path):
         assert "selectedMessageGuid" not in payload and "partIndex" not in payload
     finally:
         rig.close()
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+@pytest.mark.parametrize("later", [None, "owner", "service"])
+def test_smart_reply_orders_history_across_lagging_relays(tmp_path, later):
+    rig = FallbackRig(tmp_path)
+    second = tmp_path / "second-relay"
+    (second / "relay").mkdir(parents=True)
+    relay = subprocess.Popen(["bun", "-e", FAKE_RELAY], env={**rig.env, "FAKE_DIR": str(second)})
+    try:
+        wait_for(lambda: read_text(second / "relay-port"), "the second fake relay")
+        rig.env["FM_BLUEBUBBLES_RELAYS"] += (
+            f" http://127.0.0.1:{read_text(second / 'relay-port')},RELAY_PASSWORD"
+        )
+        rig.start()
+        rig.photon_text("p1", "the plain route")
+        at = int(time.time() * 1000)
+        rig.relay_message("older", "older history", at - 1000)
+        rig.relay_text("target", "the target", at)
+        target = rig.fake / "relay/target.json"
+        shutil.copy(target, second / "relay/target.json")
+        if later is None:
+            target.unlink()
+        else:
+            rig.relay_message("later", "a later bubble", at + 1000, isFromMe=later == "service")
+            record = rig.fake / "relay/later.json"
+            shutil.move(record, second / "relay/later.json")
+            if later == "owner":
+                hook = json.dumps({"type": "new-message", "data": {"guid": "later"}})
+                subprocess.run(
+                    ["curl", "-sS", "-d", hook, f"http://127.0.0.1:{rig.hook_port}/bluebubbles"],
+                    check=True, capture_output=True,
+                )
+                wait_for(lambda: "bluebubbles-later " in read_text(rig.notes), "the later owner note")
+        rig.relay_message("tapback", "", at + 2000, associatedMessageGuid="target", isFromMe=True)
+        rig.relay_message("unrelated", "another chat", at + 3000,
+                          chats=[{"guid": "iMessage;-;+19999999999"}])
+        for guid in ("tapback", "unrelated"):
+            shutil.copy(rig.fake / f"relay/{guid}.json", second / f"relay/{guid}.json")
+        n = "2" if later == "owner" else "1"
+        rig.cli("--reply", n, "--", "- the answer")
+        wait_for(lambda: read_text(rig.fake / "relay-payloads"), "the multi-relay reply")
+        payload = json.loads(read_text(rig.fake / "relay-payloads").splitlines()[0])
+        assert payload["chatGuid"] == "iMessage;-;+10000000000"
+        assert payload["message"] == "- the answer"
+        if later is None:
+            assert "selectedMessageGuid" not in payload
+        else:
+            assert payload["selectedMessageGuid"] == "target"
+        rig.cli("--no-thread", "--reply", n, "--", "- forced plain")
+        rig.cli("--reply", n, "--no-thread", "--", "- forced plain again")
+        rig.cli("--", "- plain")
+        wait_for(lambda: "send - plain" in read_text(rig.fake / "sent"), "the plain sends")
+        assert read_text(rig.fake / "sent").splitlines() == [
+            "send - forced plain", "send - forced plain again", "send - plain",
+        ]
+        assert len(read_text(rig.fake / "relay-payloads").splitlines()) == 1
+    finally:
+        rig.close()
+        relay.terminate()
+        relay.wait(10)
 
 
 @pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
