@@ -83,6 +83,7 @@ Every host that starts services (`start_services: true`); the container worker i
 | --- | --- |
 | `0001-watch-wake-on-queued-inbox-note.patch` | The watcher wakes Firstmate on its next cycle when an inbox note is queued. Without it, the note waits for an unrelated wake, which can take hours. |
 | `0002-watch-end-idle-wait-for-inbox-note.patch` | The watcher ends its idle wait within about 1 s when an inbox note arrives, instead of up to the full poll interval. Together, the two make a text from the iMessage bridge wake Firstmate in about 2 s. |
+| `0003-brief-crewboard.patch` | Adds the optional [Firstmate board instructions](board.md#firstmate-instructions). |
 
 How apply handles each case:
 

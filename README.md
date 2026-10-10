@@ -71,6 +71,7 @@
 - omp extension `fm-no-pattern-kill`: blocks `pkill`, `killall`, and kill-by-`pgrep` commands
 - Firstmate patch `0001-watch-wake-on-queued-inbox-note`: [wakes Firstmate](docs/dependencies.md#firstmate-patch-layer) on a queued inbox note
 - Firstmate patch `0002-watch-end-idle-wait-for-inbox-note`: ends the idle wait within about 1 s for an inbox note
+- Firstmate patch `0003-brief-crewboard`: adds the optional [crew board instructions](docs/board.md#firstmate-instructions)
 - Hooks: `code-factory-quality-gate` at omp turn end, SessionStart banners from `ponytail`, `i-have-adhd`, `caveman`, `ACTIONS_RUNNER_HOOK_JOB_STARTED` (opt-in with the [CI pool](docs/ci-pool.md))
 - Pipeline gates: [no-mistakes](docs/omp.md#no-mistakes-pipeline-agent) and `ponytail-review`
 - Gate models: routine `openai-codex/gpt-6.1-sol:medium`; ordinary (default) `anthropic/claude-sonnet-5-5:high`; hard `anthropic/claude-opus-5-5:high`.
