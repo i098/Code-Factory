@@ -21,10 +21,12 @@
   Buildings, the dock and the hull are convex solids made of planes.
   Masts, barrels, tree trunks and the lighthouse are true cones with smooth normals.
   Rocks and tree canopies are ellipsoids.
+  Ship rigging uses projected lines that check the depth buffer instead of ray intersections.
   The sea is a height field of travelling waves, ray marched per cell; the ship and the boats ride it.</li>
-  <li><b>Light.</b> Exterior lamps, lit windows, the lantern and the beacon light nearby surfaces, with brightness that decreases with distance.
+  <li><b>Light.</b> Exterior lamps, lit windows, the ship's lanterns and the beacon light nearby surfaces, with brightness that decreases with distance.
   Exterior solids cast shadows when shadow rays are enabled.
   The lighthouse beam sweeps; the moon gives a dim fill.
+  Ship sails and the flag bypass lamp and shadow calculations; fog still dims the sails.
   The room lamp lights nearby surfaces without shadow rays.
   The sea shows Fresnel reflection, moon and lamp highlights and foam.
   Fog and contact shadows add depth.</li>
