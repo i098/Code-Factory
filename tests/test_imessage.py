@@ -952,13 +952,13 @@ def test_config_takes_a_bluebubbles_relay_set(change):
         "transports": ["photon", "bluebubbles"],
         "bluebubbles": {"relays": relays, "webhook_listen": "relay-net-address:8766"},
     }
-    load_factory().validate_config(document)
+    load_ship().validate_config(document)
     bluebubbles = document["factory"]["imessage"]["bluebubbles"]
     change(bluebubbles)
     if not bluebubbles:
         document["factory"]["imessage"].pop("bluebubbles")
     with pytest.raises(ValueError, match="imessage"):
-        load_factory().validate_config(document)
+        load_ship().validate_config(document)
 OUTBOX = json.dumps(str(ROOT / "imessage/outbox.ts"))
 
 
