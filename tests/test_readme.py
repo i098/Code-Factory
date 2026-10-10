@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).parents[1]
-SCHEMA = json.loads((ROOT / "schemas/factory.schema.json").read_text())
+SCHEMA = json.loads((ROOT / "schemas/crewship.schema.json").read_text())
 DEFAULT = yaml.safe_load((ROOT / "config/default.yml").read_text())
 SPEC = importlib.util.spec_from_file_location("provisions", ROOT / "scripts/provisions.py")
 provisions = importlib.util.module_from_spec(SPEC)
