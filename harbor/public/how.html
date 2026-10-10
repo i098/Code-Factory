@@ -28,7 +28,7 @@
   With reduced motion the scene stands still and redraws only when you move.</li>
   <li><b>Controls.</b> WASD or arrows walk and turn, R and F look up and down, the mouse looks around, Enter opens what you point at. On a phone the pad walks and a drag looks. The label floats beside what you point at, with a leader line in text.</li>
   <li><b>Mini map.</b> M picks a point on the text map in the corner, M again fills the screen with it; arrows choose, Enter jumps there. On a phone, tap a point.</li>
-  <li><b>Content.</b> See the <a href="https://github.com/i098/Crewship/blob/main/harbor/README.md#content-from-the-repository">content build instructions</a> for the sources of the points of interest.</li>
+  <li><b>Content.</b> <code>harbor/build.py</code> builds the points of interest with the README's Features list and More docs row, and the changelog.</li>
   <li><b>Deploy.</b> <code>harbor/</code> is plain HTML, CSS and JavaScript with no dependencies. A GitHub Actions workflow builds it and deploys it to Cloudflare Workers static assets on every push to <code>main</code> and on each release; nothing in <code>harbor/</code> ever reaches a Crewship host or image.</li>
 </ul>
 <p><a href="https://github.com/i098/Crewship/tree/main/harbor" target="_blank" rel="noopener">The source on GitHub</a> &middot; <a href="./">Back to the harbor</a></p>
