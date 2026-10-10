@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Crewship <noreply@example.invalid>
+Date: Sat, 10 Oct 2026 03:00:00 +0000
+Subject: [PATCH] feat(brief): add opt-in crew board instructions
+
+Show peer coordination instructions and a read-only supervisor firehose
+step only when CREWBOARD_SOCKET names a socket. Keep the steering inbox,
+watcher, and durable status protocol unchanged.
+---
+ bin/fm-brief.sh                    | 14 ++++++++++++++
+ bin/fm-supervision-instructions.sh |  3 +++
+ 2 files changed, 17 insertions(+)
+
+diff --git a/bin/fm-brief.sh b/bin/fm-brief.sh
+index 2ff9c727762a75961975a8f65738d94f84b4cb89..8d25b7372f534196a9a45f44423839501d9f6d80 100755
+--- a/bin/fm-brief.sh
++++ b/bin/fm-brief.sh
+@@ -366,6 +366,20 @@ if [ -e "$CONFIG/wait-no-turns" ]; then
+   INBOX_SECTION+="Do not poll or list the inbox while waiting; a waiting instruction rings."$'\n'
+ fi
+ INBOX_SECTION=${INBOX_SECTION%$'\n'}
++if [ -n "${CREWBOARD_SOCKET:-}" ] && [ -S "$CREWBOARD_SOCKET" ]; then
++  IFS= read -r -d '' BOARD_SECTION <<EOF || true
++
++# Crew board
++The board permits direct peer coordination; report task states only to Firstmate through the status file.
++Use \`crewboard pub task/<peer-id> 'message'\` for a peer and \`crewboard pub fleet 'message'\` for the crew.
++Use \`crewboard pub fm 'message'\` for information that must not wake Firstmate.
++Read \`crewboard tail task/$ID\` and \`crewboard tail fleet\` at natural checkpoints, or subscribe in a separate pane.
++Use \`crewboard sub task/$ID fleet\` for that subscription; it waits for messages.
++Firstmate observes the board and never relays messages. The steering inbox remains unchanged.
++The board stores messages only in memory. Keep working, done, needs-decision, blocked, failed, and paused in the status file.
++EOF
++  INBOX_SECTION+=$'\n'"$BOARD_SECTION"
++fi
+ 
+ # How a crewmate or scout waits. Every model turn resends the whole context, so
+ # a wait must cost no turns: a decision wait ends the turn, and an external
+
+diff --git a/bin/fm-supervision-instructions.sh b/bin/fm-supervision-instructions.sh
+index 30e4fbdefcb3365d8551fffd5e92737b05f1048d..4fb8d56e957d601578edc775caa832d62717154d 100755
+--- a/bin/fm-supervision-instructions.sh
++++ b/bin/fm-supervision-instructions.sh
+@@ -271,6 +271,9 @@ fi
+ if [ -n "$HOST_SNIPPET" ]; then
+   printf '%s\n' '- Supervision host: on; it takes away-posture wakes and, where the dialog mirror is verified, eligible attended wakes itself, and hands the rest to you (protocol at the end of this block).'
+ fi
++if [ -n "${CREWBOARD_SOCKET:-}" ] && [ -S "$CREWBOARD_SOCKET" ]; then
++  printf '%s\n' "- Crew board: open a separate pane and run crewboard sub '*'; observe, never relay. The status file remains the durable ledger."
++fi
+ ordinary_wake_line
+ printf '\n'
+ render_snippet
+-- 
+2.53.0
