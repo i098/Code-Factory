@@ -12,7 +12,7 @@
 #   * check mode never mutates: commands are either read-only (check_mode:
 #     false) or skipped when ansible_check_mode is true
 - name: Crewship native provisioning
-  hosts: code_factory
+  hosts: crewship
   gather_facts: true
   become: false
   module_defaults:

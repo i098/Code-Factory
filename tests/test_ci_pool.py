@@ -19,7 +19,7 @@ def load(name, path):
 
 
 pool_script = load("ci_pool", "maintenance/ci-pool.py")
-factory = load("factory_config_ci_pool", "scripts/ship.py")
+ship = load("ship_config_ci_pool", "scripts/ship.py")
 
 POOL = {"job_cpus": 4, "job_memory_gb": 8}
 
@@ -254,14 +254,14 @@ def test_two_repositories_that_share_a_unit_name_are_rejected(configuration):
         {"repo": "O/Repo", "slots": 1, "labels": ["pool"]}
     )
     with pytest.raises(ValueError, match="twice"):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 def test_pool_requires_the_docker_profile(configuration):
     configuration["factory"]["profiles"]["docker"] = False
     configuration["factory"]["profiles"]["fleet_guards"] = False
     with pytest.raises(ValueError, match="docker profile"):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 def test_failed_container_create_deletes_the_runner_and_pauses(tmp_path, monkeypatch):

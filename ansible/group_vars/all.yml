@@ -350,7 +350,7 @@ factory_firstmate_config_first_write: false
 # --- Docker -----------------------------------------------------------------
 # Ubuntu's docker.io + docker-compose-v2 only; never mixed with Docker CE.
 # Docker group membership equals passwordless root on the host, so it is an
-# explicit opt-in list, never the factory account by default.
+# explicit opt-in list, never the Crewship account by default.
 factory_docker_group_users: []
 # Engine settings merged into /etc/docker/daemon.json (existing keys are kept,
 # nothing is removed). `init` puts docker-init as PID 1 in every container so

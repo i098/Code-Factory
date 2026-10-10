@@ -50,7 +50,7 @@ factory:
     user: <Mac login>
 ```
 
-When `mac_ssh` is not set, apply skips this step. When it is set, apply does three things as the factory account:
+When `mac_ssh` is not set, apply skips this step. When it is set, apply does three things as the Crewship account:
 
 - It generates `~/.ssh/id_ed25519_mac` with `ssh-keygen` (from `openssh-client`) if the file does not exist. It never replaces an existing key. Do not copy this key to another host; each host gets its own.
 - It writes a `Host mac` entry between `code-factory Host mac` markers at the top of `~/.ssh/config`, with `IdentitiesOnly yes` and `ConnectTimeout 5`. It does not change other entries.
@@ -110,7 +110,7 @@ Screen Recording is a separate permission. Without it, `screencapture` over SSH 
 
 #### Verify
 
-On the host, as the factory account:
+On the host, as the Crewship account:
 
 ```bash
 ssh mac true && echo ok
@@ -139,12 +139,12 @@ A new host gets its own key; never copy `~/.ssh/id_ed25519_mac` from the old hos
 
 The other direction, from the operator's Mac to the host, is also a manual setup on the Mac. Apply does not change it. Every host gets `mosh` (`mosh-server`) in the base packages.
 
-Add a `Host` alias for the host to `~/.ssh/config` on the Mac. Set `User` to the host's factory account, so `ssh <alias>` and `mosh <alias>` log in as that account without `user@`:
+Add a `Host` alias for the host to `~/.ssh/config` on the Mac. Set `User` to the host's Crewship account, so `ssh <alias>` and `mosh <alias>` log in as that account without `user@`:
 
 ```text
 Host <alias>
   HostName <host tailnet name or IP>
-  User <factory account>
+  User <Crewship account>
 ```
 
 mosh reads the alias too, because it starts its session over `ssh`. Then:
@@ -162,7 +162,7 @@ Every apply on a host that starts services (not the container worker image) inst
 
 Upstream supports Debian 12/13 and Ubuntu 22.04/24.04 only. `patches/koncreet/ubuntu-26.04.patch` adds Ubuntu 26.04: it opens the OS gate and doctor, and restores the last fallback Koncreet uses to find your SSH client address for the fail2ban whitelist: 26.04 keeps no utmp, so `who -m` prints nothing, and the patch asks logind instead. The same change is the `ubuntu-26.04` branch of the [undeemed/koncreet](https://github.com/undeemed/koncreet/tree/ubuntu-26.04) fork; regenerate the patch from there with `git diff main...ubuntu-26.04`. Apply layers the patch on each new release and prints which case it hit: applied; skipped because the release already supports 26.04; or skipped because it no longer applies, in which case Koncreet installs as released and refuses to run on 26.04 until the patch is refreshed. The patch never fails the apply.
 
-`/etc/koncreet.conf` makes the account that ran `./ship.sh launch` the sudo user, installs the SSH keys it logs in with, and keeps SSH open (Koncreet always allows the ports sshd listens on). With the `tailscale` profile it also opens 41641/udp for Tailscale's direct connections. When apply ran as root, or as the factory account (which runs the agents and must not gain sudo), no sudo user is set: `user=` and `pubkey_file=` stay commented out until you fill in the operator's login. Apply never overwrites it; edit it there.
+`/etc/koncreet.conf` makes the account that ran `./ship.sh launch` the sudo user, installs the SSH keys it logs in with, and keeps SSH open (Koncreet always allows the ports sshd listens on). With the `tailscale` profile it also opens 41641/udp for Tailscale's direct connections. When apply ran as root, or as the Crewship account (which runs the agents and must not gain sudo), no sudo user is set: `user=` and `pubkey_file=` stay commented out until you fill in the operator's login. Apply never overwrites it; edit it there.
 
 Run it once, by hand, from an SSH session you keep open until the last step works:
 

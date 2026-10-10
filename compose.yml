@@ -47,7 +47,7 @@ services:
     command: ["sleep", "infinity"]
     working_dir: ${FACTORY_WORKSPACE:-/home/coder/Dev}
     environment:
-      CODE_FACTORY_CONFIG: /opt/code-factory/containers/factory.container.yml
+      CODE_FACTORY_CONFIG: /opt/code-factory/containers/crewship.container.yml
       CODE_FACTORY_ROOT: /opt/code-factory
     volumes:
       - workspace:${FACTORY_WORKSPACE:-/home/coder/Dev}

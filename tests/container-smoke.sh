@@ -12,7 +12,7 @@
 #   Exercises what the image actually contains, through the programs a user
 #   would run: managed tool versions compared with the releases the build
 #   resolved, a Herdr
-#   configuration that Herdr itself accepts and that matches the factory
+#   configuration that Herdr itself accepts and that matches the Crewship
 #   document, the user unit's ExecStart resolved and executed, a real headless
 #   `herdr server` brought up and shut down over its API socket, the repository
 #   CLI (validate, invalid-input rejection, init overwrite refusal), a second
@@ -87,11 +87,11 @@ host_mode() {
     local rc
     # Globals: the EXIT trap below may run after this function has returned.
     SMOKE_BUILT=0
-    SMOKE_CONTAINER="code-factory-smoke-$$"
+    SMOKE_CONTAINER="crewship-smoke-$$"
     if [ -n "${IMAGE_REF}" ]; then
         SMOKE_TAG=${IMAGE_REF}
     else
-        SMOKE_TAG="code-factory-smoke:$$"
+        SMOKE_TAG="crewship-smoke:$$"
     fi
 
     cleanup_host() {
@@ -145,7 +145,7 @@ FACTORY_USER_EXPECTED=${FACTORY_USER:-coder}
 FACTORY_HOME_EXPECTED=${FACTORY_HOME:-/home/coder}
 FACTORY_WORKSPACE_EXPECTED=${FACTORY_WORKSPACE:-${FACTORY_HOME_EXPECTED}/Dev}
 CF_ROOT=${CODE_FACTORY_ROOT:-/opt/code-factory}
-CF_CONFIG=${CODE_FACTORY_CONFIG:-${CF_ROOT}/containers/factory.container.yml}
+CF_CONFIG=${CODE_FACTORY_CONFIG:-${CF_ROOT}/containers/crewship.container.yml}
 
 CHECKS_TOTAL=0
 CHECKS_RUN=0
@@ -426,7 +426,7 @@ check_herdr_config() {
         fail "herdr config check rejected ${cfg}"
     }
 
-    # ...and the values it accepted must be the ones the factory document asks
+    # ...and the values it accepted must be the ones the Crewship document asks
     # for, so a silently ignored key cannot pass as "configured".
     cf_python - "${cfg}" "${CF_ROOT}/config/default.yml" "${CF_CONFIG}" <<'PY'
 import sys
@@ -459,7 +459,7 @@ for key in ("sidebar_agent_rows", "sidebar_space_rows"):
     wanted[key] = tomllib.loads("rows = " + wanted[key])["rows"]
 mismatched = {key: (actual[key], value) for key, value in wanted.items() if key in actual and actual[key] != value}
 if mismatched:
-    raise SystemExit(f"rendered Herdr config disagrees with the factory document (actual, wanted): {mismatched}")
+    raise SystemExit(f"rendered Herdr config disagrees with the Crewship document (actual, wanted): {mismatched}")
 if rendered.get("experimental", {}).get("pane_history"):
     raise SystemExit("experimental.pane_history is enabled; pane output can carry secrets")
 if rendered.get("onboarding", False):
@@ -596,12 +596,12 @@ check_herdr_server_headless() {
         "${socket}" "${started_after}"
 }
 
-check_factory_validate() {
+check_ship_inspect() {
     ( cd "${CF_ROOT}" && ./ship.sh inspect --config "${CF_CONFIG}" ) || fail "./ship.sh inspect rejected the container configuration"
     printf './ship.sh inspect --config %s accepted\n' "${CF_CONFIG}"
 }
 
-check_factory_validate_rejects_invalid() {
+check_ship_inspect_rejects_invalid() {
     local bad
     bad="${SMOKE_TMP}/invalid-config.yml"
     cat >"${bad}" <<'YAML'
@@ -620,7 +620,7 @@ YAML
     printf './ship.sh inspect rejected an invalid document as expected\n'
 }
 
-check_factory_init_refuses_overwrite() {
+check_ship_dock_refuses_overwrite() {
     local host_yml backup
     host_yml="${CF_ROOT}/.local/host.yml"
     backup="${SMOKE_TMP}/host.yml.backup"
@@ -775,7 +775,7 @@ check_agent_gate() {
 }
 
 container_mode() {
-    SMOKE_TMP=$(mktemp -d -t code-factory-smoke.XXXXXX)
+    SMOKE_TMP=$(mktemp -d -t crewship-smoke.XXXXXX)
     trap 'rm -rf "${SMOKE_TMP}"' EXIT
 
     printf '== Crewship container smoke (image role: %s)\n' "${CODE_FACTORY_IMAGE:-unknown}"
@@ -797,9 +797,9 @@ container_mode() {
     run_check no-baked-credentials         check_no_baked_credentials
     run_check herdr-config                 check_herdr_config
     run_check herdr-server-headless        check_herdr_server_headless
-    run_check factory-validate             check_factory_validate
-    run_check factory-validate-invalid     check_factory_validate_rejects_invalid
-    run_check factory-init-no-overwrite    check_factory_init_refuses_overwrite
+    run_check ship-inspect                 check_ship_inspect
+    run_check ship-inspect-invalid         check_ship_inspect_rejects_invalid
+    run_check ship-dock-no-overwrite       check_ship_dock_refuses_overwrite
     run_check installer-idempotent         check_installer_idempotent
     run_check ansible-second-pass          check_ansible_second_pass_idempotent
 

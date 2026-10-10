@@ -12,9 +12,9 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).parents[1]
-SPEC = importlib.util.spec_from_file_location("factory_config", ROOT / "scripts/ship.py")
-factory = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(factory)
+SPEC = importlib.util.spec_from_file_location("ship_config", ROOT / "scripts/ship.py")
+ship = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(ship)
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def configuration():
 
 
 def test_valid_configuration_is_accepted_by_real_schema(configuration):
-    assert factory.validate_config(configuration) is configuration
+    assert ship.validate_config(configuration) is configuration
 
 
 def test_legacy_obscura_keys_are_ignored_with_one_warning_and_apply_proceeds(
@@ -36,12 +36,12 @@ def test_legacy_obscura_keys_are_ignored_with_one_warning_and_apply_proceeds(
     legacy.write_text(yaml.safe_dump(configuration))
     provisioned = []
     monkeypatch.setattr(
-        factory, "provision", lambda document, check: provisioned.append(check) or 0
+        ship, "provision", lambda document, check: provisioned.append(check) or 0
     )
-    monkeypatch.setattr(factory, "questions", lambda document: 0)
+    monkeypatch.setattr(ship, "questions", lambda document: 0)
     for host in (current, legacy):
-        monkeypatch.setattr(factory.sys, "argv", ["ship.sh", "launch", "--config", str(host)])
-        assert factory.main() == 0
+        monkeypatch.setattr(ship.sys, "argv", ["ship.sh", "launch", "--config", str(host)])
+        assert ship.main() == 0
     warning = capsys.readouterr().err
     assert provisioned == [False, False]
     assert warning.count("WARNING") == 1
@@ -55,21 +55,21 @@ def test_legacy_obscura_keys_are_ignored_with_one_warning_and_apply_proceeds(
 def test_workspace_cannot_escape_operator_home(configuration, workspace):
     configuration["factory"]["workspace"] = workspace
     with pytest.raises(ValueError, match="workspace"):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 def test_invalid_secret_field_is_rejected_without_echoing_value(configuration):
     private_value = "PRIVATE_VALUE_MUST_NOT_APPEAR_IN_DIAGNOSTICS"
     configuration["factory"]["api_key"] = private_value
     with pytest.raises(ValueError) as failure:
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
     assert private_value not in str(failure.value)
 
 
 def test_firstmate_cannot_silently_omit_its_agent_dependencies(configuration):
     configuration["factory"]["profiles"]["agents"] = False
     with pytest.raises(ValueError, match="Firstmate requires"):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 def test_firstmate_revision_pin_is_rejected(configuration):
@@ -77,36 +77,36 @@ def test_firstmate_revision_pin_is_rejected(configuration):
     # host on an old Firstmate, so the schema refuses the key outright.
     configuration["factory"]["firstmate"]["revision"] = "0" * 40
     with pytest.raises(ValueError):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 def test_fleet_guards_require_docker_and_firstmate(configuration):
     configuration["factory"]["profiles"]["fleet_guards"] = True
     configuration["factory"]["profiles"]["docker"] = False
     with pytest.raises(ValueError, match="fleet guards require"):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 def test_fleet_guards_accept_the_default_document_when_enabled(configuration):
     configuration["factory"]["profiles"]["fleet_guards"] = True
-    assert factory.validate_config(configuration) is configuration
+    assert ship.validate_config(configuration) is configuration
 
 
 def test_browsers_valid_block_accepted(configuration):
-    assert factory.validate_config(configuration) is configuration
+    assert ship.validate_config(configuration) is configuration
 
 
 def test_fleet_fixture_archive_cannot_traverse(configuration):
     configuration["factory"]["profiles"]["fleet_guards"] = True
     configuration["factory"]["fleet"]["fixture_archive"] = "/home/coder/../root/db.tgz"
     with pytest.raises(ValueError, match="traverse"):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 def test_unknown_fleet_field_is_rejected(configuration):
     configuration["factory"]["fleet"]["allow_migrations"] = True
     with pytest.raises(ValueError):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 @pytest.mark.parametrize(
@@ -121,7 +121,7 @@ def test_unknown_fleet_field_is_rejected(configuration):
 )
 def test_private_skills_source_is_accepted(configuration, skills):
     configuration["factory"]["skills"] = skills
-    assert factory.validate_config(configuration) is configuration
+    assert ship.validate_config(configuration) is configuration
 
 
 @pytest.mark.parametrize(
@@ -140,20 +140,20 @@ def test_private_skills_source_is_accepted(configuration, skills):
 def test_bad_private_skills_source_is_rejected(configuration, skills):
     configuration["factory"]["skills"] = skills
     with pytest.raises(ValueError):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 def test_private_ref_with_local_path_is_rejected(configuration):
     configuration["factory"]["skills"] = {"private_source": "/srv/skills", "private_ref": "main"}
     with pytest.raises(ValueError, match="private_ref"):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 @pytest.mark.parametrize("data_dir", ["data", "/", "/srv/../root", "/srv/data/"])
 def test_data_dir_must_be_a_plain_absolute_path(configuration, data_dir):
     configuration["factory"]["data_dir"] = data_dir
     with pytest.raises(ValueError):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 def _data_disk_vars(tmp_path, data_dir):
@@ -196,31 +196,31 @@ def test_data_dir_moves_docker_and_only_the_caches_that_never_hardlink(tmp_path)
 def test_bad_polling_window_cannot_disable_idle_accrual(configuration):
     configuration["factory"]["browser_prune"]["max_gap_seconds"] = 120
     with pytest.raises(ValueError, match="observation intervals"):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 def test_init_preserves_existing_local_configuration(tmp_path, monkeypatch):
     for path in ("config", "schemas"):
         shutil.copytree(ROOT / path, tmp_path / path)
-    monkeypatch.setattr(factory, "ROOT", tmp_path)
+    monkeypatch.setattr(ship, "ROOT", tmp_path)
     args = argparse.Namespace(user="coder", home="/home/coder", container=True, board=False)
-    factory.initialize(args)
+    ship.initialize(args)
     local = tmp_path / ".local/host.yml"
     first = local.read_bytes()
-    config = factory.load_config(local)["factory"]
+    config = ship.load_config(local)["factory"]
     assert not config["start_services"] and not config["profiles"]["docker"]
     assert config["profiles"]["agents"]
     with pytest.raises(FileExistsError):
-        factory.initialize(args)
+        ship.initialize(args)
     assert local.read_bytes() == first
 
 
 def test_root_operator_is_rejected_before_config_is_written(tmp_path, monkeypatch):
     for path in ("config", "schemas"):
         shutil.copytree(ROOT / path, tmp_path / path)
-    monkeypatch.setattr(factory, "ROOT", tmp_path)
+    monkeypatch.setattr(ship, "ROOT", tmp_path)
     with pytest.raises(ValueError, match="non-root"):
-        factory.initialize(
+        ship.initialize(
             argparse.Namespace(user="root", home="/home/root", container=False, board=False)
         )
     assert not (tmp_path / ".local/host.yml").exists()
@@ -243,16 +243,16 @@ def test_questions_launch_only_on_an_interactive_terminal_outside_ci(
     configuration, tmp_path, monkeypatch, capsys, tty, ci, launched
 ):
     configuration["factory"].update(
-        user=factory.pwd.getpwuid(factory.os.getuid()).pw_name,
+        user=ship.pwd.getpwuid(ship.os.getuid()).pw_name,
         home=str(tmp_path),
         workspace=str(tmp_path / "Dev"),
     )
     configuration["factory"]["firstmate"].pop("checklist", None)
     launches = []
-    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: tty)
+    monkeypatch.setattr(ship.sys.stdin, "isatty", lambda: tty)
     monkeypatch.setenv("CI", ci)
-    monkeypatch.setattr(factory.subprocess, "run", fake_omp(launches))
-    assert factory.questions(configuration) == 0
+    monkeypatch.setattr(ship.subprocess, "run", fake_omp(launches))
+    assert ship.questions(configuration) == 0
     assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"] * launched
     skipped = capsys.readouterr().out.count("rerun ./ship.sh launch interactively")
     assert skipped == (0 if launched else 1)
@@ -260,48 +260,48 @@ def test_questions_launch_only_on_an_interactive_terminal_outside_ci(
 
 def test_second_apply_does_not_reopen_the_questions(configuration, tmp_path, monkeypatch, capsys):
     configuration["factory"].update(
-        user=factory.pwd.getpwuid(factory.os.getuid()).pw_name,
+        user=ship.pwd.getpwuid(ship.os.getuid()).pw_name,
         home=str(tmp_path),
         workspace=str(tmp_path / "Dev"),
     )
     configuration["factory"]["firstmate"].pop("checklist", None)
     launches = []
-    monkeypatch.setattr(factory, "load_config", lambda path: configuration)
-    monkeypatch.setattr(factory, "provision", lambda document, check: 0)
-    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(ship, "load_config", lambda path: configuration)
+    monkeypatch.setattr(ship, "provision", lambda document, check: 0)
+    monkeypatch.setattr(ship.sys.stdin, "isatty", lambda: True)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(
-        factory.subprocess, "run", fake_omp(launches, exits=lambda n: 0 if n > 1 else 1)
+        ship.subprocess, "run", fake_omp(launches, exits=lambda n: 0 if n > 1 else 1)
     )
     monkeypatch.setattr(
-        factory.sys, "argv", ["ship.sh", "launch", "--config", str(tmp_path / "host.yml")]
+        ship.sys, "argv", ["ship.sh", "launch", "--config", str(tmp_path / "host.yml")]
     )
     marker = tmp_path / ".local/share/code-factory/new-host-questions-done"
-    assert factory.main() == 0
+    assert ship.main() == 0
     assert not marker.exists()
     assert "New-host questions did not complete (omp exited 1)" in capsys.readouterr().out
-    assert factory.main() == 0
+    assert ship.main() == 0
     assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"] * 2
     assert marker.is_file()
     capsys.readouterr()
-    assert factory.main() == 0
+    assert ship.main() == 0
     assert len(launches) == 2
     assert f"{marker} exists); delete it and rerun" in capsys.readouterr().out
 
 
 def test_questions_wait_for_an_omp_sign_in(configuration, tmp_path, monkeypatch, capsys):
     configuration["factory"].update(
-        user=factory.pwd.getpwuid(factory.os.getuid()).pw_name,
+        user=ship.pwd.getpwuid(ship.os.getuid()).pw_name,
         home=str(tmp_path),
         workspace=str(tmp_path / "Dev"),
     )
     launches = []
-    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(ship.sys.stdin, "isatty", lambda: True)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(
-        factory.subprocess, "run", fake_omp(launches, models=json.dumps({"models": []}))
+        ship.subprocess, "run", fake_omp(launches, models=json.dumps({"models": []}))
     )
-    assert factory.questions(configuration) == 0
+    assert ship.questions(configuration) == 0
     assert launches == []
     assert not (tmp_path / ".local/share/code-factory/new-host-questions-done").exists()
     assert "sign in to omp with /login" in capsys.readouterr().out
@@ -313,11 +313,11 @@ def test_another_accounts_apply_skips_questions_without_reading_the_unreadable_h
     home = tmp_path / "coder"
     home.mkdir(mode=0o000)
     configuration["factory"].update(user="another-account", home=str(home))
-    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(ship.sys.stdin, "isatty", lambda: True)
     monkeypatch.delenv("CI", raising=False)
-    monkeypatch.setattr(factory.subprocess, "run", lambda *a, **k: pytest.fail("launched"))
+    monkeypatch.setattr(ship.subprocess, "run", lambda *a, **k: pytest.fail("launched"))
     try:
-        assert factory.questions(configuration) == 0
+        assert ship.questions(configuration) == 0
     finally:
         home.chmod(0o700)
     assert "rerun ./ship.sh launch interactively as another-account" in capsys.readouterr().out
@@ -326,13 +326,13 @@ def test_another_accounts_apply_skips_questions_without_reading_the_unreadable_h
 def test_apply_warns_when_firstmate_still_tracks_the_stale_fork(
     configuration, tmp_path, monkeypatch, capsys
 ):
-    configuration["factory"]["firstmate"]["url"] = factory.STALE_FIRSTMATE_URL
+    configuration["factory"]["firstmate"]["url"] = ship.STALE_FIRSTMATE_URL
     host = tmp_path / "host.yml"
     host.write_text(yaml.safe_dump(configuration))
-    monkeypatch.setattr(factory, "provision", lambda document, check: 0)
-    monkeypatch.setattr(factory.sys.stdin, "isatty", lambda: False)
-    monkeypatch.setattr(factory.sys, "argv", ["ship.sh", "launch", "--config", str(host)])
-    assert factory.main() == 0
+    monkeypatch.setattr(ship, "provision", lambda document, check: 0)
+    monkeypatch.setattr(ship.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(ship.sys, "argv", ["ship.sh", "launch", "--config", str(host)])
+    assert ship.main() == 0
     output = capsys.readouterr()
     assert output.err.startswith("WARNING: firstmate.url is the stale fork")
     assert "rerun ./ship.sh launch interactively" in output.out
@@ -405,7 +405,7 @@ def _verify_firstmate(tmp_path, origin, configured):
 
 def test_verify_fails_when_firstmate_origin_is_not_the_configured_url(tmp_path):
     upstream = "https://github.com/kunchenguid/firstmate.git"
-    result = _verify_firstmate(tmp_path, factory.STALE_FIRSTMATE_URL, upstream)
+    result = _verify_firstmate(tmp_path, ship.STALE_FIRSTMATE_URL, upstream)
     assert result.returncode != 0
     assert "updated the wrong repository" in result.stdout
 
@@ -784,7 +784,7 @@ def _koncreet_settings(tmp_path, tailscale, apply_user):
         (False, "root", None, None),
     ],
 )
-def test_koncreet_config_follows_the_tailscale_profile_and_never_makes_the_factory_user_sudo(
+def test_koncreet_config_follows_the_tailscale_profile_and_never_makes_the_crewship_user_sudo(
     tmp_path, tailscale, apply_user, ports, sudo_user
 ):
     settings = _koncreet_settings(tmp_path, tailscale, apply_user)
