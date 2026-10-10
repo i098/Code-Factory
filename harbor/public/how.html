@@ -35,6 +35,7 @@
   <li id="frame-loop"><b>Frame loop.</b> <code>requestAnimationFrame</code> moves you, the sea and the ship and redraws the grid on a canvas.
   A ray tests solids whose screen box reaches its tile of cells, nearest first.
   It stops when no remaining solid can be nearer than its hit.
+  After the intro, the canvas keeps unchanged rows.
   Devices without <code>(pointer: coarse)</code> draw rows with changed cells again from their full text-run positions.
   Touch devices redraw only the changed span and its neighbouring cells.
   The mini map draws again each frame, even when its cells do not change.
@@ -43,7 +44,8 @@
   Other devices draw one run of one colour per call.
   The backing-store area stays at or below <code>4096 * 4096</code> device pixels; this does not limit each dimension to 4096.
   Large high-DPR windows use a lower rendering ratio, which can fall below 1.
-  The background clear and intro overlay use CSS dimensions to cover the transformed canvas at any rendering ratio.
+  Grid measurement clears the complete canvas, including padding, even when the backing-store size does not change.
+  The intro overlay uses CSS dimensions to cover the transformed canvas at any rendering ratio.
   The first grid measurement waits for fonts; if the requested font fails to load, the scene uses a fallback font.
   For a fixed exterior viewport, the glyph size stays fixed; slow frames can disable shadows without changing the view.
   Resizes wait until the viewport settles, then update the canvas immediately before the next draw.
