@@ -47,19 +47,21 @@ def built(tmp_path, monkeypatch, readme):
     return manifest
 
 
-def test_every_readme_row_appears_once_and_the_build_never_fails(tmp_path, monkeypatch, capsys):
+def test_mapped_features_and_docs_index_appear_once(tmp_path, monkeypatch, capsys):
     readme = (ROOT / "README.md").read_text()
     unmapped = "docs/brand-new-page.md"
-    readme = readme.replace(
-        "\n## More docs:", f"\n## More docs: [Brand new]({unmapped})", 1
-    )
-    links = [link for _, link, _ in build.features(readme)]
+    readme = readme.replace("\n## More docs:", f"\n## More docs: [Brand new]({unmapped})", 1)
+    links = [link for _, link, _ in build.features(readme) if link in build.SCENE]
+    extra_count = sum(link not in build.SCENE for _, link, _ in build.features(readme))
     manifest = built(tmp_path, monkeypatch, readme)
 
     hrefs = Counter(a["href"] for a in manifest.links)
     assert {link: hrefs[f"{build.REPO}/blob/main/{link}"] for link in links} == dict.fromkeys(
         links, 1
     )
+    assert hrefs[f"{build.REPO}#features"] == 1
+    assert hrefs[f"{build.REPO}/blob/main/{unmapped}"] == 0
+    assert f"+ {extra_count - 3} more" in manifest.text["docsboard"]
     assert len(manifest.spots) == len(set(manifest.spots))
     assert all(a.get("target") == "_blank" for a in manifest.links)
     assert "docsboard" in manifest.spots
@@ -81,10 +83,21 @@ def test_mapped_rows_get_their_own_spot_and_no_board(tmp_path, monkeypatch, caps
     assert capsys.readouterr().err == ""
 
 
-def test_readme_cards_show_prose_not_markdown(tmp_path, monkeypatch):
-    manifest = built(tmp_path, monkeypatch, (ROOT / "README.md").read_text())
-
-    for spot in ("sign", "gangway"):
-        body = manifest.text[spot].split(".", 1)[1].strip()
-        assert body and not body.startswith(("#", "<", "![", "|"))
-        assert ".." not in body
+def test_long_descriptions_are_short_and_escape_html(tmp_path, monkeypatch):
+    readme = (ROOT / "README.md").read_text()
+    readme = readme.replace(
+        "sign-in, model roles, fallbacks, and the advisor",
+        "<script>alert(1)</script> " + "long description " * 20,
+    )
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text(readme)
+    (root / "CHANGELOG.md").write_text((ROOT / "CHANGELOG.md").read_text())
+    monkeypatch.setattr(build, "ROOT", root)
+    page = (build.build(tmp_path / "dist") / "index.html").read_text()
+    manifest = Manifest()
+    manifest.feed(page)
+    assert "<script>alert(1)</script>" not in page
+    assert "<script>alert(1)</script>" in manifest.text["mast"]
+    assert len(manifest.text["mast"]) <= len("omp agents") + 52
+    assert len(manifest.links) == len(manifest.spots)

@@ -26,7 +26,7 @@ addEventListener("unhandledrejection", (e) => String(e.reason?.stack).includes("
 <div id="page" class="page">
 <header class="top">
   <h1>Crewship</h1>
-  <p class="tagline">Turn a fresh Ubuntu machine into a reproducible AI-agent coding host: Herdr, Firstmate, the omp agent fleet, and the Concord and slk chat clients, provisioned by Ansible from a checksum-verified toolchain.</p>
+  <p class="tagline">A reproducible host for AI coding agents.</p>
   <nav aria-label="Project links">
     <a target="_blank" rel="noopener" href="https://github.com/i098/Crewship">GitHub</a>
     <a target="_blank" rel="noopener" href="https://github.com/i098/Crewship/releases">Releases</a>
@@ -47,7 +47,7 @@ addEventListener("unhandledrejection", (e) => String(e.reason?.stack).includes("
 </div>
 <section id="stage" class="stage" hidden tabindex="0" role="application" aria-roledescription="3D harbor" aria-label="The ship at the dock, a walkable 3D scene. The feature list before it has the same content.">
   <canvas id="scene" aria-hidden="true"></canvas>
-  <div id="card" class="card"></div>
+  <div id="card" class="sr-only" aria-live="polite"></div>
   <div id="pad" class="pad" aria-hidden="true"><span></span></div>
 </section>
 </body>
