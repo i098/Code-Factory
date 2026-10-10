@@ -38,14 +38,15 @@ def docker(*args, input=None, optional=False):
 def write_changed(path, text):
     if path.exists() and path.read_text() == text and path.stat().st_mode & 0o777 == 0o600:
         return False
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False) as file:
-        temporary = Path(file.name)
-        file.write(text)
+    temporary = None
     try:
+        with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False) as file:
+            temporary = Path(file.name)
+            file.write(text)
         temporary.replace(path)
     finally:
-        temporary.unlink(missing_ok=True)
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     return True
 
 
@@ -74,7 +75,7 @@ def compose_document():
             "ports": [f"127.0.0.1:{PORT}:5432"],
             "volumes": ["data:/var/lib/postgresql"],
             "healthcheck": {
-                "test": ["CMD", "pg_isready", "-U", "postgres", "-d", "postgres"],
+                "test": ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "postgres"],
                 "interval": "2s", "timeout": "5s", "retries": 60,
             },
         }},
@@ -92,6 +93,8 @@ def apply(check=False, start=True):
                 or not (SECRETS / "superuser").exists()):
             print("configure shared Postgres")
         return
+    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    SECRETS.mkdir(parents=True, exist_ok=True, mode=0o700)
     password(SECRETS / "superuser")
     changed = write_changed(COMPOSE, text)
     if write_changed(PROJECTS, projects) or changed:
@@ -143,11 +146,14 @@ def seed():
         if project not in urls:
             urls[project] = project_url(project)
         path = worktree / ".env.local"
-        original = path.read_text() if path.exists() else ""
-        lines = [line for line in original.splitlines()
-                 if line != MARK and not re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=", line)]
-        text = "\n".join([*lines, MARK, "DATABASE_URL=" + urls[project]]) + "\n"
-        write_changed(path, text)
+        try:
+            original = path.read_text() if path.exists() else ""
+            lines = [line for line in original.splitlines()
+                     if line != MARK and not re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=", line)]
+            text = "\n".join([*lines, MARK, "DATABASE_URL=" + urls[project]]) + "\n"
+            write_changed(path, text)
+        except OSError:
+            continue
 
 
 def main(argv):

@@ -11,7 +11,7 @@ trap '"${docker[@]}" rm -f "$lab" >/dev/null 2>&1 || true' EXIT
   docker:dind --storage-driver=vfs >/dev/null
 "${docker[@]}" exec "$lab" sh -ec '
   timeout 90 sh -c "until docker info >/dev/null 2>&1; do sleep 1; done"
-  apk add --no-cache python3 py3-pip bash postgresql-client
+  apk add --no-cache python3 py3-pip bash nodejs postgresql-client
   python3 -m venv /lab-venv
   /lab-venv/bin/pip install uv
   UV_PROJECT_ENVIRONMENT=/lab-venv /lab-venv/bin/uv sync --locked --group dev --project /src

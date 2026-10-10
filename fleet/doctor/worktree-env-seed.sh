@@ -16,6 +16,7 @@ set -u
 SRC="$HOME/oss-fleet/shared-supabase/swarms-platform.env.local"
 MARK='# fleet-shared-supabase'
 LOG="$HOME/oss-fleet/doctor/worktree-env-seed.log"
+DB_ASSIGN='^[[:space:]]*(export[[:space:]]+)?DATABASE_URL[[:space:]]*='
 log() { printf '[%s] %s\n' "$(date -u +%FT%TZ)" "$*" >> "$LOG"; }
 
 [ -f "$SRC" ] || { log "source $SRC missing"; exit 1; }
@@ -25,15 +26,16 @@ seed_one() (
   local wt=$1 f=$1/.env.local
   umask 077
   local secrets="$HOME/.local/state/code-factory/secrets/shared-postgres"
-  mkdir -p "$secrets" || exit 1
-  exec 9>>"$secrets/.lock" || exit 1
-  flock -x 9 || exit 1
+  # Status 70 keeps lock errors fatal; checkout write errors are best-effort.
+  mkdir -p "$secrets" || exit 70
+  exec 9>>"$secrets/.lock" || exit 70
+  flock -x 9 || exit 70
   if [ -f "$f" ] && grep -qF "$MARK" "$f"; then
     if cmp -s "$SRC" "$f"; then return 0; fi
     # Postgres owns these two lines; compare the rest without rewriting them.
     if grep -qxF '# crewship-shared-postgres' "$f" &&
-       cmp -s <(grep -vE '^DATABASE_URL=' "$SRC") \
-              <(grep -vE '^(# crewship-shared-postgres$|DATABASE_URL=)' "$f"); then
+       cmp -s <(grep -vE "$DB_ASSIGN" "$SRC") \
+              <(grep -vE "$DB_ASSIGN|^# crewship-shared-postgres$" "$f"); then
       return 0
     fi
   fi
@@ -78,12 +80,14 @@ for slot in "$HOME"/.treehouse/swarms-platform-*/*/; do
     [ -d "$wt" ] || continue
   fi
   [ -e "$wt/package.json" ] || continue
-  seed_one "$wt" || exit 1
+  seed_one "$wt" || { [ "$?" -ne 70 ] || exit 1; }
   seed_node_cap "${slot%/}"
 done
 # Firstmate's primary checkout of the project.
 for wt in "$HOME"/.treehouse/firstmate-*/*/firstmate/projects/swarms-platform; do
-  if [ -e "$wt/package.json" ]; then seed_one "$wt" || exit 1; fi
+  if [ -e "$wt/package.json" ]; then
+    seed_one "$wt" || { [ "$?" -ne 70 ] || exit 1; }
+  fi
 done
 # Restore DATABASE_URL after Supabase copies its template when both profiles run.
 if [ -f "$HOME/.local/state/code-factory/shared-postgres/compose.json" ] &&

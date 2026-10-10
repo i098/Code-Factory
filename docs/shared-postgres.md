@@ -33,6 +33,7 @@ Run apply with service starts enabled when the host is ready.
 The container is `crewship-shared-postgres`.
 It publishes only `127.0.0.1:25432`, uses `restart: unless-stopped`, and stores data in `crewship-shared-postgres-data`.
 See [Container images](dependencies.md#container-images) for the image and pull policy.
+The health check waits for the final TCP server, not the temporary Unix-socket server used during initialization.
 The configuration is `~/.local/state/code-factory/shared-postgres/compose.json`.
 The superuser password is generated once in `~/.local/state/code-factory/secrets/shared-postgres/superuser`, with mode `0600`.
 Compose mounts that password as a file secret; no password enters the repository, command arguments or apply output.
@@ -65,6 +66,8 @@ It finds each checkout by its `.git` entry and uses the checkout directory name 
 It ignores names that do not meet the helper's name rules.
 It writes `DATABASE_URL` into `.env.local`, with mode `0600`, as the Supabase profile did for its environment.
 The seeder replaces an existing `DATABASE_URL` but keeps other environment entries.
+Both seeders skip checkout file errors and continue with later checkouts without recreating removed checkout directories.
+Lock, credential, and database errors remain fatal.
 Save an existing database URL before you enable this profile.
 Do not commit `.env.local` or the password files.
 Run `crewship-db --seed` before you start an app when you cannot wait for the timer.

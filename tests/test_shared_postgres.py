@@ -5,6 +5,7 @@ CREWSHIP_POSTGRES_LAB=1 enables Ansible and container operations.
 
 import concurrent.futures
 import fcntl
+import importlib.machinery
 import importlib.util
 import json
 import os
@@ -12,6 +13,7 @@ import select
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -124,6 +126,16 @@ def service(tmp_path):
     cli(home, "--apply")
     yield home
     subprocess.run(["docker", "compose", "-f", str(home / ".local/state/code-factory/shared-postgres/compose.json"), "down", "-v"], check=True, capture_output=True)
+
+
+@pytest.fixture
+def database(service, monkeypatch):
+    monkeypatch.setenv("HOME", str(service))
+    loader = importlib.machinery.SourceFileLoader("crewship_db_test", str(HELPER))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
 
 
 def query(url, sql):
@@ -251,7 +263,9 @@ def test_supabase_and_postgres_seeders_do_not_rewrite_unchanged_environment(serv
     shared = service / "oss-fleet/shared-supabase"
     shared.mkdir(parents=True)
     (service / "oss-fleet/doctor").mkdir()
-    (shared / "swarms-platform.env.local").write_text("# fleet-shared-supabase\nOTHER=keep\n")
+    (shared / "swarms-platform.env.local").write_text(
+        "# fleet-shared-supabase\nOTHER=keep\nexport DATABASE_URL=old\n \tDATABASE_URL = old\n"
+    )
     worktree = service / checkout
     worktree.mkdir(parents=True)
     (worktree / ".git").write_text("gitdir: disposable\n")
@@ -318,3 +332,160 @@ def test_supabase_and_postgres_seeders_do_not_rewrite_unchanged_environment(serv
     assert list(worktree.glob(".env.local.pre-shared-*")) == []
     url = path.read_text().split("DATABASE_URL=", 1)[1].strip()
     assert query(url, "SELECT current_database()").stdout.strip() == "crewship_swarms-platform"
+
+
+@lab
+def test_postgres_skips_removed_checkouts_at_file_boundaries(service, database, monkeypatch):
+    victim = service / ".treehouse/a-removed-test/1/a-removed"
+    survivor = service / "Dev/firstmate/projects/z-survivor"
+    survivor.mkdir(parents=True)
+    (survivor / ".git").mkdir()
+    url = connection_url(service, "a-removed")
+    destination = victim / ".env.local"
+    for operation in ("discovery", "read_text", "stat", "temporary", "replace"):
+        victim.mkdir(parents=True)
+        (victim / ".git").mkdir()
+        content = "# crewship-shared-postgres\nDATABASE_URL=" + url + "\n"
+        if operation in ("temporary", "replace"):
+            content += "OTHER=keep\n"
+        destination.write_text(content)
+        destination.chmod(0o600)
+        (survivor / ".env.local").unlink(missing_ok=True)
+        fired = False
+
+        def remove():
+            nonlocal fired
+            if not fired:
+                fired = True
+                shutil.rmtree(victim)
+
+        with monkeypatch.context() as patch:
+            if operation == "discovery":
+                real_url = database.project_url
+
+                def project_url(project):
+                    if project == "a-removed":
+                        remove()
+                    return real_url(project)
+
+                patch.setattr(database, "project_url", project_url)
+            elif operation == "temporary":
+                real_temporary = database.tempfile.NamedTemporaryFile
+
+                def temporary(*args, **kwargs):
+                    if Path(kwargs["dir"]) == victim:
+                        remove()
+                    return real_temporary(*args, **kwargs)
+
+                patch.setattr(database.tempfile, "NamedTemporaryFile", temporary)
+            else:
+                real_method = getattr(Path, operation)
+
+                def file_operation(path, *args, **kwargs):
+                    target = Path(args[0]) if operation == "replace" else path
+                    if target == destination:
+                        remove()
+                    return real_method(path, *args, **kwargs)
+
+                patch.setattr(Path, operation, file_operation)
+            database.seed()
+        assert fired, operation
+        assert not victim.exists(), operation
+        content = (survivor / ".env.local").read_text()
+        assert content == "# crewship-shared-postgres\nDATABASE_URL=" + connection_url(service, "z-survivor") + "\n"
+
+
+@lab
+def test_database_failures_remain_fatal_during_seeding(service, database):
+    checkout = service / ".treehouse/example-app-test/1/example-app"
+    checkout.mkdir(parents=True)
+    (checkout / ".git").mkdir()
+    subprocess.run(["docker", "stop", "crewship-shared-postgres"], capture_output=True, check=True)
+    with pytest.raises(RuntimeError, match="Docker operation failed"):
+        database.seed()
+    assert not (checkout / ".env.local").exists()
+
+
+@lab
+@pytest.mark.parametrize("removed", ["pool", "primary"])
+def test_supabase_write_failure_keeps_later_checkouts_and_postgres_handoff(service, removed):
+    shared = service / "oss-fleet/shared-supabase"
+    shared.mkdir(parents=True)
+    (service / "oss-fleet/doctor").mkdir()
+    (shared / "swarms-platform.env.local").write_text("# fleet-shared-supabase\nOTHER=keep\n")
+    pool = service / ".treehouse/swarms-platform-test/1/swarms-platform"
+    later = service / ".treehouse/swarms-platform-test/2/swarms-platform"
+    primary = service / ".treehouse/firstmate-test/1/firstmate/projects/swarms-platform"
+    for checkout in (pool, later, primary):
+        checkout.mkdir(parents=True)
+        (checkout / ".git").mkdir()
+        (checkout / "package.json").write_text("{}")
+    installed = service / ".local/bin/crewship-db"
+    installed.parent.mkdir(parents=True)
+    shutil.copyfile(HELPER, installed)
+    installed.chmod(0o755)
+    victim = pool if removed == "pool" else primary
+    binaries = service / "test-bin"
+    binaries.mkdir()
+    real_install = shutil.which("install")
+    wrapper = binaries / "install"
+    wrapper.write_text(
+        f"#!{sys.executable}\nimport pathlib, shutil, subprocess, sys\n"
+        f"if pathlib.Path(sys.argv[-1]) == pathlib.Path({str(victim / '.env.local')!r}):\n"
+        f"    shutil.rmtree({str(victim)!r})\n"
+        f"sys.exit(subprocess.call([{real_install!r}, *sys.argv[1:]]))\n"
+    )
+    wrapper.chmod(0o755)
+    subprocess.run(
+        ["bash", str(ROOT / "fleet/doctor/worktree-env-seed.sh")],
+        env={**os.environ, "HOME": str(service), "PATH": str(binaries) + ":" + os.environ["PATH"]},
+        capture_output=True, check=True,
+    )
+    assert not victim.exists()
+    for checkout in (pool, later, primary):
+        if checkout == victim:
+            continue
+        content = (checkout / ".env.local").read_text()
+        assert content.splitlines()[:2] == ["# fleet-shared-supabase", "OTHER=keep"]
+        url = content.split("DATABASE_URL=", 1)[1].strip()
+        assert query(url, "SELECT current_database()").stdout.strip() == "crewship_swarms-platform"
+    node = pool.parent / "node_modules/.bin/node"
+    result = subprocess.run([node, "-p", "JSON.stringify(process.execArgv)"], capture_output=True, text=True, check=True)
+    assert "--max-old-space-size=2048" in json.loads(result.stdout)
+
+
+@lab
+def test_readiness_waits_for_final_tcp_server(tmp_path):
+    cli(tmp_path, "--apply", "--no-start")
+    config = tmp_path / ".local/state/code-factory/shared-postgres/compose.json"
+    document = json.loads(config.read_text())
+    gate = tmp_path / "initialization-gate"
+    gate.mkdir(mode=0o777)
+    gate.chmod(0o777)
+    initialize = tmp_path / "initialize.sh"
+    initialize.write_text("touch /gate/ready\nwhile [ ! -e /gate/release ]; do sleep 0.1; done\n")
+    document["services"]["postgres"]["volumes"] += [
+        f"{initialize}:/docker-entrypoint-initdb.d/hold.sh:ro",
+        f"{gate}:/gate",
+    ]
+    config.write_text(json.dumps(document))
+    compose = ["docker", "compose", "-f", str(config)]
+    try:
+        subprocess.run([*compose, "up", "-d"], capture_output=True, check=True)
+        deadline = time.monotonic() + 60
+        while not (gate / "ready").exists():
+            assert time.monotonic() < deadline, "Postgres did not reach initialization"
+            time.sleep(0.1)
+        probe = subprocess.run(
+            ["docker", "exec", "crewship-shared-postgres",
+             *document["services"]["postgres"]["healthcheck"]["test"][1:]],
+            capture_output=True, text=True,
+        )
+        assert probe.returncode != 0, "Temporary initialization server must not count as ready"
+        (gate / "release").touch()
+        subprocess.run([*compose, "up", "-d", "--wait"], capture_output=True, check=True)
+        url = connection_url(tmp_path, "startup-app")
+        assert query(url, "SELECT current_database()").stdout.strip() == "crewship_startup-app"
+    finally:
+        (gate / "release").touch()
+        subprocess.run([*compose, "down", "-v"], capture_output=True, check=True)
