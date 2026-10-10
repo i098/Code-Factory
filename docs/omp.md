@@ -11,9 +11,10 @@ With the `agents` profile on, `./ship.sh launch`:
    Every apply also merges [`config/omp-models.yml`](../config/omp-models.yml) into `~/.omp/agent/models.yml`, preserving user providers and unshipped model keys.
    It reads the first existing configuration in omp's order: `models.yml`, `models.yaml`, then legacy `models.json`.
    The installed Bun parser preserves YAML 1.2 scalar types and reads legacy JSONC comments and trailing commas.
-   If Bun is absent, check mode reports the installation prerequisite and skips the dependent merge; normal apply fails.
+   When an existing model file needs parsing, missing Bun makes check mode report the installation prerequisite and skip the dependent merge.
+   Normal apply fails if that parser is unavailable.
    It writes the merged configuration to `models.yml` and leaves the other source files unchanged.
-   The Codex overrides set a 272K default window and a 1M maximum window.
+   See [Default config](../README.md#default-config) for the Codex context windows.
    omp limits the effective window to the provider's supported input window.
    The config seed enables `extendedContext: true`; existing hosts must enable it in their own config.
 3. Installs the extension `~/.omp/agent/extensions/code-factory-herdr-sidebar.ts`, which feeds the Herdr Agent sidebar the session topic, the pane's short name, and the pull request line (pull request, issue and diff size). Every apply rewrites it. See [Herdr sidebar](herdr.md).
@@ -175,11 +176,7 @@ When a new no-mistakes release changes the adapter, re-prove the wrapper against
 Select a gate tier for each run with `no-mistakes axi run --model <id> --effort <level>`.
 Without these options, the verified Pi configuration uses the ordinary tier.
 
-| Gate work | Model | Effort |
-| --- | --- | --- |
-| Routine | `openai-codex/gpt-6.1-sol` | `medium` |
-| Ordinary (default) | `anthropic/claude-sonnet-5-5` | `high` |
-| Hard | `anthropic/claude-opus-5-5` | `high` |
+See [Default config](../README.md#default-config) for the gate tiers and their model and effort choices.
 
 For a routine run, use `no-mistakes axi run --intent "..." --model openai-codex/gpt-6.1-sol --effort medium`.
 

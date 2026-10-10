@@ -171,8 +171,6 @@
   become: true
 
 # --- no-mistakes pipeline agent (docs/omp.md#no-mistakes-pipeline-agent) ----
-# omp runs through the no-mistakes pi adapter via the omp-as-pi wrapper, with
-# acp:omp as the fallback. Managed: every apply rewrites these files.
 - name: Install omp-as-pi, the wrapper that runs omp as the no-mistakes pi agent
   ansible.builtin.copy:
     src: "{{ code_factory_repo }}/config/omp-as-pi/"

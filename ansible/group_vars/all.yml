@@ -318,8 +318,7 @@ factory_agent_config_files:
     dir_mode: "0700"
     mode: "0600"
     first_write: true
-  # Seeds acp:omp; tasks/agents.yml moves it to [pi, acp:omp] once the pi
-  # adapter is verified. acpx maps omp to `omp acp`.
+  # See docs/omp.md#no-mistakes-pipeline-agent for agent selection.
   - src: config/no-mistakes.yaml
     dest: "{{ factory_cfg.home }}/.no-mistakes/config.yaml"
     dir_mode: "0700"
