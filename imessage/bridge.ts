@@ -301,9 +301,9 @@ async function sendBubble(o: Out, i: number, save: (o: Out) => void) {
   }
 }
 
-// Where bubble `i` of item `o` can go: the first threaded bubble tries its own transport first, otherwise transport
-// order. Only transports in `maybe` qualify when it has any. Other transports use his latest conversation there,
-// or their home chat. A send that may have gone out adds its transport and conversation to `maybe`.
+// Where bubble `i` of item `o` can go: the first bubble with an explicit reply target tries its own transport first,
+// otherwise transport order. Only transports in `maybe` qualify when it has any. Other transports use his latest
+// conversation there, or their home chat. A send that may have gone out adds its transport and conversation to `maybe`.
 function routes(o: Out, i: number, maybe: Record<string, string>): Route[] {
   const guid = o.guid && `${o.guid}-${i}`;
   const only = Object.keys(maybe);
