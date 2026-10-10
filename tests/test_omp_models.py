@@ -41,6 +41,18 @@ def merge_models(home, check=False):
     return int(result.stdout.rsplit("changed=", 1)[1].split()[0])
 
 
+def read_models(target):
+    home = target.parents[2]
+    result = subprocess.run(
+        [shutil.which("bun"), "--eval",
+         'import { YAML } from "bun"; console.log(JSON.stringify(YAML.parse(await Bun.stdin.text())));'],
+        input=target.read_text(), cwd=home, env={**os.environ, "HOME": str(home)},
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return json.loads(result.stdout)
+
+
 @pytest.mark.parametrize("sources", [
     (), ("yml",), ("yaml",), ("json",), ("yaml", "json"),
     ("yml", "yaml"), ("yml", "json"), ("yml", "yaml", "json"),
@@ -52,6 +64,10 @@ def test_model_merge_keeps_user_entries_and_is_idempotent(tmp_path, sources):
         "private-provider": {
             "baseUrl": "https://example.com/path//keep?value=/*literal*/",
             "models": [{"id": 'local/*literal*/"quoted"\\path//keep'}],
+            "headers": {
+                "X-Revision": "1e3", "X-Octal": "0o10", "X-Logging": "off",
+                "X-Url": "https://example.com/path//keep?value=/*literal*/",
+            },
         },
         "openai-codex": {
             "models": [{"id": "user-model"}],
@@ -71,7 +87,7 @@ def test_model_merge_keeps_user_entries_and_is_idempotent(tmp_path, sources):
         source.write_text(
             "{ // legacy provider configuration\n/* keep user fields */\n"
             + json.dumps(entry)[1:-1] + ",\n}\n"
-            if extension == "json" else yaml.safe_dump(entry)
+            if extension == "json" else json.dumps(entry)
         )
         originals[source] = source.read_bytes()
     before = target.read_bytes() if target.exists() else None
@@ -79,7 +95,7 @@ def test_model_merge_keeps_user_entries_and_is_idempotent(tmp_path, sources):
     assert (target.read_bytes() if target.exists() else None) == before
     assert all(source.read_bytes() == content for source, content in originals.items())
     assert merge_models(tmp_path) == 1
-    merged = yaml.safe_load(target.read_text())
+    merged = read_models(target)
     shipped = yaml.safe_load((ROOT / "config/omp-models.yml").read_text())
     overrides = merged["providers"]["openai-codex"]["modelOverrides"]
     for model, values in shipped["providers"]["openai-codex"]["modelOverrides"].items():
@@ -94,6 +110,7 @@ def test_model_merge_keeps_user_entries_and_is_idempotent(tmp_path, sources):
     written = target.read_bytes()
     assert merge_models(tmp_path) == 0
     assert target.read_bytes() == written
+    assert read_models(target) == merged
     assert all(source.read_bytes() == content for source, content in originals.items()
                if source != target)
 
@@ -110,10 +127,11 @@ def test_model_merge_migrates_even_when_overrides_are_already_present(tmp_path, 
     assert not target.exists()
     assert source.read_bytes() == original
     assert merge_models(tmp_path) == 1
-    assert yaml.safe_load(target.read_text()) == shipped
+    assert read_models(target) == shipped
     written = target.read_bytes()
     assert merge_models(tmp_path) == 0
     assert target.read_bytes() == written
+    assert read_models(target) == shipped
     assert source.read_bytes() == original
 
 
@@ -131,6 +149,8 @@ def test_yaml_model_merge_preserves_unquoted_string_scalars(tmp_path, extension)
         "      X-Yes: yes\n"
         "      X-No: no\n"
         "      X-Date: 2026-10-10\n"
+        '      X-Revision: "1e3"\n'
+        '      X-Octal: "0o10"\n'
         "    models:\n"
         "      - id: user-model\n"
         "    modelOverrides:\n"
@@ -143,9 +163,11 @@ def test_yaml_model_merge_preserves_unquoted_string_scalars(tmp_path, extension)
     assert source.read_bytes() == original
     assert target.exists() == (extension == "yml")
     assert merge_models(tmp_path) == 1
-    provider = yaml.safe_load(target.read_text())["providers"]["openai-codex"]
+    merged = read_models(target)
+    provider = merged["providers"]["openai-codex"]
     assert provider["headers"] == {
         "X-Off": "off", "X-On": "on", "X-Yes": "yes", "X-No": "no", "X-Date": "2026-10-10",
+        "X-Revision": "1e3", "X-Octal": "0o10",
     }
     assert provider["models"] == [{"id": "user-model"}]
     assert provider["modelOverrides"]["gpt-6.1-sol"] == {
@@ -154,6 +176,7 @@ def test_yaml_model_merge_preserves_unquoted_string_scalars(tmp_path, extension)
     written = target.read_bytes()
     assert merge_models(tmp_path) == 0
     assert target.read_bytes() == written
+    assert read_models(target) == merged
     if source != target:
         assert source.read_bytes() == original
 

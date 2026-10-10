@@ -63,7 +63,7 @@
     overrides: "{{ lookup('ansible.builtin.file', code_factory_repo ~ '/config/omp-models.yml') | from_yaml }}"
     wanted: "{{ current | combine(overrides, recursive=true) }}"
   ansible.builtin.copy:
-    content: "{{ wanted | to_nice_yaml(indent=2, sort_keys=false) }}"
+    content: "{{ wanted | to_nice_json(indent=2, sort_keys=false) }}"
     dest: "{{ factory_cfg.home }}/.omp/agent/models.yml"
     owner: "{{ factory_cfg.user }}"
     group: "{{ factory_group }}"

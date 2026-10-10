@@ -14,7 +14,7 @@ With the `agents` profile on, `./ship.sh launch`:
    The installed Bun parser preserves YAML 1.2 scalar types and reads legacy JSONC comments and trailing commas.
    When an existing model file needs parsing, missing Bun makes check mode report the installation prerequisite and skip the dependent merge.
    Normal apply fails if that parser is unavailable.
-   It writes the merged configuration to `models.yml` and leaves the other source files unchanged.
+   It writes JSON, a YAML 1.2 subset, to `models.yml` to preserve scalar types and leaves the other source files unchanged.
    See [Default config](../README.md#default-config) for the Codex context windows.
    omp limits the effective window to the provider's supported input window.
    The config seed enables `extendedContext: true`; existing hosts must enable it in their own config.

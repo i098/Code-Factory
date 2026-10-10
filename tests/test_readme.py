@@ -103,7 +103,6 @@ def test_default_config_lists_the_current_defaults():
     for line in [
         f"- Agent harness: [omp](docs/omp.md), default model `{roles['default']}`, "
         f"advisor {'on' if omp['advisor']['enabled'] else 'off'}",
-        "- Models: " + ticks(sorted({model.split(":")[0] for model in roles.values()})),
         "- omp plugins: " + ticks(provisions.OMP_PLUGINS),
         "- Profiles on: " + ticks(name for name, on in profiles.items() if on),
         "- Profiles off (opt-in): " + ticks(name for name, on in profiles.items() if not on),
@@ -112,12 +111,12 @@ def test_default_config_lists_the_current_defaults():
         assert line in lines
 
     dispatch = json.loads((ROOT / "config/crew-dispatch.json").read_text())
-    mechanical, ordinary, hard = [
+    small, ordinary, hard = [
         [choice["model"] for choice in rule["use"]] for rule in dispatch["rules"]
     ]
     assert (
-        f"- Crewmate models: mechanical {ticks(mechanical)}; "
-        f"ordinary (default) {ticks(ordinary)}; hard {ticks(hard)}."
+        f"- Models: dynamic per-task selection; small {ticks(small)}; "
+        f"ordinary (default) {ticks(ordinary)}; hard only {ticks(hard)}."
     ) in lines
     assert [choice["model"] for choice in dispatch["default"]] == ordinary
     model_overrides = yaml.safe_load((ROOT / "config/omp-models.yml").read_text())
@@ -130,7 +129,7 @@ def test_default_config_lists_the_current_defaults():
         ) in lines
     gate = yaml.safe_load((ROOT / "config/no-mistakes-omp.yml").read_text())
     assert (
-        f"- Gate models: routine `{ordinary[1]}:medium`; "
+        f"- Gate models: per-run pins; routine `{ordinary[1]}:medium`; "
         f"ordinary (default) `{gate['modelRoles']['default']}`; hard `{hard[0]}:high`."
     ) in lines
 
