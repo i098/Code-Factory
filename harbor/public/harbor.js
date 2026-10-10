@@ -1561,9 +1561,16 @@ canvas.addEventListener("click", (e) => {
 });
 document.getElementById("page").addEventListener("focusin", (e) => {
   const id = e.target.closest("[data-spot]")?.dataset.spot;
-  if (id && anchors[id]) { moved = true; face(id); dirty = true; }
+  if (id && anchors[id]) {
+    setMap(0); walkPath = []; walkTo = null;
+    moved = true; face(id); dirty = true;
+  }
 });
-card.addEventListener("focusin", () => { if (target) jumped = target; dirty = true; });
+card.addEventListener("focusin", () => {
+  setMap(0); walkPath = []; walkTo = null;
+  if (target) jumped = target;
+  dirty = true;
+});
 document.addEventListener("mousemove", (e) => {
   if (document.pointerLockElement === stage) look(e.movementX, e.movementY, 0.0022);
   else hoverMap(e.clientX, e.clientY);
