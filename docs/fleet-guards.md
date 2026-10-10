@@ -76,7 +76,7 @@ Do not use `--no-backup` or any Docker volume removal command.
 ```bash
 (
 for prefix in crewship flotilla; do
-  systemctl --user disable --now \
+  systemctl --user stop \
     "$prefix-shared-supabase-check.timer" \
     "$prefix-worktree-env-seed.timer" "$prefix-worktree-env-seed.path"
   systemctl --user stop "$prefix-shared-supabase-check.service" \
