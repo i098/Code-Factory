@@ -63,4 +63,4 @@ jobs:
         run: ./ship.sh inspect --config config/default.yml
 
       - name: Validate container configuration
-        run: ./ship.sh inspect --config containers/factory.container.yml
+        run: ./ship.sh inspect --config containers/crewship.container.yml

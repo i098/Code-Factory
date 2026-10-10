@@ -27,7 +27,7 @@
 #   Local re-run for testing on a disposable machine:
 #     sudo cloud-init schema --config-file cloud-init/user-data.yaml
 #
-# After first boot, as the account that will own the factory:
+# After first boot, as the account that will own Crewship:
 #   git clone <your private remote> ~/Dev/Crewship
 #   cd ~/Dev/Crewship && ./onboard.sh dock && ./onboard.sh launch
 #

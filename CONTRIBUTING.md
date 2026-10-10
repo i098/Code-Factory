@@ -5,7 +5,7 @@
 Crewship is an Ansible playbook with a Python CLI wrapper (`scripts/ship.py`). The source of truth is:
 
 - `config/default.yml` — ship defaults (every field the schema requires)
-- `schemas/factory.schema.json` — JSON Schema for the host config
+- `schemas/crewship.schema.json` — JSON Schema for the host config
 - `ansible/group_vars/all.yml` — Jinja vars consumed by tasks
 - `ansible/tasks/*.yml` — the tasks themselves (one file per concern)
 - `ansible/templates/*.j2` — systemd unit templates

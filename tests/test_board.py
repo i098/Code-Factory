@@ -11,9 +11,9 @@ import yaml
 
 ROOT = Path(__file__).parents[1]
 
-spec = importlib.util.spec_from_file_location("factory_config_board", ROOT / "scripts/ship.py")
-factory = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(factory)
+spec = importlib.util.spec_from_file_location("ship_config_board", ROOT / "scripts/ship.py")
+ship = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ship)
 
 BOARD = {"history": 128, "cap_mb": 32, "max_msg_kb": 16}
 
@@ -32,7 +32,7 @@ def test_the_defaults_leave_the_board_off():
 @pytest.mark.parametrize("block", [{}, BOARD])
 def test_the_board_block_is_accepted(configuration, block):
     configuration["factory"]["board"] = dict(block)
-    assert factory.validate_config(configuration) is configuration
+    assert ship.validate_config(configuration) is configuration
 
 
 @pytest.mark.parametrize(
@@ -41,22 +41,22 @@ def test_the_board_block_is_accepted(configuration, block):
 def test_a_bad_board_block_is_rejected(configuration, change):
     configuration["factory"]["board"].update(change)
     with pytest.raises(ValueError, match="board"):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 @pytest.mark.parametrize("profile", ["firstmate", "development"])
 def test_the_board_needs_firstmate_and_cargo(configuration, profile):
     configuration["factory"]["profiles"][profile] = False
     with pytest.raises(ValueError, match="board requires the firstmate profile and the development"):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 def test_dock_board_writes_the_block(tmp_path, monkeypatch):
     for path in ("config", "schemas"):
         shutil.copytree(ROOT / path, tmp_path / path)
-    monkeypatch.setattr(factory, "ROOT", tmp_path)
-    factory.initialize(argparse.Namespace(user="coder", home="/home/coder", container=False, board=True))
-    assert factory.load_config(tmp_path / ".local/host.yml")["factory"]["board"] == {}
+    monkeypatch.setattr(ship, "ROOT", tmp_path)
+    ship.initialize(argparse.Namespace(user="coder", home="/home/coder", container=False, board=True))
+    assert ship.load_config(tmp_path / ".local/host.yml")["factory"]["board"] == {}
 
 
 # A stand-in for cargo, so the test never compiles; CI builds the crate itself.

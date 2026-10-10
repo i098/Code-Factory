@@ -2,7 +2,7 @@
 """Refuse to provision an image with a configuration that describes another machine.
 
 Run inside the Dockerfile `worker` stage, as the image account, after
-`./ship.sh inspect` has accepted the document against schemas/factory.schema.json:
+`./ship.sh inspect` has accepted the document against schemas/crewship.schema.json:
 
     uv run --project . --locked python containers/assert-image-config.py CONFIG
 
@@ -22,7 +22,7 @@ from pathlib import Path
 import yaml
 
 # Capabilities that need a real host: a user manager and D-Bus, the host network
-# stack and a node identity, or an X server. containers/factory.container.yml
+# stack and a node identity, or an X server. containers/crewship.container.yml
 # documents why each one is false.
 HOST_ONLY_PROFILES = ("docker", "tailscale", "desktop")
 # The workspace is a named volume (compose) or a bind (devcontainer) at runtime,

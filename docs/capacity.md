@@ -46,7 +46,7 @@ Idle chrome-devtools-axi bridges come on top: each holds about 2 GB until
 - **RAM:** a 24 GB host fits one UI lane plus two light lanes, or six light lanes.
 - **Swap:** keeps the host reachable during a spike. It is not capacity, because the spawn floor ignores it and a swapping host thrashes.
 - **Disk:** Docker images and build cache grow with the lane count. The storage guard warns at 85% and prunes at 92%.
-- **File watchers:** every agent runs file watchers (LSP servers, bundlers, test runners) as the one factory account, and the stock limit is 128 inotify instances per user. Every host that starts services gets `/etc/sysctl.d/60-agent-host.conf` with `fs.inotify.max_user_instances = 8192`; apply loads it with `sysctl -p` when it writes the file.
+- **File watchers:** every agent runs file watchers (LSP servers, bundlers, test runners) as the one Crewship account, and the stock limit is 128 inotify instances per user. Every host that starts services gets `/etc/sysctl.d/60-agent-host.conf` with `fs.inotify.max_user_instances = 8192`; apply loads it with `sysctl -p` when it writes the file.
 
 ## Auto pruners
 

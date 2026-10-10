@@ -30,7 +30,7 @@ def validate_document(document, schema_name):
 
 
 def validate_config(document):
-    validate_document(document, "factory.schema.json")
+    validate_document(document, "crewship.schema.json")
     config = document["factory"]
     home, workspace = Path(config["home"]), Path(config["workspace"])
     if (

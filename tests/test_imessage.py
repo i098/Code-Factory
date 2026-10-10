@@ -473,8 +473,8 @@ def test_location_carries_the_local_header(tmp_path):
     assert len(calls) == 1 and "-H X-Firstmate: 1" in calls[0] and calls[0].endswith("/location")
 
 
-def load_factory():
-    spec = importlib.util.spec_from_file_location("factory_imessage", ROOT / "scripts/ship.py")
+def load_ship():
+    spec = importlib.util.spec_from_file_location("ship_imessage", ROOT / "scripts/ship.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -491,10 +491,10 @@ def load_factory():
 def test_config_rejects_a_bridge_it_cannot_run(change, error):
     document = yaml.safe_load((ROOT / "config/default.yml").read_text())
     document["factory"]["imessage"] = {"owner": "+10000000000"}
-    load_factory().validate_config(document)
+    load_ship().validate_config(document)
     change(document["factory"])
     with pytest.raises(ValueError, match=error):
-        load_factory().validate_config(document)
+        load_ship().validate_config(document)
 
 
 OUTBOX = json.dumps(str(ROOT / "imessage/outbox.ts"))

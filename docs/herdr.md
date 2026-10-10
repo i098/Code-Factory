@@ -186,7 +186,7 @@ The `machine` tab is renamed under these rules:
 - It looks at the tab at most once every 30 seconds, so it renames at most that often and its shares can be up to 30 seconds old.
 - The shares show in the desktop tab bar and navigator while `machine` is focused, and on the phone in the `machine` Space line while that tab is the active one.
 
-A home pane's display agent is its session topic. With `show_agent_labels_on_pane_borders` on (the factory default), a home pane in a split shows the topic on its border instead of `omp`, and the border follows the topic when the session is renamed. Every pane report names the pane's agent (`--agent`), so when that agent exits Herdr drops the topic and the state labels with it.
+A home pane's display agent is its session topic. With `show_agent_labels_on_pane_borders` on (the Crewship default), a home pane in a split shows the topic on its border instead of `omp`, and the border follows the topic when the session is renamed. Every pane report names the pane's agent (`--agent`), so when that agent exits Herdr drops the topic and the state labels with it.
 
 What the mobile layout forces, compared with the desktop sidebar:
 

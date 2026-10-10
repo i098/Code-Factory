@@ -27,7 +27,7 @@ Use a Linux host for the native recipe. macOS and other client devices can reach
 
 ### Docker worker
 
-The Dockerfile's `worker` target is an isolated, non-root, devcontainer-style image built by the same recipe. It runs `./ship.sh launch --config containers/factory.container.yml`, which sets `start_services: false` and `enable_linger: false` and turns off the `docker`, `tailscale`, `desktop`, `firstmate`, and `chat` profiles and the browser pruner. The image carries the agent and development toolchain and the rendered agent configs, with no systemd services, linger, or Docker-in-Docker. The devcontainer, Compose, and CI use the same image.
+The Dockerfile's `worker` target is an isolated, non-root, devcontainer-style image built by the same recipe. It runs `./ship.sh launch --config containers/crewship.container.yml`, which sets `start_services: false` and `enable_linger: false` and turns off the `docker`, `tailscale`, `desktop`, `firstmate`, and `chat` profiles and the browser pruner. The image carries the agent and development toolchain and the rendered agent configs, with no systemd services, linger, or Docker-in-Docker. The devcontainer, Compose, and CI use the same image.
 
 ```bash
 docker pull ghcr.io/i098/crewship:latest                  # released image (or :X.Y.Z), published on each release
@@ -72,7 +72,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on pushes to `main`, on every p
 - `uv sync --locked --group dev`, then `ruff check` and `pytest`.
 - `tests/test_herdr_patch.py` again on Python 3.9, the version macOS ships, because [herdr-patch](../herdr-patch/README.md) also runs on the operator's computer.
 - `bash config/omp-as-pi/test.sh`, the offline tests of the omp-as-pi wrapper ([no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)).
-- `./ship.sh inspect` for `config/default.yml` and `containers/factory.container.yml`.
+- `./ship.sh inspect` for `config/default.yml` and `containers/crewship.container.yml`.
 - Audits of the Dockerfile, devcontainer, and Compose definitions (the image builds from `mirror.gcr.io/library/ubuntu:latest`, Compose services are digest-pinned, no host namespaces or socket, resource caps).
 - On pull requests, the `quality gate` job: `sentrux gate .` against the committed `.sentrux/baseline.json` fails on a `DEGRADED` verdict, on a drop past `FM_QUALITY_MAX_DROP`, and when the gate cannot give a verdict; `fallow audit` on the changed JS/TS only warns ([Quality gate](omp.md#quality-gate)).
 - A full worker image build and the behavior smoke in `tests/container-smoke.sh`.

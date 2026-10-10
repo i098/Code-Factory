@@ -18,7 +18,7 @@ def load(name, path):
 
 
 board = load("github_board", "maintenance/github-board.py")
-factory = load("factory_config_github_board", "scripts/ship.py")
+ship = load("ship_config_github_board", "scripts/ship.py")
 
 BOARD = {"repo": "owner/board", "project": 3}
 
@@ -31,7 +31,7 @@ def configuration():
 
 
 def test_the_board_block_is_accepted(configuration):
-    assert factory.validate_config(configuration) is configuration
+    assert ship.validate_config(configuration) is configuration
 
 
 @pytest.mark.parametrize(
@@ -47,13 +47,13 @@ def test_the_board_block_is_accepted(configuration):
 def test_a_bad_board_block_is_rejected(configuration, change):
     configuration["factory"]["github_board"].update(change)
     with pytest.raises(ValueError, match="github_board"):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 def test_the_board_needs_the_firstmate_profile(configuration):
     configuration["factory"]["profiles"]["firstmate"] = False
     with pytest.raises(ValueError, match="github_board requires the firstmate profile"):
-        factory.validate_config(configuration)
+        ship.validate_config(configuration)
 
 
 class FakeGitHub:

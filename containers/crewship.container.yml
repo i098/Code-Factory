@@ -1,7 +1,7 @@
-# Factory configuration document for container builds.
+# Crewship configuration document for container builds.
 #
-# Validated by `./ship.sh inspect --config containers/factory.container.yml`
-# against schemas/factory.schema.json, then consumed by `./ship.sh launch` during
+# Validated by `./ship.sh inspect --config containers/crewship.container.yml`
+# against schemas/crewship.schema.json, then consumed by `./ship.sh launch` during
 # the Dockerfile `worker` stage. It differs from config/default.yml only where a
 # container genuinely cannot host a native capability:
 #
