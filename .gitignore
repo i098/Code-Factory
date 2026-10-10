@@ -33,3 +33,4 @@ skills/private/*
 rules/private/*
 !rules/private/README.md
 target/
+pr-body.md
