@@ -687,6 +687,72 @@ def test_a_new_chrome_devtools_mcp_release_leaves_the_managed_environment_unchan
     )
 
 
+def test_board_environment_reaches_new_shells_and_agents_and_is_removed_on_opt_out(tmp_path):
+    profile_task = next(
+        task["ansible.builtin.blockinfile"]
+        for task in yaml.safe_load((ROOT / "ansible/tasks/account.yml").read_text())
+        if "ansible.builtin.blockinfile" in task
+    )
+    profile = tmp_path / ".profile"
+    unit = tmp_path / "herdr.service"
+    variables = {
+        "code_factory_repo": str(ROOT),
+        "factory_cfg": {
+            "home": str(tmp_path),
+            "workspace": str(tmp_path),
+            "data_dir": str(tmp_path / "data"),
+            "profiles": {"agents": True},
+        },
+        "factory_user_uid": 12345,
+        "factory_platform": "linux-x86_64",
+        "factory_latest": {"herdr": {"version": "1.0.0"}},
+        "factory_fleet_browsers_enabled": False,
+        "ansible_managed": "Managed by Crewship",
+    }
+    modules = [
+        ("ansible.builtin.template", {
+            "src": str(ROOT / "ansible/templates/herdr.service.j2"), "dest": str(unit),
+        }),
+        ("ansible.builtin.blockinfile", {
+            **{key: profile_task[key] for key in ("block", "marker", "create", "mode")},
+            "path": str(profile),
+        }),
+    ]
+    for board in (None, {}, None):
+        if board is None:
+            variables["factory_cfg"].pop("board", None)
+        else:
+            variables["factory_cfg"]["board"] = board
+        for repeat in range(2):
+            for module, arguments in modules:
+                result = _ansible(
+                    tmp_path, "ansible", "localhost", "-i", "localhost,", "-c", "local",
+                    "-m", module, "-a", json.dumps(arguments),
+                    "-e", f"@{ROOT / 'ansible/group_vars/all.yml'}",
+                    "-e", json.dumps(variables),
+                )
+                assert result.returncode == 0, result.stdout + result.stderr
+                if repeat:
+                    assert '"changed": false' in result.stdout, result.stdout
+        socket = "/run/user/12345/crewboard.sock"
+        assert (f'Environment="CREWBOARD_SOCKET={socket}"' in unit.read_text()) is (
+            board is not None
+        )
+        shell = subprocess.run(
+            ["bash", "--noprofile", "--norc", "-c",
+             'source "$1"; printf "%s\\n%s\\n%s\\n" "${CREWBOARD_SOCKET-unset}" '
+             '"$CHROME_DEVTOOLS_AXI_MCP_PATH" "$npm_config_cache"', "bash", str(profile)],
+            env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"},
+            capture_output=True, text=True, check=True,
+        )
+        assert shell.stdout.splitlines() == [
+            socket if board is not None else "unset",
+            f"{tmp_path}/.local/share/code-factory/chrome-devtools-mcp/current/"
+            "node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js",
+            f"{tmp_path}/data/cache/npm",
+        ]
+
+
 def _ansible(tmp_path, *argv, wrapper=()):
     return subprocess.run(
         [*wrapper, Path(sys.executable).parent / argv[0], *argv[1:]],

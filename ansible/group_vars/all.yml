@@ -62,6 +62,10 @@ factory_chrome_devtools_mcp_path: "{{ factory_share_dir }}/chrome-devtools-mcp/c
 # the chrome-devtools-axi bridge, chrome-devtools-mcp and acpx.
 factory_managed_shell_env:
   CHROME_DEVTOOLS_AXI_MCP_PATH: "{{ factory_chrome_devtools_mcp_path }}"
+# The board is opt-in; share its socket with shells and new Herdr agents.
+factory_board_env: >-
+  {{ {'CREWBOARD_SOCKET': factory_user_runtime_dir ~ '/crewboard.sock'}
+     if factory_cfg.board is defined else {} }}
 # factory.data_dir: Docker's data root and the caches that never hardlink into
 # a worktree. Exported next to factory_managed_shell_env on every profile.
 # bun, pnpm and uv stay on the system disk on purpose: they hardlink packages
