@@ -1,8 +1,8 @@
 // The BlueBubbles transport of the iMessage bridge (bridge.ts, docs/imessage.md): self-hosted BlueBubbles servers,
 // "relays", on Macs signed into the same Apple Account, used as one line in config order.
-// Outbound: each call goes to the first healthy relay and fails over in order. A send that may have reached a
-//   relay (a timeout or a server error after the request went out) is retried on the next relay only after no
-//   relay shows it as sent, so one text is never sent twice. The bridge's outbox (outbox.ts) retries what fails.
+// Outbound: calls fail over in config order; relay eligibility is described in docs/imessage.md.
+//   A send that may have reached a relay is retried on the next relay only after no relay shows it as sent.
+//   The bridge's outbox (outbox.ts) retries what fails.
 // Inbound: every relay posts its webhook here, and a catch-up query fills any gap. A webhook is only a hint: the
 //   message itself is read back from a relay with the password, so a forged webhook can only name a real message.
 //   Messages are de-duplicated by GUID with a bounded seen-set on disk. A failed attachment download is retried by
@@ -172,8 +172,8 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
     }
   }
 
-  // Send one text into a chat, as a threaded reply when `replyTo` is a message GUID. `guid` is the client GUID
-  // (BlueBubbles tempGuid). A later relay in one call sends only after no relay shows the text as sent; a retry of
+  // `guid` is the client GUID (BlueBubbles tempGuid). Reply behavior is described in docs/imessage.md.
+  // A later relay in one call sends only after no relay shows the text as sent; a retry of
   // a failed call is the bridge's to check first (`sent`), because the outbox item keeps what may have gone out.
   async send(chat: string, text: string, replyTo?: string, guid?: string) {
     const started = Date.now();
