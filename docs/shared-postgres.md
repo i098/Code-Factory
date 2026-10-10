@@ -2,7 +2,6 @@
 
 `crewship.profiles.shared_postgres` is off by default.
 It adds one official Postgres container for all project lanes on a host.
-The existing shared Supabase profile remains available; this change does not remove or migrate it.
 
 ## Enable
 
@@ -64,19 +63,15 @@ Its service runs `crewship-db --seed` to discover checkouts in Treehouse pools a
 Apply records the configured `<workspace>/firstmate/projects` directory, so custom workspace paths also receive database settings.
 It finds each checkout by its `.git` entry and uses the checkout directory name as the project name.
 It ignores names that do not meet the helper's name rules.
-It writes `DATABASE_URL` into `.env.local`, with mode `0600`, as the Supabase profile did for its environment.
+It writes `DATABASE_URL` into `.env.local`, with mode `0600`.
 The seeder replaces an existing `DATABASE_URL` but keeps other environment entries.
-Both seeders skip checkout file errors and continue with later checkouts without recreating removed checkout directories.
+The seeder skips checkout file errors and continues without recreating removed checkout directories.
 Lock, credential, and database errors remain fatal.
 Save an existing database URL before you enable this profile.
 Do not commit `.env.local` or the password files.
 Run `crewship-db --seed` before you start an app when you cannot wait for the timer.
 Outside these managed directories, copy the environment file returned by `crewship-db <project>` into the app's local environment.
 Apps that do not load `.env.local` must load `DATABASE_URL` themselves.
-When both profiles run, the Supabase seeder runs the Postgres seeder after it copies its environment template.
-The Supabase comparison ignores the Postgres-managed entries, so unchanged runs do not rewrite files or create extra backups.
-Both seeders use the same file lock for environment comparisons and writes.
-The Supabase seeder releases that lock before it calls the Postgres helper.
 
 ## Data and upgrades
 
@@ -91,7 +86,7 @@ No automatic migration or data deletion runs here.
 ## Disable and remove
 
 Set `shared_postgres: false` and apply to stop managing this profile.
-As with shared Supabase, this leaves the existing container, volume, timer, environment files and secrets unchanged.
+This leaves the existing container, volume, timer, environment files and secrets unchanged.
 The container and timer can continue to run; disabling the profile does not stop them.
 
 To stop the service manually, run these commands as the host owner:

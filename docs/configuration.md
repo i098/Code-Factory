@@ -49,7 +49,6 @@ crewship:
     tailscale: false      # Daemon only; authenticate separately
     desktop: false        # XFCE + TigerVNC + noVNC
     fleet_guards: false   # Docker guard, reapers, storage guard and browser ladder
-    shared_supabase: false # Optional stack, CLI, keeper, shim and env seeder
     shared_postgres: false # Optional container, database helper and env seeder
     fleet_browsers: false # Browser ladder (obscura tier on 127.0.0.1:9222)
     chat: true            # Concord (Discord) and slk (Slack) terminal clients
@@ -64,8 +63,6 @@ crewship:
       [ ... ]
     sidebar_bg: "reset"   # the terminal's own background
   fleet:
-    supabase_project_id: <project-id>   # The shared Supabase project id; the default is set in config/default.yml
-    fixture_archive: ""   # Path to DB volume tarball for fresh hosts
     docker_guard:
       stopped_hours: 24   # Remove a stopped container this long after it exits
   firstmate:
@@ -108,8 +105,7 @@ crewship:
 - `user` is not `root`, and `workspace` is inside `home`.
 - `firstmate` and `browser_prune.enabled` need `agents`.
 - `fleet_guards` needs `docker` and `firstmate`. Obscura is always its latest release. An older `.local/host.yml` that still sets `browsers.obscura_version` or `browsers.obscura_sha256` keeps working: both keys are deprecated, ignored, and reported in one warning on stderr. No edit is required.
-- `shared_supabase` needs `docker` and `firstmate`, but does not need `fleet_guards`.
-- `shared_postgres` needs `docker` and `firstmate`, but does not need `shared_supabase` or `fleet_guards`.
+- `shared_postgres` needs `docker` and `firstmate`, but does not need `fleet_guards`.
 - `ci_pool` needs `docker`, and no two `ci_pool.repos` entries may make the same unit name.
 - `imessage` needs `firstmate`, and `imessage.owner` is a phone number in E.164 form (`+` and digits). `bluebubbles` in `transports` needs the `bluebubbles` block.
 - `github_board` needs `firstmate`, `github_board.repo` is `owner/name`, and `github_board.project` is a Project number.
@@ -124,9 +120,6 @@ After a successful `./ship.sh launch` with the `firstmate` profile on, once omp 
 - The questions follow `firstmate.checklist` when it is set and `gh` can read it: `repo` is a GitHub repository (it can be private) and `path` is the checklist file in it. Set it only in `.local/host.yml`, never in `config/default.yml`. Otherwise they follow [Agent host move](agent-host-move.md).
 - When `.local/host.yml` has no `github_board` block, a question asks whether to turn on the [GitHub board](github-board.md). The answer is off unless you choose it.
 - With the `development` profile on and no `board` block in `.local/host.yml`, one more question asks whether to turn on the [crew board](board.md). The answer is off unless you choose it.
-- When `shared_supabase` is off or omitted, a question asks whether to enable the shared stack and CLI.
-  The prompt names the resolved config path for this apply, including a path supplied through `--config`.
-  Follow [Shared Supabase](fleet-guards.md#shared-supabase) before the next apply.
 - When `shared_postgres` is off or omitted, a question offers the [shared Postgres database](shared-postgres.md).
   The prompt names the resolved config path and does not enable the profile without your choice.
 - They are asked once per host. When the omp session exits successfully, apply writes the marker `~/.local/share/crewship/new-host-questions-done`; while it exists, later applies skip the questions and print one line naming it. If omp exits non-zero, apply writes no marker and prints one line saying the questions did not complete. To ask again, delete the marker and rerun `./ship.sh launch` interactively.
@@ -144,7 +137,6 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 | `firstmate` | on | Firstmate clone tracking upstream `main`, plus seeded Firstmate config: crew dispatch, crew and secondmate harness, the crew omp overlay (crew advisor, see [omp configuration](omp.md#advisor)), Herdr backend selection, startup memory budget, the spawn memory floor, presentation spaces off, and the turn-end pane-churn flag (see [Seeded Firstmate and OMP configuration](agents/architecture.md#seeded-firstmate-and-omp-configuration)). |
 | `docker` | on | Docker engine and Compose v2, with daemon defaults `init` (reaps orphaned children) and `live-restore`. Group membership is opt-in through the Ansible variable `crewship_docker_group_users`. |
 | `fleet_guards` | off | Docker guard, dev-server reaper, devtools-bridge reaper, storage guard and browser ladder. See [Fleet guards](fleet-guards.md). |
-| `shared_supabase` | off | The [shared Supabase stack and CLI](fleet-guards.md#shared-supabase). |
 | `shared_postgres` | off | One [shared Postgres container](shared-postgres.md), per-project database helper and worktree environment seeder. |
 | `fleet_browsers` | off | The [browser ladder](fleet-guards.md#browser-ladder): the always-on Obscura CDP tier on `127.0.0.1:9222`, the on-demand `chrome` and `vnc` tiers with the `vnc` tier's TigerVNC and noVNC packages, the cookie sync and gc timers, and the ladder environment in shell profiles and the Herdr unit. `fleet_guards` provisions the same ladder, so a `fleet_guards` host needs no change. Needs no other profile; the ladder needs `iproute2` (`ss`) from the base image, which only `desktop` installs. |
 | `chat` | on | The latest [Concord](https://github.com/chojs23/concord) (Discord) and [slk](https://github.com/gammons/slk) (Slack) terminal clients, their shared libraries, and a first-write config for each. Logins stay manual. See [Chat clients](chat.md). |
@@ -153,7 +145,7 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 
 The latest Herdr release is always installed, with the captured UI preferences, the [Spaces and Agents sidebar layouts](herdr.md) with the reporter timer that feeds Spaces, and one canonical, versioned user-service executable. What each profile installs, and where it comes from, is in [Dependencies](dependencies.md).
 
-See [Shared Supabase](fleet-guards.md#shared-supabase) for existing-host management and safe removal.
+See [Shared Postgres](shared-postgres.md) for existing-host management and safe removal.
 
 ## Data disk
 

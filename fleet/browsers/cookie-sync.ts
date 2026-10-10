@@ -15,7 +15,7 @@
 //   4. push the canonical jar back into every live tier, then record what each
 //      tier now holds as its seen-state.
 //
-// Cookies are the portable part of a session: the app's Supabase SSR auth and
+// Cookies are the portable part of a session: the app's server-side auth and
 // GitHub live there. Google cookies are the exception and stay in the tier that
 // set them (see googleOwned). localStorage is engine-local and NOT synced
 // (Obscura exposes no DOMStorage domain); it holds UI preferences only.

@@ -58,9 +58,6 @@
             "fleet_guards": {
               "type": "boolean"
             },
-            "shared_supabase": {
-              "type": "boolean"
-            },
             "shared_postgres": {
               "type": "boolean"
             },
@@ -473,21 +470,6 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "supabase_project_id": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9-]{1,40}$"
-            },
-            "fixture_archive": {
-              "type": "string"
-            },
-            "worktree_pools": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "pattern": "^[^/][^\\0]*$"
-              },
-              "minItems": 1
-            },
             "docker_guard": {
               "type": "object",
               "additionalProperties": false,
@@ -498,12 +480,7 @@
                 }
               }
             }
-          },
-          "required": [
-            "supabase_project_id",
-            "fixture_archive",
-            "worktree_pools"
-          ]
+          }
         },
         "browsers": {
           "type": "object",

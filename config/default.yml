@@ -16,7 +16,6 @@ crewship:
     tailscale: false
     desktop: false
     fleet_guards: false
-    shared_supabase: false
     shared_postgres: false
     fleet_browsers: false
     chat: true
@@ -82,10 +81,6 @@ crewship:
     init: true
     live_restore: true
   fleet:
-    supabase_project_id: swarms-shared
-    fixture_archive: ""
-    worktree_pools:
-      - .treehouse/swarms-platform-bcc5ea
     # Docker guard: remove stopped containers this many hours after they
     # exit; report running ones this old that nothing claims.
     docker_guard:

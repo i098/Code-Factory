@@ -4,12 +4,10 @@ CREWSHIP_POSTGRES_LAB=1 enables Ansible and container operations.
 """
 
 import concurrent.futures
-import fcntl
 import importlib.machinery
 import importlib.util
 import json
 import os
-import select
 import shutil
 import subprocess
 import sys
@@ -255,86 +253,6 @@ def test_ansible_on_off_and_idempotence(service, tmp_path):
 
 
 @lab
-@pytest.mark.parametrize("checkout", [
-    ".treehouse/swarms-platform-test/1/swarms-platform",
-    ".treehouse/firstmate-test/1/firstmate/projects/swarms-platform",
-])
-def test_supabase_and_postgres_seeders_do_not_rewrite_unchanged_environment(service, checkout):
-    shared = service / "oss-fleet/shared-supabase"
-    shared.mkdir(parents=True)
-    (service / "oss-fleet/doctor").mkdir()
-    (shared / "swarms-platform.env.local").write_text(
-        "# fleet-shared-supabase\nOTHER=keep\nexport DATABASE_URL=old\n \tDATABASE_URL = old\n"
-    )
-    worktree = service / checkout
-    worktree.mkdir(parents=True)
-    (worktree / ".git").write_text("gitdir: disposable\n")
-    (worktree / "package.json").write_text("{}")
-    installed = service / ".local/bin/crewship-db"
-    installed.parent.mkdir(parents=True)
-    shutil.copyfile(HELPER, installed)
-    installed.chmod(0o755)
-    command = ["bash", str(ROOT / "fleet/doctor/worktree-env-seed.sh")]
-    environment = {**os.environ, "HOME": str(service)}
-    binaries = service / "test-bin"
-    binaries.mkdir()
-    ready = service / "writer-ready"
-    release = service / "writer-release"
-    os.mkfifo(ready)
-    os.mkfifo(release)
-    real_install = shutil.which("install")
-    assert real_install
-    wrapper = binaries / "install"
-    wrapper.write_text(
-        f"#!{sys.executable}\n"
-        "import pathlib, subprocess, sys\n"
-        "if pathlib.Path(sys.argv[-1]).name == '.env.local':\n"
-        "    pathlib.Path(sys.argv[-1]).write_text('')\n"
-        f"    with open({str(ready)!r}, 'w') as signal:\n"
-        "        signal.write('ready\\n')\n"
-        f"    with open({str(release)!r}) as signal:\n"
-        "        signal.read(1)\n"
-        f"sys.exit(subprocess.call([{real_install!r}, *sys.argv[1:]]))\n"
-    )
-    wrapper.chmod(0o755)
-    ready_fd = os.open(ready, os.O_RDWR | os.O_NONBLOCK)
-    release_fd = os.open(release, os.O_RDWR | os.O_NONBLOCK)
-    postgres = None
-    supabase = subprocess.Popen(
-        command, env={**environment, "PATH": str(binaries) + ":" + os.environ["PATH"]},
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-    )
-    try:
-        assert select.select([ready_fd], [], [], 30)[0], "Supabase writer did not pause"
-        assert os.read(ready_fd, 64) == b"ready\n"
-        lock_path = service / ".local/state/code-factory/secrets/shared-postgres/.lock"
-        with lock_path.open("a") as lock:
-            with pytest.raises(BlockingIOError):
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        postgres = subprocess.Popen(
-            [sys.executable, HELPER, "--seed"], env=environment,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
-    finally:
-        os.write(release_fd, b"x")
-        os.close(release_fd)
-        os.close(ready_fd)
-        _, stderr = supabase.communicate(timeout=30)
-        assert supabase.returncode == 0, stderr.decode()
-        if postgres is not None:
-            _, stderr = postgres.communicate(timeout=30)
-            assert postgres.returncode == 0, stderr.decode()
-    path = worktree / ".env.local"
-    assert path.read_text().splitlines()[:2] == ["# fleet-shared-supabase", "OTHER=keep"]
-    first = path.read_bytes(), path.stat().st_mtime_ns
-    subprocess.run(command, env=environment, capture_output=True, check=True)
-    assert first == (path.read_bytes(), path.stat().st_mtime_ns)
-    assert list(worktree.glob(".env.local.pre-shared-*")) == []
-    url = path.read_text().split("DATABASE_URL=", 1)[1].strip()
-    assert query(url, "SELECT current_database()").stdout.strip() == "crewship_swarms-platform"
-
-
-@lab
 def test_postgres_skips_removed_checkouts_at_file_boundaries(service, database, monkeypatch):
     victim = service / ".treehouse/a-removed-test/1/a-removed"
     survivor = service / "Dev/firstmate/projects/z-survivor"
@@ -404,54 +322,6 @@ def test_database_failures_remain_fatal_during_seeding(service, database):
     with pytest.raises(RuntimeError, match="Docker operation failed"):
         database.seed()
     assert not (checkout / ".env.local").exists()
-
-
-@lab
-@pytest.mark.parametrize("removed", ["pool", "primary"])
-def test_supabase_write_failure_keeps_later_checkouts_and_postgres_handoff(service, removed):
-    shared = service / "oss-fleet/shared-supabase"
-    shared.mkdir(parents=True)
-    (service / "oss-fleet/doctor").mkdir()
-    (shared / "swarms-platform.env.local").write_text("# fleet-shared-supabase\nOTHER=keep\n")
-    pool = service / ".treehouse/swarms-platform-test/1/swarms-platform"
-    later = service / ".treehouse/swarms-platform-test/2/swarms-platform"
-    primary = service / ".treehouse/firstmate-test/1/firstmate/projects/swarms-platform"
-    for checkout in (pool, later, primary):
-        checkout.mkdir(parents=True)
-        (checkout / ".git").mkdir()
-        (checkout / "package.json").write_text("{}")
-    installed = service / ".local/bin/crewship-db"
-    installed.parent.mkdir(parents=True)
-    shutil.copyfile(HELPER, installed)
-    installed.chmod(0o755)
-    victim = pool if removed == "pool" else primary
-    binaries = service / "test-bin"
-    binaries.mkdir()
-    real_install = shutil.which("install")
-    wrapper = binaries / "install"
-    wrapper.write_text(
-        f"#!{sys.executable}\nimport pathlib, shutil, subprocess, sys\n"
-        f"if pathlib.Path(sys.argv[-1]) == pathlib.Path({str(victim / '.env.local')!r}):\n"
-        f"    shutil.rmtree({str(victim)!r})\n"
-        f"sys.exit(subprocess.call([{real_install!r}, *sys.argv[1:]]))\n"
-    )
-    wrapper.chmod(0o755)
-    subprocess.run(
-        ["bash", str(ROOT / "fleet/doctor/worktree-env-seed.sh")],
-        env={**os.environ, "HOME": str(service), "PATH": str(binaries) + ":" + os.environ["PATH"]},
-        capture_output=True, check=True,
-    )
-    assert not victim.exists()
-    for checkout in (pool, later, primary):
-        if checkout == victim:
-            continue
-        content = (checkout / ".env.local").read_text()
-        assert content.splitlines()[:2] == ["# fleet-shared-supabase", "OTHER=keep"]
-        url = content.split("DATABASE_URL=", 1)[1].strip()
-        assert query(url, "SELECT current_database()").stdout.strip() == "crewship_swarms-platform"
-    node = pool.parent / "node_modules/.bin/node"
-    result = subprocess.run([node, "-p", "JSON.stringify(process.execArgv)"], capture_output=True, text=True, check=True)
-    assert "--max-old-space-size=2048" in json.loads(result.stdout)
 
 
 @lab

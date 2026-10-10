@@ -20,7 +20,6 @@ Do not point two machines at the same live session, task registry, browser profi
 ```
 
 - **`fleet guards require the docker and firstmate profiles`**: enable both profiles in `.local/host.yml`.
-- **Empty Supabase fixture archive**: follow [The fixture](fleet-guards.md#the-fixture) to restore the shared Supabase database.
 - **Spawn refused by the memory floor**: wait for a lane to finish, or lower the floor in this repository's `config/spawn-memory-floor-mb` and rerun `./ship.sh launch`. Every apply rewrites the Firstmate checkout's copy, so an edit made only there is reverted.
 
 ## Desktop access

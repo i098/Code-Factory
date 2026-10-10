@@ -75,13 +75,6 @@
                  crewship_user_units ~ '/default.target.wants/crewship-vnc.service',
                  crewship_user_units ~ '/default.target.wants/crewship-novnc.service']
                 if (crewship_cfg.profiles.desktop | bool) else [])
-             + ([crewship_shared_supabase_dir ~ '/check.sh',
-                 crewship_shared_supabase_dir ~ '/guard.sql',
-                 crewship_shared_supabase_dir ~ '/supabase/config.toml',
-                 crewship_shared_supabase_cli,
-                 crewship_fleet_doctor_dir ~ '/worktree-env-seed.sh',
-                 crewship_local_bin ~ '/supabase']
-                if (crewship_cfg.profiles.shared_supabase | bool) else [])
              + ([crewship_local_bin ~ '/crewship-db',
                  crewship_cfg.home ~ '/.local/state/code-factory/shared-postgres/compose.json',
                  crewship_cfg.home ~ '/.local/state/code-factory/shared-postgres/projects-dir',

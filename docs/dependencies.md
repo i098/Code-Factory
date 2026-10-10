@@ -44,13 +44,10 @@ The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests 
 
 - `fleet_browsers` or `fleet_guards` profile: Obscura, the latest [h4ckf0r0day/obscura release](https://github.com/h4ckf0r0day/obscura/releases/latest) for the host's platform, verified against the GitHub release-asset digest (`ansible/tasks/fleet-browsers.yml`). Each release extracts into its own `~/oss-fleet/browsers/obscura-<version>/`. The `vnc` tier's Ubuntu packages: tigervnc-standalone-server, websockify, novnc, xfwm4.
 
-## Optional shared Supabase
+## Optional shared Postgres
 
-Only `crewship.profiles.shared_supabase: true` installs the Supabase CLI.
-The default host and a `fleet_guards`-only host neither resolve nor install it.
-The CLI uses the npm registry's latest `supabase`, installed into `oss-fleet/shared-supabase` under the account home.
-The tasks in `ansible/tasks/shared_supabase.yml` install the stack files, keeper, shim and environment seeder.
-The profile needs Docker and Firstmate; its fixture and safe removal steps are in [Fleet guards](fleet-guards.md#shared-supabase).
+The database profile uses the official Postgres container and the Docker Compose plugin.
+See [Shared Postgres](shared-postgres.md) for setup, backups and removal.
 
 ## Koncreet
 

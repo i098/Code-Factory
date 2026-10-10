@@ -252,7 +252,6 @@ crewship_installer_also: >-
      + (['psutil'] if ((crewship_cfg.profiles.agents | bool)
                        and (crewship_cfg.browser_prune.enabled | bool)) else [])
      + (['obscura'] if (crewship_fleet_browsers_enabled | bool) else [])
-     + (['supabase'] if (crewship_cfg.profiles.shared_supabase | bool) else [])
      + (['spectrum-ts'] if (crewship_cfg.imessage is defined) else []) }}
 
 # --- Herdr static config ----------------------------------------------------
@@ -363,26 +362,18 @@ crewship_firstmate_config_first_write: false
 crewship_docker_group_users: []
 # Engine settings merged into /etc/docker/daemon.json (existing keys are kept,
 # nothing is removed). `init` puts docker-init as PID 1 in every container so
-# orphaned children are reaped - the source host accumulated 489 zombies under
-# Supabase studio/pg_meta images whose PID 1 is a bare node process.
+# orphaned children are reaped when an image uses a bare process as PID 1.
 # `live-restore` keeps containers running across dockerd restarts.
 # The merge itself happens inside one Jinja expression in tasks/docker.yml so
 # the booleans stay booleans in the written JSON.
 crewship_docker_daemon_json: /etc/docker/daemon.json
 
-# --- Fleet guards and optional shared Supabase -------------------------------
+# --- Fleet guards -----------------------------------------------------------
 # Sources live under fleet/. Installed files stay under the account's home.
 # Disabling a profile stops managing its files and units without removing them.
 crewship_fleet_sources: "{{ crewship_repo }}/fleet"
 crewship_fleet_dir: "{{ crewship_cfg.home }}/oss-fleet"
 crewship_fleet_doctor_dir: "{{ crewship_fleet_dir }}/doctor"
-crewship_shared_supabase_dir: "{{ crewship_fleet_dir }}/shared-supabase"
-crewship_shared_supabase_cli: "{{ crewship_shared_supabase_dir }}/node_modules/.bin/supabase"
-crewship_shared_supabase_project: "{{ crewship_cfg.fleet.supabase_project_id }}"
-crewship_shared_supabase_db_volume: "supabase_db_{{ crewship_shared_supabase_project }}"
-crewship_shared_supabase_storage_volume: "supabase_storage_{{ crewship_shared_supabase_project }}"
-# The npm registry's latest supabase, resolved once per run (crewship_latest).
-crewship_shared_supabase_cli_version: "{{ crewship_latest.supabase }}"
 
 # --- Fleet browsers (profiles.fleet_browsers, or fleet_guards) ---------------
 crewship_fleet_browsers_enabled: "{{ (crewship_cfg.profiles.fleet_guards | bool) or (crewship_cfg.profiles.fleet_browsers | bool) }}"
@@ -426,13 +417,6 @@ crewship_storage_guard_image_age_hours: 168
 crewship_storage_guard_fill_horizon_hours: 6
 crewship_storage_guard_repeat_min: 30
 
-crewship_shared_supabase_units:
-  - crewship-shared-supabase.service
-  - crewship-shared-supabase-check.service
-  - crewship-shared-supabase-check.timer
-  - crewship-worktree-env-seed.service
-  - crewship-worktree-env-seed.path
-  - crewship-worktree-env-seed.timer
 crewship_fleet_guard_units:
   - crewship-docker-guard.service
   - crewship-docker-guard.timer
@@ -442,23 +426,14 @@ crewship_fleet_guard_units:
   - crewship-storage-guard.timer
   - crewship-devtools-bridge-reaper.service
   - crewship-devtools-bridge-reaper.timer
-crewship_shared_supabase_enabled_units:
-  - { unit: crewship-shared-supabase.service, wants: default.target.wants }
-  - { unit: crewship-worktree-env-seed.path, wants: default.target.wants }
-  - { unit: crewship-shared-supabase-check.timer, wants: timers.target.wants }
-  - { unit: crewship-worktree-env-seed.timer, wants: timers.target.wants }
 crewship_fleet_guard_enabled_units:
   - { unit: crewship-docker-guard.timer, wants: timers.target.wants }
   - { unit: crewship-dev-server-reaper.timer, wants: timers.target.wants }
   - { unit: crewship-storage-guard.timer, wants: timers.target.wants }
   - { unit: crewship-devtools-bridge-reaper.timer, wants: timers.target.wants }
 # Only selected units reach rendering, retirement, enablement and handlers.
-crewship_fleet_units: >-
-  {{ (crewship_fleet_guard_units if (crewship_cfg.profiles.fleet_guards | bool) else [])
-     + (crewship_shared_supabase_units if (crewship_cfg.profiles.shared_supabase | bool) else []) }}
-crewship_fleet_enabled_units: >-
-  {{ (crewship_fleet_guard_enabled_units if (crewship_cfg.profiles.fleet_guards | bool) else [])
-     + (crewship_shared_supabase_enabled_units if (crewship_cfg.profiles.shared_supabase | bool) else []) }}
+crewship_fleet_units: "{{ crewship_fleet_guard_units if (crewship_cfg.profiles.fleet_guards | bool) else [] }}"
+crewship_fleet_enabled_units: "{{ crewship_fleet_guard_enabled_units if (crewship_cfg.profiles.fleet_guards | bool) else [] }}"
 # Older releases installed the same units as flotilla-*; apply stops and
 # deletes any that remain (tasks/fleet_units.yml).
 crewship_fleet_retired_units: "{{ crewship_fleet_units | map('regex_replace', '^crewship-', 'flotilla-') | list }}"
