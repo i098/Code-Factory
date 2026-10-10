@@ -97,6 +97,7 @@
     path: "{{ factory_fleet_doctor_dir }}/docker-guard-allow.txt"
     state: absent
   become: true
+  when: factory_cfg.profiles.fleet_guards | bool
 
 - name: Render the fleet units
   ansible.builtin.template:
@@ -143,7 +144,5 @@
   ansible.builtin.debug:
     msg: >-
       start_services is false: fleet units are written and statically enabled
-      but not started here. On a real host crewship-shared-supabase.service
-      brings the stack up at login and generates
-      {{ factory_shared_supabase_dir }}/swarms-platform.env.local.
+      but not started here. Enabled units start at the next user login.
   when: not (factory_manage_services | bool)

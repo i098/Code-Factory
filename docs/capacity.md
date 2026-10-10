@@ -12,15 +12,15 @@ Figures are estimates from a measured fleet host.
 | omp crewmate (one agent process) | 300-750 MB RSS | measured |
 | no-mistakes pipeline agent (omp) while a lane ships | about 450 MB | measured |
 | `next dev` / `next-server` for a UI lane | 3-4 GB | [fleet guards](fleet-guards.md) |
-| `tsc --noEmit` | about 0.6 GB; lane node scripts capped at a 2048 MB heap | measured; the seeded worktree `node` wrapper ([fleet guards](fleet-guards.md)) |
+| `tsc --noEmit` | about 0.6 GB; a 2048 MB heap cap with `shared_supabase` | measured; the optional seeded worktree `node` wrapper ([fleet guards](fleet-guards.md)) |
 | chrome-devtools-axi bridge + `chrome-devtools-mcp` | about 0.3 GB for the MCP child; an idle bridge holds about 2 GB | measured |
 | Obscura browser tier | about 25 MB idle | [browser ladder](fleet-guards.md#browser-ladder) |
 | **Light lane** (docs, config, backend: agent + pipeline + tests) | **about 1.35-1.8 GB**; plan 2 GB | sum of the agent, pipeline and `tsc` rows |
 | **UI lane** (agent + dev server + tsc + browser) | **5-8 GB**; plan 8 GB | [fleet guards](fleet-guards.md) |
 
-Fixed cost, whatever the lane count: the OS, Herdr, Firstmate and its
-secondmates (each an omp process), Docker, and the shared Supabase stack. Allow
-about 3 GB; this is an estimate.
+Fixed cost, whatever the lane count: the OS, Herdr, Firstmate, its secondmates and Docker.
+The shared Supabase stack adds a fixed cost only when `factory.profiles.shared_supabase` is enabled.
+Allow about 3 GB with the optional stack; this estimate is not a measurement of a default host.
 
 Firstmate refuses a new spawn while `MemAvailable` is under
 `config/spawn-memory-floor-mb` (8000 MB), and free swap does not count. Plan RAM

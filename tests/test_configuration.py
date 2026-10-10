@@ -92,12 +92,41 @@ def test_fleet_guards_accept_the_default_document_when_enabled(configuration):
     assert ship.validate_config(configuration) is configuration
 
 
+@pytest.mark.parametrize("enabled", [False, True])
+def test_shared_supabase_profile_accepts_booleans(configuration, enabled):
+    configuration["factory"]["profiles"]["shared_supabase"] = enabled
+    assert factory.validate_config(configuration) is configuration
+
+
+def test_shared_supabase_is_off_for_new_and_legacy_host_configs(configuration):
+    assert configuration["factory"]["profiles"]["shared_supabase"] is False
+    configuration["factory"]["profiles"].pop("shared_supabase")
+    configuration["factory"]["profiles"]["fleet_guards"] = True
+    assert factory.validate_config(configuration) is configuration
+
+
+@pytest.mark.parametrize("value", ["true", 1, None])
+def test_shared_supabase_profile_rejects_non_booleans(configuration, value):
+    configuration["factory"]["profiles"]["shared_supabase"] = value
+    with pytest.raises(ValueError, match="profiles.shared_supabase"):
+        factory.validate_config(configuration)
+
+
+@pytest.mark.parametrize("dependency", ["docker", "firstmate"])
+def test_shared_supabase_requires_its_runtime_profiles(configuration, dependency):
+    configuration["factory"]["profiles"]["shared_supabase"] = True
+    configuration["factory"]["profiles"][dependency] = False
+    with pytest.raises(ValueError, match="shared Supabase requires"):
+        factory.validate_config(configuration)
+
+
+
 def test_browsers_valid_block_accepted(configuration):
     assert ship.validate_config(configuration) is configuration
 
 
 def test_fleet_fixture_archive_cannot_traverse(configuration):
-    configuration["factory"]["profiles"]["fleet_guards"] = True
+    configuration["factory"]["profiles"]["shared_supabase"] = True
     configuration["factory"]["fleet"]["fixture_archive"] = "/home/coder/../root/db.tgz"
     with pytest.raises(ValueError, match="traverse"):
         ship.validate_config(configuration)
@@ -762,7 +791,9 @@ def _ansible(tmp_path, *argv, wrapper=()):
     )
 
 
-def _installer_also(tmp_path, start_services=True, fleet_guards=False, fleet_browsers=False):
+def _installer_also(
+    tmp_path, start_services=True, fleet_guards=False, fleet_browsers=False, shared_supabase=False
+):
     variables = {
         "factory_cfg": {
             "start_services": start_services,
@@ -770,6 +801,7 @@ def _installer_also(tmp_path, start_services=True, fleet_guards=False, fleet_bro
                 "agents": False,
                 "fleet_guards": fleet_guards,
                 "fleet_browsers": fleet_browsers,
+                "shared_supabase": shared_supabase,
             },
             "browser_prune": {"enabled": False},
         }
@@ -802,12 +834,18 @@ def test_koncreet_is_resolved_only_on_hosts_that_start_services(tmp_path, start_
 
 @pytest.mark.parametrize("fleet_guards", [False, True])
 @pytest.mark.parametrize("fleet_browsers", [False, True])
-def test_each_fleet_profile_resolves_only_its_own_release(tmp_path, fleet_guards, fleet_browsers):
-    # The browser ladder must not depend on the Supabase CLI resolving, and
-    # fleet_guards keeps provisioning the ladder it always has.
-    also = _installer_also(tmp_path, fleet_guards=fleet_guards, fleet_browsers=fleet_browsers)
+@pytest.mark.parametrize("shared_supabase", [False, True])
+def test_each_fleet_profile_resolves_only_its_own_release(
+    tmp_path, fleet_guards, fleet_browsers, shared_supabase
+):
+    also = _installer_also(
+        tmp_path,
+        fleet_guards=fleet_guards,
+        fleet_browsers=fleet_browsers,
+        shared_supabase=shared_supabase,
+    )
     assert ("obscura" in also) is (fleet_guards or fleet_browsers)
-    assert ("supabase" in also) is fleet_guards
+    assert ("supabase" in also) is shared_supabase
 
 
 def _koncreet_settings(tmp_path, tailscale, apply_user):

@@ -40,10 +40,17 @@ The GitHub lookups use the GitHub API, which allows 60 unauthenticated requests 
 - `tailscale`: `tailscale` from pkgs.tailscale.com, stable track. `factory_tailscale_version` pins it; empty by default.
 - Google Chrome: `google-chrome-stable` from dl.google.com (`ansible/tasks/browser.yml`). Installed when `factory_chrome_install` is `true`, or `auto` (the default) with the `desktop` profile. `factory_chrome_version` pins it; empty by default.
 
-## Fleet browsers and Supabase
+## Optional fleet browsers
 
 - `fleet_browsers` or `fleet_guards` profile: Obscura, the latest [h4ckf0r0day/obscura release](https://github.com/h4ckf0r0day/obscura/releases/latest) for the host's platform, verified against the GitHub release-asset digest (`ansible/tasks/fleet-browsers.yml`). Each release extracts into its own `~/oss-fleet/browsers/obscura-<version>/`. The `vnc` tier's Ubuntu packages: tigervnc-standalone-server, websockify, novnc, xfwm4.
-- `fleet_guards` profile: Supabase CLI, the npm registry's latest `supabase`, installed with `npm install` into `~/oss-fleet/shared-supabase` (`ansible/tasks/fleet_guards.yml`).
+
+## Optional shared Supabase
+
+Only `factory.profiles.shared_supabase: true` installs the Supabase CLI.
+The default host and a `fleet_guards`-only host neither resolve nor install it.
+The CLI uses the npm registry's latest `supabase`, installed into `oss-fleet/shared-supabase` under the account home.
+The tasks in `ansible/tasks/shared_supabase.yml` install the stack files, keeper, shim and environment seeder.
+The profile needs Docker and Firstmate; its fixture and safe removal steps are in [Fleet guards](fleet-guards.md#shared-supabase).
 
 ## Koncreet
 

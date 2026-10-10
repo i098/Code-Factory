@@ -58,6 +58,9 @@
             "fleet_guards": {
               "type": "boolean"
             },
+            "shared_supabase": {
+              "type": "boolean"
+            },
             "fleet_browsers": {
               "type": "boolean"
             },

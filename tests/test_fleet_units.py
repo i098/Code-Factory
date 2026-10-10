@@ -1,7 +1,7 @@
-"""tasks/fleet_units.yml retires the flotilla-* units and installs crewship-*.
+"""Fleet task fixtures write only to a throwaway home.
 
-Drives the real task file and group_vars with ansible-playbook against a
-throwaway home, start_services false, so no systemctl runs.
+External commands use local stubs. No host playbook or real systemd/Docker
+operation runs; the shared stack on the test host is never touched.
 """
 
 import getpass
@@ -43,7 +43,9 @@ def home(tmp_path):
     return home
 
 
-def apply(home, *flags, start_services=False):
+def apply(
+    home, *flags, start_services=False, shared_supabase=True, fleet_guards=True, scripts=False
+):
     playbook = home.parent / "units.yml"
     # Like site.yml, the playbook directory carries templates/.
     if not (home.parent / "templates").exists():
@@ -56,7 +58,21 @@ def apply(home, *flags, start_services=False):
                     "connection": "local",
                     "gather_facts": False,
                     "vars_files": [str(ROOT / "ansible/group_vars/all.yml")],
-                    "tasks": [{"ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/fleet_units.yml")}],
+                    "tasks": (
+                        [
+                            {
+                                "ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/fleet_guards.yml"),
+                                "when": "factory_cfg.profiles.fleet_guards | bool",
+                            },
+                            {
+                                "ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/shared_supabase.yml"),
+                                "when": "factory_cfg.profiles.shared_supabase | bool",
+                            },
+                        ] if scripts else []
+                    ) + [{
+                        "ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/fleet_units.yml"),
+                        "when": "(factory_cfg.profiles.fleet_guards | bool) or (factory_cfg.profiles.shared_supabase | bool)",
+                    }],
                     "handlers": [
                         {"name": "reload", "ansible.builtin.debug": {"msg": "reload"}, "listen": "reload user systemd"},
                         {"name": "timers", "ansible.builtin.debug": {"msg": "timers"}, "listen": "restart fleet timers"},
@@ -70,7 +86,11 @@ def apply(home, *flags, start_services=False):
         "code_factory_repo": str(ROOT),
         "factory_group": grp.getgrgid(os.getgid()).gr_name,
         "factory_become_target": False,
-        "factory": {"user": getpass.getuser(), "home": str(home), "start_services": start_services},
+        "factory_latest": {"supabase": "1.2.3"},
+        "factory": {
+            "user": getpass.getuser(), "home": str(home), "start_services": start_services,
+            "profiles": {"fleet_guards": fleet_guards, "shared_supabase": shared_supabase},
+        },
     }
     result = subprocess.run(
         [Path(sys.executable).parent / "ansible-playbook", "-i", "localhost,", str(playbook),
@@ -121,6 +141,93 @@ def test_retiring_the_old_units_never_stops_the_shared_supabase_stack(home):
 
     log = calls.read_text().splitlines()
     stops = [line.split()[-1] for line in log if " stop " in f" {line} "]
+
+    calls.write_text("")
+    apply(home, start_services=True, shared_supabase=False)
+    assert not any(
+        "supabase" in line or "worktree-env-seed" in line
+        for line in calls.read_text().splitlines()
+    )
     assert "flotilla-shared-supabase.service" not in stops
     assert stops.index("flotilla-shared-supabase-check.timer") < stops.index("flotilla-docker-guard.service")
     assert "--user reset-failed flotilla-shared-supabase.service" in log
+
+
+def test_disabling_supabase_leaves_its_old_and_current_units_unmanaged(home):
+    apply(home)
+    units = home / ".config/systemd/user"
+    preserved = {
+        n: (units / n).read_bytes()
+        for n in names(home)
+        if "supabase" in n or "worktree-env-seed" in n
+    }
+    # Include legacy units: a guards-only apply must not retire these either.
+    for name in ("flotilla-shared-supabase.service", "flotilla-shared-supabase-check.timer",
+                 "flotilla-worktree-env-seed.path"):
+        (units / name).write_text("legacy\n")
+        preserved[name] = b"legacy\n"
+    shared = home / "oss-fleet/shared-supabase"
+    shared.mkdir()
+    fixture = shared / "fixture"
+    fixture.write_text("keep data\n")
+    assert apply(home, shared_supabase=False) == 0
+    assert {n: (units / n).read_bytes() for n in preserved} == preserved
+    assert fixture.read_text() == "keep data\n"
+    assert apply(home, shared_supabase=False) == 0
+
+
+@pytest.mark.parametrize("fleet_guards", [False, True])
+def test_default_off_writes_no_supabase_assets_or_units(tmp_path, fleet_guards):
+    home = tmp_path / "home"
+    home.mkdir()
+    apply(home, scripts=True, shared_supabase=False, fleet_guards=fleet_guards)
+    assert not (home / "oss-fleet/shared-supabase").exists()
+    assert not (home / ".local/bin/supabase").exists()
+    assert not (home / "oss-fleet/doctor/worktree-env-seed.sh").exists()
+    assert not any("supabase" in n or "worktree-env-seed" in n for n in names(home))
+    assert apply(home, scripts=True, shared_supabase=False, fleet_guards=fleet_guards) == 0
+
+
+def test_opt_in_installs_the_stack_and_a_second_apply_changes_nothing(tmp_path):
+    home = tmp_path / "home"
+    bin_dir = home / ".local/bin"
+    bin_dir.mkdir(parents=True)
+    calls = home / "external.calls"
+    # The installed CLI answers --version only. No stack can start here.
+    npm = bin_dir / "npm"
+    npm.write_text(
+        '#!/bin/sh\n'
+        'test "$1" = install && test "$2" = --prefix || exit 1\n'
+        'mkdir -p "$3/node_modules/.bin"\n'
+        'printf \'#!/bin/sh\\ntest "$1" = --version || exit 1\\necho 1.2.3\\n\' '
+        '> "$3/node_modules/.bin/supabase"\n'
+        'chmod 755 "$3/node_modules/.bin/supabase"\n'
+        f'echo npm-install >> "{calls}"\n'
+    )
+    docker = bin_dir / "docker"
+    docker.write_text(
+        f'#!/bin/sh\necho "$*" >> "{calls}"\n'
+        'test "$1 $2" = "volume inspect"\n'
+    )
+    npm.chmod(0o755)
+    docker.chmod(0o755)
+    assert apply(home, scripts=True, fleet_guards=False) > 0
+    shared = home / "oss-fleet/shared-supabase"
+    assert (shared / "supabase/config.toml").is_file()
+    assert (shared / "check.sh").stat().st_mode & 0o111
+    assert (shared / "guard.sql").is_file()
+    assert (home / ".local/bin/supabase").is_file()
+    assert (home / "oss-fleet/doctor/worktree-env-seed.sh").is_file()
+    assert "default.target.wants/crewship-shared-supabase.service" in names(home)
+    assert "timers.target.wants/crewship-shared-supabase-check.timer" in names(home)
+    assert "default.target.wants/crewship-worktree-env-seed.path" in names(home)
+    assert not (home / "oss-fleet/doctor/docker-guard.sh").exists()
+    assert apply(home, scripts=True, fleet_guards=False) == 0
+    log = calls.read_text().splitlines()
+    assert log.count("npm-install") == 1
+    assert all(line == "npm-install" or line.startswith("volume inspect ") for line in log)
+    before = {p: p.read_bytes() for p in shared.rglob("*") if p.is_file()}
+    calls.write_text("")
+    assert apply(home, scripts=True, shared_supabase=False, fleet_guards=False) == 0
+    assert calls.read_text() == ""
+    assert {p: p.read_bytes() for p in before} == before
