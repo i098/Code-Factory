@@ -325,10 +325,11 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
 
   // A relay that gave no answer: marked down, and the error without the fetch error, whose URL holds the password.
   private unreached(r: Relay, e: unknown, timeout: number): never {
-    const code = e instanceof Error && e.name === "TimeoutError" ? "ETIMEDOUT" : e instanceof Error && "code" in e && e.code === "ConnectionRefused" ? "ConnectionRefused" : "ENETUNREACH";
-    const why = { ETIMEDOUT: `no answer in ${timeout} ms`, ConnectionRefused: "connection refused", ENETUNREACH: "unreachable" }[code];
+    const refused = e instanceof Error && "code" in e && (e.code === "ECONNREFUSED" || e.code === "ConnectionRefused");
+    const code = e instanceof Error && e.name === "TimeoutError" ? "ETIMEDOUT" : refused ? "ECONNREFUSED" : "ENETUNREACH";
+    const why = { ETIMEDOUT: `no answer in ${timeout} ms`, ECONNREFUSED: "connection refused", ENETUNREACH: "unreachable" }[code];
     this.mark(r, false, why);
-    throw new RelayError(`${this.name(r)}: ${why}`, code !== "ConnectionRefused", undefined, code);
+    throw new RelayError(`${this.name(r)}: ${why}`, code !== "ECONNREFUSED", undefined, code);
   }
 
   private remember(guid: string) {
