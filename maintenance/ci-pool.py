@@ -39,6 +39,7 @@ UNITS = HOME / ".config/systemd/user"
 TEMPLATE = UNITS / "ci-runner@.service"
 WANTS = UNITS / "default.target.wants"
 HOOK = HOME / ".config/ci-pool/job-started.sh"
+HOOK_ENV = "ACTIONS_RUNNER_HOOK_JOB_STARTED"
 UNIT_TEXT = """\
 # Written by ci-pool.py apply (Crewship); instances come from factory.ci_pool.
 [Unit]
@@ -282,7 +283,7 @@ def run(instance):
                 # --mount, not --volume: a missing hook fails the create instead of
                 # becoming an empty directory, so no job runs without the check.
                 "--mount", f"type=bind,src={HOOK},dst=/home/runner/job-started.sh,readonly",
-                "--env", "ACTIONS_RUNNER_HOOK_JOB_STARTED=/home/runner/job-started.sh",
+                "--env", f"{HOOK_ENV}=/home/runner/job-started.sh",
                 IMAGE, "bash", "-c", CONTAINER_PREP,
             ], check=True, stdout=subprocess.DEVNULL)
         rc = subprocess.run([*docker(), "start", "--attach", container]).returncode

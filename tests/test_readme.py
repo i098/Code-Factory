@@ -1,6 +1,5 @@
 import importlib.util
 import json
-import re
 from pathlib import Path
 
 import yaml
@@ -11,6 +10,9 @@ DEFAULT = yaml.safe_load((ROOT / "config/default.yml").read_text())
 SPEC = importlib.util.spec_from_file_location("provisions", ROOT / "scripts/provisions.py")
 provisions = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(provisions)
+SPEC = importlib.util.spec_from_file_location("ci_pool", ROOT / "maintenance/ci-pool.py")
+ci_pool = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(ci_pool)
 
 # Host config switch -> the doc its Features line links.
 FEATURES = {
@@ -106,8 +108,7 @@ def test_default_config_lists_the_current_defaults():
     ]:
         assert line in lines
 
-    ci_pool = (ROOT / "maintenance/ci-pool.py").read_text()
-    hook_env = re.search(r"--env\", \"(ACTIONS_RUNNER_HOOK_\w+)=", ci_pool).group(1)
+    hook_env = ci_pool.HOOK_ENV
     assert (
         f"- Hooks: `code-factory-quality-gate` at omp turn end, SessionStart banners from "
         f"{ticks(provisions.OMP_PLUGINS)}, `{hook_env}` (opt-in with the [CI pool](docs/ci-pool.md))"
