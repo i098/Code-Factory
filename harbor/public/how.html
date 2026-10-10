@@ -37,7 +37,7 @@
   <li id="frame-loop"><b>Frame loop.</b> <code>requestAnimationFrame</code> moves you, the sea and the ship and redraws the grid on a canvas.
   A ray tests only the solids whose screen box reaches its tile of cells, nearest first, and stops when no solid left can be nearer than its hit.
   Only the cells that changed since the last frame are drawn again.
-  Devices with <code>(pointer: coarse)</code> draw each glyph in each colour once, one glyph per <code>fillText</code> call, into an atlas to limit WebKit's text cache, and copy cells from it.
+  Devices with <code>(pointer: coarse)</code> draw one glyph per <code>fillText</code> call to limit WebKit's text cache.
   Their canvas uses at most 2 device pixels per CSS pixel.
   Other devices draw one run of one colour per call.
   The backing-store area stays at or below <code>4096 * 4096</code> device pixels; this does not limit each dimension to 4096.
