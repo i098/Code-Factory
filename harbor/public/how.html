@@ -36,7 +36,8 @@
   An edge glyph (<code>| - / \ _</code>) is drawn wherever one surface meets a farther one.</li>
   <li id="frame-loop"><b>Frame loop.</b> <code>requestAnimationFrame</code> moves you, the sea and the ship and redraws the grid on a canvas.
   A ray tests only the solids whose screen box reaches its tile of cells, nearest first, and stops when no solid left can be nearer than its hit.
-  Only the cells that changed since the last frame are drawn again.
+  Rows with changed cells are drawn again from their full text-run positions.
+  Touch devices redraw only the changed span and its neighbouring cells.
   Devices with <code>(pointer: coarse)</code> draw one glyph per <code>fillText</code> call to limit WebKit's text cache.
   Their canvas uses at most 2 device pixels per CSS pixel.
   Other devices draw one run of one colour per call.
