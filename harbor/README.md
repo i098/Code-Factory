@@ -29,9 +29,9 @@ A link with no mapping never blocks the build: it prints a warning and appears o
 The docs board shows on the mini map like the other points.
 Add an object and a `SCENE` entry to give the link its own place.
 The build limits each sign to a title, a short description and one link.
-Unmapped pages share a short summary with a count and one link to the README docs index.
+Unmapped pages share a short summary with a count and one link to the README feature index.
 The welcome sign has three project links.
-Signs stay inside the phone's safe area, above the move pad and clear of the mini map.
+Signs stay inside the phone's safe area and clear of the move pad and mini map in both orientations.
 Touch links have a hit region at least 44 pixels high.
 Enter opens the selected object, and focused HTML links retain their native keyboard behavior.
 
@@ -46,10 +46,11 @@ Then open <http://localhost:8000>.
 
 ## WebKit check
 
-CI loads the built page in Playwright WebKit as an iPhone, with `webkit-check.mjs`.
+The check loads the built page in Playwright WebKit at desktop and iPhone portrait and landscape sizes.
+The check fails on a crash, an uncaught error, a console error, a fallback to the plain page, or a multi-glyph `fillText` call on touch.
 The check also fails if the first 30 slow frames change the grid, cell size, field of view, or canvas layout.
-It still checks crashes, uncaught errors, console errors, the plain-page fallback, and multi-glyph `fillText` calls.
-It also checks each sign's bounds, taps every link, and opens the docs index with the keyboard.
+It checks every sign against safe-area edges, the map and the move pad.
+It taps or clicks every link and opens the docs index with the keyboard.
 See [how.html](public/how.html) for the rendering limits on touch devices.
 To run the check locally:
 

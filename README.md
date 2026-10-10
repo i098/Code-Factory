@@ -26,6 +26,8 @@
 - **Checksum-verified toolchain:** every apply installs the latest releases and verifies their checksums. The three omp marketplace plugins are the one exception.
 - **Built for an agent fleet:** fleet guards, auto pruners, a self-hosted CI pool, and the Concord (Discord) and slk (Slack) terminal chat clients.
 
+## Features
+
 <details>
 <summary><b>Features</b></summary>
 
