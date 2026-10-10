@@ -2,13 +2,12 @@
 // error, a fallback to the plain page, or a multi-glyph fillText (WebKit keeps every distinct string
 // it draws, which grew iOS Safari tabs until they were killed), an exterior grid change after the first draw,
 // a bright first intro frame, or a frozen scene during the intro. Run harbor/build.py first.
-import { readFile, mkdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { webkit, devices } from "playwright";
 
 const dist = new URL("dist/", import.meta.url);
 const browser = await webkit.launch();
-await mkdir(new URL("proof/", dist), { recursive: true });
 const errors = [];
 for (const [name, width, height, touch, scale = 1] of [
   ["desktop", 1440, 900, false],
@@ -215,7 +214,6 @@ for (const id of [null, ...await page.evaluate(() => window.harborCheck.ids)]) {
     assert(!overlaps(bounds, bounds.map), `${name}/${id}: sign covers the map`);
     assert(!overlaps(bounds, bounds.pad), `${name}/${id}: sign covers the move pad`);
   }
-  await page.screenshot({ path: new URL(`proof/${name}-${id || "welcome"}.png`, dist).pathname });
   assert.equal(bounds.links.length, id ? 1 : 3, `${id}: a sign link is missing`);
   for (const link of bounds.links) {
     assert.equal(link.hit, link.href, `${name}/${id}: link is not hit-testable`);
