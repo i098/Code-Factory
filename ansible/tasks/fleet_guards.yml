@@ -1,7 +1,6 @@
 ---
 # Docker guard, dev-server reaper, storage guard and devtools-bridge reaper.
 # profiles.fleet_guards also enables the browser ladder.
-# The shared stack and env seeder belong to profiles.shared_supabase.
 
 - name: Ensure the fleet directories
   ansible.builtin.file:

@@ -255,9 +255,8 @@ def resolve_latest(key, names):
         if tool in names:
             registry = fetch(f"https://registry.npmjs.org/{package}/latest", f"{tool} version")
             latest[tool] = json.loads(registry)["version"]
-    # Installed by Ansible itself: supabase for the optional shared_supabase
-    # profile, spectrum-ts for the iMessage bridge.
-    for package in ("supabase", "spectrum-ts"):
+    # Installed by Ansible itself for the iMessage bridge.
+    for package in ("spectrum-ts",):
         if package in names:
             registry = fetch(f"https://registry.npmjs.org/{package}/latest", f"{package} version")
             latest[package] = json.loads(registry)["version"]
@@ -607,7 +606,7 @@ def main():
         "--also",
         default="",
         help="comma-separated extra sources to resolve that Ansible installs itself: "
-        "obscura, supabase, psutil, koncreet",
+        "obscura, psutil, koncreet",
     )
     parser.add_argument(
         "--resolve",

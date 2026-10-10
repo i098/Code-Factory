@@ -233,7 +233,6 @@ EVERYTHING = {
     *installer.NPM_LATEST,
     "node",
     "rustup-init",
-    "supabase",
     "psutil",
 }
 
@@ -291,7 +290,7 @@ def test_latest_releases_are_pinned_to_the_digests_their_publishers_list(monkeyp
     assert rustup["url"].endswith("/9.9.9/x86_64-unknown-linux-gnu/rustup-init")
     assert (rustup["sha256"], rustup["format"]) == ("d" * 64, "file")
     assert latest["psutil"] == {"version": "9.9.9", "sha256": ["e" * 64]}
-    for tool in (*installer.NPM_LATEST, "supabase"):
+    for tool in installer.NPM_LATEST:
         assert latest[tool] == "18.9.9"
 
 
@@ -433,7 +432,7 @@ def test_resolve_covers_only_the_requested_tools(monkeypatch, capsys, tmp_path):
             ["--tools", "uv", "--npm"],
             {"uv", *installer.AGENT_TOOLS, *installer.NPM_LATEST},
         ),
-        (["--tools", "uv", "--also", "psutil,supabase"], {"uv", "psutil", "supabase"}),
+        (["--tools", "uv", "--also", "psutil"], {"uv", "psutil"}),
         (["--tools", "sentrux"], {"sentrux", "sentrux-grammars"}),
     ],
 )
@@ -569,5 +568,5 @@ def test_a_failed_command_reports_why_it_failed(monkeypatch, capsys, tmp_path):
 
 def test_every_installed_tool_has_a_built_with_line():
     credits = (Path(__file__).parents[1] / "CREDITS.md").read_text()
-    tools = {*EVERYTHING, *installer.OMP_PLUGINS} - {"supabase"}
+    tools = {*EVERYTHING, *installer.OMP_PLUGINS}
     assert [tool for tool in sorted(tools) if f"`{tool}`" not in credits] == []

@@ -102,6 +102,6 @@ flowchart TB
 ```
 
 Authentication and mutable state stay outside the recipe.
-See [Shared Supabase](fleet-guards.md#shared-supabase) and [Shared Postgres](shared-postgres.md) for the optional worktree backends.
+See [Shared Postgres](shared-postgres.md) for the optional worktree database.
 
 [Agent architecture reference](agents/architecture.md)

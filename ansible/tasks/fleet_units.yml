@@ -1,12 +1,8 @@
 ---
 # Only enabled profiles select units for rendering and legacy retirement.
 # Disabled profiles leave their units and enablement links unchanged.
-# flotilla-shared-supabase.service is never stopped: its ExecStop runs
-# `supabase stop`, and the shared stack must keep running through the rename.
-# Its file is deleted instead and crewship-shared-supabase.service adopts the
-# running stack (check.sh is idempotent). A host without the old units changes
-# nothing. With start_services false nothing is stopped or started; files are
-# still converged.
+# A host without old guard units changes nothing.
+# With start_services false, files converge without stopping or starting units.
 
 - name: Ensure the user unit directories
   ansible.builtin.file:
@@ -52,7 +48,7 @@
   become: "{{ crewship_become_target | bool }}"
   become_user: "{{ crewship_cfg.user }}"
   environment: "{{ crewship_user_systemd_env }}"
-  loop: "{{ crewship_fleet_retired.results | selectattr('stat.exists') | rejectattr('item', 'match', '.*\\.(timer|path)$') | rejectattr('item', 'equalto', 'flotilla-shared-supabase.service') | list }}"
+  loop: "{{ crewship_fleet_retired.results | selectattr('stat.exists') | rejectattr('item', 'match', '.*\\.(timer|path)$') | list }}"
   loop_control:
     label: "{{ item.item }}"
   when: crewship_manage_services | bool
@@ -78,18 +74,6 @@
   when:
     - crewship_manage_services | bool
     - crewship_fleet_retired.results | selectattr('stat.exists') | list | length > 0
-
-- name: Clear the retired shared Supabase unit's state
-  ansible.builtin.command:
-    argv: [systemctl, --user, reset-failed, flotilla-shared-supabase.service]
-  become: "{{ crewship_become_target | bool }}"
-  become_user: "{{ crewship_cfg.user }}"
-  environment: "{{ crewship_user_systemd_env }}"
-  changed_when: false
-  failed_when: false
-  when:
-    - crewship_manage_services | bool
-    - crewship_fleet_retired.results | selectattr('stat.exists') | selectattr('item', 'equalto', 'flotilla-shared-supabase.service') | list | length > 0
 
 - name: Delete the retired Docker guard allowlist
   ansible.builtin.file:

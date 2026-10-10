@@ -144,13 +144,6 @@
         - crewship_cfg.profiles.fleet_guards | bool
       tags: [fleet]
 
-    - name: Optional shared Supabase stack, CLI, shim and worktree env seeder
-      ansible.builtin.import_tasks: tasks/shared_supabase.yml
-      when:
-        - crewship_account_ready | bool
-        - crewship_cfg.profiles.shared_supabase | bool
-      tags: [fleet, shared_supabase]
-
     - name: Optional shared Postgres and worktree database environment
       ansible.builtin.import_tasks: tasks/shared_postgres.yml
       when:
@@ -162,8 +155,8 @@
       ansible.builtin.import_tasks: tasks/fleet_units.yml
       when:
         - crewship_account_ready | bool
-        - (crewship_cfg.profiles.fleet_guards | bool) or (crewship_cfg.profiles.shared_supabase | bool)
-      tags: [fleet, shared_supabase]
+        - crewship_cfg.profiles.fleet_guards | bool
+      tags: [fleet]
 
     - name: Fleet browser ladder - obscura tier, sync timer, gc timer, env injection
       ansible.builtin.import_tasks: tasks/fleet-browsers.yml

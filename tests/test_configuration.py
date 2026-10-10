@@ -157,44 +157,8 @@ def test_fleet_guards_accept_the_default_document_when_enabled(configuration):
     assert ship.validate_config(configuration) is configuration
 
 
-@pytest.mark.parametrize("enabled", [False, True])
-def test_shared_supabase_profile_accepts_booleans(configuration, enabled):
-    configuration["crewship"]["profiles"]["shared_supabase"] = enabled
-    assert ship.validate_config(configuration) is configuration
-
-
-def test_shared_supabase_is_off_for_new_and_legacy_host_configs(configuration):
-    assert configuration["crewship"]["profiles"]["shared_supabase"] is False
-    configuration["crewship"]["profiles"].pop("shared_supabase")
-    configuration["crewship"]["profiles"]["fleet_guards"] = True
-    assert ship.validate_config(configuration) is configuration
-
-
-@pytest.mark.parametrize("value", ["true", 1, None])
-def test_shared_supabase_profile_rejects_non_booleans(configuration, value):
-    configuration["crewship"]["profiles"]["shared_supabase"] = value
-    with pytest.raises(ValueError, match="profiles.shared_supabase"):
-        ship.validate_config(configuration)
-
-
-@pytest.mark.parametrize("dependency", ["docker", "firstmate"])
-def test_shared_supabase_requires_its_runtime_profiles(configuration, dependency):
-    configuration["crewship"]["profiles"]["shared_supabase"] = True
-    configuration["crewship"]["profiles"][dependency] = False
-    with pytest.raises(ValueError, match="shared Supabase requires"):
-        ship.validate_config(configuration)
-
-
-
 def test_browsers_valid_block_accepted(configuration):
     assert ship.validate_config(configuration) is configuration
-
-
-def test_fleet_fixture_archive_cannot_traverse(configuration):
-    configuration["crewship"]["profiles"]["shared_supabase"] = True
-    configuration["crewship"]["fleet"]["fixture_archive"] = "/home/coder/../root/db.tgz"
-    with pytest.raises(ValueError, match="traverse"):
-        ship.validate_config(configuration)
 
 
 def test_unknown_fleet_field_is_rejected(configuration):
@@ -387,7 +351,6 @@ def test_second_apply_does_not_reopen_the_questions(
     assert ship.main() == 0
     assert not marker.exists()
     assert "New-host questions did not complete (omp exited 1)" in capsys.readouterr().out
-    assert f"crewship.profiles.shared_supabase to true in {host.resolve()} " in launches[0][1]
     assert f"crewship.profiles.shared_postgres to true in {host.resolve()} " in launches[0][1]
     assert ship.main() == 0
     assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"] * 2
@@ -885,7 +848,7 @@ def _ansible(tmp_path, *argv, wrapper=()):
 
 
 def _installer_also(
-    tmp_path, start_services=True, fleet_guards=False, fleet_browsers=False, shared_supabase=False
+    tmp_path, start_services=True, fleet_guards=False, fleet_browsers=False
 ):
     variables = {
         "crewship_cfg": {
@@ -894,7 +857,6 @@ def _installer_also(
                 "agents": False,
                 "fleet_guards": fleet_guards,
                 "fleet_browsers": fleet_browsers,
-                "shared_supabase": shared_supabase,
             },
             "browser_prune": {"enabled": False},
         }
@@ -927,18 +889,15 @@ def test_koncreet_is_resolved_only_on_hosts_that_start_services(tmp_path, start_
 
 @pytest.mark.parametrize("fleet_guards", [False, True])
 @pytest.mark.parametrize("fleet_browsers", [False, True])
-@pytest.mark.parametrize("shared_supabase", [False, True])
 def test_each_fleet_profile_resolves_only_its_own_release(
-    tmp_path, fleet_guards, fleet_browsers, shared_supabase
+    tmp_path, fleet_guards, fleet_browsers
 ):
     also = _installer_also(
         tmp_path,
         fleet_guards=fleet_guards,
         fleet_browsers=fleet_browsers,
-        shared_supabase=shared_supabase,
     )
     assert ("obscura" in also) is (fleet_guards or fleet_browsers)
-    assert ("supabase" in also) is shared_supabase
 
 
 def _koncreet_settings(tmp_path, tailscale, apply_user):

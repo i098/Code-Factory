@@ -18,6 +18,9 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 STALE_FIRSTMATE_URL = "https://github.com/i098/firstmate.git"
 LEGACY_BROWSER_KEYS = ("obscura_version", "obscura_sha256")
+REMOVED_PROFILE = "shared_supabase"
+REMOVED_PROJECT_KEY = "supabase_project_id"
+RETIRED_STACK = "oss-fleet/shared-supabase"
 OLD_ROOT, NEW_ROOT = "factory", "crewship"
 
 
@@ -32,6 +35,16 @@ def validate_document(document, schema_name):
 
 
 def validate_config(document):
+    config = document.get("crewship") if isinstance(document, dict) else None
+    if isinstance(config, dict) and (
+        isinstance(config.get("profiles"), dict) and REMOVED_PROFILE in config["profiles"]
+        or isinstance(config.get("fleet"), dict) and REMOVED_PROJECT_KEY in config["fleet"]
+    ):
+        raise ValueError(
+            "Shared Supabase support was removed. Remove profiles.shared_supabase and "
+            "fleet.supabase_project_id from the host config; use profiles.shared_postgres "
+            "(docs/shared-postgres.md). Existing stacks and volumes remain untouched."
+        )
     validate_document(document, "crewship.schema.json")
     config = document["crewship"]
     home, workspace = Path(config["home"]), Path(config["workspace"])
@@ -55,12 +68,6 @@ def validate_config(document):
     if config["profiles"].get("shared_postgres"):
         if not (config["profiles"]["docker"] and config["profiles"]["firstmate"]):
             raise ValueError("shared Postgres requires the docker and firstmate profiles")
-    if config["profiles"].get("shared_supabase"):
-        if not (config["profiles"]["docker"] and config["profiles"]["firstmate"]):
-            raise ValueError("shared Supabase requires the docker and firstmate profiles")
-        fixture = config.get("fleet", {}).get("fixture_archive", "")
-        if fixture and ".." in Path(fixture).parts:
-            raise ValueError("fleet.fixture_archive must not traverse; give a plain path")
     skills = config.get("skills", {})
     if "private_ref" in skills and skills["private_source"].startswith("/"):
         raise ValueError("skills.private_ref applies only to a git source; remove it for a local path")
@@ -172,6 +179,15 @@ def initialize(args):
 
 
 def provision(document, check):
+    home = Path(document["crewship"]["home"])
+    if (home / RETIRED_STACK).exists():
+        print(
+            "Existing Supabase stack remains untouched: to remove it manually, stop the "
+            "crewship-/flotilla-shared-supabase and worktree-env-seed user units, run "
+            "~/oss-fleet/shared-supabase/node_modules/.bin/supabase stop --workdir "
+            "~/oss-fleet/shared-supabase, then remove those units, the CLI shim and scripts; "
+            "keep all Docker volumes. Use docs/shared-postgres.md for the replacement."
+        )
     environment = {**os.environ, "ANSIBLE_CONFIG": str(ROOT / "ansible/ansible.cfg")}
     argv = [
         "ansible-playbook",
@@ -358,13 +374,6 @@ def questions(document, config_path):
         prompt += (
             " Then ask one short question: turn on the crew board, a host-local message "
             f"board for agent-to-agent messages? If yes, follow {ROOT / 'docs/board.md'}."
-        )
-    if not config["profiles"].get("shared_supabase"):
-        prompt += (
-            " Then ask one short question: enable the optional shared Supabase stack and CLI? "
-            "They are off by default and need Docker, Firstmate, and an existing fixture volume "
-            "or archive. If yes, set crewship.profiles.shared_supabase to true in "
-            f"{config_path} and follow {ROOT / 'docs/fleet-guards.md'}."
         )
     if not config["profiles"].get("shared_postgres"):
         prompt += (
