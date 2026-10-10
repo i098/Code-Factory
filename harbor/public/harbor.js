@@ -522,6 +522,7 @@ function crossHouseDoor(x, z) {
   if (!crossing) return false;
   insideHouse = !insideHouse;
   layoutDirty = true;
+  doorInputHeld = true;
   Object.assign(me, insideHouse ? { x: 0, z: 0.8, yaw: 0, pitch: 0 } : { x: -5, z: 20.35, yaw: Math.PI, pitch: 0 });
   walkPath = []; walkTo = jumped = null;
   setMap(0); mapBox = null; MAPCELLS.clear(); LINE.clear();
@@ -530,6 +531,7 @@ function crossHouseDoor(x, z) {
   return true;
 }
 function movePlayer(x, z, here) {
+  if (doorInputHeld) return;
   if (crossHouseDoor(x, z)) return;
   const fy = floorAt(x, z);
   if (fy !== null && Math.abs(fy - here) <= 0.6 && !blocked(x, z, fy)) { me.x = x; me.z = z; }
@@ -591,6 +593,10 @@ const me = { x: 0, z: -7.4, yaw: 0.2, pitch: 0.03 };
 const keys = new Set();
 const stick = { x: 0, y: 0 };
 let moved = false;
+let doorInputHeld = false;
+function releaseDoorInput() {
+  if (!keys.has("f") && !keys.has("b") && !keys.has("l") && !keys.has("r") && !stick.x && !stick.y) doorInputHeld = false;
+}
 
 // ---- Ray casting -------------------------------------------------------------------------
 let hitT, hitS, hitK;
@@ -1417,8 +1423,8 @@ stage.addEventListener("keydown", (e) => {
   e.preventDefault();
   keys.add(k);
 });
-stage.addEventListener("keyup", (e) => keys.delete(KEYS[e.code]));
-stage.addEventListener("blur", () => keys.clear());
+stage.addEventListener("keyup", (e) => { keys.delete(KEYS[e.code]); releaseDoorInput(); });
+stage.addEventListener("blur", () => { keys.clear(); releaseDoorInput(); });
 const look = (dx, dy, k) => {
   me.yaw += dx * k;
   me.pitch = Math.max(-1.2, Math.min(1.2, me.pitch - dy * k));
@@ -1442,6 +1448,7 @@ function steer(e) {
   const l = Math.hypot(x, y);
   if (l > 1) { x /= l; y /= l; }
   stick.x = x; stick.y = -y;
+  releaseDoorInput();
   knob.style.transform = `translate(${x * half * 0.6}px, ${y * half * 0.6}px)`;
 }
 // The intro card folds away on the first tap or click, as it does on the first step.
@@ -1462,11 +1469,13 @@ stage.addEventListener("pointermove", (e) => {
 const release = (e) => {
   if (e.pointerId === padId) { padId = null; stick.x = stick.y = 0; knob.style.transform = ""; }
   if (e.pointerId === lookId) lookId = null;
+  releaseDoorInput();
 };
 stage.addEventListener("pointerup", release);
 stage.addEventListener("pointercancel", release);
 
 function step(dt) {
+  releaseDoorInput();
   const turn = (keys.has("tr") ? 1 : 0) - (keys.has("tl") ? 1 : 0);
   const tilt = (keys.has("u") ? 1 : 0) - (keys.has("d") ? 1 : 0);
   const fwd = (keys.has("f") ? 1 : 0) - (keys.has("b") ? 1 : 0) + stick.y;
@@ -1484,6 +1493,7 @@ function step(dt) {
 
 // ---- Loop --------------------------------------------------------------------------------
 let last = performance.now(), dirty = true, visible = true, slow = 0, fast = 0, layoutDirty = false, resizeTimer;
+let refreshMs = Infinity, paintedLastFrame = false;
 new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(stage);
 const resize = new ResizeObserver(() => {
   if (stage.clientWidth === viewW && stage.clientHeight === viewH) return;
@@ -1492,9 +1502,9 @@ const resize = new ResizeObserver(() => {
 });
 reduced.addEventListener("change", () => { dirty = true; });
 // Adaptive resolution: drop shadows, then grow glyphs; restore detail when frames run short.
-function adaptResolution(ms) {
-  slow = ms > 20 ? slow + 1 : 0;
-  fast = ms < 9 ? fast + 1 : 0;
+function adaptResolution(ms, late) {
+  slow = ms > 20 || late ? slow + 1 : 0;
+  fast = ms < 9 && !late ? fast + 1 : 0;
   if (!insideHouse) {
     if (slow > 20 && shadows) { shadows = false; slow = 0; dirty = true; }
     return;
@@ -1508,7 +1518,11 @@ function adaptResolution(ms) {
   }
 }
 function frame(now) {
-  const dt = Math.min(0.1, (now - last) / 1000);
+  const frameMs = now - last;
+  const dt = Math.min(0.1, frameMs / 1000);
+  if (frameMs > 0) refreshMs = paintedLastFrame ? Math.min(frameMs, refreshMs * 1.001) : frameMs;
+  const late = insideHouse && paintedLastFrame && frameMs > refreshMs * 1.5;
+  paintedLastFrame = false;
   last = now;
   const still = reduced.matches;
   if (!still) T += dt;
@@ -1529,9 +1543,9 @@ function frame(now) {
     me.eye = floorAt(me.x, me.z) + 1.6;
     const t0 = performance.now();
     render();
-    // Touch canvas painting can finish after render returns; include frame time in the room.
-    const ms = Math.max(performance.now() - t0, insideHouse ? dt * 1000 : 0);
-    adaptResolution(ms);
+    const ms = performance.now() - t0;
+    adaptResolution(ms, late);
+    paintedLastFrame = true;
   }
   requestAnimationFrame(frame);
 }

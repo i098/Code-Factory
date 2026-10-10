@@ -105,7 +105,9 @@ const document = {getElementById: () => element, querySelectorAll: () => [],
   documentElement: {}, addEventListener() {}};
 const matchMedia = () => ({matches: false, addEventListener() {}});
 const getComputedStyle = () => ({getPropertyValue: () => 'monospace'});
-const devicePixelRatio = 1, innerWidth = 600, performance = {now: () => 0};
+const devicePixelRatio = 1, innerWidth = 600;
+let clock = 0;
+const performance = {now: () => clock};
 const IntersectionObserver = class {observe() {}}, ResizeObserver = class {observe() {}};
 function requestAnimationFrame() {}
 function addEventListener() {}
@@ -116,6 +118,7 @@ Object.assign(me, {x: -5, z: 20.6, yaw: 0});
 keys.add('f');
 for (let i = 0; i < 4; i++) step(0.02);
 keys.clear();
+step(0);
 assert(insideHouse, 'walking into the door must enter the room');
 assert.equal(floorAt(me.x, me.z), 0);
 assert(!blocked(me.x, me.z, 0), 'entry must leave the player in a clear aisle');
@@ -152,6 +155,7 @@ Object.assign(me, {x: 0, z: 0.8, yaw: Math.PI});
 stick.y = 1;
 for (let i = 0; i < 8; i++) step(0.02);
 stick.y = 0;
+step(0);
 assert(!insideHouse, 'the touch stick must exit through the door');
 assert.equal(me.yaw, Math.PI);
 assert(me.z < 20.75 && me.z > 19.8, 'exit must land just outside the door');
@@ -160,12 +164,14 @@ Object.assign(me, {x: -5, z: 20.6, yaw: 0});
 stick.y = 1;
 for (let i = 0; i < 4; i++) step(0.02);
 stick.y = 0;
+step(0);
 assert(insideHouse, 'the touch stick must enter through the door');
 Object.assign(me, {x: 0, z: 0.8, yaw: Math.PI});
 keys.add('f');
 for (let i = 0; i < 8; i++) step(0.02);
 keys.clear();
 assert(!insideHouse, 'keyboard walking must exit through the door');
+step(0);
 for (const x of [-5.5, -4.5]) {
   Object.assign(me, {x, z: 20.6, yaw: 0});
   keys.add('f');
@@ -174,6 +180,75 @@ for (const x of [-5.5, -4.5]) {
   assert(!insideHouse, 'walking into the door frame must not enter');
   assert(me.z <= 20.75, 'the exterior wall must still block walking');
 }
+for (const channel of ['keyboard', 'touch', 'combined']) {
+  for (const direction of ['f', 'b', 'l', 'r']) {
+    for (const startInside of [false, true]) {
+      keys.clear(); stick.x = stick.y = 0; step(0);
+      insideHouse = startInside;
+      const yaw = {f: 0, b: Math.PI, l: Math.PI / 2, r: -Math.PI / 2}[direction];
+      Object.assign(me, startInside ? {x: 0, z: 0.8, yaw: yaw + Math.PI} : {x: -5, z: 20.6, yaw});
+      if (channel !== 'touch') keys.add(direction);
+      if (channel !== 'keyboard') {
+        stick.y = direction === 'f' ? 1 : direction === 'b' ? -1 : 0;
+        stick.x = direction === 'r' ? 1 : direction === 'l' ? -1 : 0;
+      }
+      for (let i = 0; i < 100; i++) step(0.02);
+      assert.equal(insideHouse, !startInside, `${channel} ${direction}: held input must cross only once`);
+      assert.equal(me.z, startInside ? 20.35 : 0.8);
+      assert.equal(me.yaw, startInside ? Math.PI : 0);
+      if (channel === 'combined') {
+        const heldX = stick.x, heldY = stick.y;
+        stick.x = stick.y = 0;
+        for (let i = 0; i < 30; i++) step(0.02);
+        assert.equal(insideHouse, !startInside, 'a held key must keep the touch release locked');
+        stick.x = heldX; stick.y = heldY;
+        keys.clear();
+        for (let i = 0; i < 30; i++) step(0.02);
+        assert.equal(insideHouse, !startInside, 'a held touch must keep the keyboard release locked');
+      }
+      keys.clear(); stick.x = stick.y = 0; step(0);
+      if (channel === 'keyboard') keys.add('b');
+      else stick.y = -1;
+      for (let i = 0; i < 100; i++) step(0.02);
+      assert.equal(insideHouse, startInside, 'released input must permit the next crossing');
+    }
+  }
+}
+keys.clear(); stick.x = stick.y = 0; step(0);
+let renderCost = 2;
+render = () => { clock += renderCost; };
+for (const roomScene of [false, true]) {
+  insideHouse = roomScene;
+  for (const interval of [1000 / 60, 1000 / 30]) {
+    refreshMs = Infinity; paintedLastFrame = false;
+    scale = 1.5; shadows = false; slow = fast = 0;
+    renderCost = 2;
+    const runFrame = () => { dirty = true; last = clock; clock += interval; frame(clock); };
+    for (let i = 0; i < 91; i++) runFrame();
+    assert(scale < 1.5, 'a cheap render must recover detail at either display refresh rate');
+    scale = 1; shadows = true; slow = fast = 0;
+    renderCost = 25;
+    for (let i = 0; i < 42; i++) runFrame();
+    assert(!shadows && scale > 1, 'expensive rendering must still reduce detail');
+  }
+}
+insideHouse = true; renderCost = 2;
+scale = 1; shadows = true; slow = fast = 0;
+refreshMs = Infinity; paintedLastFrame = false;
+const paintFrame = (interval) => { dirty = true; last = clock; clock += interval; frame(clock); };
+paintFrame(1000 / 60);
+for (let i = 0; i < 42; i++) paintFrame(1000 / 30);
+assert(!shadows && scale > 1, 'deferred painting that drops 60 Hz frames must reduce detail');
+const coarseScale = scale;
+for (let i = 0; i < 91; i++) paintFrame(1000 / 60);
+assert(scale < coarseScale, 'detail must recover when deferred painting stops dropping frames');
+dirty = false;
+frame(clock += 1000 / 30);
+dirty = false;
+frame(clock += 1000 / 30);
+scale = 1.5; slow = fast = 0;
+for (let i = 0; i < 91; i++) paintFrame(1000 / 30);
+assert(scale < 1.5, 'idle frames must calibrate a changed native display refresh rate');
 """
     subprocess.run(
         ["node", "-e", setup + source + check],

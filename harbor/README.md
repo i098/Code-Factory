@@ -9,6 +9,8 @@ Walk into the framed house door to enter a warm room with a lamp, table, bed, an
 The blue bed faces the door; darker walls and floor keep the furniture, lamp, and window clear.
 Walk back through the inside door to return just outside, facing the island.
 Keyboard and touch movement share the door transition; walls and furniture block walking, and the map stays hidden inside.
+Release the movement keys and touch pad after a door crossing to move again.
+The renderer adjusts detail from rendering cost and missed room frames, relative to the measured display refresh rate.
 
 The plaza fountain has an octagonal stone rim, a central spout, and water that uses the existing animation clock.
 Its basin blocks walking, and a blue `O` marks it on the mini map.
