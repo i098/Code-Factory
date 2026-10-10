@@ -122,12 +122,17 @@ function roadAt(x, z) {
   return [Math.sqrt(best), along, concrete];
 }
 // Staggered paving joints and individually divided stones around the round plaza.
-function plazaPaving(x, z, radius) {
-  if (radius > 2.96) return (Math.atan2(z - 24.6, x - 5) + Math.PI) * 12 % 1 < 0.12 ? "t:" : "s=";
+function plazaCurb(x, z) {
+  return (Math.atan2(z - 24.6, x - 5) + Math.PI) * 12 % 1 < 0.12 ? "t:" : "s=";
+}
+function plazaStone(x, z) {
   const row = Math.floor((z + 99) / 0.9), u = x + 99 + (row % 2) * 0.6;
   if (u % 1.2 < 0.09) return "s|";
   if ((z + 99) % 0.9 < 0.075) return "s-";
   return hash(Math.floor(u / 1.2), row) < 0.3 ? "t," : "t.";
+}
+function plazaPaving(x, z, radius) {
+  return radius > 2.96 ? plazaCurb(x, z) : plazaStone(x, z);
 }
 // Island ground as material and glyph: a 3 m concrete road with kerbs and joints every 3 m, a tiled plaza,
 // a 1 m dirt trail with uneven edges, ruts and footprints, and grass with a few flowers elsewhere.
@@ -172,11 +177,15 @@ function landTex(x, y, z, nx, ny) {
 }
 const TERRAIN = { id: 4000, P: new Float64Array(0), bb: [-70, -1.6, -50, 60, 1.2, 60], mat: "g", spot: null, solid: false, tex: landTex };
 // Sand: light and dotted when dry, darker and wet by the waterline, where the wash comes and goes, with a few shells.
-function sand(x, y, z, nx, ny) {
-  if (ny < 0.5) return null;
+function wetSand(x, y, z) {
   const wash = 0.12 + 0.08 * Math.sin(T * 0.9 + x * 0.3 + z * 0.2);
   if (Math.abs(y - wash) < 0.09) return "k~";
-  if (y < wash + 0.25) return "n:";
+  return y < wash + 0.25 ? "n:" : null;
+}
+function sand(x, y, z, nx, ny) {
+  if (ny < 0.5) return null;
+  const wet = wetSand(x, y, z);
+  if (wet) return wet;
   if (hash(Math.floor(x * 5), Math.floor(z * 5)) < 0.02) return "s*"; // a shell
   return hash(Math.floor(x * 6), Math.floor(z * 6)) < 0.15 ? "y:" : hash(Math.floor(x * 3), Math.floor(z * 3)) < 0.5 ? "y." : "y,";
 }
@@ -1009,12 +1018,7 @@ function surfaceHit(dx, dy, dz, limit) {
   onLand = false;
   return t < limit && t >= end ? t : Infinity;
 }
-function shadeWater(c, t, dx, dy, dz) {
-  const x = cam.x + dx * t, z = cam.z + dz * t, h = seaHeight(x, z), near = shallows(x, z);
-  seaNormal(x, z);
-  const [nx, ny, nz] = seaN, dn = dx * nx + dy * ny + dz * nz, rx = dx - 2 * dn * nx, ry = dy - 2 * dn * ny, rz = dz - 2 * dn * nz;
-  const fresnel = 0.04 + 0.96 * Math.pow(1 - Math.min(1, -dn), 5);
-  const moonSpec = Math.pow(Math.max(0, rx * MOON[0] + ry * MOON[1] + rz * MOON[2]), 90) * 1.4;
+function waterLampSpec(x, h, z, rx, ry, rz) {
   let lampSpec = 0;
   for (const L of LIGHTS) {
     const lx = L.wx - x, ly = L.wy - h, lz = L.wz - z, d2 = lx * lx + ly * ly + lz * lz;
@@ -1022,14 +1026,32 @@ function shadeWater(c, t, dx, dy, dz) {
     const d = Math.sqrt(d2), s = (rx * lx + ry * ly + rz * lz) / d;
     if (s > 0.985) lampSpec += L.i * Math.pow(s, 300) * 1.4 / (1 + d2 * 0.006);
   }
-  // Foam on the highest crests, and a broken line of it where the waves wash onto the beaches.
-  const foam = Math.max(0, (h - SEA * 0.7) / (SEA * 0.3)) * 0.6 + (near > 0.82 && Math.sin(x * 1.3 + z + T * 0.9) > -0.25 ? 0.65 : 0);
-  const body = (0.03 + 0.12 * Math.max(0, nx * MOON[0] + ny * MOON[1] + nz * MOON[2])) * (1 + near);
-  const fog = Math.exp(-t * 0.014), lum = ((body * (1 - fresnel) + 0.03 * fresnel + moonSpec + lampSpec + foam * 0.35 + beamOn(x, z) * 0.6) * fog) + 0.015 * (1 - fog);
+  return lampSpec;
+}
+// Foam on the highest crests, and a broken line where waves wash onto the beaches.
+function waterFoam(x, z, h, near) {
+  return Math.max(0, (h - SEA * 0.7) / (SEA * 0.3)) * 0.6 + (near > 0.82 && Math.sin(x * 1.3 + z + T * 0.9) > -0.25 ? 0.65 : 0);
+}
+function waterReflection(lampSpec, moonSpec) {
+  if (lampSpec > moonSpec && lampSpec > 0.1) return "l";
+  return moonSpec > 0.1 ? "m" : null;
+}
+function waterGlyph(c, t, foam, lum, fog, mat) {
   if (foam > 0.4) { put(c, "~", "k" + tier(Math.max(lum, 0.5 * fog), 0), -1, t); return; }
-  const mat = lampSpec > moonSpec && lampSpec > 0.1 ? "l" : moonSpec > 0.1 ? "m" : near > 0.2 ? "w" : "d";
   const soft = Math.min(0.78, lum); // highlights stay sparkles, not solid blocks
   put(c, glyph(soft, (c ^ Math.floor(t)) & 1), mat + tier(lum, 0), -1, t);
+}
+function shadeWater(c, t, dx, dy, dz) {
+  const x = cam.x + dx * t, z = cam.z + dz * t, h = seaHeight(x, z), near = shallows(x, z);
+  seaNormal(x, z);
+  const [nx, ny, nz] = seaN, dn = dx * nx + dy * ny + dz * nz, rx = dx - 2 * dn * nx, ry = dy - 2 * dn * ny, rz = dz - 2 * dn * nz;
+  const fresnel = 0.04 + 0.96 * Math.pow(1 - Math.min(1, -dn), 5);
+  const moonSpec = Math.pow(Math.max(0, rx * MOON[0] + ry * MOON[1] + rz * MOON[2]), 90) * 1.4;
+  const lampSpec = waterLampSpec(x, h, z, rx, ry, rz), foam = waterFoam(x, z, h, near);
+  const body = (0.03 + 0.12 * Math.max(0, nx * MOON[0] + ny * MOON[1] + nz * MOON[2])) * (1 + near);
+  const fog = Math.exp(-t * 0.014), lum = ((body * (1 - fresnel) + 0.03 * fresnel + moonSpec + lampSpec + foam * 0.35 + beamOn(x, z) * 0.6) * fog) + 0.015 * (1 - fog);
+  const mat = waterReflection(lampSpec, moonSpec) || (near > 0.2 ? "w" : "d");
+  waterGlyph(c, t, foam, lum, fog, mat);
 }
 // How close a sky ray passes to the lighthouse beam, as a glow from 0 to 1.
 function beamGlow(dx, dy, dz) {
