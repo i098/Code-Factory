@@ -482,24 +482,28 @@ function roomWindow(x, y) {
   return hash(Math.floor(x * 12), Math.floor(y * 12)) > 0.985 ? "*" : ".";
 }
 function buildRoom() {
-  box(room, -3.2, -0.2, -0.2, 3.2, 0, 6.2, "o", { tex: roomFloor });
-  box(room, -3.2, 3.4, -0.2, 3.2, 3.6, 6.2, "s");
-  for (const [x0, x1] of [[-3.2, -3], [3, 3.2]]) box(room, x0, 0, 0, x1, 3.4, 6, "s");
-  box(room, -3, 0, 6, 3, 3.4, 6.2, "s");
-  for (const [x0, x1] of [[-3, -0.7], [0.7, 3]]) box(room, x0, 0, -0.2, x1, 3.4, 0, "s");
-  box(room, -0.7, 2.4, -0.2, 0.7, 3.4, 0, "s");
+  box(room, -3.2, -0.2, -0.2, 3.2, 0, 6.2, "o", { tex: roomFloor, dim: 0.4 });
+  const plaster = { dim: 0.32 };
+  box(room, -3.2, 3.4, -0.2, 3.2, 3.6, 6.2, "s", plaster);
+  for (const [x0, x1] of [[-3.2, -3], [3, 3.2]]) box(room, x0, 0, 0, x1, 3.4, 6, "s", plaster);
+  box(room, -3, 0, 6, 3, 3.4, 6.2, "s", plaster);
+  for (const [x0, x1] of [[-3, -0.7], [0.7, 3]]) box(room, x0, 0, -0.2, x1, 3.4, 0, "s", plaster);
+  box(room, -0.7, 2.4, -0.2, 0.7, 3.4, 0, "s", plaster);
   box(room, -0.7, 0, -0.15, 0.7, 2.4, -0.1, "d", { solid: false });
   for (const x of [-0.75, 0.65]) box(room, x, 0, 0, x + 0.1, 2.45, 0.12, "o");
   box(room, -0.75, 2.4, 0, 0.75, 2.5, 0.12, "o");
   box(room, -1.5, 1.3, 5.84, 1.5, 2.8, 5.95, "d", { tex: roomWindow });
   for (const x of [-1.6, -0.04, 1.5]) box(room, x, 1.2, 5.75, x + 0.1, 2.9, 6, "o");
   for (const y of [1.2, 2.1, 2.8]) box(room, -1.6, y, 5.75, 1.6, y + 0.1, 6, "o");
-  // Table and bed leave a clear aisle from the door to the window.
+  // The bed faces the doorway; the right aisle stays clear for walking to the window.
   box(room, -2.6, 0.9, 2.4, -1.1, 1.05, 3.6, "o");
   for (const x of [-2.5, -1.3]) for (const z of [2.5, 3.4]) box(room, x, 0, z, x + 0.12, 0.9, z + 0.12, "o");
-  box(room, 1.3, 0, 3.2, 2.7, 0.5, 5.4, "o");
-  box(room, 1.3, 0.5, 3.2, 2.7, 0.7, 5.4, "b");
-  box(room, 1.45, 0.7, 4.8, 2.55, 0.85, 5.25, "s");
+  box(room, -0.6, 0.3, 3.2, 1, 0.6, 5.4, "o");
+  box(room, -0.6, 0.6, 3.2, 1, 0.85, 5.4, "b");
+  box(room, -0.4, 0.85, 4.8, 0.8, 1.05, 5.25, "s");
+  box(room, -0.7, 0.3, 5.4, 1.1, 1.2, 5.52, "o");
+  box(room, -0.7, 0.3, 3.08, 1.1, 0.75, 3.2, "o");
+  for (const x of [-0.55, 0.85]) for (const z of [3.2, 5.3]) box(room, x, 0, z, x + 0.1, 0.3, z + 0.1, "o");
   column(room, -2.2, 2.9, 0.12, 0.1, 1.05, 1.7, "t");
   column(room, -2.2, 2.9, 0.35, 0.2, 1.7, 2.1, "l");
 }
@@ -1172,7 +1176,7 @@ function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
     // Contact shadow: walls darken toward the ground they stand on.
     const ao = ny > 0.7 ? 1 : Math.min(1, 0.55 + 0.5 * (wy - (onShip ? bob + DECK : floorAt(wx, pz) ?? 0)));
     const fog = Math.exp(-t * 0.016), b = (lit * dim * ao * (0.8 + 0.2 * Math.max(0, -(nx * dx + ny * dy + nz * dz)))) * fog + 0.02 * (1 - fog);
-    cls = mat + tier(b, warm);
+    cls = mat + tier(b, insideHouse && mat === "b" ? 0 : warm);
     // Grass blades lean with the wind; fountain water keeps its texture glyphs below.
     const grass = ny > 0.7 && (mat === "g" || mat === "G" || mat === "M") && s === TERRAIN;
     ch = grass && b > 0.03 ? blade(px, pz, odd) : glyph(b, odd);

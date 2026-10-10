@@ -124,10 +124,22 @@ mapKey({code: 'KeyM'});
 minimap();
 assert.equal(mapMode, 0, 'the island map must not open inside');
 assert.equal(mapBox, null);
-for (const [x, z] of [[-2, 3], [2, 4]]) {
+for (const [x, z] of [[-2, 3], [0, 4]]) {
   assert(blocked(x, z, 0), 'interior furniture must block walking');
 }
-for (const [x, z, yaw] of [[-2.7, 1, -Math.PI/2], [2.7, 1, Math.PI/2], [0, 5.4, 0]]) {
+Object.assign(me, {x: 0, z: 0.8, yaw: 0});
+keys.add('f');
+for (let i = 0; i < 60; i++) step(0.02);
+keys.clear();
+assert(me.z > 2.5 && me.z < 3, 'walking must stop at the bed foot');
+keys.add('r');
+for (let i = 0; i < 24; i++) step(0.02);
+keys.clear();
+keys.add('f');
+for (let i = 0; i < 60; i++) step(0.02);
+keys.clear();
+assert(me.z > 5 && !blocked(me.x, me.z, 0), 'the right aisle must reach the window');
+for (const [x, z, yaw] of [[-2.7, 1, -Math.PI/2], [2.7, 1, Math.PI/2], [1.8, 5.4, 0]]) {
   Object.assign(me, {x, z, yaw});
   keys.add('f');
   for (let i = 0; i < 30; i++) step(0.02);
