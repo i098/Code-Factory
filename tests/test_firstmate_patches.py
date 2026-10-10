@@ -7,10 +7,14 @@ from, and two format-patch files made against upstream main.
 
 import getpass
 import grp
+import io
 import json
 import os
+import shutil
+import socket
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -236,3 +240,117 @@ def test_a_dropped_patch_rebuilds_the_layer_on_a_host_that_has_the_old_one(host)
     )
     assert layer(host, 1) == ["fix: first"]
     assert verify(host).returncode == 0
+
+
+@pytest.fixture
+def crewboard_firstmate(tmp_path):
+    """Exercise the carried patch against a supplied, read-only upstream tree."""
+    source = os.environ.get("FIRSTMATE_TEST_SOURCE")
+    if not source:
+        pytest.skip("Set FIRSTMATE_TEST_SOURCE to an upstream Firstmate source tree")
+    checkout = tmp_path / "source"
+    archive = subprocess.run(
+        ["git", "-C", source, "archive", "HEAD", "bin", "docs"],
+        check=True, capture_output=True,
+    ).stdout
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tree:
+        tree.extractall(checkout, filter="data")
+    scripts = ("fm-brief.sh", "fm-supervision-instructions.sh")
+    for script in scripts:
+        shutil.copyfile(checkout / "bin" / script, checkout / "bin" / f"baseline-{script}")
+    patch = ROOT / "patches/firstmate/0003-brief-crewboard.patch"
+    subprocess.run(["git", "apply", "--check", str(patch)], cwd=checkout, check=True)
+    subprocess.run(["git", "apply", str(patch)], cwd=checkout, check=True)
+    for script in scripts:
+        subprocess.run(["bash", "-n", checkout / "bin" / script], check=True)
+    return checkout
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["sample", "project", "--mode", "no-mistakes"],
+        ["sample", "project", "--scout"],
+        ["sample", "--secondmate", "--no-projects"],
+    ],
+)
+def test_crewboard_brief_output(crewboard_firstmate, tmp_path, arguments):
+    checkout = crewboard_firstmate
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {**os.environ, "FM_HOME": str(home)}
+    env.pop("CREWBOARD_SOCKET", None)
+    brief = home / "data/sample/brief.md"
+
+    def render(script):
+        subprocess.run(["bash", checkout / "bin" / script, *arguments], env=env, check=True)
+        result = brief.read_bytes()
+        brief.unlink()
+        return result
+
+    baseline = render("baseline-fm-brief.sh")
+    regular = tmp_path / "regular"
+    regular.touch()
+    for value in (None, "", str(tmp_path / "absent"), str(regular)):
+        if value is None:
+            env.pop("CREWBOARD_SOCKET", None)
+        else:
+            env["CREWBOARD_SOCKET"] = value
+        assert render("fm-brief.sh") == baseline
+
+    with socket.socket(socket.AF_UNIX) as board:
+        path = tmp_path / "board.sock"
+        board.bind(str(path))
+        board.listen()
+        env["CREWBOARD_SOCKET"] = str(path)
+        enabled = render("fm-brief.sh")
+        section = (
+            b"\n\n# Crew board\n"
+            b"The board permits direct peer coordination; report task states only to Firstmate through the status file.\n"
+            b"Use `crewboard pub task/<peer-id> 'message'` for a peer and `crewboard pub fleet 'message'` for the crew.\n"
+            b"Use `crewboard pub fm 'message'` for information that must not wake Firstmate.\n"
+            b"Read `crewboard tail task/sample` and `crewboard tail fleet` at natural checkpoints, or subscribe in a separate pane.\n"
+            b"Use `crewboard sub task/sample fleet` for that subscription; it waits for messages.\n"
+            b"Firstmate observes the board and never relays messages. The steering inbox remains unchanged.\n"
+            b"The board stores messages only in memory. Keep working, done, needs-decision, blocked, failed, and paused in the status file.\n"
+        )
+        anchor = baseline.index(b"\n\n#", baseline.index(b"# Firstmate instruction inbox\n"))
+        assert enabled.count(b"# Crew board\n") == 1
+        assert enabled == baseline[:anchor] + section + baseline[anchor:]
+
+
+@pytest.mark.parametrize("harness", ["claude", "codex", "opencode", "pi", "grok", "cursor", "omp", "unknown"])
+def test_crewboard_supervisor_output(crewboard_firstmate, tmp_path, harness):
+    checkout = crewboard_firstmate
+    env = {**os.environ, "FM_HOME": str(tmp_path / "home")}
+    env.pop("CREWBOARD_SOCKET", None)
+
+    def render(script, *options):
+        return subprocess.run(
+            ["bash", checkout / "bin" / script, "--harness", harness, *options],
+            env=env, check=True, capture_output=True,
+        ).stdout
+
+    baseline = render("baseline-fm-supervision-instructions.sh")
+    regular = tmp_path / "regular"
+    regular.touch()
+    for value in (None, "", str(tmp_path / "absent"), str(regular)):
+        if value is None:
+            env.pop("CREWBOARD_SOCKET", None)
+        else:
+            env["CREWBOARD_SOCKET"] = value
+        assert render("fm-supervision-instructions.sh") == baseline
+
+    with socket.socket(socket.AF_UNIX) as board:
+        path = tmp_path / "board.sock"
+        board.bind(str(path))
+        board.listen()
+        env["CREWBOARD_SOCKET"] = str(path)
+        enabled = render("fm-supervision-instructions.sh")
+        note = b"- Crew board: open a separate pane and run crewboard sub '*'; observe, never relay. The status file remains the durable ledger.\n"
+        assert enabled.count(note) == 1
+        anchor = baseline.index(b"- Ordinary wake:")
+        assert enabled == baseline[:anchor] + note + baseline[anchor:]
+        assert render("fm-supervision-instructions.sh", "--repair-line") == render(
+            "baseline-fm-supervision-instructions.sh", "--repair-line"
+        )
