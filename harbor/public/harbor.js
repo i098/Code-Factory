@@ -585,7 +585,7 @@ function trace(list, col, ox, oy, oz, dx, dy, dz) {
 // ---- Night lighting ----------------------------------------------------------------------
 // Lamps, lit windows, the ship's lantern and portholes, and the beacon light what is near them, falling off
 // with distance, and the solids near each light cast its shadows. The moon adds a dim, soft fill; the
-// lighthouse beam sweeps the harbor. Phones drop the shadow rays first when frames run long.
+// lighthouse beam sweeps the harbor.
 let shadows = !touchFirst.matches;
 function casters(list, x, y, z, r) {
   return list.filter(({ bb: b }) => {

@@ -32,7 +32,7 @@
   Their canvas uses at most 2 device pixels per CSS pixel.
   Other devices draw one run of one colour per call.
   The font is ready before the first grid measurement.
-  The grid keeps one glyph size; slow devices can drop shadow rays without changing the view.
+  For a fixed viewport, the glyph size stays fixed; slow frames can disable shadows without changing the view.
   Resizes wait until the viewport settles, then update the canvas immediately before the next draw.
   With reduced motion the scene stands still and redraws only when you move.</li>
   <li><b>Controls.</b> WASD or arrows walk and turn, R and F look up and down, the mouse looks around, Enter opens what you point at. On a phone the pad walks and a drag looks. The label floats beside what you point at, with a leader line in text.</li>
