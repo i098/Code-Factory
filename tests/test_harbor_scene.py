@@ -90,9 +90,23 @@ function walkToSpot(id, start, dt) {
   assert.equal(jumped, id, 'auto-walk did not face its destination');
   assert.deepEqual([me.x, me.z], stand, 'auto-walk missed its destination');
 }
+const corner = [6.876, 26.5], cornerTarget = [7.1, 24.6];
+assert(!blocked(...corner, floorAt(...corner)), 'corner start must be walkable');
+assert.notDeepEqual(approach(corner, cornerTarget), [cornerTarget], 'corner-crossing link was accepted');
+assert.notDeepEqual(approach(cornerTarget, corner), [corner], 'reverse corner-crossing link was accepted');
+assert.deepEqual(approach([7.1, 26.5], cornerTarget), [cornerTarget], 'clear link was rejected');
+assert.deepEqual(approach(cornerTarget, [7.1, 26.5]), [[7.1, 26.5]], 'reverse clear link was rejected');
+const basinBoundary = fountainBasin.bb[3] + 0.25;
+assert(!blocked(basinBoundary, 24.6, floorAt(basinBoundary, 24.6)), 'walking boundary must remain open');
+assert(blocked(basinBoundary - 0.001, 24.6, floorAt(basinBoundary, 24.6)), 'basin interior must remain blocked');
+assert.deepEqual(approach([basinBoundary, 24], [basinBoundary, 25]), [[basinBoundary, 25]], 'boundary-parallel link was rejected');
+assert.deepEqual(approach(cornerTarget, cornerTarget), [cornerTarget], 'stationary clear link was rejected');
+anchors.corner = {x: cornerTarget[0], y: 1.2, z: cornerTarget[1] + 2.5, r: 0, ship: 0};
+walkToSpot('corner', corner, 0.016);
 const plazaPoints = [[2.9, 24.6], [7.1, 24.6], [5, 22.5], [5, 26.7],
   [5, 29.5], [3.8, 29.5], [6.2, 29.5], [5, 27.5], [2.9, 29.5], [7.1, 29.5],
-  [0.5, 28], [9.5, 28], [0.5, 21.5], [9.5, 21.5]];
+  [0.5, 28], [9.5, 28], [0.5, 21.5], [9.5, 21.5], corner,
+  [3.124, 26.5], [6.876, 22.7], [3.124, 22.7]];
 for (const start of plazaPoints) {
   for (const id of ORDER) walkToSpot(id, start, 0.1);
   for (const end of plazaPoints) {

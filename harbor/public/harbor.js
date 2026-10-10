@@ -425,13 +425,15 @@ function floorAt(x, z) {
   const y = terrainY(x, z);
   return y > 0.1 ? y : null;
 }
+const walkBound = (b, k) => b[k] + (k < 3 ? -0.25 : 0.25);
+const walkingSolid = (s, fy, lift = 0) => s.solid && s.bb[1] + lift < fy + 1.7 && s.bb[4] + lift > fy + 0.3;
 function blocked(x, z, fy) {
   for (const list of [world, ship]) {
     const lift = list === ship ? bob : 0;
     for (const s of list) {
       const b = s.bb;
-      if (s.solid && x > b[0] - 0.25 && x < b[3] + 0.25 && z > b[2] - 0.25 && z < b[5] + 0.25 &&
-        b[1] + lift < fy + 1.7 && b[4] + lift > fy + 0.3) return true;
+      if (walkingSolid(s, fy, lift) && x > walkBound(b, 0) && x < walkBound(b, 3) &&
+        z > walkBound(b, 2) && z < walkBound(b, 5)) return true;
     }
   }
   return false;
@@ -840,22 +842,29 @@ function face(id) {
 }
 const nearestNode = (x, z) => NODES.reduce((b, n, i) => (Math.hypot(n[0] - x, n[1] - z) < Math.hypot(NODES[b][0] - x, NODES[b][1] - z) ? i : b), 0);
 function approach(from, to) {
-  const clear = (a, c) => {
-    const cells = Math.max(1, Math.ceil(Math.hypot(c[0] - a[0], c[1] - a[1]) / 0.1));
-    for (let i = 0; i <= cells; i++) {
-      const x = a[0] + (c[0] - a[0]) * i / cells, z = a[1] + (c[1] - a[1]) * i / cells;
-      if (x >= 0 && x <= 10 && z >= 21 && z <= 30) {
-        const fy = floorAt(x, z);
-        if (fy === null || blocked(x, z, fy)) return false;
+  const fy = floorAt(5, 24.6);
+  const obstacles = world.filter(s => walkingSolid(s, fy) && walkBound(s.bb, 3) >= 0 &&
+    walkBound(s.bb, 0) <= 10 && walkBound(s.bb, 5) >= 21 && walkBound(s.bb, 2) <= 30);
+  const clear = (a, c) => !obstacles.some(({ bb: b }) => {
+    let enter = 0, exit = 1;
+    for (const k of [0, 2]) {
+      const p = a[k / 2], d = c[k / 2] - p, low = walkBound(b, k), high = walkBound(b, k + 3);
+      if (d === 0) {
+        if (p <= low || p >= high) return false;
+      } else {
+        const t0 = (low - p) / d, t1 = (high - p) / d;
+        enter = Math.max(enter, Math.min(t0, t1));
+        exit = Math.min(exit, Math.max(t0, t1));
+        if (enter >= exit) return false;
       }
     }
-    return true;
-  };
+    return enter < exit;
+  });
   if (clear(from, to)) return [to];
   const nodes = [from, to];
   for (const { bb: b } of [fountainBasin, ...plazaHedges]) {
-    nodes.push([b[0] - 0.35, b[2] - 0.35], [b[3] + 0.35, b[2] - 0.35],
-      [b[3] + 0.35, b[5] + 0.35], [b[0] - 0.35, b[5] + 0.35]);
+    nodes.push([walkBound(b, 0) - 0.1, walkBound(b, 2) - 0.1], [walkBound(b, 3) + 0.1, walkBound(b, 2) - 0.1],
+      [walkBound(b, 3) + 0.1, walkBound(b, 5) + 0.1], [walkBound(b, 0) - 0.1, walkBound(b, 5) + 0.1]);
   }
   const links = [];
   for (let a = 0; a < nodes.length; a++) {
