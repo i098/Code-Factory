@@ -81,8 +81,8 @@ function walkToSpot(id, start, dt) {
     autoStep(dt);
     for (let i = 0; i <= 10; i++) {
       const x = x0 + (me.x - x0) * i / 10, z = z0 + (me.z - z0) * i / 10;
-      if (x > 2.5 && x < 7.5 && z > 22 && z < 27.3) {
-        assert(!blocked(x, z, floorAt(x, z)), 'auto-walk crosses the fountain');
+      if (x > 1 && x < 9 && z > 22 && z < 30) {
+        assert(!blocked(x, z, floorAt(x, z)), 'auto-walk crosses the basin or plaza hedges');
       }
     }
   }
@@ -90,9 +90,11 @@ function walkToSpot(id, start, dt) {
   assert.equal(jumped, id, 'auto-walk did not face its destination');
   assert.deepEqual([me.x, me.z], stand, 'auto-walk missed its destination');
 }
-for (const start of [[2.9, 24.6], [7.1, 24.6], [5, 22.5], [5, 26.7]]) {
+const plazaPoints = [[2.9, 24.6], [7.1, 24.6], [5, 22.5], [5, 26.7],
+  [5, 29.5], [3.8, 29.5], [6.2, 29.5], [5, 27.5], [2.9, 29.5], [7.1, 29.5]];
+for (const start of plazaPoints) {
   for (const id of ORDER) walkToSpot(id, start, 0.1);
-  for (const end of [[2.9, 24.6], [7.1, 24.6], [5, 22.5], [5, 26.7]]) {
+  for (const end of plazaPoints) {
     anchors.approach = {x: end[0], y: 1.2, z: end[1] + 2.5, r: 0, ship: 0};
     walkToSpot('approach', start, 0.02);
   }
