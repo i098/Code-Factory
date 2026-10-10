@@ -126,6 +126,31 @@ jobs:
       - name: Clippy
         run: cargo clippy --locked --all-targets -- -D warnings
 
+  # harbor/ (crewship.si) as an iPhone in WebKit: harbor/webkit-check.mjs fails on a crash,
+  # an uncaught error, or text drawn in a way that grows iOS Safari until it kills the tab.
+  # Playwright tracks its latest release, like the other tools.
+  harbor-webkit:
+    name: harbor webkit iphone check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the page
+        run: python3 harbor/build.py
+
+      - name: Install Playwright WebKit
+        working-directory: harbor
+        run: npm install --no-save --no-package-lock --prefix . playwright && npx playwright install --with-deps webkit
+
+      - name: WebKit iPhone check
+        run: node harbor/webkit-check.mjs
+
   # The repository's own quality gate (docs/omp.md#quality-gate): the same
   # blocking rule the omp extension applies at turn end, against the committed
   # .sentrux/baseline.json, plus fallow audit on the changed files as a warning.
