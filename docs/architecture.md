@@ -94,7 +94,7 @@ flowchart TB
     recipe[Provisioning recipe] --> config[Tool configuration]
     recipe --> worker[Isolated worker]
     worker --> volumes[Compose data volumes]
-    profile[Shared database profiles] --> stack[Shared backend]
+    profile[Shared Postgres profile] --> stack[Shared database]
     stack --> env[Worktree env seeder]
     env --> apps[Worktree apps]
     apps -->|application traffic| stack

@@ -4,7 +4,7 @@
 The profile is off by default.
 See [Shared Postgres](shared-postgres.md) for the optional shared database.
 
-The controls address duplicate backend stacks, orphan processes, idle dev servers and unbounded lane concurrency.
+The controls address abandoned containers, orphan processes, idle dev servers and unbounded lane concurrency.
 
 Sizing per lane count and the full list of pruners are in
 [Capacity and pruners](capacity.md).
