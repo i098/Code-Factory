@@ -1161,7 +1161,7 @@ function project(a) {
   return [Math.round(((dot(cam.r) / z / cam.tanH + 1) / 2) * cols), Math.round(((1 - dot(cam.u) / z / cam.tanV) / 2) * rows)];
 }
 
-// Signs use scene cells; touch links share a row with padded hit regions.
+// Signs use scene cells.
 const LINE = new Map();
 let signBox = null, signRows = [], signLinks = [], signWidth = "", signInset = 2;
 function signLayout(width, mode, available) {
