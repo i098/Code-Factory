@@ -10,6 +10,8 @@ Its basin blocks walking, and a blue `O` marks it on the mini map.
 The fountain marker leaves map labels and selected point markers clear.
 Map walks check each road and approach segment against the walking collision bounds.
 Detour corners come from every walking obstacle, including trees, hedges, the basin, the house, dock cargo, and ship fixtures.
+The page builds the corner graph before animation starts and rebuilds it only when the scene's obstacle count changes.
+Ship bob and roll do not rebuild the graph during a map click.
 If a road route or any segment has no clear path, the map walk stops without moving the player.
 
 It is plain HTML, CSS and JavaScript in `public/`, with no dependencies. Nothing here is part of a host or an image: `.dockerignore` excludes `harbor/`, the playbook never copies it, and `tests/test_harbor_isolation.py` checks both.

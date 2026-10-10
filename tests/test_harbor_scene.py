@@ -215,6 +215,14 @@ for (let x = -10; x <= 12; x += 0.5) {
     for (const id of ORDER) walkToSpot(id, start, 1000);
   }
 }
+// Ship height changes must not invalidate island or deck collision-safe routes.
+for (const [lift, tilt] of [[0.2, 0.03], [-0.2, -0.03]]) {
+  bob = lift; roll = tilt; rc = Math.cos(roll); rs = Math.sin(roll);
+  for (const start of [[-0.6, 25], [-3.1, -6], [0.3, 5.5]]) {
+    for (const id of ORDER) walkToSpot(id, start, 1000);
+  }
+}
+bob = roll = 0; rc = 1; rs = 0;
 const savedWorldLength = world.length;
 try {
   box(world, 29, 1.2, 39, 31, 3, 39.2, 's');
