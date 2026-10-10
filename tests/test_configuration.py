@@ -163,7 +163,7 @@ def test_init_preserves_existing_local_configuration(tmp_path, monkeypatch):
     for path in ("config", "schemas"):
         shutil.copytree(ROOT / path, tmp_path / path)
     monkeypatch.setattr(factory, "ROOT", tmp_path)
-    args = argparse.Namespace(user="coder", home="/home/coder", container=True)
+    args = argparse.Namespace(user="coder", home="/home/coder", container=True, board=False)
     factory.initialize(args)
     local = tmp_path / ".local/host.yml"
     first = local.read_bytes()
@@ -180,7 +180,9 @@ def test_root_operator_is_rejected_before_config_is_written(tmp_path, monkeypatc
         shutil.copytree(ROOT / path, tmp_path / path)
     monkeypatch.setattr(factory, "ROOT", tmp_path)
     with pytest.raises(ValueError, match="non-root"):
-        factory.initialize(argparse.Namespace(user="root", home="/home/root", container=False))
+        factory.initialize(
+            argparse.Namespace(user="root", home="/home/root", container=False, board=False)
+        )
     assert not (tmp_path / ".local/host.yml").exists()
 
 

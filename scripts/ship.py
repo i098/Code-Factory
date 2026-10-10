@@ -56,6 +56,12 @@ def validate_config(document):
     for block in ("imessage", "github_board"):
         if block in config and not config["profiles"]["firstmate"]:
             raise ValueError(f"{block} requires the firstmate profile")
+    if "board" in config and not (
+        config["profiles"]["firstmate"] and config["profiles"]["development"]
+    ):
+        raise ValueError(
+            "board requires the firstmate profile and the development profile (it builds with cargo)"
+        )
     if "ci_pool" in config:
         pool = config["ci_pool"]
         if not config["profiles"]["docker"]:
@@ -106,6 +112,8 @@ def initialize(args):
         for profile in ("docker", "tailscale", "desktop", "firstmate", "chat"):
             config["factory"]["profiles"][profile] = False
         config["factory"]["browser_prune"]["enabled"] = False
+    if args.board:
+        config["factory"]["board"] = {}
     destination = ROOT / ".local/host.yml"
     destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     # Validate before writing; a bad argument must not strand an unusable config.
@@ -299,6 +307,11 @@ def questions(document):
             " Then ask one short question: turn on the optional GitHub board, which mirrors "
             f"Firstmate work to issues and a Project? If yes, follow {ROOT / 'docs/github-board.md'}."
         )
+    if "board" not in config and config["profiles"]["development"]:
+        prompt += (
+            " Then ask one short question: turn on the crew board, a host-local message "
+            f"board for agent-to-agent messages? If yes, follow {ROOT / 'docs/board.md'}."
+        )
     returncode = subprocess.run([omp, prompt], cwd=firstmate, env=environment).returncode
     if returncode:
         print(
@@ -320,6 +333,7 @@ def main():
     dock.add_argument("--user")
     dock.add_argument("--home")
     dock.add_argument("--container", action="store_true")
+    dock.add_argument("--board", action="store_true", help="turn on the crew board (docs/board.md)")
     for name, text in (
         ("inspect", "check the host config against the schema and rules"),
         ("chart", "preview what launch would change; changes nothing"),

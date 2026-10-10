@@ -185,6 +185,7 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 | [omp configuration](docs/omp.md) | Signing in, model roles, fallbacks, the advisor, and updating an existing host |
 | [Chat clients](docs/chat.md) | The Concord (Discord) and slk (Slack) terminal clients: install, config, and sign-in |
 | [GitHub board](docs/github-board.md) | Optional: one issue per Firstmate work item, a Project board with its status, progress notes as issue comments, and a shared message board for agents |
+| [Crew board](docs/board.md) | Optional: a host-local, in-memory message board that agents use to send messages to each other, run as a user service |
 | [iMessage bridge](docs/imessage.md) | Optional: text Firstmate over a Photon Spectrum iMessage line, with a front desk that steps in when Firstmate stays quiet, and send, reply, typing, tapback, and location commands |
 | [Capacity and pruners](docs/capacity.md) | Host sizing per lane count and every auto pruner |
 | [CI pool](docs/ci-pool.md) | Self-hosted GitHub Actions slots: one job per fresh container, sized from half of the host's CPU and memory |

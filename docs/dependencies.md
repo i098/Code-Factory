@@ -63,6 +63,12 @@ Every host that starts services (`start_services: true`); the container worker i
 
 - spectrum-ts, the npm registry's latest release, installed with `bun add --exact` into `~/.local/share/code-factory/imessage` (`ansible/tasks/imessage.yml`). bun is a core tool.
 
+## Crew board
+
+`factory.board` set ([Crew board](board.md)).
+
+- crewboard, built from `crewboard/` in this repository with `cargo build --release --locked` by the Rust toolchain of the `development` profile (`ansible/tasks/board.yml`). Its crates are the versions in `crewboard/Cargo.lock`, verified by cargo against the checksums in that file.
+
 ## Firstmate
 
 `firstmate` profile.
