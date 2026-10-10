@@ -9,6 +9,7 @@ With the `agents` profile on, `./ship.sh launch`:
 1. Installs the latest published omp, resolved from the npm registry on every apply, plus the omp plugins ponytail, i-have-adhd and caveman, upgraded on every apply (see [Dependencies](dependencies.md#latest-releases)).
 2. Copies [`config/omp.yml`](../config/omp.yml) to `~/.omp/agent/config.yml` (directory `0700`, file `0600`), and [`config/omp-lsp.json`](../config/omp-lsp.json) to `~/.omp/agent/lsp.json`, which disables the markdown language server (marksman): it costs each session about 90 MB, and markdown diagnostics add nothing to agent work.
    Every apply also merges [`config/omp-models.yml`](../config/omp-models.yml) into `~/.omp/agent/models.yml`, preserving user providers and unshipped model keys.
+   Shipped override keys take precedence over existing values.
    It reads the first existing configuration in omp's order: `models.yml`, `models.yaml`, then legacy `models.json`.
    The installed Bun parser preserves YAML 1.2 scalar types and reads legacy JSONC comments and trailing commas.
    When an existing model file needs parsing, missing Bun makes check mode report the installation prerequisite and skip the dependent merge.
@@ -26,7 +27,10 @@ With the `agents` profile on, `./ship.sh launch`:
 9. Installs [`config/AGENTS.md`](../config/AGENTS.md) as the global instructions of Claude Code, omp and Codex. See [Global instructions](#global-instructions).
 10. Installs the omp rules in [`rules/`](../rules/) to omp's global rules folder. See [Rules](#rules).
 
-Both copies are first-write-only. If a file already exists, the recipe leaves it alone, so an account's own settings and provider configuration are never overwritten. The one exception is the two status line keys the [status line icons](#status-line-icons) need, which every apply ensures. See [Updating an existing host](#updating-an-existing-host).
+The `config.yml` and `lsp.json` copies are first-write-only.
+The recipe preserves existing settings except the two keys required by [Status line icons](#status-line-icons).
+Model overrides follow the merge policy above.
+See [Updating an existing host](#updating-an-existing-host).
 
 No credentials are installed. You sign in on each host.
 

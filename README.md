@@ -60,7 +60,7 @@
 - Agent harness: [omp](docs/omp.md), default model `anthropic/claude-opus-5-5:xhigh`, advisor off
 - Models: `anthropic/claude-fable-5-1`, `anthropic/claude-haiku-5-5`, `anthropic/claude-opus-5-5`, `anthropic/claude-sonnet-5-5`, `kimi-code/k3`
 - Crewmate models: mechanical `anthropic/claude-haiku-5-5`, `openai-codex/gpt-6-luna`; ordinary (default) `anthropic/claude-sonnet-5-5`, `openai-codex/gpt-6.1-sol`; hard `anthropic/claude-opus-5-5`.
-  The spawning home chooses the effort.
+  The spawning home selects a model for each task and chooses the thinking level.
 - Codex context: 272K default, 1M maximum, `extendedContext` on.
   The current bundled omp catalog limits the effective maximum to 872K.
 - omp plugins: `ponytail`, `i-have-adhd`, `caveman`
