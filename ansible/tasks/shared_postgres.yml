@@ -1,5 +1,17 @@
 ---
 # Disabled profiles leave the container, volume, secrets and units unmanaged.
+- name: Check explicit target-account Docker access
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - "{{ crewship_repo }}/fleet/bin/crewship-db"
+      - --check-docker
+  become: "{{ crewship_become_target | bool }}"
+  become_user: "{{ crewship_cfg.user }}"
+  environment: "{{ crewship_user_systemd_env | combine({'HOME': crewship_cfg.home}) }}"
+  changed_when: false
+  check_mode: false
+
 - name: Install the shared Postgres helper
   ansible.builtin.copy:
     src: "{{ crewship_repo }}/fleet/bin/crewship-db"

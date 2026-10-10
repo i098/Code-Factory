@@ -4,9 +4,11 @@ CREWSHIP_POSTGRES_LAB=1 enables Ansible and container operations.
 """
 
 import concurrent.futures
+import fcntl
 import importlib.util
 import json
 import os
+import select
 import shutil
 import subprocess
 import sys
@@ -77,6 +79,28 @@ def test_preview_and_deferred_start(tmp_path):
     assert service["image"] == "postgres:latest"
     assert document["volumes"]["data"]["name"] == "crewship-shared-postgres-data"
     assert secret.read_text().strip() not in config.read_text()
+
+
+@pytest.mark.parametrize("available", [False, True])
+def test_docker_access_check_does_not_change_resources(tmp_path, available):
+    binaries = tmp_path / "bin"
+    binaries.mkdir()
+    for name in ("docker", "sudo"):
+        command = binaries / name
+        command.write_text(f"#!/bin/sh\nexit {0 if available else 1}\n")
+        command.chmod(0o755)
+    home = tmp_path / "home"
+    home.mkdir()
+    result = subprocess.run(
+        [sys.executable, HELPER, "--check-docker"],
+        env={**os.environ, "HOME": str(home), "PATH": str(binaries)},
+        capture_output=True, text=True,
+    )
+    assert result.returncode == (0 if available else 1)
+    if not available:
+        assert "requires explicit Docker access" in result.stderr
+        assert "does not grant Docker privileges" in result.stderr
+    assert list(home.iterdir()) == []
 
 
 @pytest.fixture
@@ -165,6 +189,22 @@ def test_ansible_on_off_and_idempotence(service, tmp_path):
         "handlers": [{"name": "reload user systemd", "ansible.builtin.debug": {"msg": "deferred"}}],
     }]))
     command = ["ansible-playbook", "-i", "localhost,", str(playbook)]
+    denied = tmp_path / "denied"
+    denied.mkdir()
+    for name in ("docker", "sudo"):
+        executable = denied / name
+        executable.write_text("#!/bin/sh\nexit 1\n")
+        executable.chmod(0o755)
+    denied_playbook = yaml.safe_load(playbook.read_text())
+    denied_playbook[0]["vars"]["crewship_user_systemd_env"] = {"PATH": str(denied)}
+    playbook.write_text(yaml.safe_dump(denied_playbook))
+    rejected = subprocess.run(command, capture_output=True, text=True)
+    assert rejected.returncode != 0
+    assert "requires explicit Docker access" in rejected.stdout
+    assert not (home / ".local/bin/crewship-db").exists()
+    assert (home / ".local/state/code-factory/shared-postgres/projects-dir").read_text().strip() == str(home / "Dev/firstmate/projects")
+    denied_playbook[0]["vars"]["crewship_user_systemd_env"] = {}
+    playbook.write_text(yaml.safe_dump(denied_playbook))
     first = subprocess.run(command, capture_output=True, text=True, check=True)
     assert "changed=0" not in first.stdout.split("PLAY RECAP")[-1]
     second = subprocess.run(command, capture_output=True, text=True, check=True)
@@ -188,12 +228,16 @@ def test_ansible_on_off_and_idempotence(service, tmp_path):
 
 
 @lab
-def test_supabase_and_postgres_seeders_do_not_rewrite_unchanged_environment(service):
+@pytest.mark.parametrize("checkout", [
+    ".treehouse/swarms-platform-test/1/swarms-platform",
+    ".treehouse/firstmate-test/1/firstmate/projects/swarms-platform",
+])
+def test_supabase_and_postgres_seeders_do_not_rewrite_unchanged_environment(service, checkout):
     shared = service / "oss-fleet/shared-supabase"
     shared.mkdir(parents=True)
     (service / "oss-fleet/doctor").mkdir()
     (shared / "swarms-platform.env.local").write_text("# fleet-shared-supabase\nOTHER=keep\n")
-    worktree = service / ".treehouse/swarms-platform-test/1/swarms-platform"
+    worktree = service / checkout
     worktree.mkdir(parents=True)
     (worktree / ".git").write_text("gitdir: disposable\n")
     (worktree / "package.json").write_text("{}")
@@ -203,8 +247,56 @@ def test_supabase_and_postgres_seeders_do_not_rewrite_unchanged_environment(serv
     installed.chmod(0o755)
     command = ["bash", str(ROOT / "fleet/doctor/worktree-env-seed.sh")]
     environment = {**os.environ, "HOME": str(service)}
-    subprocess.run(command, env=environment, capture_output=True, check=True)
+    binaries = service / "test-bin"
+    binaries.mkdir()
+    ready = service / "writer-ready"
+    release = service / "writer-release"
+    os.mkfifo(ready)
+    os.mkfifo(release)
+    real_install = shutil.which("install")
+    assert real_install
+    wrapper = binaries / "install"
+    wrapper.write_text(
+        f"#!{sys.executable}\n"
+        "import pathlib, subprocess, sys\n"
+        "if pathlib.Path(sys.argv[-1]).name == '.env.local':\n"
+        "    pathlib.Path(sys.argv[-1]).write_text('')\n"
+        f"    with open({str(ready)!r}, 'w') as signal:\n"
+        "        signal.write('ready\\n')\n"
+        f"    with open({str(release)!r}) as signal:\n"
+        "        signal.read(1)\n"
+        f"sys.exit(subprocess.call([{real_install!r}, *sys.argv[1:]]))\n"
+    )
+    wrapper.chmod(0o755)
+    ready_fd = os.open(ready, os.O_RDWR | os.O_NONBLOCK)
+    release_fd = os.open(release, os.O_RDWR | os.O_NONBLOCK)
+    postgres = None
+    supabase = subprocess.Popen(
+        command, env={**environment, "PATH": str(binaries) + ":" + os.environ["PATH"]},
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    try:
+        assert select.select([ready_fd], [], [], 30)[0], "Supabase writer did not pause"
+        assert os.read(ready_fd, 64) == b"ready\n"
+        lock_path = service / ".local/state/code-factory/secrets/shared-postgres/.lock"
+        with lock_path.open("a") as lock:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        postgres = subprocess.Popen(
+            [sys.executable, HELPER, "--seed"], env=environment,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+    finally:
+        os.write(release_fd, b"x")
+        os.close(release_fd)
+        os.close(ready_fd)
+        _, stderr = supabase.communicate(timeout=30)
+        assert supabase.returncode == 0, stderr.decode()
+        if postgres is not None:
+            _, stderr = postgres.communicate(timeout=30)
+            assert postgres.returncode == 0, stderr.decode()
     path = worktree / ".env.local"
+    assert path.read_text().splitlines()[:2] == ["# fleet-shared-supabase", "OTHER=keep"]
     first = path.read_bytes(), path.stat().st_mtime_ns
     subprocess.run(command, env=environment, capture_output=True, check=True)
     assert first == (path.read_bytes(), path.stat().st_mtime_ns)
