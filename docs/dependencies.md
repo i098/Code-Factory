@@ -7,7 +7,7 @@ Everything the recipe installs, grouped by where it comes from. Nothing is pinne
 `onboard.sh`, `pyproject.toml`, `uv.lock`
 
 - The latest uv (below), then `uv sync --locked`: ansible-core 2.21.4, jsonschema 4.26.0, PyYAML 6.0.3. `uv.lock` is this repository's own development environment, so it stays locked.
-- Dev group: pytest 9.0.2, ruff 0.16.3.
+- See [pyproject.toml](../pyproject.toml) for the dev dependency group.
 
 ## Latest releases
 

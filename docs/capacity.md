@@ -19,7 +19,7 @@ Figures are estimates from a measured fleet host.
 | **UI lane** (agent + dev server + tsc + browser) | **5-8 GB**; plan 8 GB | [fleet guards](fleet-guards.md) |
 
 Fixed cost, whatever the lane count: the OS, Herdr, Firstmate, its secondmates and Docker.
-The shared Supabase stack adds a fixed cost only when `factory.profiles.shared_supabase` is enabled.
+A running [shared Supabase stack](fleet-guards.md#shared-supabase) adds a fixed cost, even when its profile no longer manages it.
 Allow about 3 GB with the optional stack; this estimate is not a measurement of a default host.
 
 Firstmate refuses a new spawn while `MemAvailable` is under

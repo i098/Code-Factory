@@ -7,7 +7,7 @@ Apply opens this runbook as the default checklist for the [new-host questions](c
 ## What stays on the old host
 
 Services that hold state other hosts share, such as a model relay, a monitoring stack, or a project database, stay where they are unless you move them on purpose. A second copy splits their state. A project moves its own data only as a deliberate project decision, with a database-aware backup and restore ([App and fleet state](recovery.md#app-and-fleet-state)).
-The new host builds its own shared Supabase only with `profiles.shared_supabase: true` and a fixture archive ([The fixture](fleet-guards.md#the-fixture)).
+Follow [Shared Supabase](fleet-guards.md#shared-supabase) for optional backend setup on the new host and [The fixture](fleet-guards.md#the-fixture) for backup and restore.
 
 `~/super.env` is still edited on one host only ([Shared credentials](secrets.md)).
 
