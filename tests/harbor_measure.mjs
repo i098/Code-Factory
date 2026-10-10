@@ -7,6 +7,7 @@ export async function checkMeasure(page, origin) {
   const intercept = request => {
     if (request.url() !== `${origin}/harbor.js`) return request.continue();
     return request.respond({ contentType: 'text/javascript', body: source + `
+window.checkMeasureReady = () => introProgress === 1 && cols > 0 && DG[0] !== undefined;
 window.checkMeasure = () => {
   const saved = { visible, insideHouse, scale, mapMode };
   visible = false;
@@ -48,7 +49,7 @@ window.checkMeasure = () => {
   page.on('request', intercept);
   try {
     await page.goto(origin, { waitUntil: 'load' });
-    await page.waitForFunction(() => window.checkMeasure && document.fonts.status === 'loaded');
+    await page.waitForFunction(() => window.checkMeasureReady?.() && document.fonts.status === 'loaded');
     const results = await page.evaluate(() => window.checkMeasure());
     assert.equal(results.length, 6);
     for (const result of results) {

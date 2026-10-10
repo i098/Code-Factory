@@ -846,7 +846,7 @@ function measure() {
   G = new Array(cols * rows); C = new Array(cols * rows);
   ID = new Int32Array(cols * rows); D = new Float32Array(cols * rows); SP = new Array(cols * rows);
   DG = new Array(cols * rows); DC = new Array(cols * rows);
-  dirty = true; // Changing canvas size clears it, including an idle room's last frame.
+  dirty = true; // Grid measurement clears the canvas, including an idle room's last frame.
 }
 
 // Per-cell glyph, colour class, surface id (solid and face) and depth; the edge pass reads them.
@@ -861,25 +861,7 @@ function render() {
   cam.lx = rc * (me.x - SX) + rs * (me.eye - bob) + SX; cam.ly = -rs * (me.x - SX) + rc * (me.eye - bob);
   const scenery = insideHouse ? room : world, vessel = insideHouse ? NONE : ship;
   const seenWorld = cull(scenery, false), seenShip = cull(vessel, true);
-  // Each tile of one row by TILE_W columns keeps only the solids whose screen rectangle reaches it.
-  for (let j = 0, c = 0; j < rows; j++) {
-    const v = (1 - (2 * j + 1) / rows) * tanV;
-    const inRowWorld = seenWorld.filter((s) => s.j0 <= j && j <= s.j1), inRowShip = seenShip.filter((s) => s.j0 <= j && j <= s.j1);
-    for (let a = 0; a < cols; a += TILE_W) {
-      const b = a + TILE_W - 1;
-      rowWorld = inRowWorld.filter((s) => s.i0 <= b && a <= s.i1); rowShip = inRowShip.filter((s) => s.i0 <= b && a <= s.i1);
-      for (let i = a; i <= b && i < cols; i++, c++) {
-        // Cells behind the noise are not visible yet; cast only the live scene revealed by the sweep.
-        if (introProgress < 1 && introDistance(i, j) > 0) {
-          put(c, " ", "f", 0, Infinity); SP[c] = null;
-          continue;
-        }
-        const h = ((2 * i + 1) / cols - 1) * tanH;
-        const dx = fx + rx * h + ux * v, dy = fy + uy * v, dz = fz + rz * h + uz * v, n = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        cast(c, i, (i + j) & 1, dx / n, dy / n, dz / n);
-      }
-    }
-  }
+  for (let j = 0; j < rows; j++) castRow(j, seenWorld, seenShip);
   if (!insideHouse) gulls();
   const mid = (rows >> 1) * cols + (cols >> 1);
   const spot = SP[mid], looked = spot && D[mid] < (RANGE[spot] || 12);
@@ -888,6 +870,26 @@ function render() {
   label(looked && spot === target ? [cols >> 1, rows >> 1] : target && project(anchors[target]));
   minimap();
   draw(mid);
+}
+// Each tile of one row by TILE_W columns keeps only the solids whose screen rectangle reaches it.
+function castRow(j, seenWorld, seenShip) {
+  const [fx, fy, fz] = cam.f, [rx, , rz] = cam.r, [ux, uy, uz] = cam.u;
+  const v = (1 - (2 * j + 1) / rows) * cam.tanV;
+  const inRowWorld = seenWorld.filter((s) => s.j0 <= j && j <= s.j1), inRowShip = seenShip.filter((s) => s.j0 <= j && j <= s.j1);
+  for (let a = 0, c = j * cols; a < cols; a += TILE_W) {
+    const b = a + TILE_W - 1;
+    rowWorld = inRowWorld.filter((s) => s.i0 <= b && a <= s.i1); rowShip = inRowShip.filter((s) => s.i0 <= b && a <= s.i1);
+    for (let i = a; i <= b && i < cols; i++, c++) {
+      // Cells behind the noise are not visible yet; cast only the live scene revealed by the sweep.
+      if (introProgress < 1 && introDistance(i, j) > 0) {
+        put(c, " ", "f", 0, Infinity); SP[c] = null;
+        continue;
+      }
+      const h = ((2 * i + 1) / cols - 1) * cam.tanH;
+      const dx = fx + rx * h + ux * v, dy = fy + uy * v, dz = fz + rz * h + uz * v, n = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      cast(c, i, (i + j) & 1, dx / n, dy / n, dz / n);
+    }
+  }
 }
 
 // Screen rectangle of each solid's bounding box this frame, so a ray only tests solids that can cover its cell,
@@ -1480,14 +1482,14 @@ function drawRow(mid, j, tick) {
   let run = "", cur = C[j * cols], from = 0;
   const tileRow = ((j + tick) & 7) << 3;
   for (let i = 0; i < cols; i++) {
-    const c = j * cols + i, aim = c === mid, hud = introProgress === 1 && MAPCELLS.has(c);
-    const distance = introProgress < 1 ? introDistance(i, j) : -1;
+    const c = j * cols + i, aim = c === mid;
+    const distance = introDistance(i, j);
     const noise = distance > 0;
-    const mark = noise ? null : hud ? " " : aim ? "+" : LINE.get(c) || outline(c, i, j);
-    const cls = noise ? distance < 0.08 ? "h" : "f" : hud ? "" : aim ? (target ? "h" : "k") : mark ? "h" : C[c];
+    const mark = noise ? null : aim ? "+" : LINE.get(c) || outline(c, i, j);
+    const cls = noise ? distance < 0.08 ? "h" : "f" : aim ? (target ? "h" : "k") : mark ? "h" : C[c];
     const ch = noise ? INTRO_NOISE[tileRow + ((i + tick) & 7)] : mark || edge(c, i, j) || G[c];
     // The intro reuses desktop colour runs; touch draws only single glyphs without building runs.
-    if (introProgress < 1 && touchFirst.matches) { paint(ch, cls, i, j); continue; }
+    if (touchFirst.matches) { paint(ch, cls, i, j); continue; }
     if (cls !== cur) { paint(run, cur, from, j); run = ""; cur = cls; from = i; }
     run += ch;
   }
