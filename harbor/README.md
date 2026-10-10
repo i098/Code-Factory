@@ -38,7 +38,7 @@ It is plain HTML, CSS and JavaScript in `public/`, with no dependencies. Nothing
 `build.py` (Python standard library) copies `public/` to `dist/` and fills the points of interest from the README's Features list and More docs row.
 It also adds the quick start, the repository, the latest release from `CHANGELOG.md`, and how.html.
 A link with an object in the scene (mapped in `build.py`'s `SCENE`) opens on that object.
-A link with no mapping never blocks the build: it prints a warning and appears on the docs board beside the HOW board.
+A link with no mapping prints a warning but never blocks the build.
 The docs board shows on the mini map like the other points.
 Add an object and a `SCENE` entry to give the link its own place.
 The build limits each sign to a title, a short description and one link.
@@ -48,7 +48,10 @@ Signs first reflow below or beside the map, clear of the move pad and safe-area 
 If space is limited, signs remove spacing and shorten the visible copy.
 If no clear rectangle fits, signs stay visible over the scene within the safe area.
 Touch links retain 44-pixel hit regions where space permits.
-Enter opens the selected object, and focused HTML links retain their native keyboard behavior.
+Click or tap a sign link to open it.
+Focus a feature-list link to show its sign.
+The sign highlights the focused link without scrolling the scene.
+See [how.html](public/how.html) for the movement and Enter controls.
 
 ## Preview
 

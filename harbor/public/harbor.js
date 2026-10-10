@@ -1417,7 +1417,7 @@ function outline(c, i, j) {
   const off = (n, inside) => !inside || SP[n] !== target;
   return slope(off(c - 1, i > 0), off(c + 1, i < cols - 1), off(c - cols, j > 0), off(c + cols, j < rows - 1));
 }
-// Draws rows, then the mini map after the intro or a dark overlay during it.
+// Draws rows, then the mini map and sign after the intro or a dark overlay during it.
 function draw(mid) {
   ctx.fillStyle = "#060a14";
   ctx.fillRect(0, 0, viewW, viewH);
