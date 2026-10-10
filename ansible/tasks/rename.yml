@@ -34,6 +34,31 @@
     crewship_renamed_word: code-factory
     crewship_renamed_home_re: "^{{ crewship_cfg.home | regex_escape }}/"
   block:
+    - name: Find the pre-rename paths and their new names
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        get_checksum: false
+      become: true
+      loop: "{{ crewship_renamed_paths | flatten }}"
+      register: crewship_renamed_path_stat
+      check_mode: false
+
+    - name: Stop when a pre-rename path and its new name both exist
+      ansible.builtin.assert:
+        that: crewship_renamed_conflicts | length == 0
+        fail_msg: >-
+          Both the old and the new path exist: {{ crewship_renamed_conflicts | join(', ') }}.
+          Provisioning never overwrites or deletes data. Merge each old path
+          into its new name or remove one of them by hand, then re-run.
+        quiet: true
+      vars:
+        crewship_renamed_existing: >-
+          {{ crewship_renamed_path_stat.results | selectattr('stat.exists') | map(attribute='item') | list }}
+        crewship_renamed_conflicts: >-
+          {{ crewship_renamed_paths | selectattr('0', 'in', crewship_renamed_existing)
+             | selectattr('1', 'in', crewship_renamed_existing) | map('join', ' and ') | list }}
+
     - name: Find the pre-rename units
       ansible.builtin.stat:
         path: "{{ crewship_user_units }}/{{ item }}"
@@ -68,30 +93,43 @@
         label: "{{ item[1] }}{{ item[0] }}"
       notify: reload user systemd
 
-    - name: Find the pre-rename paths and their new names
-      ansible.builtin.stat:
-        path: "{{ item }}"
-        follow: false
-        get_checksum: false
-      become: true
-      loop: "{{ crewship_renamed_paths | flatten }}"
-      register: crewship_renamed_path_stat
-      check_mode: false
+    - name: Stop the chrome-devtools-axi bridges that run from the pre-rename directory
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import os, re, select, signal, sys
+            bridge = re.compile(re.escape(sys.argv[1]) + r"/(chrome-devtools-axi/[^/]+|npm)"
+                                r"/node_modules/chrome-devtools-axi/dist/bin/chrome-devtools-axi-bridge\.js")
+            for pid in filter(str.isdigit, os.listdir("/proc")):
+                try:
+                    fd = os.pidfd_open(int(pid))
+                except OSError:
+                    continue
+                try:
+                    with open(f"/proc/{pid}/cmdline", "rb") as stream:
+                        args = [os.fsdecode(arg) for arg in stream.read().split(b"\0")[:-1]]
+                    if os.stat(f"/proc/{pid}").st_uid != os.getuid() or len(args) != 2 or not bridge.fullmatch(args[1]):
+                        continue
+                    signal.pidfd_send_signal(fd, signal.SIGTERM)
+                    poll = select.poll()
+                    poll.register(fd, select.POLLIN)
+                    print(pid, args[1], "stopped" if poll.poll(10000) else "shutdown requested")
+                except OSError:
+                    continue
+                finally:
+                    os.close(fd)
+          - "{{ crewship_share_dir | dirname }}/{{ crewship_renamed_word }}"
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      register: crewship_renamed_bridges
+      changed_when: crewship_renamed_bridges.stdout | length > 0
 
-    - name: Stop when a pre-rename path and its new name both exist
-      ansible.builtin.assert:
-        that: crewship_renamed_conflicts | length == 0
-        fail_msg: >-
-          Both the old and the new path exist: {{ crewship_renamed_conflicts | join(', ') }}.
-          Provisioning never overwrites or deletes data. Merge each old path
-          into its new name or remove one of them by hand, then re-run.
-        quiet: true
-      vars:
-        crewship_renamed_existing: >-
-          {{ crewship_renamed_path_stat.results | selectattr('stat.exists') | map(attribute='item') | list }}
-        crewship_renamed_conflicts: >-
-          {{ crewship_renamed_paths | selectattr('0', 'in', crewship_renamed_existing)
-             | selectattr('1', 'in', crewship_renamed_existing) | map('join', ' and ') | list }}
+    - name: Report the stopped pre-rename bridges
+      ansible.builtin.debug:
+        msg: "chrome-devtools-axi bridge {{ item }}"
+      loop: "{{ crewship_renamed_bridges.stdout_lines | default([]) }}"
 
     - name: Move the pre-rename home paths to their new names
       ansible.builtin.command:
@@ -142,6 +180,24 @@
       loop: "{{ crewship_renamed_links.stdout_lines | default([]) | batch(2) | list }}"
       loop_control:
         label: "{{ item[0] }}"
+
+    - name: Find the koncreet link
+      ansible.builtin.stat:
+        path: /usr/local/bin/koncreet
+        follow: false
+        get_checksum: false
+      register: crewship_renamed_koncreet
+      check_mode: false
+
+    - name: Point the koncreet link at the new directory
+      ansible.builtin.file:
+        path: /usr/local/bin/koncreet
+        src: "{{ crewship_renamed_koncreet.stat.lnk_target | replace('/usr/local/lib/' ~ crewship_renamed_word ~ '/', '/usr/local/lib/crewship/', 1) }}"
+        state: link
+        force: true
+        follow: false
+      become: true
+      when: (crewship_renamed_koncreet.stat.lnk_target | default('')).startswith('/usr/local/lib/' ~ crewship_renamed_word ~ '/')
 
     # Rendered units are rewritten again by their own tasks; this also carries
     # unmanaged units, such as the proxy services, over to the moved paths.

@@ -716,7 +716,7 @@ check_ansible_second_pass_idempotent() {
 # migration table in ansible/tasks/rename.yml, so no path is listed twice.
 # ansible-second-pass runs next and proves the second apply changes nothing.
 check_rename_migration() {
-    local old units share state out rc link path renamed unit
+    local old units share state out rc link path renamed unit bridge bridge_pid other_pid
     old=$(cf_python -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))[0]["vars"]["crewship_renamed_word"])' \
         "${CF_ROOT}/ansible/tasks/rename.yml") || fail "cannot read the old name from ansible/tasks/rename.yml"
     units="${HOME}/.config/systemd/user"
@@ -754,6 +754,16 @@ check_rename_migration() {
     sed -i "s/^# \(BEGIN\|END\) crewship managed environment\$/# \1 ${old} managed environment/; s#${share}/crewship/#${share}/${old}/#g" \
         "${HOME}/.profile"
 
+    # A bridge that runs from the old directory, and a process that only names its path.
+    bridge="${share}/${old}/chrome-devtools-axi/0.0.0-smoke/node_modules/chrome-devtools-axi/dist/bin/chrome-devtools-axi-bridge.js"
+    mkdir -p "${bridge%/*}"
+    printf 'setInterval(() => {}, 1000);\n' >"${bridge}"
+    node "${bridge}" </dev/null >/dev/null 2>&1 &
+    bridge_pid=$!
+    node -e 'setInterval(() => {}, 1000);' "${bridge}" </dev/null >/dev/null 2>&1 &
+    other_pid=$!
+    running() { [ -e "/proc/$1" ] && ! grep -q '^State:[[:space:]]*Z' "/proc/$1/status"; }
+
     # An old path beside its new name stops the apply and moves nothing.
     mkdir "${HOME}/.cache/crewship"
     rc=0
@@ -761,11 +771,19 @@ check_rename_migration() {
     [ "${rc}" -ne 0 ] || fail "the apply ran although an old path and its new name both exist"
     grep -q 'Both the old and the new path exist' <<<"${out}" || { printf '%s\n' "${out}" | tail -n 40; fail "the apply failed for another reason"; }
     [ -f "${share}/${old}/rename-probe" ] && [ ! -e "${share}/crewship" ] || fail "the refused apply moved data"
+    [ -f "${units}/${old}-vnc.service" ] && [ -L "${units}/default.target.wants/${old}-vnc.service" ] || fail "the refused apply deleted the old units"
+    running "${bridge_pid}" || fail "the refused apply stopped a bridge"
     rmdir "${HOME}/.cache/crewship"
 
     rc=0
     out=$(launch) || rc=$?
     [ "${rc}" -eq 0 ] || { printf '%s\n' "${out}" | tail -n 40; fail "./ship.sh launch on the old layout exited ${rc}"; }
+    ! running "${bridge_pid}" || fail "the bridge that runs from the old directory still runs"
+    grep -qF "${bridge_pid} ${bridge} stopped" <<<"${out}" || fail "the apply did not log the stopped bridge"
+    running "${other_pid}" || fail "the apply stopped a process that only names the old bridge path"
+    kill "${other_pid}"
+    wait "${bridge_pid}" "${other_pid}" || true
+    rm -rf "${share}/crewship/chrome-devtools-axi/0.0.0-smoke"
 
     [ "$(cat "${share}/crewship/rename-probe")" = kept ] || fail "the share directory data did not move"
     [ "$(cat "${state}/crewship/secrets/postgres_password")" = secret ] || fail "the state directory data did not move"

@@ -23,6 +23,7 @@ import yaml
 ROOT = Path(__file__).parents[1]
 SCRIPT = ROOT / "scripts/firstmate-patch-layer.sh"
 GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+OLD_NAME = yaml.safe_load((ROOT / "ansible/tasks/rename.yml").read_text())[0]["vars"]["crewship_renamed_word"]
 
 
 def git(repo, *args):
@@ -212,7 +213,7 @@ def test_a_layer_built_before_the_rename_is_rebuilt(host):
     tip = git(checkout, "rev-parse", "HEAD~2")
     for sha in git(checkout, "rev-list", "--reverse", "HEAD~2..HEAD").splitlines():
         message = git(checkout, "log", "-1", "--format=%B", sha)
-        old = message.replace("Crewship-Patch:", "Code-Factory-Patch:")
+        old = message.replace("Crewship-Patch:", f"{OLD_NAME.title()}-Patch:")
         tip = subprocess.run(
             [*GIT, "-C", str(checkout), "commit-tree", f"{sha}^{{tree}}", "-p", tip],
             input=old, check=True, capture_output=True, text=True,
