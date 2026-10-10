@@ -379,7 +379,7 @@ def main():
     dock.add_argument("--container", action="store_true")
     dock.add_argument("--board", action="store_true", help="turn on the crew board (docs/board.md)")
     for name, text in (
-        ("inspect", "check the host config against the schema and rules"),
+        ("inspect", "check the host config against the schema; old config keys are rewritten once"),
         ("chart", "preview provisioning changes; old config keys are rewritten once"),
         ("launch", "provision this host from the host config"),
         ("survey", "check expected tools; old config keys are rewritten once"),

@@ -8,7 +8,7 @@
 | --- | --- |
 | `./onboard.sh` | Installs the repository tooling: the latest uv, then the locked Python environment with Ansible. |
 | `./ship.sh dock` | Creates `.local/host.yml` with the current user, home, and workspace. Never overwrites a file. Options: `--user`, `--home`, `--container`, `--board`. |
-| `./ship.sh inspect` | Checks the config against `schemas/crewship.schema.json` and the cross-field rules. |
+| `./ship.sh inspect` | Checks the config against `schemas/crewship.schema.json` and the cross-field rules. Can also do the one-time config rewrite below. |
 | `./ship.sh chart` | Runs Ansible in check mode without changing the host, except for the one-time config rewrite below. |
 | `./ship.sh launch` | Provisions the host. Asks for the sudo password if needed, then opens the new-host questions after a successful interactive apply. |
 | `./ship.sh survey` | Checks the tools and GitHub login without changing the host, except for the one-time config rewrite below. |
