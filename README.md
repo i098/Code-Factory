@@ -52,9 +52,6 @@
 - [SSH to a Mac](docs/security.md#ssh-to-a-mac): `ssh mac` from the host to your Mac (opt-in)
 - [Agent host move](docs/agent-host-move.md): move the agents to a new host with parity checks
 - [Security](docs/security.md): credential handling and remote access
-- [Configuration](docs/configuration.md): `.local/host.yml`, the `./ship.sh` commands, and what each profile installs
-- [Architecture](docs/architecture.md): why Ansible, host and container boundary, Docker worker, CI
-
 </details>
 
 <details>
@@ -206,7 +203,7 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 
 </details>
 
-## More docs: [Configuration](docs/configuration.md), [Dependencies](docs/dependencies.md), [Architecture](docs/architecture.md)
+## More docs: [Architecture](docs/architecture.md)
 
 Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Support: [SUPPORT.md](SUPPORT.md). Bug report: [form](../../issues/new?template=bug_report.yml). Feature request: [form](../../issues/new?template=feature_request.yml). Pull request: [template](.github/PULL_REQUEST_TEMPLATE.md). Security: [SECURITY.md](SECURITY.md). Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). License: [FSL-1.1-Apache-2.0](LICENSE).
 
