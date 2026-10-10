@@ -41,7 +41,7 @@ This service is a development database, not a security boundary between untruste
 
 ## Project databases
 
-Run `crewship-db example-app` to create a project's role and database and print its connection string.
+Run `crewship-db example-app` to create a project's role and database and print its environment file path.
 Project names start with a letter and contain at most 48 letters, digits, underscores or hyphens.
 Names are case-sensitive.
 The role and database both use the name `crewship_<project>`.
@@ -53,7 +53,8 @@ Projects with the same directory name share a database, even when they come from
 
 Project passwords stay in `~/.local/state/code-factory/secrets/shared-postgres/<project>.password`, with mode `0600`.
 Do not delete these files while you keep the volume.
-Treat helper output as a secret; do not put it in logs or a commit.
+The helper writes `DATABASE_URL` to `~/.local/state/code-factory/secrets/shared-postgres/<project>.env`, with mode `0600`.
+The helper prints only that file's path, never the connection string.
 
 ## Worktree environment
 
@@ -67,7 +68,7 @@ The seeder replaces an existing `DATABASE_URL` but keeps other environment entri
 Save an existing database URL before you enable this profile.
 Do not commit `.env.local` or the password files.
 Run `crewship-db --seed` before you start an app when you cannot wait for the timer.
-Outside these managed directories, copy the output of `crewship-db <project>` into the app's local environment.
+Outside these managed directories, copy the environment file returned by `crewship-db <project>` into the app's local environment.
 Apps that do not load `.env.local` must load `DATABASE_URL` themselves.
 When both profiles run, the Supabase seeder runs the Postgres seeder after it copies its environment template.
 The Supabase comparison ignores the Postgres-managed entries, so unchanged runs do not rewrite files or create extra backups.
