@@ -35,7 +35,8 @@ const manifest = JSON.parse(process.argv[3]).map(([id, title]) => ({
 }));
 const context = vm.createContext({
   document: {getElementById: () => element, querySelectorAll: () => manifest,
-    documentElement: {}, addEventListener() {}},
+    documentElement: {}, addEventListener() {},
+    fonts: { load: () => Promise.resolve(), ready: Promise.resolve() }},
   matchMedia: () => ({matches: false, addEventListener() {}}),
   getComputedStyle: () => ({getPropertyValue: () => 'monospace'}),
   devicePixelRatio: 1, innerWidth: 600, performance: {now: () => 0},
