@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 from pathlib import Path
 
 import yaml
@@ -104,6 +105,14 @@ def test_default_config_lists_the_current_defaults():
         "- Unset (opt-in): " + ticks(unset),
     ]:
         assert line in lines
+
+    ci_pool = (ROOT / "maintenance/ci-pool.py").read_text()
+    hook_env = re.search(r"--env\", \"(ACTIONS_RUNNER_HOOK_\w+)=", ci_pool).group(1)
+    assert (
+        f"- Hooks: `code-factory-quality-gate` at omp turn end, SessionStart banners from "
+        f"{ticks(provisions.OMP_PLUGINS)}, `{hook_env}` (opt-in with the [CI pool](docs/ci-pool.md))"
+    ) in lines
+    assert "code-factory-quality-gate" in extensions
 
     def named(prefix):
         return {line.split("`")[1] for line in lines if line.startswith(prefix)}
