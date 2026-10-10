@@ -13,7 +13,7 @@ import yaml
 ROOT = Path(__file__).parents[1]
 
 
-def merge_models(home, check=False):
+def run_model_merge(home, check=False, local_bin=None):
     playbook = home / "merge.yml"
     playbook.write_text(yaml.safe_dump([{
         "hosts": "localhost",
@@ -22,17 +22,21 @@ def merge_models(home, check=False):
         "vars": {
             "ansible_become": False,
             "code_factory_repo": str(ROOT),
-            "factory_local_bin": str(Path(shutil.which("bun")).parent),
+            "factory_local_bin": str(local_bin or Path(shutil.which("bun")).parent),
             "factory_cfg": {"home": str(home), "user": pwd.getpwuid(os.getuid()).pw_name},
             "factory_group": grp.getgrgid(os.getgid()).gr_name,
         },
         "tasks": [{"ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/omp_models.yml")}],
     }]))
-    result = subprocess.run(
+    return subprocess.run(
         [str(Path(sys.executable).parent / "ansible-playbook"), "-i", "localhost,",
          str(playbook), *(["--check"] if check else [])],
         cwd=home, env={**os.environ, "HOME": str(home)}, capture_output=True, text=True,
     )
+
+
+def merge_models(home, check=False):
+    result = run_model_merge(home, check=check)
     assert result.returncode == 0, result.stdout + result.stderr
     return int(result.stdout.rsplit("changed=", 1)[1].split()[0])
 
@@ -111,6 +115,69 @@ def test_model_merge_migrates_even_when_overrides_are_already_present(tmp_path, 
     assert merge_models(tmp_path) == 0
     assert target.read_bytes() == written
     assert source.read_bytes() == original
+
+
+@pytest.mark.parametrize("extension", ["yml", "yaml"])
+def test_yaml_model_merge_preserves_unquoted_string_scalars(tmp_path, extension):
+    target = tmp_path / ".omp/agent/models.yml"
+    target.parent.mkdir(parents=True)
+    source = target.with_suffix(f".{extension}")
+    source.write_text(
+        "providers:\n"
+        "  openai-codex:\n"
+        "    headers:\n"
+        "      X-Off: off\n"
+        "      X-On: on\n"
+        "      X-Yes: yes\n"
+        "      X-No: no\n"
+        "      X-Date: 2026-10-10\n"
+        "    models:\n"
+        "      - id: user-model\n"
+        "    modelOverrides:\n"
+        "      gpt-6.1-sol:\n"
+        "        contextWindow: 64000\n"
+        "        maxTokens: 8192\n"
+    )
+    original = source.read_bytes()
+    assert merge_models(tmp_path, check=True) == 1
+    assert source.read_bytes() == original
+    assert target.exists() == (extension == "yml")
+    assert merge_models(tmp_path) == 1
+    provider = yaml.safe_load(target.read_text())["providers"]["openai-codex"]
+    assert provider["headers"] == {
+        "X-Off": "off", "X-On": "on", "X-Yes": "yes", "X-No": "no", "X-Date": "2026-10-10",
+    }
+    assert provider["models"] == [{"id": "user-model"}]
+    assert provider["modelOverrides"]["gpt-6.1-sol"] == {
+        "contextWindow": 272000, "maxContextWindow": 1000000, "maxTokens": 8192,
+    }
+    written = target.read_bytes()
+    assert merge_models(tmp_path) == 0
+    assert target.read_bytes() == written
+    if source != target:
+        assert source.read_bytes() == original
+
+
+@pytest.mark.parametrize("extension", [None, "yml", "yaml", "json"])
+def test_model_preview_without_parser_preserves_files(tmp_path, extension):
+    target = tmp_path / ".omp/agent/models.yml"
+    target.parent.mkdir(parents=True)
+    source = target.with_suffix(f".{extension}") if extension else None
+    if source:
+        source.write_text('{"providers": {"user": {"baseUrl": "https://example.com"}}}')
+    original = source.read_bytes() if source else None
+    missing_bin = tmp_path / ".local/bin"
+    result = run_model_merge(tmp_path, check=True, local_bin=missing_bin)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert int(result.stdout.rsplit("changed=", 1)[1].split()[0]) == (0 if source else 1)
+    assert target.exists() == (extension == "yml")
+    if source:
+        assert "Model merge preview requires Bun installation" in result.stdout
+        assert source.read_bytes() == original
+        result = run_model_merge(tmp_path, local_bin=missing_bin)
+        assert result.returncode != 0
+        assert source.read_bytes() == original
+        assert target.exists() == (extension == "yml")
 
 
 def test_shipped_model_configuration_schema():
