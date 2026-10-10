@@ -16,7 +16,7 @@ const element = {
   hidden: false, classList: { add() {}, toggle() {} }, focus() {}, addEventListener() {},
   firstElementChild: {}, clientWidth: 600, clientHeight: 400,
   style: {setProperty() {}},
-  getContext: () => ({setTransform() {}, measureText: () => ({width: 6})})
+  getContext: () => ({setTransform() {}, fillRect() {}, measureText: () => ({width: 6})})
 };
 const context = vm.createContext({
   document: {getElementById: () => element,
