@@ -25,14 +25,14 @@ The profile checks this prerequisite before convergence, including previews and 
 Project creation and automatic seeding use the same account and require the same access.
 
 Run `./ship.sh chart` to preview, then `./ship.sh launch` to apply.
-The guided setup also offers this profile and names the host config to edit.
+Follow [New-host questions](configuration.md#new-host-questions) for guided setup.
 An unchanged second apply reports no changes for this service.
 With `start_services: false`, apply writes the configuration, secrets and enabled timer but does not pull images or start services.
 Run apply with service starts enabled when the host is ready.
 
 The container is `crewship-shared-postgres`.
 It publishes only `127.0.0.1:25432`, uses `restart: unless-stopped`, and stores data in `crewship-shared-postgres-data`.
-Compose pulls the official `postgres:latest` image on each apply, using the same latest-image pattern as the CI pool.
+See [Container images](dependencies.md#container-images) for the image and pull policy.
 The configuration is `~/.local/state/code-factory/shared-postgres/compose.json`.
 The superuser password is generated once in `~/.local/state/code-factory/secrets/shared-postgres/superuser`, with mode `0600`.
 Compose mounts that password as a file secret; no password enters the repository, command arguments or apply output.
@@ -57,7 +57,7 @@ Treat helper output as a secret; do not put it in logs or a commit.
 
 ## Worktree environment
 
-`crewship-postgres-env-seed.timer` runs at login and every two minutes.
+`crewship-postgres-env-seed.timer` first runs ten seconds after the user service manager starts, then two minutes after each service activation.
 Its service runs `crewship-db --seed` to discover checkouts in Treehouse pools and Firstmate project directories.
 Apply records the configured `<workspace>/firstmate/projects` directory, so custom workspace paths also receive database settings.
 It finds each checkout by its `.git` entry and uses the checkout directory name as the project name.
