@@ -20,8 +20,14 @@ Do NOT:
 - enumerate `google-chrome`/`chromium` on `PATH` or look for a default Chrome profile — the host holds no such profile by design, an empty result is a false negative;
 - copy, prune, or hand-edit the shared session jar.
 
-Sessions are shared: cookies live in one canonical jar synced across all three tiers every 2 min, so the user's logins are already present in whichever tier you use. To use a fallback tier for one task: `eval "$(fleet-browser env chrome)"` (it sets a separate axi session so it does not collide with the default). The gc timer stops idle fallbacks; do not kill another lane's tier. `fleet-browser status` shows the live tiers.
+Cookies other than Google cookies sync through one shared jar across all three tiers every 2 min.
+Google cookies never enter the shared jar; they stay in the tier that holds the login.
+For a signed-in Google task, use that tier, even when it is not the default.
+To use a fallback tier for one task: `eval "$(fleet-browser env chrome)"` (it sets a separate axi session so it does not collide with the default).
+The gc timer stops idle fallbacks; do not kill another lane's tier.
+`fleet-browser status` shows the live tiers.
 
 When the wrong identity is signed in, do NOT copy the jar, prune cookies, or spin a throwaway profile — that fragments session state and strands logins. Instead drive the same tier, sign out of the app (or its account menu), sign back in as the required account, and leave the shared jar in place. If a session must not persist, use an incognito context in the same tier, not a new profile.
 
-A missing API secret is not a blocker either: the shared session carries the login the secret would have bought. Check the session before escalating for a credential.
+A missing API secret is not a blocker if a browser session provides the required access.
+Check the session before escalating for a credential; for Google, check the tier that holds the login.

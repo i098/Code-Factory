@@ -1,10 +1,13 @@
 import importlib.util
+import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 import yaml
+from jinja2.nativetypes import NativeEnvironment
 
 SPEC = importlib.util.spec_from_file_location(
     "skills", Path(__file__).parents[1] / "scripts/skills.py"
@@ -95,6 +98,70 @@ def test_install_rules_private_wins_and_hand_added_rules_stay(tmp_path):
     assert not (rules / "only-private.md").exists()
     assert (rules / "hand-made.md").read_text() == "operator"
     assert not skills.install(home, tmp_path)["changed"]
+
+
+
+@pytest.fixture
+def browser_rules_repo(tmp_path):
+    repo = tmp_path / "repo"
+    script = repo / "scripts/skills.py"
+    script.parent.mkdir(parents=True)
+    script.write_bytes((skills.REPO / "scripts/skills.py").read_bytes())
+    for name in ("drive-the-browser-yourself", "fleet-browser-default-tier"):
+        rule(repo / "rules", "public", name, f"public {name}")
+        rule(repo / "rules", "private", name, f"private {name}")
+    rule(repo / "rules", "public", "always-on-skills", "general rule")
+    return repo
+
+
+def apply_rules(repo, home, ladder):
+    home.mkdir(parents=True, exist_ok=True)
+    tasks = yaml.safe_load((skills.REPO / "ansible/tasks/agents.yml").read_text())
+    task = next(t for t in tasks if t.get("register") == "factory_skills_run")
+    template = NativeEnvironment()
+    template.filters["bool"] = bool
+    argv = template.from_string(task["ansible.builtin.command"]["argv"]).render(
+        code_factory_repo=str(repo),
+        factory_cfg={"home": str(home)},
+        factory_fleet_browsers_enabled=ladder,
+    )
+    argv[0] = sys.executable
+    result = subprocess.run(argv, check=True, capture_output=True, text=True)
+    return json.loads(result.stdout)
+
+
+def test_browser_ladder_on_installs_both_rules(browser_rules_repo, tmp_path):
+    home = tmp_path / "home"
+    result = apply_rules(browser_rules_repo, home, True)
+    assert result["installed"]["rules"] == [
+        "always-on-skills.md", "drive-the-browser-yourself.md", "fleet-browser-default-tier.md"
+    ]
+    for name in ("drive-the-browser-yourself", "fleet-browser-default-tier"):
+        assert (home / RULES / f"{name}.md").read_text() == f"private {name}"
+    assert not apply_rules(browser_rules_repo, home, True)["changed"]
+
+
+def test_browser_ladder_off_removes_only_owned_rules(browser_rules_repo, tmp_path):
+    home = tmp_path / "home"
+    result = apply_rules(browser_rules_repo, home, False)
+    assert result["installed"]["rules"] == ["always-on-skills.md"]
+    names = ("drive-the-browser-yourself.md", "fleet-browser-default-tier.md")
+    assert all(not (home / RULES / name).exists() for name in names)
+    apply_rules(browser_rules_repo, home, True)
+    result = apply_rules(browser_rules_repo, home, False)
+    assert result["changed"]
+    assert all(not (home / RULES / name).exists() for name in names)
+    owned = json.loads((home / skills.MANIFEST).read_text())
+    assert owned[RULES] == ["always-on-skills.md"]
+    assert (home / RULES / "always-on-skills.md").read_text() == "general rule"
+    assert not apply_rules(browser_rules_repo, home, False)["changed"]
+
+    hand_home = tmp_path / "hand-home"
+    for name in names:
+        rule(hand_home / ".omp/agent", "rules", Path(name).stem, "operator")
+    apply_rules(browser_rules_repo, hand_home, True)
+    apply_rules(browser_rules_repo, hand_home, False)
+    assert all((hand_home / RULES / name).read_text() == "operator" for name in names)
 
 
 def test_failed_copy_still_records_what_was_installed(tmp_path, monkeypatch):

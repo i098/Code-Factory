@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 from pathlib import Path
 
 import yaml
@@ -122,3 +123,11 @@ def test_default_config_lists_the_current_defaults():
 
     assert named("- omp extension `") == extensions
     assert named("- Firstmate patch `") == patches
+
+    rule_line = next(line for line in lines if line.startswith("- omp rules "))
+    names = re.findall(r"`([^`]+)`", rule_line)
+    public_rules = {
+        path.stem for path in (ROOT / "rules/public").glob("*.md") if path.name != "README.md"
+    }
+    assert set(names) == public_rules
+    assert len(names) == len(public_rules)

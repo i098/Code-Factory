@@ -79,7 +79,10 @@
       {{ ['python3', code_factory_repo ~ '/scripts/skills.py', '--home', factory_cfg.home]
          + (['--private-source', factory_cfg.skills.private_source,
              '--private-ref', factory_cfg.skills.private_ref | default('HEAD')]
-            if factory_cfg.skills is defined else []) }}
+            if factory_cfg.skills is defined else [])
+         + (['--skip-rule', 'drive-the-browser-yourself.md',
+             '--skip-rule', 'fleet-browser-default-tier.md']
+            if not (factory_fleet_browsers_enabled | bool) else []) }}
   become: "{{ factory_become_target | bool }}"
   become_user: "{{ factory_cfg.user }}"
   register: factory_skills_run

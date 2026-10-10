@@ -169,6 +169,12 @@ Crewship ships general omp rules, including Time Traveling Stream Rules (TTSR), 
 
 Every apply copies each rule to `~/.omp/agent/rules/<name>.md` with the skills installer, [`scripts/skills.py`](../scripts/skills.py). A private rule wins over a public rule with the same name. The installer records the rules it installed in the same manifest as the skills, and treats them the same way: it rewrites or removes only those rules, a rule file that the manifest does not list belongs to the operator, and an unchanged apply changes nothing.
 
+Apply installs `drive-the-browser-yourself.md` and `fleet-browser-default-tier.md` only when `profiles.fleet_browsers` or `profiles.fleet_guards` enables the browser ladder.
+Without the ladder, apply passes `--skip-rule` for both names to the installer.
+This excludes both public and private copies from installation and removes earlier manifest-owned copies from omp's rules folder.
+Files added by hand remain unchanged.
+The other rules install with the `agents` profile.
+
 The same `skills.private_source` fills `rules/private/` from the `rules/` folder of that source (`rules/<name>.md`), with the same manifest rules under `rules/private`: a rule that leaves the source leaves `rules/private/` and `~/.omp/agent/rules/`, and a private rule put there by hand is never replaced.
 
 ## Global instructions

@@ -91,7 +91,7 @@ def sync(wanted, base, mine, skipped):
     return changed
 
 
-def install(home, repo=REPO, private_source=None, private_ref="HEAD"):
+def install(home, repo=REPO, private_source=None, private_ref="HEAD", skip_rules=()):
     record = home / MANIFEST
     owned = json.loads(record.read_text()) if record.is_file() else {}
     keys = [key for kind, (_, _, roots) in KINDS.items() for key in (f"{kind}/private", *roots)]
@@ -105,6 +105,8 @@ def install(home, repo=REPO, private_source=None, private_ref="HEAD"):
             changed |= sync(filled, repo / kind / "private", owned[f"{kind}/private"], skipped)
             # private last, so it wins a name clash
             wanted = {**find(repo / kind / "public"), **find(repo / kind / "private")}
+            if kind == "rules":
+                wanted = {name: path for name, path in wanted.items() if name not in skip_rules}
             installed[kind] = sorted(wanted)
             for root in roots:
                 changed |= sync(wanted, home / root, owned[root], skipped)
@@ -121,6 +123,7 @@ if __name__ == "__main__":
     parser.add_argument("--home", type=Path, required=True)
     parser.add_argument("--private-source")
     parser.add_argument("--private-ref", default="HEAD")
+    parser.add_argument("--skip-rule", action="append", default=[])
     args = parser.parse_args()
     home = args.home.resolve(strict=True)
-    print(json.dumps(install(home, REPO, args.private_source, args.private_ref)))
+    print(json.dumps(install(home, REPO, args.private_source, args.private_ref, args.skip_rule)))
