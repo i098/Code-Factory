@@ -819,32 +819,35 @@ function label(at) {
   if (card.hidden || !card.firstChild || (target && !at)) return;
   const [top, right, bottom, left] = safe;
   const i0 = Math.max(1, Math.ceil((left - padX) / cellW));
-  let i1 = Math.min(cols - 1, Math.floor((stage.clientWidth - right - padX) / cellW));
+  const i1 = Math.min(cols - 1, Math.floor((stage.clientWidth - right - padX) / cellW));
   const j0 = Math.max(1, Math.ceil((top - padY) / cellH));
-  const limit = pad.offsetParent ? pad.getBoundingClientRect().top - 12 : stage.clientHeight - bottom;
-  let j1 = Math.min(rows - 1, Math.floor((limit - padY) / cellH));
-  const ai = at ? Math.max(i0, Math.min(i1 - 1, at[0])) : i0;
-  const aj = at ? Math.max(j0, Math.min(j1 - 1, at[1])) : j0;
-  let width = Math.min(52, i1 - i0 - 4);
+  const j1 = Math.min(rows - 1, Math.floor((stage.clientHeight - bottom - padY) / cellH));
+  const controls = pad.offsetParent ? pad.getBoundingClientRect() : null;
+  const padLeft = controls ? Math.floor((controls.left - 12 - padX) / cellW) : i1;
+  const padTop = controls ? Math.floor((controls.top - 12 - padY) / cellH) : j1;
+  const below = Math.max(j0, mapBox.oj + mapBox.h + 1);
+  const side = Math.min(i1, mapBox.oi - 1, padLeft);
+  const anchor = at && [Math.max(i0, Math.min(i1 - 1, at[0])), Math.max(j0, Math.min(j1 - 1, at[1]))];
+  for (const area of [
+    [i0, below, i1, Math.min(j1, padTop)],
+    [i0, below, Math.min(i1, padLeft), j1],
+    [i0, j0, side, j1]
+  ]) {
+    signBox = signFit(anchor, ...area);
+    if (signBox) break;
+  }
+  if (signBox && anchor) signLeader(...anchor);
+}
+function signFit(at, i0, j0, i1, j1) {
+  const width = Math.min(52, i1 - i0 - 4);
+  if (width < 1 || j1 <= j0) return null;
   if (width !== signWidth) signLayout(width);
-  let w = Math.max(...signRows.map(([text]) => text.length)) + 4, h = signRows.length + 2;
-  if (mapBox.oj + mapBox.h + 1 + h > j1) {
-    i1 = Math.min(i1, mapBox.oi - 1);
-    if (pad.offsetParent) i1 = Math.min(i1, Math.floor((pad.getBoundingClientRect().left - 12 - padX) / cellW));
-    j1 = Math.min(rows - 1, Math.floor((stage.clientHeight - bottom - padY) / cellH));
-    width = Math.min(52, i1 - i0 - 4);
-    if (width !== signWidth) signLayout(width);
-    w = Math.max(...signRows.map(([text]) => text.length)) + 4; h = signRows.length + 2;
-  }
-  let i = at ? ai + 4 + w > i1 ? ai - 4 - w : ai + 4 : i0;
-  let j = at ? aj - h - 2 < j0 ? aj + 2 : aj - h - 2 : j0;
-  i = Math.max(i0, Math.min(i1 - w, i));
-  j = Math.max(j0, Math.min(j1 - h, j));
-  if (i + w > mapBox.oi && j < mapBox.oj + mapBox.h) {
-    j = mapBox.oj + mapBox.h + 1;
-  }
-  signBox = { i, j, w, h };
-  if (at) signLeader(ai, aj);
+  const w = Math.max(...signRows.map(([text]) => text.length)) + 4, h = signRows.length + 2;
+  if (h > j1 - j0) return null;
+  const [ai, aj] = at || [i0, j0];
+  const i = at ? ai + 4 + w > i1 ? ai - 4 - w : ai + 4 : i0;
+  const j = at ? aj - h - 2 < j0 ? aj + 2 : aj - h - 2 : j0;
+  return { i: Math.max(i0, Math.min(i1 - w, i)), j: Math.max(j0, Math.min(j1 - h, j)), w, h };
 }
 function signLeader(ai, aj) {
   const { i, j, w, h } = signBox;

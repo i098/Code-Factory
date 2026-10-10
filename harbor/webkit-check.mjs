@@ -13,7 +13,9 @@ const errors = [];
 for (const [name, width, height, touch] of [
   ["desktop", 1440, 900, false],
   ["portrait", 390, 844, true],
-  ["landscape", 844, 390, true]
+  ["landscape", 844, 390, true],
+  ["narrow-portrait", 320, 568, true],
+  ["narrow-landscape", 568, 320, true]
 ]) {
 const page = await browser.newPage({
   ...(touch ? devices["iPhone 13"] : {}),
@@ -72,7 +74,11 @@ window.harborCheck = {
       links: signLinks.map(({start, height, a}) => ({
         x: padX + (signBox.i + 2) * cellW,
         y: padY + (signBox.j + 1 + start + height / 2) * cellH,
-        href: a.href, height: height * cellH
+        href: a.href, height: height * cellH,
+        top: padY + (signBox.j + 1 + start) * cellH,
+        bottom: padY + (signBox.j + 1 + start + height) * cellH,
+        left: padX + (signBox.i + 1) * cellW,
+        right: padX + (signBox.i + signBox.w - 1) * cellW
       }))
     };
   }
@@ -105,8 +111,15 @@ if (touch) await page.evaluate(() => {
 const overlaps = (a, b) => b && a.x < b.x + b.width && a.x + a.width > b.x
   && a.y < b.y + b.height && a.y + a.height > b.y;
 for (const id of [null, ...await page.evaluate(() => window.harborCheck.ids)]) {
-  await page.evaluate((id) => window.harborCheck.go(id), id);
-  const bounds = await page.evaluate(() => window.harborCheck.bounds());
+  const timeout = setTimeout(() => {
+    console.error(`${name}/${id}: sign rendering stalled`);
+    process.exit(1);
+  }, 10000);
+  const bounds = await page.evaluate((id) => {
+    window.harborCheck.go(id);
+    return window.harborCheck.bounds();
+  }, id);
+  clearTimeout(timeout);
   const [top, right, bottom, left] = bounds.safe;
   assert(bounds.x >= left && bounds.y >= top, `${name}/${id}: sign starts outside the safe area`);
   assert(bounds.x + bounds.width <= bounds.screenWidth - right, `${name}/${id}: sign extends past the safe area: ${JSON.stringify(bounds)}`);
@@ -114,9 +127,11 @@ for (const id of [null, ...await page.evaluate(() => window.harborCheck.ids)]) {
   assert(!overlaps(bounds, bounds.map), `${name}/${id}: sign covers the map`);
   assert(!overlaps(bounds, bounds.pad), `${name}/${id}: sign covers the move pad`);
   await page.screenshot({ path: new URL(`proof/${name}-${id || "welcome"}.png`, dist).pathname });
-  assert(bounds.links.length >= 1 && bounds.links.length <= 3, `${id}: invalid link count`);
+  assert.equal(bounds.links.length, id ? 1 : 3, `${id}: a sign link is missing`);
   for (const link of bounds.links) {
     if (touch) assert(link.height >= 44, `${id}: touch link is too short`);
+    assert(link.top >= bounds.y && link.bottom <= bounds.y + bounds.height, `${id}: link region extends outside the frame`);
+    assert(link.left >= bounds.x && link.right <= bounds.x + bounds.width, `${id}: link region extends outside the frame`);
     const popup = page.waitForEvent("popup");
     if (touch) await page.touchscreen.tap(link.x, link.y);
     else await page.mouse.click(link.x, link.y);
