@@ -1347,14 +1347,14 @@ function outline(c, i, j) {
 // Draws rows, then the mini map after the intro or a dark overlay during it.
 function draw(mid) {
   ctx.fillStyle = "#060a14";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, viewW, viewH);
   const tick = Math.floor(introProgress * 24);
   for (let j = 0; j < rows; j++) drawRow(mid, j, tick);
   if (introProgress === 1) drawMap();
   else {
     ctx.fillStyle = "#000";
     ctx.globalAlpha = 1 - introProgress * introProgress;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, viewW, viewH);
     ctx.globalAlpha = 1;
   }
 }

@@ -7,6 +7,7 @@ See [how.html](public/how.html) for the renderer and controls.
 An uncaught error in `harbor.js`, or a failure to load it, hides the scene and shows the plain page.
 Errors and rejected promises from other scripts or resources, such as browser add-ons, do not.
 The canvas backing store stays within 4096x4096 device pixels, so large high-DPR windows draw at a lower pixel ratio.
+The background clear and intro overlay use CSS dimensions to cover the canvas, including when the rendering ratio falls below 1.
 JavaScript hides the plain page before the first paint; visitors without JavaScript still see it.
 The scene starts with a 1.2-second glyph-noise sweep that fades in from black without moving the camera or resizing the grid.
 Any key, click, touch, or mouse wheel input skips the animation.
