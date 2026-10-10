@@ -1,6 +1,10 @@
 # harbor
 
-`harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship at the dock, drawn as text in the browser every frame. Each object opens a floating label for one Crewship feature, an ASCII mini map jumps to any of them, and [how.html](public/how.html) explains how it is built. The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
+`harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship at the dock, drawn as text in the browser every frame.
+Each object opens a floating label for one Crewship feature.
+Selecting a destination on the ASCII mini map walks you there around obstacles; with reduced motion, you jump there instead.
+[how.html](public/how.html) explains how it is built.
+The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
 An uncaught error hides the scene and shows the plain page.
 
 The island has staggered plaza paving, scattered stones and grass tufts, varied tree canopies, textured bark, and foam along the shore.
@@ -10,7 +14,7 @@ Its basin blocks walking, and a blue `O` marks it on the mini map.
 The fountain marker leaves map labels and selected point markers clear.
 Map walks check each road and approach segment against the walking collision bounds.
 Detour corners come from every walking obstacle, including trees, hedges, the basin, the house, dock cargo, and ship fixtures.
-The page builds the corner graph before animation starts and rebuilds it only when the scene's obstacle count changes.
+The page builds the corner graph before animation starts and rebuilds it only when the world or ship object count changes.
 Ship bob and roll do not rebuild the graph during a map click.
 If a road route or any segment has no clear path, the map walk stops without moving the player.
 
