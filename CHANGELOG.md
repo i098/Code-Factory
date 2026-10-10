@@ -7,10 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-10
+
 ### Added
 
-- Generic global instructions in `config/AGENTS.md`, installed by the `agents` profile as `~/.claude/CLAUDE.md`, `~/.omp/agent/AGENTS.md` and `~/.codex/AGENTS.md`; a file changed on the host is moved to a timestamped backup first, and an unchanged apply changes nothing ([#86](https://github.com/i098/Crewship/issues/86)).
 - README: a Built with section that lists each third-party project Crewship installs or builds on, with a link and its license ([#73](https://github.com/i098/Crewship/issues/73)).
+- Eleven public skills in `skills/public/` with general working rules: code navigation, engineering standards, git and PR habits, IEEE documentation, operating rules, Opus speed, process safety, progress bars, quality gates, talk style, and tooling conventions; a test fails when a public skill holds a private detail such as a home path, an email or a host address ([#85](https://github.com/i098/Crewship/issues/85)).
+- Generic global instructions in `config/AGENTS.md`, installed by the `agents` profile as `~/.claude/CLAUDE.md`, `~/.omp/agent/AGENTS.md` and `~/.codex/AGENTS.md`; a file changed on the host is moved to a timestamped backup first, and an unchanged apply changes nothing ([#86](https://github.com/i098/Crewship/issues/86)).
+
+### Changed
+
+- Each pull request adds its changelog entry as its own file, `changelog.d/<issue>.<type>.md`, and no longer edits `CHANGELOG.md`, so pull requests that run at the same time do not conflict; the release step assembles the files into `CHANGELOG.md` with `towncrier build`, and CI fails a pull request without a fragment unless it has the `no changelog` label ([#90](https://github.com/i098/Crewship/issues/90)).
+- README: the install part is labeled command blocks, and host sizing is one sentence ([#91](https://github.com/i098/Crewship/issues/91)).
+- Deployments link each GHCR image push to the package page and each landing page deploy to https://crewship.si instead of its `workers.dev` address ([#102](https://github.com/i098/Crewship/issues/102)).
+- The README tagline, the landing page description, and the npm package description are now "Orchestrate hundreds of agents effortlessly - hardware is the limit." ([#105](https://github.com/i098/Crewship/issues/105)).
+
+### Fixed
+
+- `npx crewship --help` and `install.sh --help` print the usage and change nothing; a bad option prints the usage and exits with an error ([#94](https://github.com/i098/Crewship/issues/94)).
 
 ## [0.2.0] - 2026-10-09
 
@@ -68,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - iMessage front desk waits a 4-second quiet period, sends multi-bubble replies, and keeps the full intake ([#25](https://github.com/i098/Crewship/pull/25), [#28](https://github.com/i098/Crewship/pull/28)).
 - Firstmate inbox wake patches apply on top of upstream main ([#30](https://github.com/i098/Crewship/pull/30)).
 
-[Unreleased]: https://github.com/i098/Crewship/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/i098/Crewship/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/i098/Crewship/releases/tag/v0.3.0
 [0.2.0]: https://github.com/i098/Crewship/releases/tag/v0.2.0
 [0.1.0]: https://github.com/i098/Crewship/releases/tag/v0.1.0
