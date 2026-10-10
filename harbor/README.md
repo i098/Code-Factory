@@ -1,9 +1,19 @@
 # harbor
 
-`harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship at the dock, drawn as text in the browser every frame. Each object opens a floating label for one Crewship feature, an ASCII mini map jumps to any of them, and [how.html](public/how.html) explains how it is built. The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
+`harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship, dock, island, and house, drawn as text.
+Exterior objects open floating labels for Crewship features, and an ASCII mini map provides routes to them.
+The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
+See [how.html](public/how.html) for the renderer and controls.
 An uncaught error hides the scene and shows the plain page.
 
 The island has staggered plaza paving, scattered stones and grass tufts, varied tree canopies, textured bark, and foam along the shore.
+
+Walk into the framed house door to enter a warm room with a lamp, table, bed, and a starry night window.
+The blue bed faces the door; darker walls and floor keep the furniture, lamp, and window clear.
+Walk back through the inside door to return just outside, facing the island.
+Keyboard and touch movement share the door transition; walls and furniture block walking, and the map stays hidden inside.
+Release the movement keys and touch pad after a door crossing to move again.
+See [the frame loop](public/how.html#frame-loop) for adaptive detail and display timing.
 
 The plaza fountain has an octagonal stone rim, a central spout, and water that uses the existing animation clock.
 Its basin blocks walking, and a blue `O` marks it on the mini map.
@@ -35,8 +45,9 @@ Then open <http://localhost:8000>.
 ## WebKit check
 
 CI loads the built page in Playwright WebKit as an iPhone, with `webkit-check.mjs`.
-The check also fails if the first 30 slow frames change the grid, cell size, field of view, or canvas layout.
-It still checks crashes, uncaught errors, console errors, the plain-page fallback, and multi-glyph `fillText` calls.
+The check also fails if the first 30 slow exterior frames change the grid, cell size, field of view, or canvas layout.
+The check walks through the house door and back with the touch pad.
+It fails on a crash, an uncaught error, a console error, a fallback to the plain page, or a multi-glyph `fillText` call.
 See [how.html](public/how.html) for the rendering limits on touch devices.
 To run the check locally:
 
