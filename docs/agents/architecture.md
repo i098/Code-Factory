@@ -31,8 +31,8 @@ The Dockerfile's `worker` target is an isolated, non-root, devcontainer-style im
 
 ```bash
 docker pull ghcr.io/i098/crewship:latest                  # released image (or :X.Y.Z), published on each release
-docker tag ghcr.io/i098/crewship:latest code-factory/worker:dev  # name Compose uses; skip to let Compose build it
-docker build --target worker --tag code-factory/worker .  # or build it here
+docker tag ghcr.io/i098/crewship:latest crewship/worker:dev  # name Compose uses; skip to let Compose build it
+docker build --target worker --tag crewship/worker .  # or build it here
 docker compose --profile worker up -d                    # worker only
 docker compose --profile worker --profile data up -d     # + example Postgres and Redis
 ```
