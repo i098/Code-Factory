@@ -201,6 +201,10 @@ To turn it off, remove the block, then run `systemctl --user disable --now fm-im
 | `fm-imessage --help` | Shows the usage. It queues nothing. |
 | `fm-location` | Prints the location that the owner shares with the line in Find My, as JSON. |
 
+Use `--` before text that starts with a dash: `fm-imessage -- '- first item'`.
+Place send options before `--`: `fm-imessage --reply 1 --no-thread -- '- first item'`.
+All arguments after `--` are text, not options.
+
 If a spectrum-ts upgrade changes the internals that the service reads to reach the line's client, the service logs one warning at start and keeps running. Until the bridge is updated, `fm-location` fails with HTTP 503 and the service does not see edits.
 
 `fm-imessage` exits 0 only when the message is on disk in the outbox, and prints that it is queued. It exits non-zero when it queues nothing. An unknown option queues nothing and exits with code 2.

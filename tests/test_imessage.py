@@ -41,8 +41,9 @@ def test_text_goes_to_send(tmp_path):
 
 
 @pytest.mark.parametrize("option", ["--bogus", "-x", "--typo=1"])
-def test_unknown_option_sends_nothing(tmp_path, option):
-    result, calls = send(tmp_path, option, "hello")
+@pytest.mark.parametrize("options", [[], ["--reply", "1"], ["--no-thread"]])
+def test_unknown_option_sends_nothing(tmp_path, option, options):
+    result, calls = send(tmp_path, *options, option, "--", "hello")
     assert result.returncode == 2
     assert "nothing sent" in result.stderr
     assert calls == []
@@ -1299,6 +1300,37 @@ def test_bridge_auto_threads_only_the_first_bubble_and_keeps_overrides(tmp_path)
         cli("plain latest")
         wait_for(lambda: "send plain latest" in text(fake / "sent"), "the plain latest send")
         assert text(fake / "sent").splitlines()[-2:] == ["reply m2 after restart", "send plain latest"]
+    finally:
+        bridge.terminate()
+        bridge.wait(10)
+
+
+@pytest.mark.skipif(not (shutil.which("bun") and shutil.which("curl")), reason="needs bun and curl")
+def test_cli_delimiter_preserves_payload_and_thread_selection(tmp_path):
+    fake, state, notes, err, start, inbound, cli, text = fake_bridge(tmp_path)
+    bridge = start(1)
+    try:
+        inbound("m1", text="earlier")
+        inbound("m2", content={"type": "reply", "content": {"type": "text", "text": "yes"},
+                               "target": {"content": {"type": "text", "text": "earlier"}}})
+        payload = "- first item\n- second item\n--typing"
+        cases = [
+            ([], "reply m2"),
+            (["--reply", "1"], "reply m2"),
+            (["--reply", "2"], "reply m1"),
+            (["--no-thread"], "send"),
+            (["--reply", "2", "--no-thread"], "reply m1"),
+            (["--no-thread", "--reply", "2"], "reply m1"),
+        ]
+        expected = ""
+        for options, prefix in cases:
+            cli(*options, "--", payload)
+            expected += f"{prefix} {payload}\n"
+            wait_for(lambda: text(fake / "sent") == expected, "the dash-leading list")
+        inbound("m3", text="plain latest")
+        cli("--", payload)
+        expected += f"send {payload}\n"
+        wait_for(lambda: text(fake / "sent") == expected, "the plain latest list")
     finally:
         bridge.terminate()
         bridge.wait(10)

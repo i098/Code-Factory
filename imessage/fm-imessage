@@ -1,6 +1,6 @@
 #!/bin/bash
 # Send iMessage to the owner from the Firstmate line (docs/imessage.md).
-# Usage: fm-imessage [--reply N] [--no-thread] 'text' | fm-imessage --typing | fm-imessage --react '👍'
+# Usage: fm-imessage [--reply N] [--no-thread] [--] 'text' | fm-imessage --typing | fm-imessage --react '👍'
 # Blank-line-separated paragraphs become separate bubbles; a list stays one bubble. The first bubble automatically
 # threads under his latest text if it is a thread reply; --no-thread opts out, but --reply N overrides both.
 # --typing shows the typing bubble while you compose (best effort); --react puts a tapback on his latest text.
@@ -16,6 +16,7 @@ while [ $# -gt 0 ]; do
     --reply) case "${2:-}" in [1-9]|10) ;; *) echo "fm-imessage: --reply needs a number from 1 to 10 (nothing sent)" >&2; exit 2 ;; esac
              q="${q:+$q&}reply=$2"; shift 2 ;;
     --no-thread) q="${q:+$q&}no-thread=1"; shift ;;
+    --) shift; break ;;
     -*) echo "fm-imessage: unknown option $1 (nothing sent)" >&2; exit 2 ;;
     *) break ;;
   esac
