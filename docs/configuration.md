@@ -4,18 +4,18 @@
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `./onboard.sh` | Installs the repository tooling: the latest uv, then the locked Python environment with Ansible. |
-| `./ship.sh dock` | Creates `.local/host.yml` with the current user, home, and workspace. Never overwrites a file. Options: `--user`, `--home`, `--container`, `--board`. |
-| `./ship.sh inspect` | Checks the config against `schemas/crewship.schema.json` and the cross-field rules. Can also do the one-time config rewrite below. |
-| `./ship.sh chart` | Runs Ansible in check mode without changing the host, except for the one-time config rewrite below. |
-| `./ship.sh launch` | Provisions the host. Asks for the sudo password if needed, then opens the new-host questions after a successful interactive apply. |
-| `./ship.sh survey` | Checks the tools and GitHub login without changing the host, except for the one-time config rewrite below. |
-| `scripts/ship.py` | Runs the CLI behind `ship.sh`. |
-| `scripts/provisions.py` | Installs the public tools into the user-owned Crewship prefix. |
-| `scripts/stow-secrets.sh` | Pushes `~/super.env` to Cloudflare Secrets Store and deploys the fleet-secrets Worker. |
-| `scripts/fetch-secrets.sh` | Pulls `super.env` from the fleet-secrets Worker into `~/super.env`. |
+| New name | Old name | What it does |
+| --- | --- | --- |
+| `./onboard.sh` | `./bootstrap.sh` | Installs the repository tooling: the latest uv, then the locked Python environment with Ansible. Changes nothing else on the host. |
+| `./ship.sh dock` | | Copies `config/default.yml` to `.local/host.yml` with your user, home, and `~/Dev` workspace filled in. Never overwrites an existing file. Options: `--user`, `--home`, `--container`, and `--board`, which turns on the [crew board](board.md). |
+| `./ship.sh inspect` | | Does the one-time config rewrite below if needed, then checks the config against `schemas/crewship.schema.json` and the cross-field rules below. |
+| `./ship.sh chart` | | Runs the Ansible playbook in check mode. Reports what would change; mutates nothing except for the one-time config rewrite below. |
+| `./ship.sh launch` | | Runs the playbook for real, after the one-time config rewrite below. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, the first successful interactive apply with omp signed in then opens the new-host questions (below). |
+| `./ship.sh survey` | | Checks that each expected tool runs and reports `gh` authentication. Changes nothing except for the one-time config rewrite below. |
+| `scripts/ship.py` | | The Python program behind `ship.sh`. |
+| `scripts/provisions.py` | `scripts/install_tools.py` | Installs the public tools into the user-owned Crewship prefix. |
+| `scripts/stow-secrets.sh` | `scripts/push-super-env.sh` | Pushes `~/super.env` to Cloudflare Secrets Store and redeploys the fleet-secrets Worker. |
+| `scripts/fetch-secrets.sh` | `scripts/fetch-super-env.sh` | Pulls `super.env` from the fleet-secrets Worker into `~/super.env`. |
 
 `inspect`, `chart`, `launch`, and `survey` read `--config <path>` if you pass one, otherwise `.local/host.yml`. If `.local/host.yml` does not exist, `inspect`, `chart`, and `survey` fall back to `config/default.yml` (user `coder`); `launch` refuses to run.
 

@@ -381,7 +381,7 @@ def main():
     for name, text in (
         ("inspect", "check the host config against the schema; old config keys are rewritten once"),
         ("chart", "preview provisioning changes; old config keys are rewritten once"),
-        ("launch", "provision this host from the host config"),
+        ("launch", "provision this host from the host config; old config keys are rewritten once"),
         ("survey", "check expected tools; old config keys are rewritten once"),
     ):
         command = commands.add_parser(name, help=text)
