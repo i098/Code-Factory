@@ -780,10 +780,10 @@ function mapTerrain() {
 function mapMarks() {
   for (const s of world) footprint(s, s.mat === "l" ? "l" : s.mat);
   for (const s of ship) footprint(s, s.mat === "l" ? "l" : "o");
-  ORDER.forEach(mapPoint);
-  if (mapMode === 2) mapLabels();
   const f = toMap(5, 24.6);
   if (mapInside(f)) mapPut(f[0] + 1, f[1] + 1, "O", "w");
+  ORDER.forEach(mapPoint);
+  if (mapMode === 2) mapLabels();
   const p = toMap(me.x, me.z);
   if (mapInside(p)) mapPut(p[0] + 1, p[1] + 1, "^>v<"[Math.round(((me.yaw % 6.283) + 6.283) / 1.5708) % 4], "k");
 }
@@ -804,10 +804,17 @@ function mapPoint(id, n) {
 // Names on the big map, right of their point, else left of it, else left out where the ship crowds them.
 function mapLabels() {
   const taken = new Set(ORDER.map((id) => toMap(anchors[id].x, anchors[id].z).join()));
+  const f = toMap(5, 24.6);
+  taken.add(f.join());
   ORDER.forEach((id, n) => {
     const p = toMap(anchors[id].x, anchors[id].z), text = spots[id].title.slice(0, 16);
     const free = (i0) => i0 >= 0 && i0 + text.length < mapBox.iw && [...text].every((_, k) => !taken.has(`${i0 + k},${p[1]}`));
-    const i0 = [p[0] + 2, p[0] - 1 - text.length].find(free);
+    const places = [p[0] + 2, p[0] - 1 - text.length];
+    if (p[1] === f[1]) {
+      if (places[0] <= f[0] && f[0] < places[0] + text.length) places[0] = f[0] + 1;
+      if (places[1] <= f[0] && f[0] < places[1] + text.length) places[1] = f[0] - text.length;
+    }
+    const i0 = places.find(free);
     if (!mapInside(p) || i0 === undefined) return;
     [...text].forEach((ch, k) => { taken.add(`${i0 + k},${p[1]}`); mapPut(i0 + k + 1, p[1] + 1, ch, mapMode && n === pick ? "h" : "k"); });
   });

@@ -4,6 +4,7 @@
 
 The plaza fountain has an octagonal stone rim, a central spout, and water that uses the existing animation clock.
 Its basin blocks walking, and a blue `O` marks it on the mini map.
+The fountain marker leaves map labels and selected point markers clear.
 Map walks check complete approach segments against the walking collision bounds and route around the basin and all four hedges.
 If an approach has no clear path, the map walk stops without moving the player.
 Detour completeness remains in [#150](https://github.com/i098/Crewship/issues/150).

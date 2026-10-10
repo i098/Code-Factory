@@ -19,9 +19,9 @@ def test_fountain_stops_walking_and_leaves_room_to_pass():
     points = builder["points"](
         (ROOT / "README.md").read_text(), (ROOT / "CHANGELOG.md").read_text()
     )
-    point_ids = json.dumps([spot for spot, *_ in points])
+    point_data = json.dumps([[spot, title] for spot, title, *_ in points])
     subprocess.run(
-        [node, "-", str(ROOT / "harbor/public/harbor.js"), point_ids],
+        [node, "-", str(ROOT / "harbor/public/harbor.js"), point_data],
         input=r"""
 const fs = require('node:fs'), vm = require('node:vm');
 const assert = require('node:assert/strict');
@@ -30,8 +30,8 @@ const element = {
   firstElementChild: {}, clientWidth: 600, clientHeight: 400,
   getContext: () => ({setTransform() {}, measureText: () => ({width: 6})})
 };
-const manifest = JSON.parse(process.argv[3]).map(id => ({
-  dataset: {spot: id}, querySelector: tag => tag === 'a' ? {textContent: id, href: '#'} : {}
+const manifest = JSON.parse(process.argv[3]).map(([id, title]) => ({
+  dataset: {spot: id}, querySelector: tag => tag === 'a' ? {textContent: title, href: '#'} : {}
 }));
 const context = vm.createContext({
   document: {getElementById: () => element, querySelectorAll: () => manifest,
@@ -44,6 +44,31 @@ const context = vm.createContext({
   console, window: {}, assert
 });
 vm.runInContext(fs.readFileSync(process.argv[2], 'utf8') + `
+cols = 100; rows = 120; pick = ORDER.indexOf('antenna');
+me.x = 0; me.z = -7.4; me.yaw = 0;
+mapKey({code: 'KeyM', key: 'm'});
+mapKey({code: 'KeyM', key: 'm'});
+assert.equal(mapMode, 2, 'M twice must open the full map');
+minimap();
+const labelRow = toMap(anchors.antenna.x, anchors.antenna.z)[1];
+const mapRowText = Array.from({length: mapBox.iw}, (_, i) =>
+  MAPCELLS.get((mapBox.oj + labelRow + 1) * cols + mapBox.oi + i + 1)[0]).join('');
+assert(mapRowText.includes('Chat clients'), 'full map corrupts the Chat clients label');
+assert(!mapRowText.includes('Chat Olients'), 'fountain overwrites the Chat clients label');
+function fountainMapCell() {
+  const [i, j] = toMap(5, 24.6);
+  return MAPCELLS.get((mapBox.oj + j + 1) * cols + mapBox.oi + i + 1);
+}
+assert.deepEqual(fountainMapCell(), ['O', 'w'], 'full map label overwrites the fountain');
+cols = 17; rows = 20; setMap(1);
+minimap();
+assert.deepEqual(toMap(anchors.antenna.x, anchors.antenna.z), toMap(5, 24.6),
+  'coarse map must exercise a point and scenery overlap');
+assert.deepEqual(fountainMapCell(), ['@', 'h'], 'fountain overwrites the selected point');
+me.x = 2.9; me.z = 24.6;
+minimap();
+assert.deepEqual(fountainMapCell(), ['^', 'k'], 'scenery or selected point overwrites the player');
+setMap(0); cols = rows = 0;
 for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
   me.x = 5 - Math.sin(yaw) * 2.1;
   me.z = 24.6 - Math.cos(yaw) * 2.1;
