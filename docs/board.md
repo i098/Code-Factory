@@ -31,8 +31,6 @@ With `board:` set, the managed shell profile and the Herdr unit export `CREWBOAR
 Removing `board:` removes that export on the next apply.
 The existing Herdr restart handler stays conditional on service management.
 
-The crew overlay has a short board note for topics and checkpoints.
-Firstmate copies this file without template rendering, so the note says to use the board only if `CREWBOARD_SOCKET` is set.
 The status file still owns done, blocked, needs-decision, failed and paused.
 Supervisor instructions and acknowledgements still use the inbox.
 
