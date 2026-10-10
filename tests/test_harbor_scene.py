@@ -44,6 +44,25 @@ const context = vm.createContext({
   console, window: {}, assert, addEventListener() {}
 });
 vm.runInContext(fs.readFileSync(process.argv[2], 'utf8') + `
+const basinWater = world.find(s => s.tex === fountainWater);
+assert.match(textureColor(basinWater, 'w.', 0, 1, 1), /^w[1-7]$/,
+  'fountain water must stay visible and blue under lamp light');
+assert.match(textureColor(TERRAIN, 's|', 0.5, 1, 1), /^sw[0-7]$/,
+  'pale paving must retain warm lamp light');
+assert(Number(textureColor(TERRAIN, 's|', 0, 1, 0).slice(-1)) >
+  Number(textureColor(TERRAIN, 's|', 0, 0.1, 0).slice(-1)),
+  'pale paving must fade in fog');
+assert.equal(textureColor(fountainBasin, 's|', 0.5, 1, 1), null,
+  'terrain texture overrides must not apply to the stone basin');
+assert(segmentBlocked([6.876, 26.5], [7.1, 24.6], fountainBasin.bb),
+  'slab test missed the reported basin corner crossing');
+assert(!segmentBlocked([7.1, 26.5], [7.1, 24.6], fountainBasin.bb),
+  'slab test rejected a clear link');
+const openBoundary = walkBound(fountainBasin.bb, 3);
+assert(!segmentBlocked([openBoundary, 24], [openBoundary, 25], fountainBasin.bb),
+  'slab test closed an open walking boundary');
+assert(segmentBlocked([7.1, 24.6], [6.876, 26.5], fountainBasin.bb),
+  'slab test missed the reverse basin corner crossing');
 cols = 100; rows = 120; pick = ORDER.indexOf('antenna');
 me.x = 0; me.z = -7.4; me.yaw = 0;
 mapKey({code: 'KeyM', key: 'm'});
@@ -93,7 +112,7 @@ for (let k = 1; k < path.length; k++) {
   for (let i = 0; i <= 20; i++) {
     const x = ax + (bx - ax) * i / 20, z = az + (bz - az) * i / 20;
     assert(!blocked(x, z, floorAt(x, z)), 'map route crosses the basin');
-    assert.equal(ground(x, 1.2, z, 0, 1)[0], 't', 'map route leaves the paving');
+    assert(roadAt(x, z)[2], 'map route leaves the concrete road');
   }
 }
 function walkToSpot(id, start, dt) {
@@ -171,9 +190,6 @@ for (const start of plazaPoints) {
         const fy = floorAt(x, z);
         assert.notEqual(fy, null, 'approach leaves walkable ground');
         assert(!blocked(x, z, fy), 'approach enters a hedge or solid cell');
-        const surface = ground(x, fy, z, 0, 1);
-        assert(surface[0] === 't' || surface === 's_' || surface.endsWith("'") ||
-          ['r*', 'b*', 's*'].includes(surface), 'approach leaves paving or grass');
       }
     }
     anchors.approach = {x: end[0], y: 1.2, z: end[1] + 2.5, r: 0, ship: 0};

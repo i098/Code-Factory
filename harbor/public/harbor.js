@@ -107,36 +107,53 @@ const NODES = [[-0.3, -6], [-0.3, -1.2], [-0.3, 5.5], [1.9, -1.2], [4.2, -1.2], 
   [-16, 19.6], [-28, 19.6], [-30, 10], [-30, -14], [14, 19.6], [20, 19.6], [7.1, 21.7]];
 const LINKS = [[0, 1], [1, 2], [1, 3], [3, 4], [4, 5], [5, 6], [6, 15], [6, 8], [8, 9], [9, 10], [10, 11], [11, 12], [6, 13], [13, 14], [15, 7]];
 // Island ways (the links past the dock): concrete from the dock head to the plaza and along the centre of
-// the avenue, narrow dirt trails beyond. [ax, az, dx, dz, length², concrete]
+// the avenue, narrow dirt trails beyond. [ax, az, dx, dz, length², concrete, length]
 const CONCRETE = new Set(["5,6", "6,15", "15,7", "6,8", "6,13"]);
 const ROADS = LINKS.slice(5).map(([a, b]) => {
   const [ax, az] = NODES[a], dx = NODES[b][0] - ax, dz = NODES[b][1] - az;
-  return [ax, az, dx, dz, dx * dx + dz * dz, CONCRETE.has(`${a},${b}`)];
+  const l2 = dx * dx + dz * dz;
+  return [ax, az, dx, dz, l2, CONCRETE.has(`${a},${b}`), Math.sqrt(l2)];
 });
 // Distance from (x, z) to the nearest way, how far along it you are, and whether it is concrete.
 function roadAt(x, z) {
   let best = Infinity, along = 0, concrete = false;
-  for (const [ax, az, dx, dz, l2, c] of ROADS) {
+  for (const [ax, az, dx, dz, l2, c, length] of ROADS) {
     const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)), ex = x - ax - t * dx, ez = z - az - t * dz;
     const d = ex * ex + ez * ez;
-    if (d < best) { best = d; along = t * Math.sqrt(l2); concrete = c; }
+    if (d < best) { best = d; along = t * length; concrete = c; }
   }
   return [Math.sqrt(best), along, concrete];
+}
+// Staggered paving joints and individually divided stones around the round plaza.
+function plazaCurb(x, z) {
+  return (Math.atan2(z - 24.6, x - 5) + Math.PI) * 12 % 1 < 0.12 ? "t:" : "s=";
+}
+function plazaStone(x, z) {
+  const row = Math.floor((z + 99) / 0.9), u = x + 99 + (row % 2) * 0.6;
+  if (u % 1.2 < 0.09) return "s|";
+  if ((z + 99) % 0.9 < 0.075) return "s-";
+  return hash(Math.floor(u / 1.2), row) < 0.3 ? "t," : "t.";
+}
+function plazaPaving(x, z, radius) {
+  return radius > 2.96 ? plazaCurb(x, z) : plazaStone(x, z);
 }
 // Island ground as material and glyph: a 3 m concrete road with kerbs and joints every 3 m, a tiled plaza,
 // a 1 m dirt trail with uneven edges, ruts and footprints, and grass with a few flowers elsewhere.
 function ground(x, y, z, nx, ny) {
   if (ny < 0.5) return null;
   const [d, along, concrete] = roadAt(x, z), plaza = Math.hypot(x - 5, z - 24.6);
-  if (plaza < 3.2) return plaza > 3.05 ? "t_" : (x + 99) % 1.5 < 0.09 || (z + 99) % 1.5 < 0.09 ? "t:" : "t.";
-  if (concrete && d < 1.5) return d > 1.38 ? "s_" : along % 3 < 0.12 ? "t:" : "t.";
+  if (plaza < 3.2) return plazaPaving(x, z, plaza);
+  if (concrete && d < 1.5) return d > 1.38 ? along % 0.8 < 0.08 ? "t:" : "s_" : along % 3 < 0.12 ? "t:" : "t.";
   if (!concrete && d < 0.5 + 0.12 * Math.sin(along * 1.7) + 0.08 * hash(Math.floor(along * 3), 7)) {
     if (Math.abs(d - 0.22) < 0.06) return "o:";
     return hash(Math.floor(along * 2.5), Math.floor(d * 6)) < 0.18 ? "o," : "o.";
   }
-  // A few flowers and stones, each a small round dot in its half-metre cell.
   const cx = Math.floor(x * 2), cz = Math.floor(z * 2), h = hash(cx, cz);
   if (h < 0.025 && Math.hypot(x * 2 - cx - 0.5, z * 2 - cz - 0.5) < 0.18) return ["r*", "b*", "s*"][Math.floor(h * 120)];
+  if (h >= 0.025 && h < 0.13) {
+    const dx = x * 2 - cx - 0.3 - h * 3, dz = z * 2 - cz - 0.3 - hash(cz, cx) * 0.4;
+    if (dx * dx * 1.6 + dz * dz < 0.025 + h * 0.2) return h < 0.08 ? "t_" : "G'";
+  }
   // Grass in three greens mixed blade by blade; shadeSolid draws it as blades swaying in the wind.
   const v = hash(Math.floor(x * 5), Math.floor(z * 5) + 50);
   return (v < 0.3 ? "M" : v < 0.65 ? "G" : "g") + "'";
@@ -163,19 +180,23 @@ function landTex(x, y, z, nx, ny) {
 }
 const TERRAIN = { id: 4000, P: new Float64Array(0), bb: [-70, -1.6, -50, 60, 1.2, 60], mat: "g", spot: null, solid: false, tex: landTex };
 // Sand: light and dotted when dry, darker and wet by the waterline, where the wash comes and goes, with a few shells.
+function wetSand(x, y, z) {
+  const wash = 0.12 + 0.08 * Math.sin(T * 0.9 + x * 0.3 + z * 0.2);
+  if (Math.abs(y - wash) < 0.09) return "k~";
+  return y < wash + 0.25 ? "n:" : null;
+}
 function sand(x, y, z, nx, ny) {
   if (ny < 0.5) return null;
-  const wash = 0.12 + 0.08 * Math.sin(T * 0.9 + x * 0.3);
-  if (y < wash) return hash(Math.floor(x * 3), Math.floor(z * 3 + T)) < 0.4 ? "k:" : "n:";
-  if (y < wash + 0.25) return hash(Math.floor(x * 2), Math.floor(z * 2)) < 0.06 ? "w~" : "n:";
+  const wet = wetSand(x, y, z);
+  if (wet) return wet;
   if (hash(Math.floor(x * 5), Math.floor(z * 5)) < 0.02) return "s*"; // a shell
-  return hash(Math.floor(x * 3), Math.floor(z * 3)) < 0.5 ? "y." : "y,";
+  return hash(Math.floor(x * 6), Math.floor(z * 6)) < 0.15 ? "y:" : hash(Math.floor(x * 3), Math.floor(z * 3)) < 0.5 ? "y." : "y,";
 }
 // Rounded, weathered rocks with pebbles at their feet, and driftwood, on the sand.
 const beachY = terrainY;
-for (const [x, z, r] of [[-14, 11.5, 0.8], [-9, 10.8, 0.5], [-18, 12.3, 0.6], [15, 11, 0.9], [19, 12.4, 0.5], [26, 11.3, 0.7], [-23.6, -4, 0.8], [-23, -20, 0.6], [-24.4, 5, 0.5]]) {
+for (const [x, z, r] of [[-14, 10.1, 0.8], [-9, 10.8, 0.5], [-18, 10.4, 0.6], [15, 11, 0.9], [19, 10.4, 0.5], [26, 10.1, 0.7], [-23.6, -4, 0.8], [-23, -20, 0.6], [-24.4, 5, 0.5]]) {
   const y = beachY(x, z);
-  blob(world, x, y + r * 0.25, z, r, r * 0.6, r * 0.85, "t", { tex: (x, y) => (hash(Math.floor(x * 6), Math.floor(y * 6)) < 0.25 ? "-" : null) });
+  blob(world, x, y + r * 0.25, z, r, r * 0.6, r * 0.85, "t", { dim: 2.2, tex: (x, y) => (hash(Math.floor(x * 6), Math.floor(y * 6)) < 0.25 ? "-" : null) });
   for (let k = 0; k < 3; k++) {
     const a = k * 2.1 + r, px = x + Math.cos(a) * (r + 0.4), pz = z + Math.sin(a) * (r + 0.3), pr = 0.08 + 0.06 * hash(k, r);
     blob(world, px, beachY(px, pz) + pr * 0.3, pz, pr, pr * 0.6, pr, "t", { solid: false });
@@ -201,16 +222,58 @@ box(world, 9, 1.2, 16, 15, 3.8, 18.5, "r", { spot: "containers", tex: ribs });
 box(world, 9.4, 3.8, 16.2, 15.4, 6.4, 18.7, "b", { spot: "containers", tex: ribs });
 box(world, 16.2, 1.2, 15.6, 22.2, 3.8, 18.1, "b", { spot: "containers", tex: ribs });
 const officeText = painted("HARBOR", -7.6, -2.4, 4.15, 5.05);
-const pane = (u, y, spans) => y > 2.4 && y < 3.6 && spans.some(([a, b]) => u > a && u < b);
-box(world, -9, 1.2, 21, -1, 5.4, 28, "s", { spot: "office", tex: (x, y, z, nx, ny, nz) => {
-  if (nx > 0.5) return pane(z, y, [[22.5, 24], [25, 26.5]]) ? "l" : null;
-  if (nz > -0.5) return null;
-  if (officeText(x, y)) return "r";
-  if (x > -5.6 && x < -4.4 && y < 3.5) return "o";
-  return pane(x, y, [[-8.2, -6.6], [-3.4, -1.8]]) ? "l" : null;
-} });
+const officeFrontWindows = [[-8.2, -6.6], [-3.4, -1.8]];
+const officeSideWindows = [[22.5, 24], [25, 26.5]];
+function officeWindow(u, y, spans) {
+  if (y < 2.28 || y > 3.72) return null;
+  for (const [a, b] of spans) {
+    if (u < a - 0.12 || u > b + 0.12) continue;
+    // The frame and crossbars stay dark; only the four inset panes emit light.
+    if (u < a || u > b || y < 2.4 || y > 3.6 || Math.abs(u - (a + b) / 2) < 0.055 || Math.abs(y - 3) < 0.055) return "o";
+    return "l";
+  }
+  return null;
+}
+function officeWall(x, y, z, nx, ny, nz) {
+  if (ny > 0.5) return null;
+  const front = nz < -0.5, u = Math.abs(nz) > 0.5 ? x : z;
+  if (front && officeText(x, y)) return "r";
+  if (front && x > -5.6 && x < -4.4 && y < 3.6) {
+    if (Math.hypot(x + 4.6, y - 2.35) < 0.07) return "t";
+    return Math.abs(x + 5) > 0.46 || Math.abs(y - 2.35) < 0.08 || y < 1.55 || y > 3.35 ? "o" : "o:";
+  }
+  const window = officeWindow(u, y, Math.abs(nz) > 0.5 ? officeFrontWindows : officeSideWindows);
+  if (window) return window;
+  return (y - 1.2) % 0.32 < 0.025 ? "-" : null;
+}
+box(world, -9, 1.2, 21, -1, 5.4, 28, "s", { spot: "office", tex: officeWall });
 solid(world, [[0, -1, 0, 0, 5.4, 0], [0, 0, 1, 0, 0, 28.4], [0, 0, -1, 0, 0, 20.6],
-  [-2, 4.4, 0, -9.4, 5.4, 0], [2, 4.4, 0, -0.6, 5.4, 0]], [-9.4, 5.4, 20.6, -0.6, 7.4, 28.4], "r", { spot: "office" });
+  [-2, 4.4, 0, -9.4, 5.4, 0], [2, 4.4, 0, -0.6, 5.4, 0]], [-9.4, 5.4, 20.6, -0.6, 7.4, 28.4], "r", { spot: "office",
+  tex: (x, y, z, nx, ny, nz) => {
+    if (Math.abs(nz) > 0.5) return (y - 5.4) % 0.25 < 0.035 ? "o:" : "o";
+    const row = Math.floor((y - 5.4) / 0.22);
+    return (y - 5.4) % 0.22 < 0.035 || (z + 99 + (row % 2) * 0.25) % 0.5 < 0.035 ? "-" : null;
+  } });
+// Raised details do not change the walking bounds, map footprint or feature anchor.
+const officeDetail = { spot: "office", anchor: false, solid: false, thin: true };
+for (const x of [-9, -1]) {
+  for (const z of [21, 28]) beam(world, [x, 1.25, z], [x, 5.4, z], "o", officeDetail, 0.12);
+  for (const y of [1.4, 3.95, 5.3]) beam(world, [x, y, 21], [x, y, 28], "o", officeDetail, 0.09);
+  beam(world, [x < -5 ? -9.4 : -0.6, 5.4, 20.6], [x < -5 ? -9.4 : -0.6, 5.4, 28.4], "s", officeDetail, 0.1);
+  for (const [a, b] of officeSideWindows) box(world, x - 0.2, 2.23, a - 0.18, x + 0.2, 2.4, b + 0.18, "o", officeDetail);
+}
+for (const z of [21, 28]) {
+  for (const y of [1.4, 3.95, 5.3]) beam(world, [-9, y, z], [-1, y, z], "o", officeDetail, 0.09);
+  for (const [a, b] of officeFrontWindows) box(world, a - 0.18, 2.23, z - 0.2, b + 0.18, 2.4, z + 0.2, "o", officeDetail);
+}
+for (const z of [20.6, 28.4]) {
+  beam(world, [-9.4, 5.4, z], [-5, 7.4, z], "s", officeDetail, 0.1);
+  beam(world, [-5, 7.4, z], [-0.6, 5.4, z], "s", officeDetail, 0.1);
+}
+beam(world, [-5, 7.4, 20.6], [-5, 7.4, 28.4], "o", officeDetail, 0.1);
+for (const x of [-5.72, -4.28]) beam(world, [x, 1.4, 20.92], [x, 3.72, 20.92], "o", officeDetail, 0.1);
+beam(world, [-5.82, 3.72, 20.92], [-4.18, 3.72, 20.92], "o", officeDetail, 0.1);
+box(world, -5.85, 1.2, 20.55, -4.15, 1.4, 21.05, "t", officeDetail);
 box(world, -2.6, 6, 24, -2.45, 10.5, 24.15, "t", { spot: "antenna" });
 box(world, -3.3, 9.4, 24, -1.75, 9.52, 24.15, "t", { spot: "antenna" });
 box(world, -3, 8.5, 24, -2.05, 8.62, 24.15, "t", { spot: "antenna" });
@@ -267,8 +330,9 @@ for (let z = -32; z < 12; z += 5.5) column(world, -26.6, z + hash(z, 4) * 2, 0.9
 // Palms: curved-looking trunks (two leaning segments) with drooping fronds, on the quay and along the beaches.
 for (const [x, z, y0] of [[21, 24, 1.2], [-16, 23.5, 1.2], [-30, 2, 1], [-20, 12.6, beachY(-20, 12.6)], [23, 12.4, beachY(23, 12.4)], [-24, -14, beachY(-24, -14)]]) {
   const lean = 0.6 * hash(x, z) - 0.3, tx = x + lean * 1.4, top = y0 + 6;
-  beam(world, [x, y0, z], [x + lean * 0.5, y0 + 3.2, z], "o", {}, 0.2);
-  beam(world, [x + lean * 0.5, y0 + 3.2, z], [tx, top, z + 0.2], "o", {}, 0.15);
+  const rings = (px, py) => (py * 4 + 99) % 1 < 0.18 ? "-" : "o.";
+  beam(world, [x, y0, z], [x + lean * 0.5, y0 + 3.2, z], "o", { tex: rings }, 0.2);
+  beam(world, [x + lean * 0.5, y0 + 3.2, z], [tx, top, z + 0.2], "o", { tex: rings }, 0.15);
   for (let a = 0; a < 7; a++) {
     const c = Math.cos(a * 0.9), s = Math.sin(a * 0.9);
     beam(world, [tx, top, z + 0.2], [tx + 1.5 * c, top + 0.5, z + 0.2 + 1.5 * s], "g");
@@ -323,15 +387,17 @@ for (const [x0, x1, z0, z1] of [[1, 2.2, 22, 27.4], [7.8, 9, 22, 27.4], [2.2, 3.
 }
 // Broadleaf trees: a barked trunk, three branches and a layered canopy of leafy ellipsoids that sway.
 const canopies = [];
-const bark = (x, y, z) => ((Math.atan2(z - Math.round(z), x - Math.round(x)) * 3 + y * 0.8 + 9) % 1 < 0.25 ? "-" : null);
-const leaves = (x, y, z) => { const h = hash(Math.floor(x * 4), Math.floor(y * 4 + z * 4)); return h < 0.3 ? "-" : h > 0.8 ? "G" : null; };
+const leaves = (x, y, z) => { const h = hash(Math.floor(x * 4), Math.floor(y * 4 + z * 4)); return h < 0.3 ? "-" : h > 0.88 ? "G" : null; };
 for (const [x, z, h] of [[-10, 23, 6.5], [0, 25, 5.5], [11, 24, 6], [17, 27, 7], [-22, 24, 6.2]]) {
-  column(world, x, z, 0.3, 0.17, 1.2, 1.2 + h * 0.72, "o", { tex: bark });
-  for (let a = 0; a < 3; a++) beam(world, [x, 1.2 + h * 0.45, z], [x + 1.3 * Math.cos(a * 2.1), 1.2 + h * 0.72, z + 1.3 * Math.sin(a * 2.1)], "o", {}, 0.07);
+  const width = h / 6 * (0.85 + hash(x, z) * 0.3), angle = hash(z, x) * 6.28, c = Math.cos(angle), sn = Math.sin(angle);
+  const bark = (px, py, pz) => Math.sin(Math.atan2(pz - z, px - x) * 13 + Math.sin(py * 2) * 0.6) > 0.25 ? "-" : "o,";
+  column(world, x, z, 0.3 * width, 0.17 * width, 1.2, 1.2 + h * 0.72, "o", { tex: bark });
+  for (let a = 0; a < 3; a++) beam(world, [x, 1.2 + h * 0.45, z], [x + 1.3 * width * Math.cos(a * 2.1 + angle), 1.2 + h * 0.72, z + 1.3 * width * Math.sin(a * 2.1 + angle)], "o", { tex: bark }, 0.07);
   for (const [ox, oy, oz, r] of [[0, 0.85, 0, 1.7], [1, 0.72, 0.4, 1.1], [-0.8, 0.75, 0.7, 1.15], [0.2, 0.74, -1, 1.05], [0, 1.02, 0.1, 1]]) {
-    const s = blob(world, x + ox, 1.2 + h * oy, z + oz, r, r * 0.72, r, "g", { tex: leaves });
+    const cx = x + (ox * c - oz * sn) * width, cz = z + (ox * sn + oz * c) * width, radius = r * width;
+    const s = blob(world, cx, 1.2 + h * oy, cz, radius, radius * (0.6 + hash(x, oy) * 0.25), radius * (0.8 + hash(z, oy) * 0.35), oy < 0.8 ? "M" : oy > 1 ? "G" : "g", { dim: oy < 0.8 ? 0.8 : 1.25, tex: leaves });
     s.bb[0] -= 0.25; s.bb[3] += 0.25; s.bb[2] -= 0.25; s.bb[5] += 0.25;
-    canopies.push({ s, x: x + ox, z: z + oz, phase: hash(x, oz) * 6 });
+    canopies.push({ s, x: cx, z: cz, phase: hash(x, oz) * 6 });
   }
 }
 // Canopies sway in the wind, higher leaves more.
@@ -534,7 +600,7 @@ const centre = ({ bb: b }) => [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5
 const LIGHTS = [
   ...world.filter((s) => s.mat === "l" && s !== beacon && s !== antennaLamp).map((s) => lamp(...centre(s), 1, 10)),
   ...ship.filter((s) => s.mat === "l").map((s) => lamp(...centre(s), 0.9, 9, true)),
-  lamp(-7.4, 3, 20.5, 0.6, 6), lamp(-2.6, 3, 20.5, 0.6, 6), lamp(-0.5, 3, 23.2, 0.45, 5), lamp(-0.5, 3, 25.7, 0.45, 5),
+  lamp(-7.4, 3, 20.8, 0.22, 2.3), lamp(-2.6, 3, 20.8, 0.22, 2.3), lamp(-0.8, 3, 23.2, 0.22, 2.3), lamp(-0.8, 3, 25.7, 0.22, 2.3),
   lamp(-2.7, 3.3, -8, 0.45, 5, true), lamp(-0.3, 3.3, -8, 0.45, 5, true), lamp(...centre(beacon), 1.1, 16),
 ];
 const BEAM = { x: -36, y: 13.8, z: -24, reach: 95 };
@@ -601,7 +667,7 @@ for (const s of [...world, ...ship]) if (s.spot && !spots[s.spot]) s.spot = null
 const anchors = {};
 for (const [list, lift] of [[world, 0], [ship, 1]]) {
   for (const s of list) {
-    if (!s.spot) continue;
+    if (!s.spot || s.anchor === false) continue;
     const b = s.bb, a = (anchors[s.spot] ||= { x: 0, y: 0, z: 0, n: 0, r: 0, ship: lift });
     a.x += (b[0] + b[3]) / 2; a.y += (b[1] + b[4]) / 2; a.z += (b[2] + b[5]) / 2; a.n++;
     a.r = Math.max(a.r, (b[3] - b[0]) / 2, (b[5] - b[2]) / 2, (b[4] - b[1]) / 3);
@@ -858,25 +924,27 @@ function face(id) {
   jumped = id;
 }
 const nearestNode = (x, z) => NODES.reduce((b, n, i) => (Math.hypot(n[0] - x, n[1] - z) < Math.hypot(NODES[b][0] - x, NODES[b][1] - z) ? i : b), 0);
+// Exact slab test against the same open walking bounds used by blocked().
+function segmentBlocked(a, c, b) {
+  let enter = 0, exit = 1;
+  for (const k of [0, 2]) {
+    const p = a[k / 2], d = c[k / 2] - p, low = walkBound(b, k), high = walkBound(b, k + 3);
+    if (d === 0) {
+      if (p <= low || p >= high) return false;
+    } else {
+      const t0 = (low - p) / d, t1 = (high - p) / d;
+      enter = Math.max(enter, Math.min(t0, t1));
+      exit = Math.min(exit, Math.max(t0, t1));
+      if (enter >= exit) return false;
+    }
+  }
+  return enter < exit;
+}
 function approach(from, to) {
   const fy = floorAt(5, 24.6);
   const obstacles = world.filter(s => walkingSolid(s, fy) && walkBound(s.bb, 3) >= -1 &&
     walkBound(s.bb, 0) <= 10 && walkBound(s.bb, 5) >= 21 && walkBound(s.bb, 2) <= 30);
-  const clear = (a, c) => !obstacles.some(({ bb: b }) => {
-    let enter = 0, exit = 1;
-    for (const k of [0, 2]) {
-      const p = a[k / 2], d = c[k / 2] - p, low = walkBound(b, k), high = walkBound(b, k + 3);
-      if (d === 0) {
-        if (p <= low || p >= high) return false;
-      } else {
-        const t0 = (low - p) / d, t1 = (high - p) / d;
-        enter = Math.max(enter, Math.min(t0, t1));
-        exit = Math.min(exit, Math.max(t0, t1));
-        if (enter >= exit) return false;
-      }
-    }
-    return enter < exit;
-  });
+  const clear = (a, c) => !obstacles.some(s => segmentBlocked(a, c, s.bb));
   if (clear(from, to)) return [to];
   const nodes = [from, to];
   for (const { bb: b } of [fountainBasin, ...plazaHedges]) {
@@ -993,6 +1061,14 @@ function shadeLand(c, odd, t, dx, dy, dz) {
 }
 // Brightness changes the ground textures ask for: kerbs and flowers brighter, joints, ruts and wet sand darker.
 const GRAIN = { _: 1.35, "=": 1.3, "*": 1.5, "~": 1.25, "+": 1.1, "-": 1.1, ".": 1, ",": 0.85, ":": 0.7, ";": 0.8, '"': 0.9, "'": 0.95, "`": 0.9, " ": 1 };
+const paleGroundMark = (tex) => tex === "s|" || tex === "s-" || tex === "s=" || tex === "k~";
+function textureColor(s, tex, b, fog, warm) {
+  if (s.tex === fountainWater) return tex[0] + tier(Math.max(0.34, b), 0);
+  if (s === TERRAIN && paleGroundMark(tex)) {
+    return tex[0] + tier(Math.max(b, (tex === "k~" ? 0.5 : 0.35) * fog), warm);
+  }
+  return null;
+}
 function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
   const s = hitS, P = s.P, k = hitK, t = hitT;
   const lnx = k >= 0 ? P[k] : hitN[0], lny = k >= 0 ? P[k + 1] : hitN[1], nz = k >= 0 ? P[k + 2] : hitN[2];
@@ -1015,9 +1091,10 @@ function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
     // Grass blades lean with the wind; fountain water keeps its texture glyphs below.
     const grass = ny > 0.7 && (mat === "g" || mat === "G" || mat === "M") && s === TERRAIN;
     ch = grass && b > 0.03 ? blade(px, pz, odd) : glyph(b, odd);
-    if (s.tex === fountainWater) {
+    const texture = textureColor(s, tex, b, fog, warm);
+    if (texture) {
       ch = tex[1];
-      cls = mat + tier(Math.max(0.34, b), 0);
+      cls = texture;
     }
   }
   // Floors get a negative id: they outline what stands on them but draw no edges themselves.
@@ -1081,12 +1158,7 @@ function surfaceHit(dx, dy, dz, limit) {
   onLand = false;
   return t < limit && t >= end ? t : Infinity;
 }
-function shadeWater(c, t, dx, dy, dz) {
-  const x = cam.x + dx * t, z = cam.z + dz * t, h = seaHeight(x, z), near = shallows(x, z);
-  seaNormal(x, z);
-  const [nx, ny, nz] = seaN, dn = dx * nx + dy * ny + dz * nz, rx = dx - 2 * dn * nx, ry = dy - 2 * dn * ny, rz = dz - 2 * dn * nz;
-  const fresnel = 0.04 + 0.96 * Math.pow(1 - Math.min(1, -dn), 5);
-  const moonSpec = Math.pow(Math.max(0, rx * MOON[0] + ry * MOON[1] + rz * MOON[2]), 90) * 1.4;
+function waterLampSpec(x, h, z, rx, ry, rz) {
   let lampSpec = 0;
   for (const L of LIGHTS) {
     const lx = L.wx - x, ly = L.wy - h, lz = L.wz - z, d2 = lx * lx + ly * ly + lz * lz;
@@ -1094,13 +1166,32 @@ function shadeWater(c, t, dx, dy, dz) {
     const d = Math.sqrt(d2), s = (rx * lx + ry * ly + rz * lz) / d;
     if (s > 0.985) lampSpec += L.i * Math.pow(s, 300) * 1.4 / (1 + d2 * 0.006);
   }
-  // Foam on the highest crests, and a broken line of it where the waves wash onto the beaches.
-  const foam = Math.max(0, (h - SEA * 0.7) / (SEA * 0.3)) * 0.6 + (near > 0.9 && Math.sin(x * 1.3 + z + T * 1.8) > 0.55 ? 0.5 : 0);
-  const body = (0.03 + 0.12 * Math.max(0, nx * MOON[0] + ny * MOON[1] + nz * MOON[2])) * (1 + near);
-  const fog = Math.exp(-t * 0.014), lum = ((body * (1 - fresnel) + 0.03 * fresnel + moonSpec + lampSpec + foam * 0.35 + beamOn(x, z) * 0.6) * fog) + 0.015 * (1 - fog);
-  const mat = foam > 0.4 ? "k" : lampSpec > moonSpec && lampSpec > 0.1 ? "l" : moonSpec > 0.1 ? "m" : near > 0.2 ? "w" : "d";
+  return lampSpec;
+}
+// Foam on the highest crests, and a broken line where waves wash onto the beaches.
+function waterFoam(x, z, h, near) {
+  return Math.max(0, (h - SEA * 0.7) / (SEA * 0.3)) * 0.6 + (near > 0.82 && Math.sin(x * 1.3 + z + T * 0.9) > -0.25 ? 0.65 : 0);
+}
+function waterReflection(lampSpec, moonSpec) {
+  if (lampSpec > moonSpec && lampSpec > 0.1) return "l";
+  return moonSpec > 0.1 ? "m" : null;
+}
+function waterGlyph(c, t, foam, lum, fog, mat) {
+  if (foam > 0.4) { put(c, "~", "k" + tier(Math.max(lum, 0.5 * fog), 0), -1, t); return; }
   const soft = Math.min(0.78, lum); // highlights stay sparkles, not solid blocks
   put(c, glyph(soft, (c ^ Math.floor(t)) & 1), mat + tier(lum, 0), -1, t);
+}
+function shadeWater(c, t, dx, dy, dz) {
+  const x = cam.x + dx * t, z = cam.z + dz * t, h = seaHeight(x, z), near = shallows(x, z);
+  seaNormal(x, z);
+  const [nx, ny, nz] = seaN, dn = dx * nx + dy * ny + dz * nz, rx = dx - 2 * dn * nx, ry = dy - 2 * dn * ny, rz = dz - 2 * dn * nz;
+  const fresnel = 0.04 + 0.96 * Math.pow(1 - Math.min(1, -dn), 5);
+  const moonSpec = Math.pow(Math.max(0, rx * MOON[0] + ry * MOON[1] + rz * MOON[2]), 90) * 1.4;
+  const lampSpec = waterLampSpec(x, h, z, rx, ry, rz), foam = waterFoam(x, z, h, near);
+  const body = (0.03 + 0.12 * Math.max(0, nx * MOON[0] + ny * MOON[1] + nz * MOON[2])) * (1 + near);
+  const fog = Math.exp(-t * 0.014), lum = ((body * (1 - fresnel) + 0.03 * fresnel + moonSpec + lampSpec + foam * 0.35 + beamOn(x, z) * 0.6) * fog) + 0.015 * (1 - fog);
+  const mat = waterReflection(lampSpec, moonSpec) || (near > 0.2 ? "w" : "d");
+  waterGlyph(c, t, foam, lum, fog, mat);
 }
 // How close a sky ray passes to the lighthouse beam, as a glow from 0 to 1.
 function beamGlow(dx, dy, dz) {
