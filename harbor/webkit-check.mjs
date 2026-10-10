@@ -217,6 +217,8 @@ for (const id of [null, ...await page.evaluate(() => window.harborCheck.ids)]) {
   assert.equal(bounds.links.length, id ? 1 : 3, `${id}: a sign link is missing`);
   for (const link of bounds.links) {
     assert.equal(link.hit, link.href, `${name}/${id}: link is not hit-testable`);
+    assert(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y) === document.getElementById("scene"),
+      { x: link.x, y: link.y }), `${name}/${id}: link tap point is covered by an HTML control`);
     if (touch && !bounds.box.overlay) assert(link.height >= 44, `${id}: touch link is too short`);
     assert(link.top >= bounds.y && link.bottom <= bounds.y + bounds.height, `${id}: link region extends outside the frame`);
     assert(link.left >= bounds.x && link.right <= bounds.x + bounds.width, `${id}: link region extends outside the frame`);

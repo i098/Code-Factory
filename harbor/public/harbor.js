@@ -955,7 +955,10 @@ function label(at) {
       if (signBox) break;
     }
   }
-  if (!signBox) signBox = signFit(anchor, i0, j0, i1, j1, 3);
+  if (!signBox) {
+    const clearLeft = controls ? Math.max(i0, Math.ceil((controls.right + 12 - padX) / cellW)) : i0;
+    signBox = signFit(anchor, clearLeft, j0, i1, j1, 3);
+  }
   if (signBox && anchor) signLeader(...anchor);
 }
 function signFit(at, i0, j0, i1, j1, mode = 0) {
