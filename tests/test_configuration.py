@@ -388,6 +388,7 @@ def test_second_apply_does_not_reopen_the_questions(
     assert not marker.exists()
     assert "New-host questions did not complete (omp exited 1)" in capsys.readouterr().out
     assert f"crewship.profiles.shared_supabase to true in {host.resolve()} " in launches[0][1]
+    assert f"crewship.profiles.shared_postgres to true in {host.resolve()} " in launches[0][1]
     assert ship.main() == 0
     assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"] * 2
     assert marker.is_file()

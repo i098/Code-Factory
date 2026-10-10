@@ -151,6 +151,13 @@
         - crewship_cfg.profiles.shared_supabase | bool
       tags: [fleet, shared_supabase]
 
+    - name: Optional shared Postgres and worktree database environment
+      ansible.builtin.import_tasks: tasks/shared_postgres.yml
+      when:
+        - crewship_account_ready | bool
+        - crewship_cfg.profiles.shared_postgres | default(false) | bool
+      tags: [fleet, shared_postgres]
+
     - name: Fleet guard units - retire the flotilla units, render and start the crewship ones
       ansible.builtin.import_tasks: tasks/fleet_units.yml
       when:

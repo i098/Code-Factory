@@ -61,6 +61,9 @@
             "shared_supabase": {
               "type": "boolean"
             },
+            "shared_postgres": {
+              "type": "boolean"
+            },
             "fleet_browsers": {
               "type": "boolean"
             },
