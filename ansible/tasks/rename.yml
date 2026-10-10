@@ -225,7 +225,37 @@
       loop: "{{ crewship_renamed_unit_files.files }}"
       loop_control:
         label: "{{ item.path }}"
-      notify: reload user systemd
+      register: crewship_renamed_unit_rewrites
+
+    - name: Reload user systemd after the unit file rewrite
+      ansible.builtin.systemd_service:
+        scope: user
+        daemon_reload: true
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      environment: "{{ crewship_user_systemd_env }}"
+      when:
+        - crewship_manage_services | bool
+        - crewship_renamed_unit_rewrites is changed
+
+    # try-restart leaves inactive units stopped. A prefix drop-in such as
+    # no-mistakes-daemon-.service is skipped: its daemon restarts by hand.
+    - name: Restart the running user services whose units name the moved paths
+      ansible.builtin.command:
+        argv: "{{ ['systemctl', '--user', 'try-restart'] + crewship_renamed_services }}"
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      environment: "{{ crewship_user_systemd_env }}"
+      changed_when: true
+      when:
+        - crewship_manage_services | bool
+        - crewship_renamed_services | length > 0
+      vars:
+        crewship_renamed_services: >-
+          {{ crewship_renamed_unit_rewrites.results | default([]) | selectattr('changed')
+             | map(attribute='item.path') | map('relpath', crewship_user_units)
+             | map('split', '.d/') | map('first') | reject('search', '/')
+             | select('search', '[^-][.]service$') | unique | list }}
 
     # A new marker would add a second managed block beside the old one.
     - name: Find the pre-rename managed block markers
