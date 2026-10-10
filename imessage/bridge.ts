@@ -314,7 +314,10 @@ function routes(o: Out, i: number, maybe: Record<string, string>): Route[] {
     if (!space || (only.length && !only.includes(line.name))) return [];
     const reply = own && i === 0 ? o.reply : undefined;
     return [{ name: line.name, send: async (text: string) => {
-      const last = reply ? await line.last(space) : undefined;
+      // A read-only lookup cannot have sent text, so its failure can use a fallback.
+      const last = reply ? await line.last(space).catch((e: unknown) => {
+        throw Object.assign(e instanceof Error ? e : new Error(String(e)), { maybeSent: false });
+      }) : undefined;
       const thread = reply && last && last !== reply ? reply : undefined;
       return line.send(space, text, thread, guid).catch((e) => { if (!notSent(e)) maybe[line.name] = space; throw e; });
     } }];
@@ -445,7 +448,7 @@ async function handle(line: Line, message: LineMessage) {
 // period. False when the inbox refused the note: he is asked to send it again.
 function wake(requestId: string, text: string, ref: Ref): boolean {
   if (!fileNote(requestId, text)) {
-    put({ ...ref, bubbles: ["firstmate did not get that, send it again"], reply: ref.id, silent: true });
+    put({ ...ref, bubbles: ["firstmate did not get that, send it again"], silent: true });
     return false;
   }
   const id = remember("owner", text);
