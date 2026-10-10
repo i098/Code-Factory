@@ -29,4 +29,4 @@ cd harbor
 CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... npx wrangler@latest deploy
 ```
 
-The site serves on the Worker's `workers.dev` address. When the `crewship.si` zone is active, add `"routes": [{ "pattern": "crewship.si", "custom_domain": true }]` to `wrangler.jsonc`; the deploy token then also needs Workers Routes edit on that zone.
+The site serves on https://crewship.si, a custom domain attached to the Worker outside `wrangler.jsonc`, and each deploy records that URL under Deployments.

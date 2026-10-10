@@ -2,9 +2,8 @@
 # Cloudflare Workers static assets, on every push to main and on each published
 # release, so the page follows Crewship as it changes.
 #
-# Each run is a GitHub deployment in the crewship.si environment; its URL is the
-# address wrangler reports (the custom domain once one is attached, else the
-# workers.dev address). The environment accepts only main and v* release tags and
+# Each run is a GitHub deployment in the crewship.si environment, with
+# https://crewship.si as its URL. The environment accepts only main and v* release tags and
 # holds the deploy token, which can edit the one crewship Worker. Never runs on
 # pull requests.
 #
@@ -34,7 +33,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: crewship.si
-      url: ${{ steps.deploy.outputs.url }}
+      url: https://crewship.si
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -45,14 +44,8 @@ jobs:
         run: python3 harbor/build.py
 
       - name: Deploy
-        id: deploy
         working-directory: harbor
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler.ndjson
-        run: |
-          npx --yes wrangler@latest deploy
-          url=$(jq -r 'select(.type == "deploy") | .targets | (map(select(contains("workers.dev") | not)) + .)[0] | split(" ")[0]' "$WRANGLER_OUTPUT_FILE_PATH")
-          case $url in https://*) ;; *) url="https://$url" ;; esac
-          echo "url=$url" >> "$GITHUB_OUTPUT"
+        run: npx --yes wrangler@latest deploy
