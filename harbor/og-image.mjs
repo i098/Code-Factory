@@ -1,7 +1,4 @@
-// Draws the link preview (public/og.png, 1200x630) with the real renderer in Playwright Chromium, and the
-// apple-touch-icon (public/apple-touch-icon.png, 180x180) from public/favicon.svg. The camera is fixed,
-// the sign and mini map are hidden, and the title and tagline are set as text over the scene.
-// Run harbor/build.py first; rerun this after a scene change and commit the PNGs.
+// See README.md#link-preview for image regeneration and its Playwright requirements.
 import { readFile } from "node:fs/promises";
 import { chromium } from "playwright";
 
