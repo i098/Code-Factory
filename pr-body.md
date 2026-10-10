@@ -1,8 +1,9 @@
-Closes #134
+Closes #153
 
-- Add the plaza fountain with blue water, a stone rim, a column, a spout, and a blue map marker.
-- Preview: https://feat-cf-harbor-fountain-crewship.jerry-2c0.workers.dev
-- Keep: Disconnected approaches stop safely; detour completeness remains in [#150](https://github.com/i098/Crewship/issues/150).
-- Hold: Keep the mobile WebKit hold for [#143](https://github.com/i098/Crewship/issues/143).
+- Enter the framed house door and leave through the inside door.
+- Add a warm lamp, table, bed, walls, and a starry night window.
+- Share keyboard and touch collisions; hide the map inside. Remove the dead movement branch found by one ponytail review round.
+- Preview: https://cf-harbor-interior-crewship.jerry-2c0.workers.dev
+- Screenshots: [door](https://cf-harbor-interior-crewship.jerry-2c0.workers.dev/evidence/harbor-after-door.png), [room](https://cf-harbor-interior-crewship.jerry-2c0.workers.dev/evidence/harbor-inside-window.png), [lamp](https://cf-harbor-interior-crewship.jerry-2c0.workers.dev/evidence/harbor-inside-door.png), [outside](https://cf-harbor-interior-crewship.jerry-2c0.workers.dev/evidence/harbor-back-outside.png).
 
-Proof: `uv run pytest tests/test_harbor_scene.py -q`.
+Proof: 9 harbor tests, iPhone WebKit touch entry/exit, and four inspected desktop views; phone WebKit island FPS: 26.63 before, 27.54 after.

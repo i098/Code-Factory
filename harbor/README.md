@@ -5,6 +5,10 @@ An uncaught error hides the scene and shows the plain page.
 
 The island has staggered plaza paving, scattered stones and grass tufts, varied tree canopies, textured bark, and foam along the shore.
 
+Walk into the framed house door to enter a warm room with a lamp, table, bed, and a starry night window.
+Walk back through the inside door to return just outside, facing the island.
+Keyboard and touch movement share the door transition; walls and furniture block walking, and the map stays hidden inside.
+
 The plaza fountain has an octagonal stone rim, a central spout, and water that uses the existing animation clock.
 Its basin blocks walking, and a blue `O` marks it on the mini map.
 The fountain marker leaves map labels and selected point markers clear.
@@ -35,8 +39,9 @@ Then open <http://localhost:8000>.
 ## WebKit check
 
 CI loads the built page in Playwright WebKit as an iPhone, with `webkit-check.mjs`.
-The check also fails if the first 30 slow frames change the grid, cell size, field of view, or canvas layout.
-It still checks crashes, uncaught errors, console errors, the plain-page fallback, and multi-glyph `fillText` calls.
+The check also fails if the first 30 slow exterior frames change the grid, cell size, field of view, or canvas layout.
+The check walks through the house door and back with the touch pad.
+It fails on a crash, an uncaught error, a console error, a fallback to the plain page, or a multi-glyph `fillText` call.
 See [how.html](public/how.html) for the rendering limits on touch devices.
 To run the check locally:
 

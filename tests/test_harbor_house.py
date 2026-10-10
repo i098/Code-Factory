@@ -89,3 +89,82 @@ for (const s of world.filter(s => s.anchor === false)) {
         check=True,
         timeout=10,
     )
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="needs node")
+def test_house_entry_exit_and_room_collisions():
+    source = (ROOT / "harbor/public/harbor.js").read_text()
+    setup = r"""
+const assert = require('node:assert/strict');
+const element = {
+  hidden: false, classList: {add() {}, toggle() {}}, focus() {}, addEventListener() {},
+  firstElementChild: {style: {}}, clientWidth: 600, clientHeight: 400,
+  replaceChildren() {}, getContext: () => ({setTransform() {}, measureText: () => ({width: 6})})
+};
+const document = {getElementById: () => element, querySelectorAll: () => [],
+  documentElement: {}, addEventListener() {}};
+const matchMedia = () => ({matches: false, addEventListener() {}});
+const getComputedStyle = () => ({getPropertyValue: () => 'monospace'});
+const devicePixelRatio = 1, innerWidth = 600, performance = {now: () => 0};
+const IntersectionObserver = class {observe() {}}, ResizeObserver = class {observe() {}};
+function requestAnimationFrame() {}
+function addEventListener() {}
+const window = {};
+"""
+    check = r"""
+Object.assign(me, {x: -5, z: 20.6, yaw: 0});
+keys.add('f');
+for (let i = 0; i < 4; i++) step(0.02);
+keys.clear();
+assert(insideHouse, 'walking into the door must enter the room');
+assert.equal(floorAt(me.x, me.z), 0);
+assert(!blocked(me.x, me.z, 0), 'entry must leave the player in a clear aisle');
+assert.equal(walkPath.length, 0);
+mapKey({code: 'KeyM'});
+minimap();
+assert.equal(mapMode, 0, 'the island map must not open inside');
+assert.equal(mapBox, null);
+for (const [x, z] of [[-2, 3], [2, 4]]) {
+  assert(blocked(x, z, 0), 'interior furniture must block walking');
+}
+for (const [x, z, yaw] of [[-2.7, 1, -Math.PI/2], [2.7, 1, Math.PI/2], [0, 5.4, 0]]) {
+  Object.assign(me, {x, z, yaw});
+  keys.add('f');
+  for (let i = 0; i < 30; i++) step(0.02);
+  keys.clear();
+  assert(insideHouse, 'walking into a wall must not leave the room');
+  assert.notEqual(floorAt(me.x, me.z), null, 'walking must stay within room bounds');
+  assert(!blocked(me.x, me.z, 0));
+}
+Object.assign(me, {x: 0, z: 0.8, yaw: Math.PI});
+stick.y = 1;
+for (let i = 0; i < 8; i++) step(0.02);
+stick.y = 0;
+assert(!insideHouse, 'the touch stick must exit through the door');
+assert.equal(me.yaw, Math.PI);
+assert(me.z < 20.75 && me.z > 19.8, 'exit must land just outside the door');
+assert(!blocked(me.x, me.z, floorAt(me.x, me.z)));
+Object.assign(me, {x: -5, z: 20.6, yaw: 0});
+stick.y = 1;
+for (let i = 0; i < 4; i++) step(0.02);
+stick.y = 0;
+assert(insideHouse, 'the touch stick must enter through the door');
+Object.assign(me, {x: 0, z: 0.8, yaw: Math.PI});
+keys.add('f');
+for (let i = 0; i < 8; i++) step(0.02);
+keys.clear();
+assert(!insideHouse, 'keyboard walking must exit through the door');
+for (const x of [-5.5, -4.5]) {
+  Object.assign(me, {x, z: 20.6, yaw: 0});
+  keys.add('f');
+  for (let i = 0; i < 20; i++) step(0.02);
+  keys.clear();
+  assert(!insideHouse, 'walking into the door frame must not enter');
+  assert(me.z <= 20.75, 'the exterior wall must still block walking');
+}
+"""
+    subprocess.run(
+        ["node", "-e", setup + source + check],
+        check=True,
+        timeout=10,
+    )
