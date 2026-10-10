@@ -3,7 +3,7 @@
 `harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship, dock, island, and house, drawn as text.
 Each object shows an ASCII sign anchored to its surface.
 The sign uses the scene's character grid, font and colors, with clickable links.
-An ASCII mini map leads to each object.
+Selecting a destination on the ASCII mini map walks you there around obstacles; with reduced motion, you jump there instead.
 See [how.html](public/how.html) for the renderer and controls.
 The off-screen HTML list and current sign keep links available to screen readers and keyboard users.
 An uncaught error or rejected promise in `harbor.js`, or a failure to load it, hides the scene and shows the plain page.
@@ -36,9 +36,12 @@ Outboard lanterns make the gun ports visible.
 The plaza fountain has an octagonal stone rim, a central spout, and water that uses the existing animation clock.
 Its basin blocks walking, and a blue `O` marks it on the mini map.
 The fountain marker leaves map labels and selected point markers clear.
-Map walks check complete approach segments against the plaza walking collision bounds and route around the basin and all four hedges.
-If a road route or either approach has no clear path, the map walk stops without moving the player.
-Detour completeness remains in [#150](https://github.com/i098/Crewship/issues/150).
+Map walks check each road and approach segment against the walking collision bounds at the local floor height and require continuous ground coverage.
+Detour corners come from every walking obstacle, including trees, hedges, the basin, the house, dock cargo, and ship fixtures.
+The page builds the corner graph once before animation starts.
+Ship bob and roll do not rebuild the graph during a map click.
+If no free viewing spot exists, the map selection stops without moving the player.
+Without reduced motion, a missing clear route also stops the map walk without moving the player.
 
 It is plain HTML, CSS and JavaScript in `public/`, with no dependencies. Nothing here is part of a host or an image: `.dockerignore` excludes `harbor/`, the playbook never copies it, and `tests/test_harbor_isolation.py` checks both.
 

@@ -56,14 +56,14 @@ assert(Number(textureColor(TERRAIN, 's|', 0, 1, 0).slice(-1)) >
   'pale paving must fade in fog');
 assert.equal(textureColor(fountainBasin, 's|', 0.5, 1, 1), null,
   'terrain texture overrides must not apply to the stone basin');
-assert(segmentBlocked([6.876, 26.5], [7.1, 24.6], fountainBasin.bb),
+assert(segmentBlocked([6.876, 26.5], [7.1, 24.6], fountainBasin),
   'slab test missed the reported basin corner crossing');
-assert(!segmentBlocked([7.1, 26.5], [7.1, 24.6], fountainBasin.bb),
+assert(!segmentBlocked([7.1, 26.5], [7.1, 24.6], fountainBasin),
   'slab test rejected a clear link');
 const openBoundary = walkBound(fountainBasin.bb, 3);
-assert(!segmentBlocked([openBoundary, 24], [openBoundary, 25], fountainBasin.bb),
+assert(!segmentBlocked([openBoundary, 24], [openBoundary, 25], fountainBasin),
   'slab test closed an open walking boundary');
-assert(segmentBlocked([7.1, 24.6], [6.876, 26.5], fountainBasin.bb),
+assert(segmentBlocked([7.1, 24.6], [6.876, 26.5], fountainBasin),
   'slab test missed the reverse basin corner crossing');
 cols = 100; rows = 120; pick = ORDER.indexOf('antenna');
 me.x = 0; me.z = -7.4; me.yaw = 0;
@@ -117,24 +117,31 @@ for (let k = 1; k < path.length; k++) {
     assert(roadAt(x, z)[2], 'map route leaves the concrete road');
   }
 }
-function walkToSpot(id, start, dt) {
+function walkToSpot(id, start, dt, useMap = false) {
   me.x = start[0]; me.z = start[1]; me.eye = floorAt(...start) + 1.6;
-  const stand = standFor(anchors[id]);
-  go(id);
+  if (useMap) {
+    pick = ORDER.indexOf(id); setMap(1);
+    mapKey({key: 'Enter', code: 'Enter'});
+  } else go(id);
+  const obstacles = routeObstacles();
   let frames = 0;
   while (walkPath.length && frames++ < 10000) {
     const x0 = me.x, z0 = me.z;
     autoStep(dt);
+    assert(!obstacles.some(s => segmentBlocked([x0, z0], [me.x, me.z], s)),
+      'auto-walk link crosses an obstacle');
     for (let i = 0; i <= 10; i++) {
       const x = x0 + (me.x - x0) * i / 10, z = z0 + (me.z - z0) * i / 10;
-      if (x >= 0 && x <= 10 && z >= 21 && z <= 30) {
-        assert(!blocked(x, z, floorAt(x, z)), 'auto-walk crosses the basin or plaza hedges');
-      }
+      assert.notEqual(floorAt(x, z), null, 'auto-walk leaves walkable ground');
+      assert(!blocked(x, z, floorAt(x, z)), 'auto-walk crosses an obstacle');
     }
   }
   assert.equal(walkPath.length, 0, 'auto-walk did not finish');
-  assert.equal(jumped, id, 'auto-walk did not face its destination');
-  assert.deepEqual([me.x, me.z], stand, 'auto-walk missed its destination');
+  assert.equal(jumped, id, 'auto-walk did not face ' + id + ' from ' + start);
+  const a = anchors[id], fy = floorAt(me.x, me.z);
+  assert.equal(fy > 1.6, !!a.ship, 'auto-walk missed the destination level: ' + id);
+  assert(Math.hypot(me.x - a.x, me.z - a.z) <= (['mast', 'sign'].includes(id) ? 4 : 16),
+    'auto-walk missed the landmark: ' + id);
 }
 function stoppedMapWalk(start, id, useMap = false) {
   me.x = 7.1; me.z = 24.6; me.eye = floorAt(me.x, me.z) + 1.6;
@@ -152,9 +159,18 @@ function stoppedMapWalk(start, id, useMap = false) {
   }
   assert.equal(jumped, null, 'failed map walk reported arrival');
 }
-stoppedMapWalk([-0.6, 25], 'how', true);
+const slopeStart = [-14, 10.9], dockStart = [3.01, -0.57];
+const dockGapEnd = [1.9, -1.2], obstacles = routeObstacles();
+assert(walkable(slopeStart), 'uphill rock start must be walkable');
+assert(walkable(dockStart), 'dock edge start must be walkable');
+assert(!clear(dockStart, dockGapEnd, obstacles), 'dock-to-gangway gap must reject a direct link');
+assert(!clear(dockGapEnd, dockStart, obstacles), 'reverse gangway-to-dock gap must reject a direct link');
+for (const start of [slopeStart, dockStart]) {
+  for (const id of ORDER) walkToSpot(id, start, 0.01);
+}
+walkToSpot('how', [-0.6, 25], 0.016, true);
 anchors.disconnected = {x: -0.6, y: 1.2, z: 27.5, r: 0, ship: 0};
-stoppedMapWalk([7.1, 24.6], 'disconnected');
+walkToSpot('disconnected', [7.1, 24.6], 0.016);
 const savedRoadLinks = LINKS.slice();
 try {
   LINKS.length = 0;
@@ -197,6 +213,45 @@ for (const start of plazaPoints) {
     anchors.approach = {x: end[0], y: 1.2, z: end[1] + 2.5, r: 0, ship: 0};
     walkToSpot('approach', start, 0.02);
   }
+}
+for (let x = WORLD.x0; x <= WORLD.x1; x += 4) {
+  for (let z = WORLD.z0; z <= WORLD.z1; z += 4) {
+    const start = [x, z], fy = floorAt(x, z);
+    if (fy === null || blocked(x, z, fy)) continue;
+    for (const id of ORDER) walkToSpot(id, start, 1000);
+  }
+}
+for (let x = -10; x <= 12; x += 0.5) {
+  for (let z = 20; z <= 30; z += 0.5) {
+    const start = [x, z], fy = floorAt(x, z);
+    if (fy === null || blocked(x, z, fy)) continue;
+    for (const id of ORDER) walkToSpot(id, start, 1000);
+  }
+}
+// Ship height changes must not invalidate island or deck collision-safe routes.
+for (const [lift, tilt] of [[0.2, 0.03], [-0.2, -0.03]]) {
+  bob = lift; roll = tilt; rc = Math.cos(roll); rs = Math.sin(roll);
+  for (const start of [[-0.6, 25], [-3.1, -6], [SX + shipProfile(5.5)[0] - 0.4, 5.5]]) {
+    assert(walkable(start), 'ship-motion start must remain on clear walking ground');
+    for (const id of ORDER) walkToSpot(id, start, 1000);
+  }
+}
+bob = roll = 0; rc = 1; rs = 0;
+reduced.matches = true;
+for (const id of ORDER) walkToSpot(id, [-0.6, 25], 0.02, true);
+reduced.matches = false;
+const savedWorldLength = world.length;
+try {
+  box(world, 29, 1.2, 39, 31, 3, 39.2, 's');
+  box(world, 29, 1.2, 40.8, 31, 3, 41, 's');
+  box(world, 29, 1.2, 39, 29.2, 3, 41, 's');
+  box(world, 30.8, 1.2, 39, 31, 3, 41, 's');
+  rebuildRoutes();
+  assert.deepEqual(approach([30, 40], [5, 19.6]), [], 'enclosed start must have no route');
+  stoppedMapWalk([30, 40], 'how', true);
+} finally {
+  world.length = savedWorldLength;
+  rebuildRoutes();
 }
 `, context);
 """,
