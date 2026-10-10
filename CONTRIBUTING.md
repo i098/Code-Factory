@@ -120,14 +120,14 @@ GitHub rulesets enforce these rules, with no bypass:
    ```
 
    A PR with nothing to note, for example a test-only change, gets the `no changelog` label instead.
-2. To cut a release, run `uv run towncrier build --version X.Y.Z` on a new branch and open a PR with the result. The command writes a new `## [X.Y.Z] - YYYY-MM-DD` section (today's ISO 8601 date) under `## [Unreleased]` in Keep a Changelog order and deletes the fragments it used; `uv run towncrier build --draft --version X.Y.Z` shows the section first and changes nothing. In the same PR, update the link references at the bottom of the file. Choose the number:
+2. To cut a release, run `uv run towncrier build --version X.Y.Z` on a new branch and open a PR with the result. The command writes a new `## [X.Y.Z] - YYYY-MM-DD` section (today's ISO 8601 date) under `## [Unreleased]` in Keep a Changelog order and deletes the fragments it used; `uv run towncrier build --draft --version X.Y.Z` shows the section first and changes nothing. In the same PR, update the link references at the bottom of the file and set `version` in `npm/package.json` to `X.Y.Z`. Choose the number:
    - patch (`Z`): fixes only;
    - minor (`Y`): a new capability;
    - major (`X`): a breaking change to the host config or the host layout.
 
    While the version is `0.y.z` (initial development, see SemVer item 4), a breaking change bumps the minor number instead.
 3. After that PR merges, tag its merge commit on `main` as `vX.Y.Z`. Never move or reuse a published tag.
-4. Publish a GitHub release for the tag, named `vX.Y.Z`, with that version's changelog section as the notes, for example `gh release create vX.Y.Z --target <merge-sha> --title vX.Y.Z --notes-file <section.md>`. Publishing the release runs `.github/workflows/npm-publish.yml`, which publishes the `crewship` npm package as version `X.Y.Z`.
+4. Publish a GitHub release for the tag, named `vX.Y.Z`, with that version's changelog section as the notes, for example `gh release create vX.Y.Z --target <merge-sha> --title vX.Y.Z --notes-file <section.md>`. Publishing the release runs `.github/workflows/npm-publish.yml`, which publishes the `crewship` npm package as version `X.Y.Z`. The workflow fails before the publish when `npm/package.json` does not have that version.
 5. The release starts the `release-image` workflow. It builds the `worker` image and pushes it to the GitHub Container Registry as `ghcr.io/i098/crewship:X.Y.Z` and `ghcr.io/i098/crewship:latest`. When the package is public, anyone can pull it without a login: `docker pull ghcr.io/i098/crewship:X.Y.Z`.
 
    The first push creates the package as private, and the REST API cannot change package visibility. Do this one time: on the [crewship package](https://github.com/users/i098/packages/container/package/crewship), click **Package settings**, then under **Danger Zone** click **Change visibility**, select **Public**, and confirm with the package name.

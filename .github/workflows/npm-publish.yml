@@ -41,12 +41,17 @@ jobs:
         with:
           node-version: latest
 
-      # The package version is the release tag, so the launcher fetches the
-      # install.sh of the same release.
-      - name: Set the version from the tag
+      # The release PR sets npm/package.json to the release version, so the
+      # launcher fetches the install.sh of the same release.
+      - name: Check the package version matches the tag
         env:
           TAG: ${{ github.event.release.tag_name }}
-        run: npm version --no-git-tag-version "${TAG#v}"
+        run: |
+          version=$(jq -r .version package.json)
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error title=package version::npm/package.json has $version but the release tag is $TAG; set it in the release PR"
+            exit 1
+          fi
 
       - name: Publish
         run: npm publish --provenance --access public
