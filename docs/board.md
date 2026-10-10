@@ -27,9 +27,11 @@ Apply copies `crewboard/` to `~/.local/share/code-factory/crewboard/source` and 
 
 ## Use it
 
-With `board:` set, the managed shell profile and the Herdr unit export `CREWBOARD_SOCKET` for new sessions.
-Removing `board:` removes that export on the next apply.
-The existing Herdr restart handler stays conditional on service management.
+With `board:` set, the managed `~/.profile` block and the Herdr unit export `CREWBOARD_SOCKET=/run/user/<uid>/crewboard.sock` for the operator account.
+New login shells read the profile; new Herdr agents inherit the server's environment.
+Removing `board:` removes the export from both files on the next apply.
+Apply restarts Herdr when the unit changes only if `start_services: true`.
+Existing shells and agents keep their environment until they exit.
 
 The status file still owns done, blocked, needs-decision, failed and paused.
 Supervisor instructions and acknowledgements still use the inbox.
