@@ -1426,8 +1426,8 @@ function outline(c, i, j) {
   const off = (n, inside) => !inside || SP[n] !== target;
   return slope(off(c - 1, i > 0), off(c + 1, i < cols - 1), off(c - cols, j > 0), off(c + cols, j < rows - 1));
 }
-// What each cell showed when last drawn. A frame draws again only the stretches of a row that changed: each is
-// cleared and clipped to whole device pixels and drawn with one neighbour either side, so it matches a full redraw.
+// Keep unchanged rows. Desktop text runs keep their full-row origins; touch glyphs
+// have independent positions, so only their changed span and overhang need clearing.
 let DG, DC, dpr = 1;
 const BACKGROUND = "#060a14";
 const snap = (v) => Math.round(v * dpr) / dpr;
@@ -1441,7 +1441,7 @@ function update(c, i, j, mid, onMap) {
   DG[c] = ch; DC[c] = cls;
   return true;
 }
-// Draws the intro in full, then the changed scene and the mini map on its own backing above it.
+// Draws the intro in full, then updates each whole row before painting and draws the mini map above it.
 function draw(mid) {
   if (introProgress < 1) {
     ctx.fillStyle = BACKGROUND;
@@ -1455,16 +1455,20 @@ function draw(mid) {
     DG.fill(undefined);
     return;
   }
+  if (DG[0] === undefined) {
+    ctx.fillStyle = BACKGROUND;
+    ctx.fillRect(0, 0, viewW, viewH);
+  }
   for (let j = 0; j < rows; j++) {
     const onMap = mapBox && j >= mapBox.oj && j < mapBox.oj + mapBox.h;
-    let from = -1, last = -9;
+    let first = cols, last = -1;
     for (let i = 0; i < cols; i++) {
-      if (!update(j * cols + i, i, j, mid, onMap)) continue;
-      if (from >= 0 && i - last > 3) { redraw(j, from, last); from = -1; }
-      if (from < 0) from = i;
-      last = i;
+      if (update(j * cols + i, i, j, mid, onMap)) { first = Math.min(first, i); last = i; }
     }
-    if (from >= 0) redraw(j, from, last);
+    if (last >= 0) {
+      if (touchFirst.matches) redraw(j, Math.max(0, first - 1), Math.min(cols - 1, last + 1));
+      else redraw(j, 0, cols - 1);
+    }
   }
   drawMap();
 }
