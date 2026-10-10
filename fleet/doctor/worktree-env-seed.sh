@@ -23,8 +23,14 @@ grep -qF "$MARK" "$SRC" || { log "source lacks marker '$MARK' - refusing"; exit 
 
 seed_one() {
   local wt=$1 f=$1/.env.local
-  if [ -f "$f" ] && grep -qF "$MARK" "$f" && cmp -s "$SRC" "$f"; then
-    return 0
+  if [ -f "$f" ] && grep -qF "$MARK" "$f"; then
+    if cmp -s "$SRC" "$f"; then return 0; fi
+    # Postgres owns these two lines; compare the rest without rewriting them.
+    if grep -qxF '# crewship-shared-postgres' "$f" &&
+       cmp -s <(grep -vE '^DATABASE_URL=' "$SRC") \
+              <(grep -vE '^(# crewship-shared-postgres$|DATABASE_URL=)' "$f"); then
+      return 0
+    fi
   fi
   if [ -f "$f" ]; then
     cp -p "$f" "$f.pre-shared-$(date -u +%Y%m%dT%H%M%SZ)"
@@ -74,4 +80,9 @@ done
 for wt in "$HOME"/.treehouse/firstmate-*/*/firstmate/projects/swarms-platform; do
   [ -e "$wt/package.json" ] && seed_one "$wt"
 done
+# Restore DATABASE_URL after Supabase copies its template when both profiles run.
+if [ -f "$HOME/.local/state/code-factory/shared-postgres/compose.json" ] &&
+   [ -x "$HOME/.local/bin/crewship-db" ]; then
+  "$HOME/.local/bin/crewship-db" --seed || exit 1
+fi
 exit 0

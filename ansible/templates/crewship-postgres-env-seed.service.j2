@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Shared Postgres worktree environment (Crewship managed)
+ConditionPathExists=%h/.local/state/code-factory/shared-postgres/compose.json
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart={{ crewship_local_bin }}/crewship-db --seed
+TimeoutStartSec=300
