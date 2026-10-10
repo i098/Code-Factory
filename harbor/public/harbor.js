@@ -111,7 +111,7 @@ const hash = (a, b) => { const h = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
 // Harbor: quay, breakwater, the dock and what stands on them.
 // The road network: junctions and the links between them. It is drawn on the island and is the route
 // the mini map walks you along (deck, gangway, dock, avenue, plaza, breakwater path).
-const NODES = [[-0.3, -6], [-0.3, -1.2], [-0.3, 5.5], [1.9, -1.2], [4.2, -1.2], [5, 13.5], [5, 19.6], [7.1, 24.6], [-5, 19.6],
+const NODES = [[-0.3, -6], [-0.3, -1.2], [0.3, 5.5], [1.9, -1.2], [4.2, -1.2], [5, 13.5], [5, 19.6], [7.1, 24.6], [-5, 19.6],
   [-16, 19.6], [-28, 19.6], [-30, 10], [-30, -14], [14, 19.6], [20, 19.6], [7.1, 21.7]];
 const LINKS = [[0, 1], [1, 2], [1, 3], [3, 4], [4, 5], [5, 6], [6, 15], [6, 8], [8, 9], [9, 10], [10, 11], [11, 12], [6, 13], [13, 14], [15, 7]];
 // Island ways (the links past the dock): concrete from the dock head to the plaza and along the centre of
@@ -1374,11 +1374,13 @@ function go(id) {
   if (reduced.matches) { me.x = stand[0]; me.z = stand[1]; me.eye = floorAt(...stand) + 1.6; face(id); return; }
   const path = route(nearestNode(me.x, me.z), nearestNode(...stand));
   if (!path.length) return;
-  const first = approach([me.x, me.z], path[0]);
-  if (!first.length) return;
-  const last = approach(path[path.length - 1], stand);
-  if (!last.length) return;
-  walkPath = [...first, ...path.slice(1), ...last];
+  const points = [[me.x, me.z], ...path, stand], steps = [];
+  for (let i = 1; i < points.length; i++) {
+    const leg = approach(points[i - 1], points[i]);
+    if (!leg.length) return;
+    steps.push(...leg);
+  }
+  walkPath = steps;
   walkTo = id;
 }
 function face(id) {
@@ -1410,54 +1412,98 @@ function segmentBlocked(a, c, b) {
   }
   return enter < exit;
 }
-function shipSegmentClear(a, b) {
-  const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.05));
+function walkable([x, z]) {
+  const fy = floorAt(x, z);
+  return fy !== null && !blocked(x, z, fy);
+}
+function routeObstacles() {
   const obstacles = [];
-  for (const [list, lift] of [[world, 0], [ship, bob]]) {
-    for (const s of list) if (s.solid && segmentBlocked(a, b, s.bb)) obstacles.push([s, lift]);
+  for (const list of [world, ship]) {
+    for (const s of list) {
+      const b = s.bb, fy = floorAt((b[0] + b[3]) / 2, (b[2] + b[5]) / 2);
+      if (fy !== null && walkingSolid(s, fy, list === ship ? bob : 0)) obstacles.push(s);
+    }
   }
-  let height = floorAt(...a), previous = a;
+  return obstacles;
+}
+function detourCorners(b) {
+  const x0 = walkBound(b, 0), x1 = walkBound(b, 3), z0 = walkBound(b, 2), z1 = walkBound(b, 5);
+  return [[x0, z0], [x1, z0], [x1, z1], [x0, z1]].filter(walkable);
+}
+function clear(a, c, obstacles) {
+  if (!walkable(a) || !walkable(c) || obstacles.some(s => segmentBlocked(a, c, s.bb))) return false;
+  const steps = Math.max(1, Math.ceil(Math.hypot(c[0] - a[0], c[1] - a[1]) / 0.1));
   for (let i = 0; i <= steps; i++) {
-    const x = a[0] + (b[0] - a[0]) * i / steps, z = a[1] + (b[1] - a[1]) * i / steps;
-    const fy = floorAt(x, z);
-    const point = [x, z];
-    if (fy === null || Math.abs(fy - height) > 0.6 || obstacles.some(([s, lift]) =>
-      walkingSolid(s, Math.min(fy, height), lift) && segmentBlocked(previous, point, s.bb))) return false;
-    height = fy; previous = point;
+    if (floorAt(a[0] + (c[0] - a[0]) * i / steps, a[1] + (c[1] - a[1]) * i / steps) === null) return false;
   }
   return true;
 }
-function approach(from, to) {
-  const fy = floorAt(5, 24.6);
-  const obstacles = world.filter(s => walkingSolid(s, fy) && walkBound(s.bb, 3) >= -1 &&
-    walkBound(s.bb, 0) <= 10 && walkBound(s.bb, 5) >= 21 && walkBound(s.bb, 2) <= 30);
-  const harbor = shipDockPoint(from) || shipDockPoint(to);
-  const clear = harbor ? shipSegmentClear : (a, c) => !obstacles.some(s => segmentBlocked(a, c, s.bb));
-  if (clear(from, to)) return [to];
-  const nodes = [from, to];
-  if (harbor) nodes.push(...NODES.slice(0, 7), [5, -15], [5, 0], [5, 10],
-    [SX + 1.7, -5.4], [SX + 1.7, -9.2], [SX, -12]);
-  const corners = harbor ? ship.filter(s => walkingSolid(s, DECK, bob)) : [fountainBasin, ...plazaHedges];
-  for (const { bb: b } of corners) {
-    nodes.push([walkBound(b, 0) - 0.1, walkBound(b, 2) - 0.1], [walkBound(b, 3) + 0.1, walkBound(b, 2) - 0.1],
-      [walkBound(b, 3) + 0.1, walkBound(b, 5) + 0.1], [walkBound(b, 0) - 0.1, walkBound(b, 5) + 0.1]);
-  }
+function clearLinks(nodes, obstacles) {
   const links = [];
   for (let a = 0; a < nodes.length; a++) {
-    for (let c = a + 1; c < nodes.length; c++) if (clear(nodes[a], nodes[c])) links.push([a, c]);
+    for (let c = a + 1; c < nodes.length; c++) if (clear(nodes[a], nodes[c], obstacles)) links.push([a, c]);
   }
-  return route(0, 1, nodes, links).slice(1);
+  return links;
 }
-// Shortest route between two nodes (Dijkstra over a handful of nodes).
-function route(from, to, nodes = NODES, links = LINKS) {
+let approachGraph;
+function detourGraph(obstacles, nearby) {
+  if (approachGraph?.bob !== bob || approachGraph.roll !== roll || approachGraph.count !== obstacles.length) {
+    approachGraph = { bob, roll, count: obstacles.length, graphs: new Map() };
+  }
+  const key = nearby.map(s => s.id).join(), cached = approachGraph.graphs.get(key);
+  if (cached) return cached;
+  const nodes = NODES.filter(walkable);
+  for (const { bb } of nearby) nodes.push(...detourCorners(bb));
+  const graph = { nodes, edges: routeEdges(nodes, clearLinks(nodes, obstacles)) };
+  approachGraph.graphs.set(key, graph);
+  return graph;
+}
+function nearestClear(point, nodes, obstacles) {
+  let best = -1, distance = Infinity;
+  for (let i = 0; i < nodes.length; i++) {
+    const d = Math.hypot(point[0] - nodes[i][0], point[1] - nodes[i][1]);
+    if (d < distance && clear(point, nodes[i], obstacles)) { best = i; distance = d; }
+  }
+  return best;
+}
+function nearSegment(from, to, b) {
+  return walkBound(b, 3) >= Math.min(from[0], to[0]) - 3 && walkBound(b, 0) <= Math.max(from[0], to[0]) + 3 &&
+    walkBound(b, 5) >= Math.min(from[1], to[1]) - 3 && walkBound(b, 2) <= Math.max(from[1], to[1]) + 3;
+}
+function detourRoute(from, to, obstacles, nearby) {
+  const { nodes, edges } = detourGraph(obstacles, nearby);
+  const a = nearestClear(from, nodes, obstacles), b = nearestClear(to, nodes, obstacles);
+  if (a < 0 || b < 0) return [];
+  const path = route(a, b, nodes, edges);
+  return path.length ? [...path, to] : [];
+}
+function approach(from, to) {
+  const obstacles = routeObstacles();
+  if (clear(from, to, obstacles)) return [to];
+  const nearby = obstacles.filter(s => nearSegment(from, to, s.bb));
+  const path = detourRoute(from, to, obstacles, nearby);
+  // Distant corners may be needed round a long wall or a coastline; never stop at the local search.
+  return path.length ? path : detourRoute(from, to, obstacles, obstacles);
+}
+function routeEdges(nodes, links) {
+  const edges = nodes.map(() => []);
+  for (const [a, b] of links) {
+    const d = Math.hypot(nodes[b][0] - nodes[a][0], nodes[b][1] - nodes[a][1]);
+    edges[a].push([b, d]); edges[b].push([a, d]);
+  }
+  return edges;
+}
+// Shortest route between two nodes (Dijkstra over the clear-link graph).
+function route(from, to, nodes = NODES, edges = routeEdges(nodes, LINKS)) {
   const dist = nodes.map(() => Infinity), prev = [], todo = new Set(nodes.keys());
   dist[from] = 0;
   while (todo.size) {
     const u = [...todo].reduce((a, b) => (dist[a] < dist[b] ? a : b));
     todo.delete(u);
-    for (const [a, b] of links) {
-      const v = a === u ? b : b === u ? a : -1, d = v < 0 ? 0 : dist[u] + Math.hypot(nodes[v][0] - nodes[u][0], nodes[v][1] - nodes[u][1]);
-      if (v >= 0 && todo.has(v) && d < dist[v]) { dist[v] = d; prev[v] = u; }
+    if (u === to || dist[u] === Infinity) break;
+    for (const [v, length] of edges[u]) {
+      const d = dist[u] + length;
+      if (todo.has(v) && d < dist[v]) { dist[v] = d; prev[v] = u; }
     }
   }
   if (dist[to] === Infinity) return [];
