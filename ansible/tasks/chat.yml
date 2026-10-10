@@ -7,14 +7,14 @@
 
 - name: Ensure the chat client config directories
   ansible.builtin.file:
-    path: "{{ factory_cfg.home }}/.config/{{ item }}"
+    path: "{{ crewship_cfg.home }}/.config/{{ item }}"
     state: directory
   loop: [concord, slk]
 
 - name: Seed the chat client configs that are absent
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/config/{{ item }}.toml"
-    dest: "{{ factory_cfg.home }}/.config/{{ item }}/config.toml"
+    src: "{{ crewship_repo }}/config/{{ item }}.toml"
+    dest: "{{ crewship_cfg.home }}/.config/{{ item }}/config.toml"
     mode: "0644"
     force: false
   loop: [concord, slk]

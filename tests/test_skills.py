@@ -117,13 +117,13 @@ def browser_rules_repo(tmp_path):
 def apply_rules(repo, home, ladder):
     home.mkdir(parents=True, exist_ok=True)
     tasks = yaml.safe_load((skills.REPO / "ansible/tasks/agents.yml").read_text())
-    task = next(t for t in tasks if t.get("register") == "factory_skills_run")
+    task = next(t for t in tasks if t.get("register") == "crewship_skills_run")
     template = NativeEnvironment()
     template.filters["bool"] = bool
     argv = template.from_string(task["ansible.builtin.command"]["argv"]).render(
-        code_factory_repo=str(repo),
-        factory_cfg={"home": str(home)},
-        factory_fleet_browsers_enabled=ladder,
+        crewship_repo=str(repo),
+        crewship_cfg={"home": str(home)},
+        crewship_fleet_browsers_enabled=ladder,
     )
     argv[0] = sys.executable
     result = subprocess.run(argv, check=True, capture_output=True, text=True)

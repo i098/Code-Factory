@@ -4,7 +4,7 @@
 # One package family only - the source host runs Ubuntu's docker.io, so Docker
 # CE repositories are deliberately not added. /etc/docker/daemon.json is
 # MERGED, never replaced: the engine settings (and data-root when
-# factory.data_dir is set) are set, every other key an operator put there is
+# crewship.data_dir is set) are set, every other key an operator put there is
 # kept, and the daemon is restarted only when the merged document differs.
 # With live-restore on, that restart leaves running containers untouched; the
 # very first apply that turns live-restore on is the one restart that recycles
@@ -12,12 +12,12 @@
 # before it happens. A data-root switch is refused while containers run.
 #
 # Membership of the docker group is equivalent to passwordless root on the
-# host, so it is never granted implicitly. factory_docker_group_users is an
+# host, so it is never granted implicitly. crewship_docker_group_users is an
 # explicit opt-in list and is empty by default.
 
 - name: Install Docker engine and Compose v2
   ansible.builtin.apt:
-    name: "{{ factory_docker_packages }}"
+    name: "{{ crewship_docker_packages }}"
     state: present
   become: true
 
@@ -30,14 +30,14 @@
   loop:
     - containerd.service
     - docker.service
-  when: factory_manage_services | bool
+  when: crewship_manage_services | bool
 
 - name: Report the deferred Docker start
   ansible.builtin.debug:
     msg: >-
       start_services is false: docker.io and docker-compose-v2 are installed
       but neither containerd nor dockerd is enabled or started here.
-  when: not (factory_manage_services | bool)
+  when: not (crewship_manage_services | bool)
 
 - name: Grant docker group membership where it was explicitly requested
   ansible.builtin.user:
@@ -45,22 +45,22 @@
     groups: docker
     append: true
   become: true
-  loop: "{{ factory_docker_group_users }}"
+  loop: "{{ crewship_docker_group_users }}"
 
 - name: Report the docker group policy
   ansible.builtin.debug:
     msg: >-
       No account was added to the docker group. Membership grants host-level
       root through the daemon socket, so it stays opt-in: set
-      factory_docker_group_users to the accounts that need it, or use sudo for
+      crewship_docker_group_users to the accounts that need it, or use sudo for
       docker commands.
-  when: factory_docker_group_users | length == 0
+  when: crewship_docker_group_users | length == 0
 
 - name: Read the existing Docker daemon configuration
   ansible.builtin.slurp:
-    src: "{{ factory_docker_daemon_json }}"
+    src: "{{ crewship_docker_daemon_json }}"
   become: true
-  register: factory_docker_daemon_raw
+  register: crewship_docker_daemon_raw
   # Absent on a fresh host; that is the common case, not a failure.
   failed_when: false
   changed_when: false
@@ -68,18 +68,18 @@
 
 - name: Decode the existing daemon configuration
   ansible.builtin.set_fact:
-    factory_docker_daemon_current: >-
-      {{ (((factory_docker_daemon_raw.content | b64decode)
-           if (factory_docker_daemon_raw.content is defined) else '{}')
+    crewship_docker_daemon_current: >-
+      {{ (((crewship_docker_daemon_raw.content | b64decode)
+           if (crewship_docker_daemon_raw.content is defined) else '{}')
           | default('{}', true)) | from_json }}
 
 - name: Merge the engine settings into the daemon configuration
   ansible.builtin.set_fact:
-    factory_docker_daemon_desired: >-
-      {{ factory_docker_daemon_current
-         | combine({'init': factory_cfg.docker.init | bool,
-                    'live-restore': factory_cfg.docker.live_restore | bool})
-         | combine({'data-root': factory_docker_data_root} if factory_docker_data_root else {}) }}
+    crewship_docker_daemon_desired: >-
+      {{ crewship_docker_daemon_current
+         | combine({'init': crewship_cfg.docker.init | bool,
+                    'live-restore': crewship_cfg.docker.live_restore | bool})
+         | combine({'data-root': crewship_docker_data_root} if crewship_docker_data_root else {}) }}
 
 # A new data root starts empty and live-restore cannot carry containers across
 # it, so the switch waits for a host with nothing running. Nothing is copied:
@@ -87,30 +87,30 @@
 - name: Refuse to switch the Docker data root under running containers
   ansible.builtin.command: docker ps -q
   become: true
-  register: factory_docker_running
+  register: crewship_docker_running
   changed_when: false
   check_mode: false
   # A stopped or missing daemon runs nothing; only listed containers block.
-  failed_when: factory_docker_running.stdout | default('') | length > 0
+  failed_when: crewship_docker_running.stdout | default('') | length > 0
   when: >-
-    (factory_docker_daemon_current['data-root'] | default('/var/lib/docker'))
-    != (factory_docker_daemon_desired['data-root'] | default('/var/lib/docker'))
+    (crewship_docker_daemon_current['data-root'] | default('/var/lib/docker'))
+    != (crewship_docker_daemon_desired['data-root'] | default('/var/lib/docker'))
 
 - name: Warn that the first live-restore switch recycles running containers
   ansible.builtin.debug:
     msg: >-
-      {{ factory_docker_daemon_json }} gains live-restore=true. The restart
+      {{ crewship_docker_daemon_json }} gains live-restore=true. The restart
       that applies it stops every running container once (their restart
       policies start them again); later restarts leave containers running.
   when:
-    - factory_docker_daemon_current != factory_docker_daemon_desired
-    - not (factory_docker_daemon_current['live-restore'] | default(false) | bool)
-    - factory_docker_daemon_desired['live-restore'] | bool
+    - crewship_docker_daemon_current != crewship_docker_daemon_desired
+    - not (crewship_docker_daemon_current['live-restore'] | default(false) | bool)
+    - crewship_docker_daemon_desired['live-restore'] | bool
 
 - name: Write the merged Docker daemon configuration
   ansible.builtin.copy:
-    dest: "{{ factory_docker_daemon_json }}"
-    content: "{{ factory_docker_daemon_desired | to_nice_json }}\n"
+    dest: "{{ crewship_docker_daemon_json }}"
+    content: "{{ crewship_docker_daemon_desired | to_nice_json }}\n"
     owner: root
     group: root
     mode: "0644"

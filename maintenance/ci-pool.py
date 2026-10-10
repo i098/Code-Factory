@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CI pool: just-in-time GitHub Actions runners, one job per fresh container.
 
-  ci-pool.py apply [--check]   factory.ci_pool as JSON on stdin; sizes the pool,
+  ci-pool.py apply [--check]   crewship.ci_pool as JSON on stdin; sizes the pool,
                                writes ci-runner@.service and enables one instance
                                per slot, and stops and cleans removed slots.
   ci-pool.py run <instance>    ExecStart of ci-runner@<instance>.service: asks
@@ -41,7 +41,7 @@ WANTS = UNITS / "default.target.wants"
 HOOK = HOME / ".config/ci-pool/job-started.sh"
 HOOK_ENV = "ACTIONS_RUNNER_HOOK_JOB_STARTED"
 UNIT_TEXT = """\
-# Written by ci-pool.py apply (Crewship); instances come from factory.ci_pool.
+# Written by ci-pool.py apply (Crewship); instances come from crewship.ci_pool.
 [Unit]
 Description=CI pool runner slot %i (one GitHub Actions job per start)
 After=network-online.target

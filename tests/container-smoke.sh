@@ -68,7 +68,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "${MODE}" = auto ]; then
-    if [ -n "${CODE_FACTORY_IMAGE:-}" ] || [ -f /etc/code-factory-image ]; then
+    if [ -n "${CREWSHIP_IMAGE:-}" ] || [ -f /etc/code-factory-image ]; then
         MODE=container
     else
         MODE=host
@@ -141,11 +141,11 @@ host_mode() {
 # ---------------------------------------------------------------------------
 # Container mode: harness
 # ---------------------------------------------------------------------------
-FACTORY_USER_EXPECTED=${FACTORY_USER:-coder}
-FACTORY_HOME_EXPECTED=${FACTORY_HOME:-/home/coder}
-FACTORY_WORKSPACE_EXPECTED=${FACTORY_WORKSPACE:-${FACTORY_HOME_EXPECTED}/Dev}
-CF_ROOT=${CODE_FACTORY_ROOT:-/opt/code-factory}
-CF_CONFIG=${CODE_FACTORY_CONFIG:-${CF_ROOT}/containers/crewship.container.yml}
+CREWSHIP_USER_EXPECTED=${CREWSHIP_USER:-coder}
+CREWSHIP_HOME_EXPECTED=${CREWSHIP_HOME:-/home/coder}
+CREWSHIP_WORKSPACE_EXPECTED=${CREWSHIP_WORKSPACE:-${CREWSHIP_HOME_EXPECTED}/Dev}
+CF_ROOT=${CREWSHIP_ROOT:-/opt/code-factory}
+CF_CONFIG=${CREWSHIP_CONFIG:-${CF_ROOT}/containers/crewship.container.yml}
 
 CHECKS_TOTAL=0
 CHECKS_RUN=0
@@ -243,8 +243,8 @@ image_is_current() {
 
 check_identity() {
     [ "$(id -u)" -ne 0 ] || fail "image runs as root; the worker must be non-root"
-    [ "$(id -un)" = "${FACTORY_USER_EXPECTED}" ] || fail "user is $(id -un), expected ${FACTORY_USER_EXPECTED}"
-    [ "${HOME}" = "${FACTORY_HOME_EXPECTED}" ] || fail "HOME is ${HOME}, expected ${FACTORY_HOME_EXPECTED}"
+    [ "$(id -un)" = "${CREWSHIP_USER_EXPECTED}" ] || fail "user is $(id -un), expected ${CREWSHIP_USER_EXPECTED}"
+    [ "${HOME}" = "${CREWSHIP_HOME_EXPECTED}" ] || fail "HOME is ${HOME}, expected ${CREWSHIP_HOME_EXPECTED}"
     [ -w "${HOME}" ] || fail "home is not writable"
     printf 'uid=%s user=%s home=%s shell=%s\n' "$(id -u)" "$(id -un)" "${HOME}" "${SHELL:-unset}"
 }
@@ -261,7 +261,7 @@ check_no_systemd() {
             fail "systemctl reports a running system manager inside the container"
         fi
     fi
-    [ ! -e "/var/lib/systemd/linger/${FACTORY_USER_EXPECTED}" ] || fail "linger marker present; enable_linger must be suppressed"
+    [ ! -e "/var/lib/systemd/linger/${CREWSHIP_USER_EXPECTED}" ] || fail "linger marker present; enable_linger must be suppressed"
     printf 'pid1=%s no systemd, no linger marker (start_services=false honored)\n' "${pid1}"
 }
 
@@ -300,19 +300,19 @@ check_source_checkout() {
     [ -f "${CF_CONFIG}" ] || fail "missing container configuration ${CF_CONFIG}"
     local owner
     owner=$(stat -c %U "${CF_ROOT}")
-    [ "${owner}" = "${FACTORY_USER_EXPECTED}" ] || fail "${CF_ROOT} owned by ${owner}, expected ${FACTORY_USER_EXPECTED}"
+    [ "${owner}" = "${CREWSHIP_USER_EXPECTED}" ] || fail "${CF_ROOT} owned by ${owner}, expected ${CREWSHIP_USER_EXPECTED}"
     printf 'checkout %s owned by %s, config %s\n' "${CF_ROOT}" "${owner}" "${CF_CONFIG}"
 }
 
 check_workspace() {
     local probe owner
-    [ -d "${FACTORY_WORKSPACE_EXPECTED}" ] || fail "missing workspace ${FACTORY_WORKSPACE_EXPECTED}"
-    owner=$(stat -c %U "${FACTORY_WORKSPACE_EXPECTED}")
-    [ "${owner}" = "${FACTORY_USER_EXPECTED}" ] || fail "workspace owned by ${owner}"
-    probe="${FACTORY_WORKSPACE_EXPECTED}/.container-smoke-probe.$$"
+    [ -d "${CREWSHIP_WORKSPACE_EXPECTED}" ] || fail "missing workspace ${CREWSHIP_WORKSPACE_EXPECTED}"
+    owner=$(stat -c %U "${CREWSHIP_WORKSPACE_EXPECTED}")
+    [ "${owner}" = "${CREWSHIP_USER_EXPECTED}" ] || fail "workspace owned by ${owner}"
+    probe="${CREWSHIP_WORKSPACE_EXPECTED}/.container-smoke-probe.$$"
     : >"${probe}" || fail "workspace is not writable"
     rm -f "${probe}"
-    printf 'workspace %s writable and owned by %s\n' "${FACTORY_WORKSPACE_EXPECTED}" "${owner}"
+    printf 'workspace %s writable and owned by %s\n' "${CREWSHIP_WORKSPACE_EXPECTED}" "${owner}"
 }
 
 check_core_tools() {
@@ -438,9 +438,9 @@ config_path, defaults_path, document_path = sys.argv[1], sys.argv[2], sys.argv[3
 with open(config_path, "rb") as fh:
     rendered = tomllib.load(fh)
 with open(defaults_path, encoding="utf-8") as fh:
-    wanted = yaml.safe_load(fh)["factory"]["herdr"]
+    wanted = yaml.safe_load(fh)["crewship"]["herdr"]
 with open(document_path, encoding="utf-8") as fh:
-    wanted.update(yaml.safe_load(fh)["factory"]["herdr"])
+    wanted.update(yaml.safe_load(fh)["crewship"]["herdr"])
 
 actual = {
     "theme": rendered.get("theme", {}).get("name"),
@@ -606,7 +606,7 @@ check_ship_inspect_rejects_invalid() {
     bad="${SMOKE_TMP}/invalid-config.yml"
     cat >"${bad}" <<'YAML'
 schema_version: 99
-factory:
+crewship:
   user: 42
   home: /home/coder
   start_services: definitely
@@ -639,11 +639,11 @@ check_ship_dock_refuses_overwrite() {
         rm -f "${host_yml}"
     fi
 
-    ( cd "${CF_ROOT}" && ./ship.sh dock --container --user "${FACTORY_USER_EXPECTED}" --home "${FACTORY_HOME_EXPECTED}" ) \
+    ( cd "${CF_ROOT}" && ./ship.sh dock --container --user "${CREWSHIP_USER_EXPECTED}" --home "${CREWSHIP_HOME_EXPECTED}" ) \
         || fail "./ship.sh dock --container failed"
     [ -f "${host_yml}" ] || fail "./ship.sh dock did not write ${host_yml}"
 
-    if ( cd "${CF_ROOT}" && ./ship.sh dock --container --user "${FACTORY_USER_EXPECTED}" --home "${FACTORY_HOME_EXPECTED}" ) >/dev/null 2>&1; then
+    if ( cd "${CF_ROOT}" && ./ship.sh dock --container --user "${CREWSHIP_USER_EXPECTED}" --home "${CREWSHIP_HOME_EXPECTED}" ) >/dev/null 2>&1; then
         fail "./ship.sh dock overwrote an existing ${host_yml} without an explicit flag"
     fi
 
@@ -778,7 +778,7 @@ container_mode() {
     SMOKE_TMP=$(mktemp -d -t crewship-smoke.XXXXXX)
     trap 'rm -rf "${SMOKE_TMP}"' EXIT
 
-    printf '== Crewship container smoke (image role: %s)\n' "${CODE_FACTORY_IMAGE:-unknown}"
+    printf '== Crewship container smoke (image role: %s)\n' "${CREWSHIP_IMAGE:-unknown}"
     printf '== %s %s\n\n' "$(uname -s)" "$(uname -m)"
 
     run_check identity                     check_identity

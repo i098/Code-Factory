@@ -1,8 +1,8 @@
 # Fleet guards
 
-`factory.profiles.fleet_guards` installs the Docker guard, reapers, storage guard and browser ladder.
+`crewship.profiles.fleet_guards` installs the Docker guard, reapers, storage guard and browser ladder.
 It does not install or start Supabase.
-The separate `factory.profiles.shared_supabase` profile installs the shared stack, CLI, keeper, shim and environment seeder.
+The separate `crewship.profiles.shared_supabase` profile installs the shared stack, CLI, keeper, shim and environment seeder.
 Both profiles are off by default.
 
 The controls address duplicate backend stacks, orphan processes, idle dev servers and unbounded lane concurrency.
@@ -28,9 +28,9 @@ The Docker defaults and Firstmate spawn floor belong to their respective profile
 
 | Path (under the account home) | Purpose |
 | --- | --- |
-| `oss-fleet/shared-supabase/` | The ONE stack: the latest Supabase CLI (`npm install` of the registry's latest `supabase`), `supabase/config.toml` with `factory.fleet.supabase_project_id`, `check.sh` keeper, `guard.sql`, `README.md`. `check.sh` also generates the project's `<project>.env.local` from the running stack. |
+| `oss-fleet/shared-supabase/` | The ONE stack: the latest Supabase CLI (`npm install` of the registry's latest `supabase`), `supabase/config.toml` with `crewship.fleet.supabase_project_id`, `check.sh` keeper, `guard.sql`, `README.md`. `check.sh` also generates the project's `<project>.env.local` from the running stack. |
 | `oss-fleet/doctor/docker-guard.sh` | Every hour: removes stopped containers that agents left behind and reports long-running ones that nothing claims. See [Docker guard](#docker-guard). |
-| `oss-fleet/doctor/worktree-env-seed.sh` | Installs the env file as `.env.local` in the project worktrees matched by the pool glob and Firstmate checkout path fixed in `fleet/doctor/worktree-env-seed.sh`; `factory.fleet.worktree_pools` only sets which pool directories the systemd path unit watches to trigger it. Files without the `# fleet-shared-supabase` marker are replaced with a backup left beside them. For each pool worktree it also seeds a `node` wrapper in `<pool slot>/node_modules/.bin`, above the checkout, that runs the managed `node` with `--max-old-space-size=2048` (`FLEET_NODE_HEAP_MB`). See the heap cap row below. |
+| `oss-fleet/doctor/worktree-env-seed.sh` | Installs the env file as `.env.local` in the project worktrees matched by the pool glob and Firstmate checkout path fixed in `fleet/doctor/worktree-env-seed.sh`; `crewship.fleet.worktree_pools` only sets which pool directories the systemd path unit watches to trigger it. Files without the `# fleet-shared-supabase` marker are replaced with a backup left beside them. For each pool worktree it also seeds a `node` wrapper in `<pool slot>/node_modules/.bin`, above the checkout, that runs the managed `node` with `--max-old-space-size=2048` (`FLEET_NODE_HEAP_MB`). See the heap cap row below. |
 | `oss-fleet/doctor/dev-server-reaper.sh` | Every 2 minutes: kills `next dev`/`next-server`/`tsc --noEmit` trees in treehouse worktrees whose lane last reported `done:`/`paused:`/`blocked:`/`failed:`, has no agent process, or whose agent transcript is idle >= 30 min (`REAPER_IDLE_MIN`). A dev server is 3-4 GB and restarts in 10 s; idle ones from finished lanes are what filled swap. One `next dev` per branch is inherent - Next compiles the whole app per process - so the fix is lifetime, not sharing. |
 | `oss-fleet/doctor/storage-guard.sh` | Every 5 minutes: use% of the filesystems holding `/`, `/var/log`, the home and Docker's data root. WARN (85%) alerts once per episode, CRIT (92%) prunes only regenerable Docker data, and a fill rate projecting the disk full within 6 hours alerts even below WARN. See [Storage guard](#storage-guard). |
 | `oss-fleet/doctor/devtools-bridge-reaper.sh` | Every 10 minutes: stops attached chrome-devtools-axi bridges (`CHROME_DEVTOOLS_AXI_BROWSER_URL` set) whose process tree used no CPU and whose session state files did not change for 60 min (`REAPER_IDLE_MIN`). See [Devtools-bridge reaper](#devtools-bridge-reaper). |
@@ -46,7 +46,7 @@ and sets `postgres`/`dashboard_user` to read-only transactions by default.
 Application traffic (anon/authenticated/service_role through PostgREST, GoTrue,
 Storage) is unaffected. There is never a migration on this database.
 
-The Firstmate checkout, tracking `main` of `factory.firstmate.url`, carries the
+The Firstmate checkout, tracking `main` of `crewship.firstmate.url`, carries the
 last layer: a per-project guard extension, a tool-call seatbelt
 loaded by every omp crewmate that blocks `supabase start|stop|db reset|migration`,
 `docker run ... postgres`, `psql` against the stack and edits to the shared
@@ -55,7 +55,7 @@ starts a second stack.
 
 ## Shared Supabase
 
-Enable `factory.profiles.shared_supabase: true` in the host config only when the host needs this backend.
+Enable `crewship.profiles.shared_supabase: true` in the host config only when the host needs this backend.
 Keep `docker` and `firstmate` enabled.
 Set `fleet.supabase_project_id`, `fleet.fixture_archive` and `fleet.worktree_pools` for the fixture and watched pools.
 The setup questions offer this profile; they do not install it without your choice.
@@ -67,7 +67,7 @@ The existing keeper still runs until the owner removes it manually.
 
 ### Manual removal
 
-Set `factory.profiles.shared_supabase: false` before removing the integration.
+Set `crewship.profiles.shared_supabase: false` before removing the integration.
 Run these commands as the owner only when the stack is no longer needed.
 They stop the stack and remove its units, CLI and scripts.
 They leave Docker volumes, fixture archives and worktree environment files in place.
@@ -111,7 +111,7 @@ rm -f "$HOME/oss-fleet/shared-supabase/check.sh" \
 The shared database is a read-only test fixture. Its content cannot be
 rebuilt from the application's migrations (they do not apply cleanly to an
 empty database), so provisioning restores the Docker volume
-`supabase_db_<project>` from `factory.fleet.fixture_archive`, a tarball taken
+`supabase_db_<project>` from `crewship.fleet.fixture_archive`, a tarball taken
 with:
 
 ```
@@ -133,7 +133,7 @@ looping process writing to `/var/log` can take `/` to 100%.
 `crewship-storage-guard.timer` runs `storage-guard.sh` every 5 minutes. It
 measures the filesystems holding `/`, `/var/log`, the home and Docker's data
 root (`docker info`), each filesystem once. Thresholds are the
-`factory_storage_guard_*` variables in `ansible/group_vars/all.yml`.
+`crewship_storage_guard_*` variables in `ansible/group_vars/all.yml`.
 
 | Tier | Trigger (default) | Action |
 | --- | --- | --- |
@@ -162,7 +162,7 @@ them. `crewship-docker-guard.timer` runs `docker-guard.sh` every hour:
 
 | Container | Action |
 | --- | --- |
-| Stopped (exited, created or dead) for `factory.fleet.docker_guard.stopped_hours` (24) or more, counted from its exit, or from its creation when it never ran | Removed with a plain `docker rm`: its volumes stay, and a container that started again since the check is refused. |
+| Stopped (exited, created or dead) for `crewship.fleet.docker_guard.stopped_hours` (24) or more, counted from its exit, or from its creation when it never ran | Removed with a plain `docker rm`: its volumes stay, and a container that started again since the check is refused. |
 | Running for 48 h or more (fixed) | Reported, never stopped or removed: one log line, one `COMMS.md` line and one `notify-master.sh` alert per container. It is reported again only after it stops qualifying and then qualifies again. |
 | Claimed: label `crewship.keep` (any value), or a restart policy other than `no` | Never removed or reported. |
 

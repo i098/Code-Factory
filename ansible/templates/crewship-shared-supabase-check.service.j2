@@ -3,11 +3,11 @@
 
 [Unit]
 Description=Fleet shared Supabase keeper tick - restart missing containers, re-apply guard (Crewship managed)
-ConditionPathExists={{ factory_shared_supabase_dir }}/check.sh
+ConditionPathExists={{ crewship_shared_supabase_dir }}/check.sh
 
 [Service]
 Type=oneshot
 Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart={{ factory_shared_supabase_dir }}/check.sh
+ExecStart={{ crewship_shared_supabase_dir }}/check.sh
 TimeoutStartSec=900
 Nice=5

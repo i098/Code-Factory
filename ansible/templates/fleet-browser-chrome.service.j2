@@ -4,12 +4,12 @@
 
 [Unit]
 Description=Fleet browser tier 2 - headless Chromium on 127.0.0.1:9522 (Crewship managed)
-ConditionPathExists={{ factory_fleet_browsers_dir }}/fleet-browser
+ConditionPathExists={{ crewship_fleet_browsers_dir }}/fleet-browser
 
 [Service]
 Type=simple
 Environment=PATH=%h/.local/bin:%h/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart={{ factory_fleet_browsers_dir }}/fleet-browser _run-chrome
+ExecStart={{ crewship_fleet_browsers_dir }}/fleet-browser _run-chrome
 Restart=on-failure
 RestartSec=5
 MemoryMax=4G

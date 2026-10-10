@@ -17,105 +17,105 @@
       check mode: skipping output verification. `./ship.sh launch` verifies the
       resolved Herdr and omp releases, unit wiring, pruner runtime, the Firstmate revision it
       resolved and the loopback-only desktop listeners.
-  when: ansible_check_mode or not (factory_account_ready | bool)
+  when: ansible_check_mode or not (crewship_account_ready | bool)
 
 - name: Verify provisioning outputs
   when:
     - not ansible_check_mode
-    - factory_account_ready | bool
+    - crewship_account_ready | bool
   block:
 
     # --- files that must exist ---------------------------------------------
 
     - name: Build the inventory of outputs this configuration must have
       ansible.builtin.set_fact:
-        factory_expected_outputs: >-
-          {{ [factory_herdr_bin,
-              factory_local_bin ~ '/herdr',
-              factory_herdr_config,
-              factory_user_units ~ '/herdr.service',
-              factory_user_units ~ '/default.target.wants/herdr.service',
-              factory_herdr_spaces_script,
-              factory_local_bin ~ '/herdr-sidebar-to-client.py',
-              factory_local_bin ~ '/herdr-patch',
-              factory_local_bin ~ '/btop',
-              factory_local_bin ~ '/btop-bin',
-              factory_btop_config,
-              factory_local_bin ~ '/sentrux',
-              factory_local_bin ~ '/fallow',
-              factory_user_units ~ '/herdr-spaces.service',
-              factory_user_units ~ '/herdr-spaces.timer',
-              factory_user_units ~ '/timers.target.wants/herdr-spaces.timer',
-              factory_cfg.home ~ '/.profile']
-             + ([factory_chrome_devtools_mcp_path, factory_omp_sidebar_extension,
-                 factory_omp_status_icons_extension, factory_omp_no_pattern_kill_extension,
-                 factory_omp_quality_gate_extension,
-                 factory_omp_as_pi_dir ~ '/omp-as-pi', factory_no_mistakes_omp_overlay,
-                 factory_user_units ~ '/no-mistakes-daemon-.service.d/code-factory.conf']
-                if (factory_cfg.profiles.agents | bool) else [])
-             + ([factory_pruner_script,
-                 factory_pruner_python,
-                 factory_pruner_stamp,
-                 factory_user_units ~ '/chrome-autoprune.service',
-                 factory_user_units ~ '/chrome-autoprune.timer',
-                 factory_user_units ~ '/timers.target.wants/chrome-autoprune.timer']
-                if ((factory_cfg.profiles.agents | bool)
-                    and (factory_cfg.browser_prune.enabled | bool)) else [])
-             + ([factory_firstmate_dir ~ '/.git']
-                + (factory_firstmate_config_names
-                   | map('regex_replace', '^', factory_firstmate_dir ~ '/config/')
+        crewship_expected_outputs: >-
+          {{ [crewship_herdr_bin,
+              crewship_local_bin ~ '/herdr',
+              crewship_herdr_config,
+              crewship_user_units ~ '/herdr.service',
+              crewship_user_units ~ '/default.target.wants/herdr.service',
+              crewship_herdr_spaces_script,
+              crewship_local_bin ~ '/herdr-sidebar-to-client.py',
+              crewship_local_bin ~ '/herdr-patch',
+              crewship_local_bin ~ '/btop',
+              crewship_local_bin ~ '/btop-bin',
+              crewship_btop_config,
+              crewship_local_bin ~ '/sentrux',
+              crewship_local_bin ~ '/fallow',
+              crewship_user_units ~ '/herdr-spaces.service',
+              crewship_user_units ~ '/herdr-spaces.timer',
+              crewship_user_units ~ '/timers.target.wants/herdr-spaces.timer',
+              crewship_cfg.home ~ '/.profile']
+             + ([crewship_chrome_devtools_mcp_path, crewship_omp_sidebar_extension,
+                 crewship_omp_status_icons_extension, crewship_omp_no_pattern_kill_extension,
+                 crewship_omp_quality_gate_extension,
+                 crewship_omp_as_pi_dir ~ '/omp-as-pi', crewship_no_mistakes_omp_overlay,
+                 crewship_user_units ~ '/no-mistakes-daemon-.service.d/code-factory.conf']
+                if (crewship_cfg.profiles.agents | bool) else [])
+             + ([crewship_pruner_script,
+                 crewship_pruner_python,
+                 crewship_pruner_stamp,
+                 crewship_user_units ~ '/chrome-autoprune.service',
+                 crewship_user_units ~ '/chrome-autoprune.timer',
+                 crewship_user_units ~ '/timers.target.wants/chrome-autoprune.timer']
+                if ((crewship_cfg.profiles.agents | bool)
+                    and (crewship_cfg.browser_prune.enabled | bool)) else [])
+             + ([crewship_firstmate_dir ~ '/.git']
+                + (crewship_firstmate_config_names
+                   | map('regex_replace', '^', crewship_firstmate_dir ~ '/config/')
                    | list)
-                if (factory_cfg.profiles.firstmate | bool) else [])
-             + ([factory_vnc_dir ~ '/xstartup',
-                 factory_vnc_password_file,
-                 factory_vnc_chrome_profile,
-                 factory_local_bin ~ '/vnc-chrome',
-                 factory_user_units ~ '/code-factory-vnc.service',
-                 factory_user_units ~ '/code-factory-novnc.service',
-                 factory_user_units ~ '/default.target.wants/code-factory-vnc.service',
-                 factory_user_units ~ '/default.target.wants/code-factory-novnc.service']
-                if (factory_cfg.profiles.desktop | bool) else [])
-             + ([factory_shared_supabase_dir ~ '/check.sh',
-                 factory_shared_supabase_dir ~ '/guard.sql',
-                 factory_shared_supabase_dir ~ '/supabase/config.toml',
-                 factory_shared_supabase_cli,
-                 factory_fleet_doctor_dir ~ '/worktree-env-seed.sh',
-                 factory_local_bin ~ '/supabase']
-                if (factory_cfg.profiles.shared_supabase | bool) else [])
-             + ([factory_fleet_doctor_dir ~ '/docker-guard.sh',
-                 factory_fleet_doctor_dir ~ '/dev-server-reaper.sh',
-                 factory_fleet_doctor_dir ~ '/storage-guard.sh',
-                 factory_fleet_doctor_dir ~ '/devtools-bridge-reaper.sh']
-                if (factory_cfg.profiles.fleet_guards | bool) else [])
-             + ((factory_fleet_units
-                   | map('regex_replace', '^', factory_user_units ~ '/')
+                if (crewship_cfg.profiles.firstmate | bool) else [])
+             + ([crewship_vnc_dir ~ '/xstartup',
+                 crewship_vnc_password_file,
+                 crewship_vnc_chrome_profile,
+                 crewship_local_bin ~ '/vnc-chrome',
+                 crewship_user_units ~ '/code-factory-vnc.service',
+                 crewship_user_units ~ '/code-factory-novnc.service',
+                 crewship_user_units ~ '/default.target.wants/code-factory-vnc.service',
+                 crewship_user_units ~ '/default.target.wants/code-factory-novnc.service']
+                if (crewship_cfg.profiles.desktop | bool) else [])
+             + ([crewship_shared_supabase_dir ~ '/check.sh',
+                 crewship_shared_supabase_dir ~ '/guard.sql',
+                 crewship_shared_supabase_dir ~ '/supabase/config.toml',
+                 crewship_shared_supabase_cli,
+                 crewship_fleet_doctor_dir ~ '/worktree-env-seed.sh',
+                 crewship_local_bin ~ '/supabase']
+                if (crewship_cfg.profiles.shared_supabase | bool) else [])
+             + ([crewship_fleet_doctor_dir ~ '/docker-guard.sh',
+                 crewship_fleet_doctor_dir ~ '/dev-server-reaper.sh',
+                 crewship_fleet_doctor_dir ~ '/storage-guard.sh',
+                 crewship_fleet_doctor_dir ~ '/devtools-bridge-reaper.sh']
+                if (crewship_cfg.profiles.fleet_guards | bool) else [])
+             + ((crewship_fleet_units
+                   | map('regex_replace', '^', crewship_user_units ~ '/')
                    | list)
-                + (factory_fleet_enabled_units | map(attribute='wants')
-                   | zip(factory_fleet_enabled_units | map(attribute='unit'))
+                + (crewship_fleet_enabled_units | map(attribute='wants')
+                   | zip(crewship_fleet_enabled_units | map(attribute='unit'))
                    | map('join', '/')
-                   | map('regex_replace', '^', factory_user_units ~ '/')
+                   | map('regex_replace', '^', crewship_user_units ~ '/')
                    | list))
-             + ([factory_fleet_browsers_dir ~ '/fleet-browser',
-                 factory_fleet_browsers_dir ~ '/cookie-sync.ts',
-                 factory_fleet_browsers_dir ~ '/env.sh']
-                + (factory_fleet_browser_units
-                   | map('regex_replace', '^', factory_user_units ~ '/')
+             + ([crewship_fleet_browsers_dir ~ '/fleet-browser',
+                 crewship_fleet_browsers_dir ~ '/cookie-sync.ts',
+                 crewship_fleet_browsers_dir ~ '/env.sh']
+                + (crewship_fleet_browser_units
+                   | map('regex_replace', '^', crewship_user_units ~ '/')
                    | list)
-                + (factory_fleet_browser_enabled_units | map(attribute='wants')
-                   | zip(factory_fleet_browser_enabled_units | map(attribute='unit'))
+                + (crewship_fleet_browser_enabled_units | map(attribute='wants')
+                   | zip(crewship_fleet_browser_enabled_units | map(attribute='unit'))
                    | map('join', '/')
-                   | map('regex_replace', '^', factory_user_units ~ '/')
+                   | map('regex_replace', '^', crewship_user_units ~ '/')
                    | list)
-                if (factory_fleet_browsers_enabled | bool) else [])
-             + ([factory_local_bin ~ '/concord',
-                 factory_local_bin ~ '/slk',
-                 factory_cfg.home ~ '/.config/concord/config.toml',
-                 factory_cfg.home ~ '/.config/slk/config.toml']
-                if (factory_cfg.profiles.chat | bool) else [])
-             + ([factory_local_bin ~ '/crewboard',
-                 factory_user_units ~ '/crewboard.service',
-                 factory_user_units ~ '/default.target.wants/crewboard.service']
-                if (factory_cfg.board is defined) else []) }}
+                if (crewship_fleet_browsers_enabled | bool) else [])
+             + ([crewship_local_bin ~ '/concord',
+                 crewship_local_bin ~ '/slk',
+                 crewship_cfg.home ~ '/.config/concord/config.toml',
+                 crewship_cfg.home ~ '/.config/slk/config.toml']
+                if (crewship_cfg.profiles.chat | bool) else [])
+             + ([crewship_local_bin ~ '/crewboard',
+                 crewship_user_units ~ '/crewboard.service',
+                 crewship_user_units ~ '/default.target.wants/crewboard.service']
+                if (crewship_cfg.board is defined) else []) }}
 
     - name: Stat every expected output
       ansible.builtin.stat:
@@ -123,20 +123,20 @@
         follow: false
         get_checksum: false
       become: true
-      loop: "{{ factory_expected_outputs }}"
+      loop: "{{ crewship_expected_outputs }}"
       loop_control:
-        label: "{{ item | relpath(factory_cfg.home) }}"
-      register: factory_output_stat
+        label: "{{ item | relpath(crewship_cfg.home) }}"
+      register: crewship_output_stat
       changed_when: false
       check_mode: false
 
     - name: Assert every expected output exists
       ansible.builtin.assert:
         that:
-          - factory_output_stat.results | rejectattr('stat.exists') | list | length == 0
+          - crewship_output_stat.results | rejectattr('stat.exists') | list | length == 0
         fail_msg: >-
           Provisioning finished but these outputs are missing:
-          {{ factory_output_stat.results | rejectattr('stat.exists')
+          {{ crewship_output_stat.results | rejectattr('stat.exists')
              | map(attribute='item') | list | join(', ') }}.
         quiet: true
 
@@ -144,68 +144,68 @@
 
     - name: Stat the desktop static-enablement symlinks
       ansible.builtin.stat:
-        path: "{{ factory_user_units }}/default.target.wants/{{ item }}"
+        path: "{{ crewship_user_units }}/default.target.wants/{{ item }}"
         follow: false
         get_checksum: false
       become: true
       loop:
         - code-factory-vnc.service
         - code-factory-novnc.service
-      register: factory_verify_desktop_links
+      register: crewship_verify_desktop_links
       changed_when: false
       check_mode: false
       when:
-        - factory_cfg.profiles.desktop | bool
-        - factory_desktop_strict_symlink_check | bool
+        - crewship_cfg.profiles.desktop | bool
+        - crewship_desktop_strict_symlink_check | bool
 
     - name: Assert the desktop units are enabled through the managed unit files
       ansible.builtin.assert:
         that:
-          - factory_verify_desktop_links.results
+          - crewship_verify_desktop_links.results
             | map(attribute='stat.lnk_source', default='')
             | list
             == (['code-factory-vnc.service', 'code-factory-novnc.service']
-                | map('regex_replace', '^', factory_user_units ~ '/') | list)
+                | map('regex_replace', '^', crewship_user_units ~ '/') | list)
         fail_msg: >-
           The default.target.wants entries for the desktop must be symlinks to
-          the managed units in {{ factory_user_units }}. Found:
-          {{ factory_verify_desktop_links.results
+          the managed units in {{ crewship_user_units }}. Found:
+          {{ crewship_verify_desktop_links.results
              | map(attribute='stat.lnk_source', default='(not a symlink)')
              | list | join(', ') }}.
         quiet: true
       when:
-        - factory_cfg.profiles.desktop | bool
-        - factory_desktop_strict_symlink_check | bool
+        - crewship_cfg.profiles.desktop | bool
+        - crewship_desktop_strict_symlink_check | bool
 
     # --- the Herdr release this run resolved is the one that runs ----------
 
     - name: Stat the managed Herdr symlink
       ansible.builtin.stat:
-        path: "{{ factory_local_bin }}/herdr"
+        path: "{{ crewship_local_bin }}/herdr"
         follow: false
         get_checksum: false
       become: true
-      register: factory_verify_herdr_link
+      register: crewship_verify_herdr_link
       changed_when: false
       check_mode: false
 
     - name: Read the rendered Herdr unit
       ansible.builtin.slurp:
-        src: "{{ factory_user_units }}/herdr.service"
+        src: "{{ crewship_user_units }}/herdr.service"
       become: true
-      register: factory_verify_herdr_unit
+      register: crewship_verify_herdr_unit
       changed_when: false
 
     - name: Assert CLI and service run the resolved Herdr release
       ansible.builtin.assert:
         that:
-          - (factory_verify_herdr_link.stat.lnk_source | default('')) == factory_herdr_bin
-          - (factory_verify_herdr_unit.content | b64decode) is search('ExecStart=' ~ (factory_herdr_bin | regex_escape))
+          - (crewship_verify_herdr_link.stat.lnk_source | default('')) == crewship_herdr_bin
+          - (crewship_verify_herdr_unit.content | b64decode) is search('ExecStart=' ~ (crewship_herdr_bin | regex_escape))
         fail_msg: >-
           The interactive `herdr` command and herdr.service must both resolve to
-          {{ factory_herdr_bin }} (Herdr {{ factory_herdr_version }}, the latest
+          {{ crewship_herdr_bin }} (Herdr {{ crewship_herdr_version }}, the latest
           release this run resolved). The symlink points at
-          "{{ factory_verify_herdr_link.stat.lnk_source | default('(missing)') }}".
+          "{{ crewship_verify_herdr_link.stat.lnk_source | default('(missing)') }}".
         quiet: true
 
     # mosh-server and non-interactive SSH run commands with the system PATH,
@@ -214,9 +214,9 @@
       ansible.builtin.command:
         argv: [env, -i, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                sh, -c, "command -v herdr && command -v herdr-patch"]
-      become: "{{ factory_become_target | bool }}"
-      become_user: "{{ factory_cfg.user }}"
-      register: factory_verify_mosh_path
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      register: crewship_verify_mosh_path
       changed_when: false
       failed_when: false
       check_mode: false
@@ -224,10 +224,10 @@
     - name: Assert herdr and herdr-patch resolve through /usr/local/bin
       ansible.builtin.assert:
         that:
-          - factory_verify_mosh_path.stdout_lines == ['/usr/local/bin/herdr', '/usr/local/bin/herdr-patch']
+          - crewship_verify_mosh_path.stdout_lines == ['/usr/local/bin/herdr', '/usr/local/bin/herdr-patch']
         fail_msg: >-
           With the mosh-server PATH, `herdr` and `herdr-patch` resolve to
-          "{{ factory_verify_mosh_path.stdout_lines | join(', ') | default('(nothing)', true) }}",
+          "{{ crewship_verify_mosh_path.stdout_lines | join(', ') | default('(nothing)', true) }}",
           not /usr/local/bin/herdr and /usr/local/bin/herdr-patch, so
           `mosh <host> -- herdr-patch` fails.
         quiet: true
@@ -236,206 +236,206 @@
 
     - name: Stat the managed omp symlink
       ansible.builtin.stat:
-        path: "{{ factory_local_bin }}/omp"
+        path: "{{ crewship_local_bin }}/omp"
         follow: false
         get_checksum: false
       become: true
-      register: factory_verify_omp_link
+      register: crewship_verify_omp_link
       changed_when: false
       check_mode: false
-      when: factory_cfg.profiles.agents | bool
+      when: crewship_cfg.profiles.agents | bool
 
     - name: Read the installed omp package manifest
       ansible.builtin.slurp:
-        src: "{{ factory_omp_root }}/node_modules/@oh-my-pi/pi-coding-agent/package.json"
+        src: "{{ crewship_omp_root }}/node_modules/@oh-my-pi/pi-coding-agent/package.json"
       become: true
-      register: factory_verify_omp_package
+      register: crewship_verify_omp_package
       changed_when: false
-      when: factory_cfg.profiles.agents | bool
+      when: crewship_cfg.profiles.agents | bool
 
     - name: Assert omp is the release this run resolved
       ansible.builtin.assert:
         that:
-          - (factory_verify_omp_link.stat.lnk_source | default('')).startswith(factory_omp_root ~ '/')
-          - (factory_verify_omp_package.content | b64decode | from_json).version == factory_omp_version
+          - (crewship_verify_omp_link.stat.lnk_source | default('')).startswith(crewship_omp_root ~ '/')
+          - (crewship_verify_omp_package.content | b64decode | from_json).version == crewship_omp_version
         fail_msg: >-
-          `omp` must be omp {{ factory_omp_version }}, the latest release this run
-          resolved, installed under {{ factory_omp_root }}. The symlink points at
-          "{{ factory_verify_omp_link.stat.lnk_source | default('(missing)') }}".
+          `omp` must be omp {{ crewship_omp_version }}, the latest release this run
+          resolved, installed under {{ crewship_omp_root }}. The symlink points at
+          "{{ crewship_verify_omp_link.stat.lnk_source | default('(missing)') }}".
         quiet: true
-      when: factory_cfg.profiles.agents | bool
+      when: crewship_cfg.profiles.agents | bool
 
     # Every omp flag omp-as-pi relies on is still in the installed omp's --help,
     # and its gate overlay matches the pinned sha256.
     - name: Run the omp-as-pi preflight
       ansible.builtin.command:
-        argv: ["{{ factory_omp_as_pi_dir }}/omp-as-pi", --omp-as-pi-check]
+        argv: ["{{ crewship_omp_as_pi_dir }}/omp-as-pi", --omp-as-pi-check]
       become: true
       changed_when: false
       check_mode: false
-      when: factory_cfg.profiles.agents | bool
+      when: crewship_cfg.profiles.agents | bool
 
     # Without Herdr's omp integration every omp pane shows as idle in the sidebar.
     - name: Read the Herdr integration status
       ansible.builtin.command:
-        argv: ["{{ factory_herdr_bin }}", integration, status]
-      register: factory_verify_herdr_integrations
+        argv: ["{{ crewship_herdr_bin }}", integration, status]
+      register: crewship_verify_herdr_integrations
       changed_when: false
       check_mode: false
-      when: factory_cfg.profiles.agents | bool
+      when: crewship_cfg.profiles.agents | bool
 
     - name: Assert Herdr's omp integration is current
       ansible.builtin.assert:
         that:
-          - "factory_verify_herdr_integrations.stdout is search('(?m)^omp: current')"
+          - "crewship_verify_herdr_integrations.stdout is search('(?m)^omp: current')"
         fail_msg: >-
           `herdr integration status` does not report `omp: current`, so Herdr
           shows every omp agent as idle:
-          {{ factory_verify_herdr_integrations.stdout_lines | select('match', 'omp:') | join(' ') }}
+          {{ crewship_verify_herdr_integrations.stdout_lines | select('match', 'omp:') | join(' ') }}
         quiet: true
-      when: factory_cfg.profiles.agents | bool
+      when: crewship_cfg.profiles.agents | bool
 
     # --- managed shell environment -----------------------------------------
 
     - name: Read the account profile
       ansible.builtin.slurp:
-        src: "{{ factory_cfg.home }}/.profile"
+        src: "{{ crewship_cfg.home }}/.profile"
       become: true
-      register: factory_verify_profile
+      register: crewship_verify_profile
       changed_when: false
-      when: factory_manage_profile_path | bool
+      when: crewship_manage_profile_path | bool
 
     - name: Assert the managed environment block is present
       ansible.builtin.assert:
         that:
-          - (factory_verify_profile.content | b64decode) is search('code-factory managed environment')
-          - (factory_verify_profile.content | b64decode) is search('\.local/bin')
-          - not (factory_cfg.profiles.agents | bool)
-            or ((factory_verify_profile.content | b64decode) is search('CHROME_DEVTOOLS_AXI_MCP_PATH'))
+          - (crewship_verify_profile.content | b64decode) is search('code-factory managed environment')
+          - (crewship_verify_profile.content | b64decode) is search('\.local/bin')
+          - not (crewship_cfg.profiles.agents | bool)
+            or ((crewship_verify_profile.content | b64decode) is search('CHROME_DEVTOOLS_AXI_MCP_PATH'))
         fail_msg: >-
-          {{ factory_cfg.home }}/.profile has no managed block exporting
-          ~/.local/bin{{ ' and CHROME_DEVTOOLS_AXI_MCP_PATH' if (factory_cfg.profiles.agents | bool) else '' }}.
+          {{ crewship_cfg.home }}/.profile has no managed block exporting
+          ~/.local/bin{{ ' and CHROME_DEVTOOLS_AXI_MCP_PATH' if (crewship_cfg.profiles.agents | bool) else '' }}.
           A login shell would not see the managed toolchain.
         quiet: true
-      when: factory_manage_profile_path | bool
+      when: crewship_manage_profile_path | bool
 
-    # --- data disk (factory.data_dir) --------------------------------------
+    # --- data disk (crewship.data_dir) --------------------------------------
 
     - name: Assert the login shell sends the npm and pip caches to the data disk
       ansible.builtin.assert:
         that:
-          - (factory_verify_profile.content | b64decode) is search('export ' ~ item.key ~ '="' ~ (item.value | regex_escape) ~ '"')
-        fail_msg: "{{ factory_cfg.home }}/.profile does not export {{ item.key }}={{ item.value }}."
+          - (crewship_verify_profile.content | b64decode) is search('export ' ~ item.key ~ '="' ~ (item.value | regex_escape) ~ '"')
+        fail_msg: "{{ crewship_cfg.home }}/.profile does not export {{ item.key }}={{ item.value }}."
         quiet: true
-      loop: "{{ factory_data_cache_env | dict2items }}"
-      when: factory_manage_profile_path | bool
+      loop: "{{ crewship_data_cache_env | dict2items }}"
+      when: crewship_manage_profile_path | bool
 
     - name: Read the Docker daemon configuration
       ansible.builtin.slurp:
-        src: "{{ factory_docker_daemon_json }}"
+        src: "{{ crewship_docker_daemon_json }}"
       become: true
-      register: factory_verify_docker_daemon
+      register: crewship_verify_docker_daemon
       changed_when: false
       when:
-        - factory_cfg.profiles.docker | bool
-        - factory_docker_data_root | length > 0
+        - crewship_cfg.profiles.docker | bool
+        - crewship_docker_data_root | length > 0
 
     - name: Assert Docker's data root is on the data disk
       ansible.builtin.assert:
         that:
-          - ((factory_verify_docker_daemon.content | b64decode | from_json)['data-root'] | default('')) == factory_docker_data_root
-        fail_msg: "{{ factory_docker_daemon_json }} does not set data-root to {{ factory_docker_data_root }}."
+          - ((crewship_verify_docker_daemon.content | b64decode | from_json)['data-root'] | default('')) == crewship_docker_data_root
+        fail_msg: "{{ crewship_docker_daemon_json }} does not set data-root to {{ crewship_docker_data_root }}."
         quiet: true
       when:
-        - factory_cfg.profiles.docker | bool
-        - factory_docker_data_root | length > 0
+        - crewship_cfg.profiles.docker | bool
+        - crewship_docker_data_root | length > 0
 
     # --- pruner runtime and unit -------------------------------------------
 
     - name: Read the pruner unit
       ansible.builtin.slurp:
-        src: "{{ factory_user_units }}/chrome-autoprune.service"
+        src: "{{ crewship_user_units }}/chrome-autoprune.service"
       become: true
-      register: factory_verify_prune_unit
+      register: crewship_verify_prune_unit
       changed_when: false
       when:
-        - factory_cfg.profiles.agents | bool
-        - factory_cfg.browser_prune.enabled | bool
+        - crewship_cfg.profiles.agents | bool
+        - crewship_cfg.browser_prune.enabled | bool
 
     - name: Assert the pruner runs the private runtime with --apply
       ansible.builtin.assert:
         that:
-          - (factory_verify_prune_unit.content | b64decode)
-            is search('ExecStart=' ~ (factory_pruner_python | regex_escape) ~ ' ' ~ (factory_pruner_script | regex_escape))
-          - (factory_verify_prune_unit.content | b64decode) is search('\s--apply(\s|$)')
-          - (factory_verify_prune_unit.content | b64decode) is not search(code_factory_repo | regex_escape)
+          - (crewship_verify_prune_unit.content | b64decode)
+            is search('ExecStart=' ~ (crewship_pruner_python | regex_escape) ~ ' ' ~ (crewship_pruner_script | regex_escape))
+          - (crewship_verify_prune_unit.content | b64decode) is search('\s--apply(\s|$)')
+          - (crewship_verify_prune_unit.content | b64decode) is not search(crewship_repo | regex_escape)
         fail_msg: >-
           chrome-autoprune.service must start
-          "{{ factory_pruner_python }} {{ factory_pruner_script }} --apply ...".
+          "{{ crewship_pruner_python }} {{ crewship_pruner_script }} --apply ...".
           Without --apply the pruner neither records observations nor stops
-          anything, and the unit must not reference {{ code_factory_repo }}: the
+          anything, and the unit must not reference {{ crewship_repo }}: the
           timer has to keep working without this checkout.
         quiet: true
       when:
-        - factory_cfg.profiles.agents | bool
-        - factory_cfg.browser_prune.enabled | bool
+        - crewship_cfg.profiles.agents | bool
+        - crewship_cfg.browser_prune.enabled | bool
 
     # --- Firstmate is on main at the revision this run resolved + patches ----
 
     - name: Assert this run resolved a Firstmate target revision
       ansible.builtin.assert:
         that:
-          - factory_firstmate_target is defined
+          - crewship_firstmate_target is defined
         fail_msg: >-
           No Firstmate target revision was resolved in this run, so there is
           nothing to verify against. tasks/firstmate.yml resolves it from
           origin/main; verify as part of a full apply, or with
           `--tags firstmate,verify`.
         quiet: true
-      when: factory_cfg.profiles.firstmate | bool
+      when: crewship_cfg.profiles.firstmate | bool
 
     - name: Read the Firstmate origin URL
       ansible.builtin.command:
-        argv: [git, -C, "{{ factory_firstmate_dir }}", config, --get, remote.origin.url]
-      become: "{{ factory_become_target | bool }}"
-      become_user: "{{ factory_cfg.user }}"
-      environment: "{{ factory_user_env }}"
-      register: factory_verify_fm_origin
+        argv: [git, -C, "{{ crewship_firstmate_dir }}", config, --get, remote.origin.url]
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      environment: "{{ crewship_user_env }}"
+      register: crewship_verify_fm_origin
       changed_when: false
       failed_when: false
       check_mode: false
-      when: factory_cfg.profiles.firstmate | bool
+      when: crewship_cfg.profiles.firstmate | bool
 
     - name: Assert Firstmate fetches the configured repository
       ansible.builtin.assert:
         that:
-          - (factory_verify_fm_origin.stdout | trim) == factory_cfg.firstmate.url
+          - (crewship_verify_fm_origin.stdout | trim) == crewship_cfg.firstmate.url
         fail_msg: >-
-          {{ factory_firstmate_dir }} fetches origin
-          {{ factory_verify_fm_origin.stdout | default('') | trim | default('(none)', true) }},
-          not factory.firstmate.url {{ factory_cfg.firstmate.url }}, so this
+          {{ crewship_firstmate_dir }} fetches origin
+          {{ crewship_verify_fm_origin.stdout | default('') | trim | default('(none)', true) }},
+          not crewship.firstmate.url {{ crewship_cfg.firstmate.url }}, so this
           run updated the wrong repository. Provisioning never rewrites the
           remote or discards local commits; follow "Moving off the old
           Firstmate fork" in docs/configuration.md.
         quiet: true
-      when: factory_cfg.profiles.firstmate | bool
+      when: crewship_cfg.profiles.firstmate | bool
 
     - name: Verify Firstmate is on main at the resolved revision plus the patch layer
       ansible.builtin.command:
         argv:
           - bash
-          - "{{ code_factory_repo }}/scripts/firstmate-patch-layer.sh"
+          - "{{ crewship_repo }}/scripts/firstmate-patch-layer.sh"
           - verify
-          - "{{ factory_firstmate_dir }}"
-          - "{{ factory_firstmate_target }}"
-          - "{{ factory_firstmate_patch_dir }}"
-      become: "{{ factory_become_target | bool }}"
-      become_user: "{{ factory_cfg.user }}"
-      environment: "{{ factory_user_env }}"
-      register: factory_verify_fm_head
+          - "{{ crewship_firstmate_dir }}"
+          - "{{ crewship_firstmate_target }}"
+          - "{{ crewship_firstmate_patch_dir }}"
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      environment: "{{ crewship_user_env }}"
+      register: crewship_verify_fm_head
       changed_when: false
       check_mode: false
-      when: factory_cfg.profiles.firstmate | bool
+      when: crewship_cfg.profiles.firstmate | bool
 
     # A host that cannot name the Firstmate it installed is how a fleet ends up
     # running a revision nobody can identify, so the sha is reported, not only
@@ -443,57 +443,57 @@
     - name: Report the Firstmate revision this run installed
       ansible.builtin.debug:
         msg: >-
-          Firstmate in {{ factory_firstmate_dir }} is on main at
-          {{ factory_verify_fm_head.stdout | trim }}: {{ factory_firstmate_target }},
-          the revision origin/main of {{ factory_cfg.firstmate.url }} resolved to
+          Firstmate in {{ crewship_firstmate_dir }} is on main at
+          {{ crewship_verify_fm_head.stdout | trim }}: {{ crewship_firstmate_target }},
+          the revision origin/main of {{ crewship_cfg.firstmate.url }} resolved to
           during this run, plus the patch layer in patches/firstmate/.
-      when: factory_cfg.profiles.firstmate | bool
+      when: crewship_cfg.profiles.firstmate | bool
 
     # --- runtime state, only where services are managed ---------------------
 
     - name: Read the state of the managed user units
       ansible.builtin.command:
         argv: [systemctl, --user, is-active, "{{ item }}"]
-      become: "{{ factory_become_target | bool }}"
-      become_user: "{{ factory_cfg.user }}"
-      environment: "{{ factory_user_systemd_env }}"
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      environment: "{{ crewship_user_systemd_env }}"
       loop: >-
         {{ ['herdr.service', 'herdr-spaces.timer']
            + (['chrome-autoprune.timer']
-              if ((factory_cfg.profiles.agents | bool)
-                  and (factory_cfg.browser_prune.enabled | bool)) else [])
+              if ((crewship_cfg.profiles.agents | bool)
+                  and (crewship_cfg.browser_prune.enabled | bool)) else [])
            + (['code-factory-vnc.service', 'code-factory-novnc.service']
-              if (factory_cfg.profiles.desktop | bool) else [])
-           + (['crewboard.service'] if (factory_cfg.board is defined) else []) }}
-      register: factory_verify_units
+              if (crewship_cfg.profiles.desktop | bool) else [])
+           + (['crewboard.service'] if (crewship_cfg.board is defined) else []) }}
+      register: crewship_verify_units
       changed_when: false
       failed_when: false
       check_mode: false
-      when: factory_manage_services | bool
+      when: crewship_manage_services | bool
 
     - name: Assert the managed user units are running
       ansible.builtin.assert:
         that:
-          - factory_verify_units.results
+          - crewship_verify_units.results
             | rejectattr('stdout', 'in', ['active', 'activating'])
             | list | length == 0
         fail_msg: >-
           These managed user units are not running:
-          {{ factory_verify_units.results
+          {{ crewship_verify_units.results
              | rejectattr('stdout', 'in', ['active', 'activating'])
              | map(attribute='item') | list | join(', ') }}.
           Inspect them with `systemctl --user status <unit>` and
-          `journalctl --user -u <unit>` as {{ factory_cfg.user }}.
+          `journalctl --user -u <unit>` as {{ crewship_cfg.user }}.
         quiet: true
-      when: factory_manage_services | bool
+      when: crewship_manage_services | bool
 
     - name: Report the units that were written but not started
       ansible.builtin.debug:
         msg: >-
           start_services is false: unit files and their *.target.wants symlinks
-          exist under {{ factory_user_units }}, nothing was started, and no
+          exist under {{ crewship_user_units }}, nothing was started, and no
           linger was enabled. This is the image-build and container mode.
-      when: not (factory_manage_services | bool)
+      when: not (crewship_manage_services | bool)
 
     # --- the desktop stays on loopback --------------------------------------
 
@@ -501,37 +501,37 @@
       ansible.builtin.command:
         argv: [ss, -H, -l, -t, -n]
       become: true
-      register: factory_verify_listeners
+      register: crewship_verify_listeners
       changed_when: false
       check_mode: false
       when:
-        - factory_cfg.profiles.desktop | bool
-        - factory_manage_services | bool
+        - crewship_cfg.profiles.desktop | bool
+        - crewship_manage_services | bool
 
     - name: Collect desktop listeners that are not on loopback
       ansible.builtin.set_fact:
-        factory_desktop_public_listeners: >-
-          {{ factory_verify_listeners.stdout_lines
-             | select('search', ':(' ~ factory_vnc_rfb_port ~ '|' ~ factory_cfg.desktop.novnc_port ~ ')\s')
-             | reject('search', '(127\.0\.0\.1|\[::1\]):(' ~ factory_vnc_rfb_port ~ '|' ~ factory_cfg.desktop.novnc_port ~ ')\s')
+        crewship_desktop_public_listeners: >-
+          {{ crewship_verify_listeners.stdout_lines
+             | select('search', ':(' ~ crewship_vnc_rfb_port ~ '|' ~ crewship_cfg.desktop.novnc_port ~ ')\s')
+             | reject('search', '(127\.0\.0\.1|\[::1\]):(' ~ crewship_vnc_rfb_port ~ '|' ~ crewship_cfg.desktop.novnc_port ~ ')\s')
              | list }}
       when:
-        - factory_cfg.profiles.desktop | bool
-        - factory_manage_services | bool
+        - crewship_cfg.profiles.desktop | bool
+        - crewship_manage_services | bool
 
     - name: Assert the desktop listeners are loopback only
       ansible.builtin.assert:
         that:
-          - factory_desktop_public_listeners | length == 0
+          - crewship_desktop_public_listeners | length == 0
         fail_msg: >-
           The review desktop must never leave loopback, and these sockets do:
-          {{ factory_desktop_public_listeners | join(' | ') }}.
+          {{ crewship_desktop_public_listeners | join(' | ') }}.
           VNC requires authentication as well as loopback binding; use an SSH
           tunnel instead of publishing the desktop directly.
         quiet: true
       when:
-        - factory_cfg.profiles.desktop | bool
-        - factory_manage_services | bool
+        - crewship_cfg.profiles.desktop | bool
+        - crewship_manage_services | bool
 
     # --- what provisioning deliberately did not do --------------------------
 
@@ -539,22 +539,22 @@
       ansible.builtin.debug:
         msg: >-
           {{ ['Verified outputs for profiles: '
-              ~ (factory_cfg.profiles | dict2items | selectattr('value')
+              ~ (crewship_cfg.profiles | dict2items | selectattr('value')
                  | map(attribute='key') | list | join(', ') | default('none', true))
               ~ '.']
              + ['Manual: authenticate every CLI interactively as '
-                ~ factory_cfg.user
+                ~ crewship_cfg.user
                 ~ ' (gh auth login, OMP provider sign-in); no credential was copied.']
              + (['Manual: join the tailnet with `sudo tailscale up`; Tailscale SSH and the tailnet ACL stay separate decisions.']
-                if (factory_cfg.profiles.tailscale | bool) else [])
-             + (['Manual: add accounts to the docker group yourself (factory_docker_group_users); it grants host root.']
-                if ((factory_cfg.profiles.docker | bool) and (factory_docker_group_users | length == 0)) else [])
+                if (crewship_cfg.profiles.tailscale | bool) else [])
+             + (['Manual: add accounts to the docker group yourself (crewship_docker_group_users); it grants host root.']
+                if ((crewship_cfg.profiles.docker | bool) and (crewship_docker_group_users | length == 0)) else [])
              + (['Manual: sign in once inside the single persistent profile '
-                 ~ factory_vnc_chrome_profile
+                 ~ crewship_vnc_chrome_profile
                  ~ ' via `vnc-chrome`, reached through `ssh -N -L '
-                 ~ factory_cfg.desktop.novnc_port ~ ':127.0.0.1:'
-                 ~ factory_cfg.desktop.novnc_port ~ ' ' ~ factory_cfg.user ~ '@<host>`.']
-                if (factory_cfg.profiles.desktop | bool) else [])
+                 ~ crewship_cfg.desktop.novnc_port ~ ':127.0.0.1:'
+                 ~ crewship_cfg.desktop.novnc_port ~ ' ' ~ crewship_cfg.user ~ '@<host>`.']
+                if (crewship_cfg.profiles.desktop | bool) else [])
              + (['Manual: Firstmate startup and fleet restore are never run by provisioning.']
-                if (factory_cfg.profiles.firstmate | bool) else [])
+                if (crewship_cfg.profiles.firstmate | bool) else [])
              + ['Unchanged by design: sshd configuration, firewall rules, existing credentials and unrelated account membership.'] }}

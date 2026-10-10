@@ -167,7 +167,7 @@ With two transports, the first one is the primary line and the second one is the
 Add this block to `.local/host.yml`, then run `./ship.sh launch`. The `firstmate` profile must be on.
 
 ```yaml
-factory:
+crewship:
   imessage:
     owner: "+<country code><number>"  # the owner's phone number, E.164 form
     owner_name: the owner           # optional; this is the default; how the desk prompt names him

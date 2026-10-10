@@ -33,7 +33,7 @@ close that.
 - `~/oss-fleet/doctor/worktree-env-seed.sh` (`crewship-worktree-env-seed.*`) -
   installs `<project>.env.local` as `.env.local` in the project worktrees
   matched by the pool glob and checkout path fixed in that script, on changes
-  to the pools the path unit watches (`factory.fleet.worktree_pools`), every
+  to the pools the path unit watches (`crewship.fleet.worktree_pools`), every
   2 min, and at login. Files lacking the
   `# fleet-shared-supabase` marker are replaced (backup kept alongside).
 - `~/.local/bin/supabase` - shim; refuses lifecycle subcommands with a pointer

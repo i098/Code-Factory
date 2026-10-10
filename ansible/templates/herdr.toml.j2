@@ -1,5 +1,5 @@
 {{ ansible_managed | comment }}
-# Herdr {{ factory_herdr_version }} static configuration.
+# Herdr {{ crewship_herdr_version }} static configuration.
 #
 # Reviewed, non-secret subset only. Session state, pane history, saved machine
 # catalogues and workspace state are deliberately not reproduced here.
@@ -9,38 +9,38 @@
 onboarding = false
 
 [theme]
-name = "{{ factory_cfg.herdr.theme }}"
-auto_switch = {{ factory_herdr_theme_auto_switch | bool | lower }}
+name = "{{ crewship_cfg.herdr.theme }}"
+auto_switch = {{ crewship_herdr_theme_auto_switch | bool | lower }}
 
 [theme.custom]
-sidebar_bg = "{{ factory_cfg.herdr.sidebar_bg }}"
+sidebar_bg = "{{ crewship_cfg.herdr.sidebar_bg }}"
 
 [ui]
-sidebar_width = {{ factory_cfg.herdr.sidebar_width | int }}
-sidebar_max_width = {{ factory_cfg.herdr.sidebar_max_width | int }}
-show_agent_labels_on_pane_borders = {{ factory_herdr_show_agent_labels | bool | lower }}
-agent_panel_sort = "{{ factory_cfg.herdr.agent_panel_sort }}"
+sidebar_width = {{ crewship_cfg.herdr.sidebar_width | int }}
+sidebar_max_width = {{ crewship_cfg.herdr.sidebar_max_width | int }}
+show_agent_labels_on_pane_borders = {{ crewship_herdr_show_agent_labels | bool | lower }}
+agent_panel_sort = "{{ crewship_cfg.herdr.agent_panel_sort }}"
 # A distinct symbol per agent state instead of a colored dot.
-status_indicators = "{{ factory_herdr_status_indicators }}"
+status_indicators = "{{ crewship_herdr_status_indicators }}"
 
 [ui.toast]
-delivery = "{{ factory_cfg.herdr.toast_delivery }}"
+delivery = "{{ crewship_cfg.herdr.toast_delivery }}"
 
 # Agent sidebar layout (docs/herdr.md). $who and the pull request parts come
 # from the omp extension ~/.omp/agent/extensions/code-factory-herdr-sidebar.ts.
 [ui.sidebar.agents]
-rows = {{ factory_cfg.herdr.sidebar_agent_rows | trim }}
+rows = {{ crewship_cfg.herdr.sidebar_agent_rows | trim }}
 
 # Spaces sidebar layout (docs/herdr.md). Its $ tokens come from the
 # herdr-spaces reporter timer.
 [ui.sidebar.spaces]
-rows = {{ factory_cfg.herdr.sidebar_space_rows | trim }}
+rows = {{ crewship_cfg.herdr.sidebar_space_rows | trim }}
 
 [update]
 # Controls the updater's own check behaviour only. `./ship.sh launch` installs
 # the latest release itself; never run `herdr update` from provisioning.
-channel = "{{ factory_herdr_update_channel }}"
+channel = "{{ crewship_herdr_update_channel }}"
 
 [server]
-headless_cols = {{ factory_cfg.herdr.headless_cols | int }}
-headless_rows = {{ factory_cfg.herdr.headless_rows | int }}
+headless_cols = {{ crewship_cfg.herdr.headless_cols | int }}
+headless_rows = {{ crewship_cfg.herdr.headless_rows | int }}

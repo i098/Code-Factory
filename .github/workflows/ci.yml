@@ -324,7 +324,7 @@ jobs:
           set -euo pipefail
           secret_dir="$RUNNER_TEMP/crewship-secrets"
           install -d -m 700 "$secret_dir"
-          echo "CODE_FACTORY_SECRET_DIR=$secret_dir" >> "$GITHUB_ENV"
+          echo "CREWSHIP_SECRET_DIR=$secret_dir" >> "$GITHUB_ENV"
           umask 077
           openssl rand -base64 32 | tr -d '\n' > "$secret_dir/postgres_password"
 

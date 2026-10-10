@@ -21,10 +21,10 @@ def run_model_merge(home, check=False, local_bin=None):
         "gather_facts": False,
         "vars": {
             "ansible_become": False,
-            "code_factory_repo": str(ROOT),
-            "factory_local_bin": str(local_bin or Path(shutil.which("bun")).parent),
-            "factory_cfg": {"home": str(home), "user": pwd.getpwuid(os.getuid()).pw_name},
-            "factory_group": grp.getgrgid(os.getgid()).gr_name,
+            "crewship_repo": str(ROOT),
+            "crewship_local_bin": str(local_bin or Path(shutil.which("bun")).parent),
+            "crewship_cfg": {"home": str(home), "user": pwd.getpwuid(os.getuid()).pw_name},
+            "crewship_group": grp.getgrgid(os.getgid()).gr_name,
         },
         "tasks": [{"ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/omp_models.yml")}],
     }]))

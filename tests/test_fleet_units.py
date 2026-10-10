@@ -62,16 +62,16 @@ def apply(
                         [
                             {
                                 "ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/fleet_guards.yml"),
-                                "when": "factory_cfg.profiles.fleet_guards | bool",
+                                "when": "crewship_cfg.profiles.fleet_guards | bool",
                             },
                             {
                                 "ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/shared_supabase.yml"),
-                                "when": "factory_cfg.profiles.shared_supabase | bool",
+                                "when": "crewship_cfg.profiles.shared_supabase | bool",
                             },
                         ] if scripts else []
                     ) + [{
                         "ansible.builtin.import_tasks": str(ROOT / "ansible/tasks/fleet_units.yml"),
-                        "when": "(factory_cfg.profiles.fleet_guards | bool) or (factory_cfg.profiles.shared_supabase | bool)",
+                        "when": "(crewship_cfg.profiles.fleet_guards | bool) or (crewship_cfg.profiles.shared_supabase | bool)",
                     }],
                     "handlers": [
                         {"name": "reload", "ansible.builtin.debug": {"msg": "reload"}, "listen": "reload user systemd"},
@@ -83,11 +83,11 @@ def apply(
     )
     variables = {
         "ansible_become": False,
-        "code_factory_repo": str(ROOT),
-        "factory_group": grp.getgrgid(os.getgid()).gr_name,
-        "factory_become_target": False,
-        "factory_latest": {"supabase": "1.2.3"},
-        "factory": {
+        "crewship_repo": str(ROOT),
+        "crewship_group": grp.getgrgid(os.getgid()).gr_name,
+        "crewship_become_target": False,
+        "crewship_latest": {"supabase": "1.2.3"},
+        "crewship": {
             "user": getpass.getuser(), "home": str(home), "start_services": start_services,
             "profiles": {"fleet_guards": fleet_guards, "shared_supabase": shared_supabase},
         },

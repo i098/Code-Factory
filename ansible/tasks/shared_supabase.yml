@@ -7,30 +7,30 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
   become: true
   loop:
-    - "{{ factory_fleet_doctor_dir }}"
-    - "{{ factory_shared_supabase_dir }}/supabase"
-    - "{{ factory_local_bin }}"
+    - "{{ crewship_fleet_doctor_dir }}"
+    - "{{ crewship_shared_supabase_dir }}/supabase"
+    - "{{ crewship_local_bin }}"
 
 - name: Install the shared Supabase scripts
   ansible.builtin.copy:
-    src: "{{ factory_fleet_sources }}/{{ item.src }}"
+    src: "{{ crewship_fleet_sources }}/{{ item.src }}"
     dest: "{{ item.dest }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "{{ item.mode }}"
     remote_src: true
   become: true
   loop:
-    - { src: doctor/worktree-env-seed.sh, dest: "{{ factory_fleet_doctor_dir }}/worktree-env-seed.sh", mode: "0755" }
-    - { src: shared-supabase/check.sh, dest: "{{ factory_shared_supabase_dir }}/check.sh", mode: "0755" }
-    - { src: shared-supabase/guard.sql, dest: "{{ factory_shared_supabase_dir }}/guard.sql", mode: "0644" }
-    - { src: shared-supabase/README.md, dest: "{{ factory_shared_supabase_dir }}/README.md", mode: "0644" }
-    - { src: bin/supabase, dest: "{{ factory_local_bin }}/supabase", mode: "0755" }
+    - { src: doctor/worktree-env-seed.sh, dest: "{{ crewship_fleet_doctor_dir }}/worktree-env-seed.sh", mode: "0755" }
+    - { src: shared-supabase/check.sh, dest: "{{ crewship_shared_supabase_dir }}/check.sh", mode: "0755" }
+    - { src: shared-supabase/guard.sql, dest: "{{ crewship_shared_supabase_dir }}/guard.sql", mode: "0644" }
+    - { src: shared-supabase/README.md, dest: "{{ crewship_shared_supabase_dir }}/README.md", mode: "0644" }
+    - { src: bin/supabase, dest: "{{ crewship_local_bin }}/supabase", mode: "0755" }
   loop_control:
     label: "{{ item.dest }}"
 
@@ -38,11 +38,11 @@
 - name: Render the shared stack's Supabase configuration
   ansible.builtin.copy:
     content: >-
-      {{ lookup('ansible.builtin.file', factory_fleet_sources ~ '/shared-supabase/supabase/config.toml')
-         | regex_replace('(?m)^project_id = .*$', 'project_id = "' ~ factory_shared_supabase_project ~ '"') }}
-    dest: "{{ factory_shared_supabase_dir }}/supabase/config.toml"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+      {{ lookup('ansible.builtin.file', crewship_fleet_sources ~ '/shared-supabase/supabase/config.toml')
+         | regex_replace('(?m)^project_id = .*$', 'project_id = "' ~ crewship_shared_supabase_project ~ '"') }}
+    dest: "{{ crewship_shared_supabase_dir }}/supabase/config.toml"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0644"
   become: true
 
@@ -50,11 +50,11 @@
 
 - name: Read the installed Supabase CLI version
   ansible.builtin.command:
-    argv: ["{{ factory_shared_supabase_cli }}", --version]
-  become: "{{ factory_become_target | bool }}"
-  become_user: "{{ factory_cfg.user }}"
-  environment: "{{ factory_user_env }}"
-  register: factory_fleet_cli_version
+    argv: ["{{ crewship_shared_supabase_cli }}", --version]
+  become: "{{ crewship_become_target | bool }}"
+  become_user: "{{ crewship_cfg.user }}"
+  environment: "{{ crewship_user_env }}"
+  register: crewship_fleet_cli_version
   failed_when: false
   changed_when: false
   check_mode: false
@@ -62,11 +62,11 @@
 - name: Report the CLI install that check mode cannot perform
   ansible.builtin.debug:
     msg: >-
-      check mode: would run `npm install` in {{ factory_shared_supabase_dir }}
-      for supabase {{ factory_shared_supabase_cli_version }}.
+      check mode: would run `npm install` in {{ crewship_shared_supabase_dir }}
+      for supabase {{ crewship_shared_supabase_cli_version }}.
   when:
     - ansible_check_mode
-    - (factory_fleet_cli_version.stdout | default('') | trim) != factory_shared_supabase_cli_version
+    - (crewship_fleet_cli_version.stdout | default('') | trim) != crewship_shared_supabase_cli_version
 
 # npm checks the integrity the registry records for the resolved version.
 - name: Install the latest Supabase CLI
@@ -75,38 +75,38 @@
       - npm
       - install
       - --prefix
-      - "{{ factory_shared_supabase_dir }}"
+      - "{{ crewship_shared_supabase_dir }}"
       - --no-fund
       - --no-audit
       - --loglevel=error
-      - "supabase@{{ factory_shared_supabase_cli_version }}"
-    chdir: "{{ factory_shared_supabase_dir }}"
-  become: "{{ factory_become_target | bool }}"
-  become_user: "{{ factory_cfg.user }}"
-  environment: "{{ factory_user_env }}"
+      - "supabase@{{ crewship_shared_supabase_cli_version }}"
+    chdir: "{{ crewship_shared_supabase_dir }}"
+  become: "{{ crewship_become_target | bool }}"
+  become_user: "{{ crewship_cfg.user }}"
+  environment: "{{ crewship_user_env }}"
   changed_when: true
   when:
     - not ansible_check_mode
-    - (factory_fleet_cli_version.stdout | default('') | trim) != factory_shared_supabase_cli_version
+    - (crewship_fleet_cli_version.stdout | default('') | trim) != crewship_shared_supabase_cli_version
 
 - name: Confirm the Supabase CLI is the resolved release
   ansible.builtin.command:
-    argv: ["{{ factory_shared_supabase_cli }}", --version]
-  become: "{{ factory_become_target | bool }}"
-  become_user: "{{ factory_cfg.user }}"
-  environment: "{{ factory_user_env }}"
-  register: factory_fleet_cli_verified
+    argv: ["{{ crewship_shared_supabase_cli }}", --version]
+  become: "{{ crewship_become_target | bool }}"
+  become_user: "{{ crewship_cfg.user }}"
+  environment: "{{ crewship_user_env }}"
+  register: crewship_fleet_cli_verified
   changed_when: false
   when: not ansible_check_mode
 
 - name: Assert the Supabase CLI version
   ansible.builtin.assert:
     that:
-      - (factory_fleet_cli_verified.stdout | trim) == factory_shared_supabase_cli_version
+      - (crewship_fleet_cli_verified.stdout | trim) == crewship_shared_supabase_cli_version
     fail_msg: >-
-      {{ factory_shared_supabase_cli }} reports
-      "{{ factory_fleet_cli_verified.stdout | default('') | trim }}" but
-      this run resolved {{ factory_shared_supabase_cli_version }}.
+      {{ crewship_shared_supabase_cli }} reports
+      "{{ crewship_fleet_cli_verified.stdout | default('') | trim }}" but
+      this run resolved {{ crewship_shared_supabase_cli_version }}.
     quiet: true
   when: not ansible_check_mode
 
@@ -114,58 +114,58 @@
 
 - name: Check whether the fixture volume exists
   ansible.builtin.command:
-    argv: [docker, volume, inspect, "{{ factory_shared_supabase_db_volume }}"]
-  become: "{{ factory_become_target | bool }}"
-  become_user: "{{ factory_cfg.user }}"
-  environment: "{{ factory_user_env }}"
-  register: factory_fleet_volume
+    argv: [docker, volume, inspect, "{{ crewship_shared_supabase_db_volume }}"]
+  become: "{{ crewship_become_target | bool }}"
+  become_user: "{{ crewship_cfg.user }}"
+  environment: "{{ crewship_user_env }}"
+  register: crewship_fleet_volume
   failed_when: false
   changed_when: false
   check_mode: false
 
 - name: Stat the fixture archive
   ansible.builtin.stat:
-    path: "{{ factory_cfg.fleet.fixture_archive }}"
+    path: "{{ crewship_cfg.fleet.fixture_archive }}"
     get_checksum: false
   become: true
-  register: factory_fleet_fixture
+  register: crewship_fleet_fixture
   changed_when: false
   check_mode: false
-  when: factory_cfg.fleet.fixture_archive | length > 0
+  when: crewship_cfg.fleet.fixture_archive | length > 0
 
 - name: Refuse to start an empty shared stack
   ansible.builtin.assert:
     that:
-      - factory_fleet_volume.rc == 0 or (factory_fleet_fixture.stat.exists | default(false))
+      - crewship_fleet_volume.rc == 0 or (crewship_fleet_fixture.stat.exists | default(false))
     fail_msg: >-
-      No Docker volume {{ factory_shared_supabase_db_volume }} and no fixture
-      archive at "{{ factory_cfg.fleet.fixture_archive }}". The shared database
+      No Docker volume {{ crewship_shared_supabase_db_volume }} and no fixture
+      archive at "{{ crewship_cfg.fleet.fixture_archive }}". The shared database
       is a fixture that cannot be rebuilt from migrations. Copy the snapshot
-      (see {{ factory_shared_supabase_dir }}/README.md, "Snapshot") to this
-      host, set factory.fleet.fixture_archive to its path, and re-run.
+      (see {{ crewship_shared_supabase_dir }}/README.md, "Snapshot") to this
+      host, set crewship.fleet.fixture_archive to its path, and re-run.
     quiet: true
   when: not ansible_check_mode
 
 - name: Report the fixture restore that check mode cannot perform
   ansible.builtin.debug:
     msg: >-
-      check mode: would create volume {{ factory_shared_supabase_db_volume }}
-      from {{ factory_cfg.fleet.fixture_archive }}.
+      check mode: would create volume {{ crewship_shared_supabase_db_volume }}
+      from {{ crewship_cfg.fleet.fixture_archive }}.
   when:
     - ansible_check_mode
-    - factory_fleet_volume.rc != 0
+    - crewship_fleet_volume.rc != 0
 
 - name: Restore the fixture volume from the archive
   when:
     - not ansible_check_mode
-    - factory_fleet_volume.rc != 0
+    - crewship_fleet_volume.rc != 0
   block:
     - name: Create the fixture volume
       ansible.builtin.command:
-        argv: [docker, volume, create, "{{ factory_shared_supabase_db_volume }}"]
-      become: "{{ factory_become_target | bool }}"
-      become_user: "{{ factory_cfg.user }}"
-      environment: "{{ factory_user_env }}"
+        argv: [docker, volume, create, "{{ crewship_shared_supabase_db_volume }}"]
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      environment: "{{ crewship_user_env }}"
       changed_when: true
 
     - name: Unpack the archive into the volume
@@ -175,14 +175,14 @@
           - run
           - --rm
           - -v
-          - "{{ factory_shared_supabase_db_volume }}:/v"
+          - "{{ crewship_shared_supabase_db_volume }}:/v"
           - -v
-          - "{{ factory_cfg.fleet.fixture_archive | dirname }}:/b:ro"
+          - "{{ crewship_cfg.fleet.fixture_archive | dirname }}:/b:ro"
           - alpine
           - sh
           - -c
-          - "tar xzf /b/{{ factory_cfg.fleet.fixture_archive | basename }} -C /v"
-      become: "{{ factory_become_target | bool }}"
-      become_user: "{{ factory_cfg.user }}"
-      environment: "{{ factory_user_env }}"
+          - "tar xzf /b/{{ crewship_cfg.fleet.fixture_archive | basename }} -C /v"
+      become: "{{ crewship_become_target | bool }}"
+      become_user: "{{ crewship_cfg.user }}"
+      environment: "{{ crewship_user_env }}"
       changed_when: true

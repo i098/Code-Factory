@@ -44,7 +44,7 @@ Agents can reach an operator Mac with `ssh mac`. They use it to open links in th
 Set the Mac's address and login in `.local/host.yml` only, never in `config/default.yml`:
 
 ```yaml
-factory:
+crewship:
   mac_ssh:
     host: <Mac tailnet name or IP>
     user: <Mac login>

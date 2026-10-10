@@ -2,104 +2,104 @@
 # Crewship - native provisioning variables.
 #
 # The CLI passes the whole validated configuration document as extra vars, so
-# `factory` (and `schema_version`) arrive from config/default.yml or
+# `crewship` (and `schema_version`) arrive from config/default.yml or
 # .local/host.yml. Extra vars replace a variable wholesale, so the defaults of
-# the contract document are kept separately in `factory_defaults` and merged
-# recursively into `factory_cfg`. Task files consume `factory_cfg.*`, which is
-# `factory.*` with contract defaults filled in for keys the caller omitted.
+# the contract document are kept separately in `crewship_defaults` and merged
+# recursively into `crewship_cfg`. Task files consume `crewship_cfg.*`, which is
+# `crewship.*` with contract defaults filled in for keys the caller omitted.
 #
 # Nothing in this file may contain a secret, a token, a host identity or a
 # /home/ubuntu literal.
 
-factory_defaults: "{{ (lookup('ansible.builtin.file', code_factory_repo ~ '/config/default.yml') | from_yaml).factory }}"
+crewship_defaults: "{{ (lookup('ansible.builtin.file', crewship_repo ~ '/config/default.yml') | from_yaml).crewship }}"
 
-factory_cfg: "{{ factory_defaults | combine(factory | default({}, true), recursive=True) }}"
+crewship_cfg: "{{ crewship_defaults | combine(crewship | default({}, true), recursive=True) }}"
 
 # --- Repository layout (Main-owned inputs) ----------------------------------
-# Override code_factory_repo if the CLI ever invokes the playbook from outside
+# Override crewship_repo if the CLI ever invokes the playbook from outside
 # the checkout.
-code_factory_repo: "{{ playbook_dir | dirname }}"
-factory_installer: "{{ code_factory_repo }}/scripts/provisions.py"
-factory_pruner_source: "{{ code_factory_repo }}/maintenance/chrome-autoprune.py"
+crewship_repo: "{{ playbook_dir | dirname }}"
+crewship_installer: "{{ crewship_repo }}/scripts/provisions.py"
+crewship_pruner_source: "{{ crewship_repo }}/maintenance/chrome-autoprune.py"
 
 # Nothing is pinned: tasks/preflight.yml resolves every tool's latest release
-# once per run into factory_latest, and that is what the run installs and
+# once per run into crewship_latest, and that is what the run installs and
 # tasks/verify.yml asserts for herdr and omp.
-factory_herdr_version: "{{ factory_latest.herdr.version }}"
-factory_omp_version: "{{ factory_latest.omp }}"
+crewship_herdr_version: "{{ crewship_latest.herdr.version }}"
+crewship_omp_version: "{{ crewship_latest.omp }}"
 
 # --- Platform ---------------------------------------------------------------
-factory_platform_map:
+crewship_platform_map:
   x86_64: linux-x86_64
   amd64: linux-x86_64
   aarch64: linux-aarch64
   arm64: linux-aarch64
-factory_platform: "{{ factory_platform_map[ansible_architecture] | default('') }}"
-factory_deb_arch_map:
+crewship_platform: "{{ crewship_platform_map[ansible_architecture] | default('') }}"
+crewship_deb_arch_map:
   x86_64: amd64
   amd64: amd64
   aarch64: arm64
   arm64: arm64
-factory_deb_arch: "{{ factory_deb_arch_map[ansible_architecture] | default('') }}"
-factory_supported_ubuntu_releases: ["24.04", "26.04"]
-factory_allow_unsupported_os: false
+crewship_deb_arch: "{{ crewship_deb_arch_map[ansible_architecture] | default('') }}"
+crewship_supported_ubuntu_releases: ["24.04", "26.04"]
+crewship_allow_unsupported_os: false
 
 # --- Derived paths ----------------------------------------------------------
-factory_local_bin: "{{ factory_cfg.home }}/.local/bin"
-factory_share_dir: "{{ factory_cfg.home }}/.local/share/code-factory"
-factory_tools_root: "{{ factory_share_dir }}/tools"
-factory_omp_root: "{{ factory_share_dir }}/omp/{{ factory_omp_version }}"
+crewship_local_bin: "{{ crewship_cfg.home }}/.local/bin"
+crewship_share_dir: "{{ crewship_cfg.home }}/.local/share/code-factory"
+crewship_tools_root: "{{ crewship_share_dir }}/tools"
+crewship_omp_root: "{{ crewship_share_dir }}/omp/{{ crewship_omp_version }}"
 # AXI must launch the chrome-devtools MCP build the installer installed (the
 # latest release) instead of resolving `npx ...@latest` at runtime. The
 # installer re-points `current` at that release, so this text, and with it the
 # Herdr unit and the profile block, stays the same between releases. Exported
 # to the managed shell environment and to the Herdr service environment.
-factory_chrome_devtools_mcp_path: "{{ factory_share_dir }}/chrome-devtools-mcp/current/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
+crewship_chrome_devtools_mcp_path: "{{ crewship_share_dir }}/chrome-devtools-mcp/current/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
 # Environment shared by the interactive shell profile and the Herdr unit.
 # Consumed only when the agents profile is on, because the npm set that
 # provides the MCP entrypoint is installed by `--npm`. Nothing here may be a
 # process-wide runtime limit (NODE_OPTIONS, BUN_OPTIONS): it would also reach
 # the chrome-devtools-axi bridge, chrome-devtools-mcp and acpx.
-factory_managed_shell_env:
-  CHROME_DEVTOOLS_AXI_MCP_PATH: "{{ factory_chrome_devtools_mcp_path }}"
+crewship_managed_shell_env:
+  CHROME_DEVTOOLS_AXI_MCP_PATH: "{{ crewship_chrome_devtools_mcp_path }}"
 # The board is opt-in; share its socket with shells and new Herdr agents.
-factory_board_env: >-
-  {{ {'CREWBOARD_SOCKET': factory_user_runtime_dir ~ '/crewboard.sock'}
-     if factory_cfg.board is defined else {} }}
-# factory.data_dir: Docker's data root and the caches that never hardlink into
-# a worktree. Exported next to factory_managed_shell_env on every profile.
+crewship_board_env: >-
+  {{ {'CREWBOARD_SOCKET': crewship_user_runtime_dir ~ '/crewboard.sock'}
+     if crewship_cfg.board is defined else {} }}
+# crewship.data_dir: Docker's data root and the caches that never hardlink into
+# a worktree. Exported next to crewship_managed_shell_env on every profile.
 # bun, pnpm and uv stay on the system disk on purpose: they hardlink packages
 # into each worktree, which only works on one filesystem
 # (docs/configuration.md#data-disk).
-factory_data_dir: "{{ factory_cfg.data_dir | default('', true) }}"
-factory_docker_data_root: "{{ (factory_data_dir ~ '/docker') if factory_data_dir else '' }}"
-factory_data_cache_env: >-
-  {{ {'npm_config_cache': factory_data_dir ~ '/cache/npm',
-      'PIP_CACHE_DIR': factory_data_dir ~ '/cache/pip'} if factory_data_dir else {} }}
+crewship_data_dir: "{{ crewship_cfg.data_dir | default('', true) }}"
+crewship_docker_data_root: "{{ (crewship_data_dir ~ '/docker') if crewship_data_dir else '' }}"
+crewship_data_cache_env: >-
+  {{ {'npm_config_cache': crewship_data_dir ~ '/cache/npm',
+      'PIP_CACHE_DIR': crewship_data_dir ~ '/cache/pip'} if crewship_data_dir else {} }}
 # Contract: compute the unit ExecStart directly, never /usr/local/bin or $PATH.
-factory_herdr_bin: "{{ factory_tools_root }}/herdr/{{ factory_herdr_version }}/{{ factory_platform }}/herdr"
-factory_herdr_config_dir: "{{ factory_cfg.home }}/.config/herdr"
-factory_herdr_config: "{{ factory_herdr_config_dir }}/config.toml"
-factory_user_units: "{{ factory_cfg.home }}/.config/systemd/user"
-factory_firstmate_dir: "{{ factory_cfg.workspace }}/firstmate"
+crewship_herdr_bin: "{{ crewship_tools_root }}/herdr/{{ crewship_herdr_version }}/{{ crewship_platform }}/herdr"
+crewship_herdr_config_dir: "{{ crewship_cfg.home }}/.config/herdr"
+crewship_herdr_config: "{{ crewship_herdr_config_dir }}/config.toml"
+crewship_user_units: "{{ crewship_cfg.home }}/.config/systemd/user"
+crewship_firstmate_dir: "{{ crewship_cfg.workspace }}/firstmate"
 # One local commit per patch on top of origin/main (tasks/firstmate.yml).
-factory_firstmate_patch_dir: "{{ code_factory_repo }}/patches/firstmate"
-factory_vnc_dir: "{{ factory_cfg.home }}/.vnc"
+crewship_firstmate_patch_dir: "{{ crewship_repo }}/patches/firstmate"
+crewship_vnc_dir: "{{ crewship_cfg.home }}/.vnc"
 # Exactly one persistent Chrome profile for the VNC desktop. Never seeded,
 # copied, cloned or duplicated (docs/security.md).
-factory_vnc_chrome_profile: "{{ factory_cfg.home }}/.vnc-chrome-profile"
+crewship_vnc_chrome_profile: "{{ crewship_cfg.home }}/.vnc-chrome-profile"
 # Generated on the host for `ssh mac` (tasks/mac_ssh.yml), never copied.
-factory_mac_ssh_key: "{{ factory_cfg.home }}/.ssh/id_ed25519_mac"
-# iMessage bridge (factory.imessage, tasks/imessage.yml, docs/imessage.md).
+crewship_mac_ssh_key: "{{ crewship_cfg.home }}/.ssh/id_ed25519_mac"
+# iMessage bridge (crewship.imessage, tasks/imessage.yml, docs/imessage.md).
 # The service runs from this copy of imessage/ with the latest spectrum-ts,
-# resolved once per run (factory_latest). Photon and relay credentials stay in ~/super.env.
-factory_imessage_dir: "{{ factory_share_dir }}/imessage"
-factory_imessage_desk_model: "{{ factory_cfg.imessage.desk_model | default('claude-haiku-5-5') }}"
-factory_imessage_supervisor_model: "{{ factory_cfg.imessage.supervisor_model | default('') }}"
-factory_imessage_owner_name: "{{ factory_cfg.imessage.owner_name | default('the owner') }}"
-# Crew board (factory.board, tasks/board.yml, docs/board.md): cargo's target
+# resolved once per run (crewship_latest). Photon and relay credentials stay in ~/super.env.
+crewship_imessage_dir: "{{ crewship_share_dir }}/imessage"
+crewship_imessage_desk_model: "{{ crewship_cfg.imessage.desk_model | default('claude-haiku-5-5') }}"
+crewship_imessage_supervisor_model: "{{ crewship_cfg.imessage.supervisor_model | default('') }}"
+crewship_imessage_owner_name: "{{ crewship_cfg.imessage.owner_name | default('the owner') }}"
+# Crew board (crewship.board, tasks/board.yml, docs/board.md): cargo's target
 # directory and the source checksum of the last build.
-factory_board_dir: "{{ factory_share_dir }}/crewboard"
+crewship_board_dir: "{{ crewship_share_dir }}/crewboard"
 
 # Private runtime for the Chrome pruner. The exported pruner calls
 # psutil.Process.net_connections(), which exists from psutil 6 onwards, while
@@ -107,61 +107,61 @@ factory_board_dir: "{{ factory_share_dir }}/crewboard"
 # API or pip-installing into the distribution interpreter, the pruner runs on
 # an account-owned virtualenv built by the managed uv and filled with the latest
 # psutil, --require-hashes against the digests PyPI publishes for that release
-# (factory_latest.psutil). The unit references only
+# (crewship_latest.psutil). The unit references only
 # paths under the account's home, so the timer keeps working after the
 # repository checkout is gone.
-factory_uv_bin: "{{ factory_local_bin }}/uv"
-factory_pruner_script: "{{ factory_local_bin }}/chrome-autoprune.py"
-factory_pruner_venv: "{{ factory_share_dir }}/pruner-venv"
-factory_pruner_python: "{{ factory_pruner_venv }}/bin/python"
+crewship_uv_bin: "{{ crewship_local_bin }}/uv"
+crewship_pruner_script: "{{ crewship_local_bin }}/chrome-autoprune.py"
+crewship_pruner_venv: "{{ crewship_share_dir }}/pruner-venv"
+crewship_pruner_python: "{{ crewship_pruner_venv }}/bin/python"
 # Written after a successful install; carries the digest of the requirements
 # that produced the runtime, so a new psutil release reinstalls and an
 # unchanged one is a no-op on the second apply.
-factory_pruner_stamp: "{{ factory_pruner_venv }}/.code-factory-runtime.json"
-factory_pruner_requirements: "{{ factory_share_dir }}/pruner-requirements.txt"
-factory_pruner_psutil_version: "{{ factory_latest.psutil.version }}"
-factory_pruner_requirements_text: >-
-  psutil=={{ factory_pruner_psutil_version }}
-  {{ factory_latest.psutil.sha256 | map('regex_replace', '^', '--hash=sha256:') | join(' ') }}
-factory_pruner_requirements_digest: "{{ factory_pruner_requirements_text | hash('sha256') }}"
+crewship_pruner_stamp: "{{ crewship_pruner_venv }}/.code-factory-runtime.json"
+crewship_pruner_requirements: "{{ crewship_share_dir }}/pruner-requirements.txt"
+crewship_pruner_psutil_version: "{{ crewship_latest.psutil.version }}"
+crewship_pruner_requirements_text: >-
+  psutil=={{ crewship_pruner_psutil_version }}
+  {{ crewship_latest.psutil.sha256 | map('regex_replace', '^', '--hash=sha256:') | join(' ') }}
+crewship_pruner_requirements_digest: "{{ crewship_pruner_requirements_text | hash('sha256') }}"
 # The base interpreter of that virtualenv. Pinned to the distribution
 # interpreter so no managed Python is downloaded behind the operator's back.
-factory_pruner_base_python: /usr/bin/python3
-factory_pruner_uv_env:
+crewship_pruner_base_python: /usr/bin/python3
+crewship_pruner_uv_env:
   UV_PYTHON_DOWNLOADS: never
   UV_NO_CONFIG: "1"
 
 # systemd/service switches. start_services=false (image builds, containers)
 # suppresses every linger, daemon-reload, enable-at-runtime and start action;
 # unit files and their static *.target.wants symlinks are still written.
-factory_manage_services: "{{ factory_cfg.start_services | bool }}"
-factory_manage_linger: "{{ (factory_cfg.start_services | bool) and (factory_cfg.enable_linger | bool) }}"
+crewship_manage_services: "{{ crewship_cfg.start_services | bool }}"
+crewship_manage_linger: "{{ (crewship_cfg.start_services | bool) and (crewship_cfg.enable_linger | bool) }}"
 
 # Escalate to the target account only when we are not already that account.
-factory_become_target: "{{ (ansible_user_id | default('')) != factory_cfg.user }}"
-factory_user_runtime_dir: "/run/user/{{ factory_user_uid | default('') }}"
-factory_user_systemd_env:
-  XDG_RUNTIME_DIR: "{{ factory_user_runtime_dir }}"
-  DBUS_SESSION_BUS_ADDRESS: "unix:path={{ factory_user_runtime_dir }}/bus"
-  PATH: "{{ factory_local_bin }}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+crewship_become_target: "{{ (ansible_user_id | default('')) != crewship_cfg.user }}"
+crewship_user_runtime_dir: "/run/user/{{ crewship_user_uid | default('') }}"
+crewship_user_systemd_env:
+  XDG_RUNTIME_DIR: "{{ crewship_user_runtime_dir }}"
+  DBUS_SESSION_BUS_ADDRESS: "unix:path={{ crewship_user_runtime_dir }}/bus"
+  PATH: "{{ crewship_local_bin }}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-factory_user_env:
-  HOME: "{{ factory_cfg.home }}"
-  USER: "{{ factory_cfg.user }}"
-  LOGNAME: "{{ factory_cfg.user }}"
-  PATH: "{{ factory_local_bin }}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+crewship_user_env:
+  HOME: "{{ crewship_cfg.home }}"
+  USER: "{{ crewship_cfg.user }}"
+  LOGNAME: "{{ crewship_cfg.user }}"
+  PATH: "{{ crewship_local_bin }}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # --- Account policy (conservative by default) -------------------------------
-factory_create_user: true
-factory_user_shell: /bin/bash
+crewship_create_user: true
+crewship_user_shell: /bin/bash
 # Never granted implicitly. Add the account to sudo only by explicit choice.
-factory_user_sudo: false
+crewship_user_sudo: false
 # Marker-delimited PATH block in the account's ~/.profile.
-factory_manage_profile_path: true
+crewship_manage_profile_path: true
 
 # --- apt package sets -------------------------------------------------------
-factory_apt_cache_valid_time: 3600
-factory_base_packages:
+crewship_apt_cache_valid_time: 3600
+crewship_base_packages:
   - ca-certificates
   - curl
   - git
@@ -184,7 +184,7 @@ factory_base_packages:
 # Shared libraries and a font the chrome-headless-shell that omp's browser tool and
 # puppeteer download needs on a minimal Ubuntu; installed without recommends.
 # The t64 names exist on 24.04 and 26.04.
-factory_headless_browser_packages:
+crewship_headless_browser_packages:
   - libxcomposite1
   - libxdamage1
   - libxfixes3
@@ -201,12 +201,12 @@ factory_headless_browser_packages:
 # Shared libraries the Concord release binary links or loads (its README's
 # Debian list, without xdg-desktop-portal, which only screen capture uses);
 # installed without recommends. libasound2t64 is in the headless set above.
-factory_chat_packages:
+crewship_chat_packages:
   - libegl1
   - libpipewire-0.3-0t64
   - libva2
   - libva-drm2
-factory_development_packages:
+crewship_development_packages:
   - build-essential
   - pkg-config
   - libssl-dev
@@ -214,11 +214,11 @@ factory_development_packages:
   - cmake
   - ripgrep
 # No python3-psutil here on purpose: the pruner runs on its own hash-verified
-# virtualenv (factory_pruner_venv), not on the distribution interpreter.
-factory_docker_packages:
+# virtualenv (crewship_pruner_venv), not on the distribution interpreter.
+crewship_docker_packages:
   - docker.io
   - docker-compose-v2
-factory_desktop_packages:
+crewship_desktop_packages:
   - xfce4
   - xfce4-terminal
   - dbus-x11
@@ -234,105 +234,105 @@ factory_desktop_packages:
   - iproute2
 
 # --- Tool installer ---------------------------------------------------------
-factory_core_tools: [herdr, node, bun, uv, btop, sentrux, fallow]
+crewship_core_tools: [herdr, node, bun, uv, btop, sentrux, fallow]
 # The terminal chat clients of the chat profile (docs/chat.md).
-factory_chat_tools: [concord, slk]
+crewship_chat_tools: [concord, slk]
 # The installer flags that choose which tools a run covers. tasks/preflight.yml
 # resolves exactly this set (plus the sources Ansible installs itself) and
 # tasks/tools.yml installs it, so a host never resolves, and never fails on, a
 # release it does not install.
-factory_installer_selection: >-
-  {{ ['--tools', (factory_core_tools
-                  + (factory_chat_tools if (factory_cfg.profiles.chat | bool) else []))
+crewship_installer_selection: >-
+  {{ ['--tools', (crewship_core_tools
+                  + (crewship_chat_tools if (crewship_cfg.profiles.chat | bool) else []))
                  | join(',')]
-     + (['--npm'] if (factory_cfg.profiles.agents | bool) else [])
-     + (['--development'] if (factory_cfg.profiles.development | bool) else []) }}
-factory_installer_also: >-
-  {{ (['koncreet'] if (factory_cfg.start_services | bool) else [])
-     + (['psutil'] if ((factory_cfg.profiles.agents | bool)
-                       and (factory_cfg.browser_prune.enabled | bool)) else [])
-     + (['obscura'] if (factory_fleet_browsers_enabled | bool) else [])
-     + (['supabase'] if (factory_cfg.profiles.shared_supabase | bool) else [])
-     + (['spectrum-ts'] if (factory_cfg.imessage is defined) else []) }}
+     + (['--npm'] if (crewship_cfg.profiles.agents | bool) else [])
+     + (['--development'] if (crewship_cfg.profiles.development | bool) else []) }}
+crewship_installer_also: >-
+  {{ (['koncreet'] if (crewship_cfg.start_services | bool) else [])
+     + (['psutil'] if ((crewship_cfg.profiles.agents | bool)
+                       and (crewship_cfg.browser_prune.enabled | bool)) else [])
+     + (['obscura'] if (crewship_fleet_browsers_enabled | bool) else [])
+     + (['supabase'] if (crewship_cfg.profiles.shared_supabase | bool) else [])
+     + (['spectrum-ts'] if (crewship_cfg.imessage is defined) else []) }}
 
 # --- Herdr static config ----------------------------------------------------
 # Only the reviewed, non-secret subset is templated. experimental.pane_history
 # is deliberately absent: it persists terminal output that can contain tokens.
-factory_herdr_update_channel: stable
-factory_herdr_show_agent_labels: true
-factory_herdr_theme_auto_switch: false
-factory_herdr_status_indicators: symbols
-factory_omp_sidebar_extension: "{{ factory_cfg.home }}/.omp/agent/extensions/code-factory-herdr-sidebar.ts"
+crewship_herdr_update_channel: stable
+crewship_herdr_show_agent_labels: true
+crewship_herdr_theme_auto_switch: false
+crewship_herdr_status_indicators: symbols
+crewship_omp_sidebar_extension: "{{ crewship_cfg.home }}/.omp/agent/extensions/code-factory-herdr-sidebar.ts"
 # The "aa-" name loads it before the plugins whose status it takes over (docs/omp.md).
-factory_omp_status_icons_extension: "{{ factory_cfg.home }}/.omp/agent/extensions/aa-mode-icons.ts"
+crewship_omp_status_icons_extension: "{{ crewship_cfg.home }}/.omp/agent/extensions/aa-mode-icons.ts"
 # Blocks pkill/killall/kill-by-pgrep in every omp session (docs/omp.md).
-factory_omp_no_pattern_kill_extension: "{{ factory_cfg.home }}/.omp/agent/extensions/fm-no-pattern-kill.ts"
+crewship_omp_no_pattern_kill_extension: "{{ crewship_cfg.home }}/.omp/agent/extensions/fm-no-pattern-kill.ts"
 # The sentrux/fallow quality gate at the end of every omp agent turn (docs/omp.md#quality-gate).
-factory_omp_quality_gate_extension: "{{ factory_cfg.home }}/.omp/agent/extensions/code-factory-quality-gate.ts"
+crewship_omp_quality_gate_extension: "{{ crewship_cfg.home }}/.omp/agent/extensions/code-factory-quality-gate.ts"
 # Herdr's own omp state extension; `herdr integration install omp` writes it (docs/herdr.md).
-factory_herdr_omp_integration: "{{ factory_cfg.home }}/.omp/agent/extensions/herdr-omp-agent-state.ts"
+crewship_herdr_omp_integration: "{{ crewship_cfg.home }}/.omp/agent/extensions/herdr-omp-agent-state.ts"
 # omp as the no-mistakes pi agent, and the omp overlay only daemon-spawned omp
 # loads (docs/omp.md#no-mistakes-pipeline-agent).
-factory_omp_as_pi_dir: "{{ factory_cfg.home }}/.no-mistakes/omp-as-pi"
-factory_no_mistakes_omp_overlay: "{{ factory_cfg.home }}/.no-mistakes/omp-config.yml"
+crewship_omp_as_pi_dir: "{{ crewship_cfg.home }}/.no-mistakes/omp-as-pi"
+crewship_no_mistakes_omp_overlay: "{{ crewship_cfg.home }}/.no-mistakes/omp-config.yml"
 # Stdlib-only reporter that feeds the Spaces sidebar layout, run by herdr-spaces.timer.
-factory_herdr_spaces_source: "{{ code_factory_repo }}/maintenance/herdr-spaces.py"
-factory_herdr_spaces_script: "{{ factory_local_bin }}/herdr-spaces.py"
+crewship_herdr_spaces_source: "{{ crewship_repo }}/maintenance/herdr-spaces.py"
+crewship_herdr_spaces_script: "{{ crewship_local_bin }}/herdr-spaces.py"
 # btop: ~/.local/bin/btop is a launcher that picks a preset of the saved config
 # by pane size, so it also loads in a phone's 50-column pane (docs/herdr.md#btop).
-factory_btop_launcher_source: "{{ code_factory_repo }}/maintenance/btop.sh"
-factory_btop_config: "{{ factory_cfg.home }}/.config/btop/btop.conf"
+crewship_btop_launcher_source: "{{ crewship_repo }}/maintenance/btop.sh"
+crewship_btop_config: "{{ crewship_cfg.home }}/.config/btop/btop.conf"
 
 # --- Browser pruning --------------------------------------------------------
 # Flags confirmed by Main (owner of maintenance/chrome-autoprune.py): without
 # --apply the script neither keeps state nor prunes.
-factory_prune_exec_args:
+crewship_prune_exec_args:
   - "--apply"
   - "--idle-seconds"
-  - "{{ factory_cfg.browser_prune.idle_seconds }}"
+  - "{{ crewship_cfg.browser_prune.idle_seconds }}"
   - "--max-gap-seconds"
-  - "{{ factory_cfg.browser_prune.max_gap_seconds }}"
-factory_prune_timeout_seconds: 90
+  - "{{ crewship_cfg.browser_prune.max_gap_seconds }}"
+crewship_prune_timeout_seconds: 90
 
 # --- Sanitized preference files (Main-owned sources) ------------------------
 # first_write: true means the file is written only when it does not exist, so
 # an account that already holds provider settings is never overwritten.
-factory_omp_config: "{{ factory_cfg.home }}/.omp/agent/config.yml"
-factory_acpx_config: "{{ factory_cfg.home }}/.acpx/config.json"
-factory_agent_config_files:
+crewship_omp_config: "{{ crewship_cfg.home }}/.omp/agent/config.yml"
+crewship_acpx_config: "{{ crewship_cfg.home }}/.acpx/config.json"
+crewship_agent_config_files:
   - src: config/omp.yml
-    dest: "{{ factory_omp_config }}"
+    dest: "{{ crewship_omp_config }}"
     dir_mode: "0700"
     mode: "0600"
     first_write: true
   # Merged on every apply; user providers and unshipped model keys stay.
   - src: config/omp-models.yml
-    dest: "{{ factory_cfg.home }}/.omp/agent/models.yml"
+    dest: "{{ crewship_cfg.home }}/.omp/agent/models.yml"
     dir_mode: "0700"
     mode: "0600"
     first_write: false
   # marksman costs each omp session about 90 MB for markdown diagnostics that
   # agent work never uses.
   - src: config/omp-lsp.json
-    dest: "{{ factory_cfg.home }}/.omp/agent/lsp.json"
+    dest: "{{ crewship_cfg.home }}/.omp/agent/lsp.json"
     dir_mode: "0700"
     mode: "0600"
     first_write: true
   # See docs/omp.md#no-mistakes-pipeline-agent for agent selection.
   - src: config/no-mistakes.yaml
-    dest: "{{ factory_cfg.home }}/.no-mistakes/config.yaml"
+    dest: "{{ crewship_cfg.home }}/.no-mistakes/config.yaml"
     dir_mode: "0700"
     mode: "0600"
     first_write: true
   - src: config/acpx.json
-    dest: "{{ factory_acpx_config }}"
+    dest: "{{ crewship_acpx_config }}"
     dir_mode: "0700"
     mode: "0600"
     first_write: true
 
 # Firstmate reads these from its own checkout and already gitignores them, so
 # the clone stays clean and no .gitignore is edited.
-factory_firstmate_config_names:
+crewship_firstmate_config_names:
   - crew-harness
   - secondmate-harness
   - crew-dispatch.json
@@ -354,13 +354,13 @@ factory_firstmate_config_names:
   # A presence flag (empty file): the watcher may also defer a bare turn end
   # on pane-churn evidence.
   - turnend-churn-absorb
-factory_firstmate_config_first_write: false
+crewship_firstmate_config_first_write: false
 
 # --- Docker -----------------------------------------------------------------
 # Ubuntu's docker.io + docker-compose-v2 only; never mixed with Docker CE.
 # Docker group membership equals passwordless root on the host, so it is an
 # explicit opt-in list, never the Crewship account by default.
-factory_docker_group_users: []
+crewship_docker_group_users: []
 # Engine settings merged into /etc/docker/daemon.json (existing keys are kept,
 # nothing is removed). `init` puts docker-init as PID 1 in every container so
 # orphaned children are reaped - the source host accumulated 489 zombies under
@@ -368,39 +368,39 @@ factory_docker_group_users: []
 # `live-restore` keeps containers running across dockerd restarts.
 # The merge itself happens inside one Jinja expression in tasks/docker.yml so
 # the booleans stay booleans in the written JSON.
-factory_docker_daemon_json: /etc/docker/daemon.json
+crewship_docker_daemon_json: /etc/docker/daemon.json
 
 # --- Fleet guards and optional shared Supabase -------------------------------
 # Sources live under fleet/. Installed files stay under the account's home.
 # Disabling a profile stops managing its files and units without removing them.
-factory_fleet_sources: "{{ code_factory_repo }}/fleet"
-factory_fleet_dir: "{{ factory_cfg.home }}/oss-fleet"
-factory_fleet_doctor_dir: "{{ factory_fleet_dir }}/doctor"
-factory_shared_supabase_dir: "{{ factory_fleet_dir }}/shared-supabase"
-factory_shared_supabase_cli: "{{ factory_shared_supabase_dir }}/node_modules/.bin/supabase"
-factory_shared_supabase_project: "{{ factory_cfg.fleet.supabase_project_id }}"
-factory_shared_supabase_db_volume: "supabase_db_{{ factory_shared_supabase_project }}"
-factory_shared_supabase_storage_volume: "supabase_storage_{{ factory_shared_supabase_project }}"
-# The npm registry's latest supabase, resolved once per run (factory_latest).
-factory_shared_supabase_cli_version: "{{ factory_latest.supabase }}"
+crewship_fleet_sources: "{{ crewship_repo }}/fleet"
+crewship_fleet_dir: "{{ crewship_cfg.home }}/oss-fleet"
+crewship_fleet_doctor_dir: "{{ crewship_fleet_dir }}/doctor"
+crewship_shared_supabase_dir: "{{ crewship_fleet_dir }}/shared-supabase"
+crewship_shared_supabase_cli: "{{ crewship_shared_supabase_dir }}/node_modules/.bin/supabase"
+crewship_shared_supabase_project: "{{ crewship_cfg.fleet.supabase_project_id }}"
+crewship_shared_supabase_db_volume: "supabase_db_{{ crewship_shared_supabase_project }}"
+crewship_shared_supabase_storage_volume: "supabase_storage_{{ crewship_shared_supabase_project }}"
+# The npm registry's latest supabase, resolved once per run (crewship_latest).
+crewship_shared_supabase_cli_version: "{{ crewship_latest.supabase }}"
 
 # --- Fleet browsers (profiles.fleet_browsers, or fleet_guards) ---------------
-factory_fleet_browsers_enabled: "{{ (factory_cfg.profiles.fleet_guards | bool) or (factory_cfg.profiles.fleet_browsers | bool) }}"
-factory_fleet_browsers_dir: "{{ factory_fleet_dir }}/browsers"
+crewship_fleet_browsers_enabled: "{{ (crewship_cfg.profiles.fleet_guards | bool) or (crewship_cfg.profiles.fleet_browsers | bool) }}"
+crewship_fleet_browsers_dir: "{{ crewship_fleet_dir }}/browsers"
 # The latest Obscura release for this platform, with the SHA-256 GitHub
 # publishes for the asset; each release extracts into its own directory.
-factory_browser_obscura: "{{ factory_latest.obscura.assets[factory_platform] }}"
-factory_browser_obscura_dir: "{{ factory_fleet_browsers_dir }}/obscura-{{ factory_latest.obscura.version }}"
+crewship_browser_obscura: "{{ crewship_latest.obscura.assets[crewship_platform] }}"
+crewship_browser_obscura_dir: "{{ crewship_fleet_browsers_dir }}/obscura-{{ crewship_latest.obscura.version }}"
 # The vnc tier's own packages, so it works without the desktop profile:
 # /usr/bin/tigervncserver, websockify, the noVNC web root /usr/share/novnc, and
 # xfwm4, the window manager the tier's xstartup runs so Chrome maximizes and
 # its pop-ups can be moved and closed.
-factory_fleet_browser_vnc_packages:
+crewship_fleet_browser_vnc_packages:
   - tigervnc-standalone-server
   - websockify
   - novnc
   - xfwm4
-factory_fleet_browser_units:
+crewship_fleet_browser_units:
   - fleet-browser-obscura.service
   - fleet-browser-chrome.service
   - fleet-browser-vnc.service
@@ -408,7 +408,7 @@ factory_fleet_browser_units:
   - fleet-browser-sync.timer
   - fleet-browser-gc.service
   - fleet-browser-gc.timer
-factory_fleet_browser_enabled_units:
+crewship_fleet_browser_enabled_units:
   - { unit: fleet-browser-obscura.service, wants: default.target.wants }
   - { unit: fleet-browser-sync.timer, wants: timers.target.wants }
   - { unit: fleet-browser-gc.timer, wants: timers.target.wants }
@@ -419,21 +419,21 @@ factory_fleet_browser_enabled_units:
 # dangling images and unused images created more than image_age_hours ago
 # (creation time, not last use), then alerts at most once per repeat_min. A
 # fill rate projecting full within fill_horizon_hours alerts even below WARN.
-factory_storage_guard_warn_pct: 85
-factory_storage_guard_crit_pct: 92
-factory_storage_guard_hysteresis_pct: 3
-factory_storage_guard_image_age_hours: 168
-factory_storage_guard_fill_horizon_hours: 6
-factory_storage_guard_repeat_min: 30
+crewship_storage_guard_warn_pct: 85
+crewship_storage_guard_crit_pct: 92
+crewship_storage_guard_hysteresis_pct: 3
+crewship_storage_guard_image_age_hours: 168
+crewship_storage_guard_fill_horizon_hours: 6
+crewship_storage_guard_repeat_min: 30
 
-factory_shared_supabase_units:
+crewship_shared_supabase_units:
   - crewship-shared-supabase.service
   - crewship-shared-supabase-check.service
   - crewship-shared-supabase-check.timer
   - crewship-worktree-env-seed.service
   - crewship-worktree-env-seed.path
   - crewship-worktree-env-seed.timer
-factory_fleet_guard_units:
+crewship_fleet_guard_units:
   - crewship-docker-guard.service
   - crewship-docker-guard.timer
   - crewship-dev-server-reaper.service
@@ -442,34 +442,34 @@ factory_fleet_guard_units:
   - crewship-storage-guard.timer
   - crewship-devtools-bridge-reaper.service
   - crewship-devtools-bridge-reaper.timer
-factory_shared_supabase_enabled_units:
+crewship_shared_supabase_enabled_units:
   - { unit: crewship-shared-supabase.service, wants: default.target.wants }
   - { unit: crewship-worktree-env-seed.path, wants: default.target.wants }
   - { unit: crewship-shared-supabase-check.timer, wants: timers.target.wants }
   - { unit: crewship-worktree-env-seed.timer, wants: timers.target.wants }
-factory_fleet_guard_enabled_units:
+crewship_fleet_guard_enabled_units:
   - { unit: crewship-docker-guard.timer, wants: timers.target.wants }
   - { unit: crewship-dev-server-reaper.timer, wants: timers.target.wants }
   - { unit: crewship-storage-guard.timer, wants: timers.target.wants }
   - { unit: crewship-devtools-bridge-reaper.timer, wants: timers.target.wants }
 # Only selected units reach rendering, retirement, enablement and handlers.
-factory_fleet_units: >-
-  {{ (factory_fleet_guard_units if (factory_cfg.profiles.fleet_guards | bool) else [])
-     + (factory_shared_supabase_units if (factory_cfg.profiles.shared_supabase | bool) else []) }}
-factory_fleet_enabled_units: >-
-  {{ (factory_fleet_guard_enabled_units if (factory_cfg.profiles.fleet_guards | bool) else [])
-     + (factory_shared_supabase_enabled_units if (factory_cfg.profiles.shared_supabase | bool) else []) }}
+crewship_fleet_units: >-
+  {{ (crewship_fleet_guard_units if (crewship_cfg.profiles.fleet_guards | bool) else [])
+     + (crewship_shared_supabase_units if (crewship_cfg.profiles.shared_supabase | bool) else []) }}
+crewship_fleet_enabled_units: >-
+  {{ (crewship_fleet_guard_enabled_units if (crewship_cfg.profiles.fleet_guards | bool) else [])
+     + (crewship_shared_supabase_enabled_units if (crewship_cfg.profiles.shared_supabase | bool) else []) }}
 # Older releases installed the same units as flotilla-*; apply stops and
 # deletes any that remain (tasks/fleet_units.yml).
-factory_fleet_retired_units: "{{ factory_fleet_units | map('regex_replace', '^crewship-', 'flotilla-') | list }}"
+crewship_fleet_retired_units: "{{ crewship_fleet_units | map('regex_replace', '^crewship-', 'flotilla-') | list }}"
 
 # --- Tailscale (install only; login, ACLs, SSH and UFW stay manual) ---------
-factory_tailscale_track: stable
-factory_tailscale_suite: "{{ ansible_distribution_release }}"
-factory_tailscale_keyring: /usr/share/keyrings/tailscale-archive-keyring.gpg
+crewship_tailscale_track: stable
+crewship_tailscale_suite: "{{ ansible_distribution_release }}"
+crewship_tailscale_keyring: /usr/share/keyrings/tailscale-archive-keyring.gpg
 # Optional exact apt version pin, e.g. "1.102.3". Empty installs the current
 # package from the stable track.
-factory_tailscale_version: ""
+crewship_tailscale_version: ""
 
 # --- Koncreet (install only; the operator runs it by hand) ------------------
 # The latest jimididit/koncreet release, verified against the SHA-256 GitHub
@@ -478,29 +478,29 @@ factory_tailscale_version: ""
 # the account's home. docs/security.md has the manual run. Optional: it is
 # resolved only when start_services is true (never in the container image), and
 # a failed lookup, digest, or download skips it with a warning.
-factory_koncreet: "{{ factory_latest.koncreet.assets[factory_platform] }}"
-factory_koncreet_patch: "{{ code_factory_repo }}/patches/koncreet/ubuntu-26.04.patch"
-factory_koncreet_prefix: /usr/local/lib/code-factory/koncreet
-factory_koncreet_config: /etc/koncreet.conf
+crewship_koncreet: "{{ crewship_latest.koncreet.assets[crewship_platform] }}"
+crewship_koncreet_patch: "{{ crewship_repo }}/patches/koncreet/ubuntu-26.04.patch"
+crewship_koncreet_prefix: /usr/local/lib/code-factory/koncreet
+crewship_koncreet_config: /etc/koncreet.conf
 
 # --- Chrome -----------------------------------------------------------------
 # auto  -> install only when the desktop profile is enabled
 # true  -> always install (headless AXI bridge use without a desktop)
 # false -> never install
-factory_chrome_install: auto
-factory_chrome_package: google-chrome-stable
-factory_chrome_keyring: /usr/share/keyrings/google-chrome.asc
-factory_chrome_key_url: https://dl.google.com/linux/linux_signing_key.pub
-factory_chrome_repo_uri: https://dl.google.com/linux/chrome/deb/
+crewship_chrome_install: auto
+crewship_chrome_package: google-chrome-stable
+crewship_chrome_keyring: /usr/share/keyrings/google-chrome.asc
+crewship_chrome_key_url: https://dl.google.com/linux/linux_signing_key.pub
+crewship_chrome_repo_uri: https://dl.google.com/linux/chrome/deb/
 # Optional exact apt version pin. Empty tracks the repository, which is the
 # only workable default: Google removes superseded Chrome versions from the
 # pool, so a hard pin stops resolving after the next release.
-factory_chrome_version: ""
+crewship_chrome_version: ""
 
 # --- Desktop ----------------------------------------------------------------
 # VNC requires an operator-created credential plus loopback/SSH transport.
 # noVNC binds 127.0.0.1 only and still prompts for the RFB password.
-factory_vnc_password_file: "{{ factory_vnc_dir }}/passwd"
-factory_vnc_rfb_port: "{{ 5900 + (factory_cfg.desktop.display | int) }}"
-factory_novnc_web_root: /usr/share/novnc/
-factory_desktop_strict_symlink_check: true
+crewship_vnc_password_file: "{{ crewship_vnc_dir }}/passwd"
+crewship_vnc_rfb_port: "{{ 5900 + (crewship_cfg.desktop.display | int) }}"
+crewship_novnc_web_root: /usr/share/novnc/
+crewship_desktop_strict_symlink_check: true

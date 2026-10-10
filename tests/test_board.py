@@ -21,17 +21,17 @@ BOARD = {"history": 128, "cap_mb": 32, "max_msg_kb": 16}
 @pytest.fixture
 def configuration():
     document = yaml.safe_load((ROOT / "config/default.yml").read_text())
-    document["factory"]["board"] = dict(BOARD)
+    document["crewship"]["board"] = dict(BOARD)
     return document
 
 
 def test_the_defaults_leave_the_board_off():
-    assert "board" not in yaml.safe_load((ROOT / "config/default.yml").read_text())["factory"]
+    assert "board" not in yaml.safe_load((ROOT / "config/default.yml").read_text())["crewship"]
 
 
 @pytest.mark.parametrize("block", [{}, BOARD])
 def test_the_board_block_is_accepted(configuration, block):
-    configuration["factory"]["board"] = dict(block)
+    configuration["crewship"]["board"] = dict(block)
     assert ship.validate_config(configuration) is configuration
 
 
@@ -39,14 +39,14 @@ def test_the_board_block_is_accepted(configuration, block):
     "change", [{"history": 0}, {"cap_mb": "32"}, {"max_msg_kb": 2048}, {"socket": "/tmp/x"}]
 )
 def test_a_bad_board_block_is_rejected(configuration, change):
-    configuration["factory"]["board"].update(change)
+    configuration["crewship"]["board"].update(change)
     with pytest.raises(ValueError, match="board"):
         ship.validate_config(configuration)
 
 
 @pytest.mark.parametrize("profile", ["firstmate", "development"])
 def test_the_board_needs_firstmate_and_cargo(configuration, profile):
-    configuration["factory"]["profiles"][profile] = False
+    configuration["crewship"]["profiles"][profile] = False
     with pytest.raises(ValueError, match="board requires the firstmate profile and the development"):
         ship.validate_config(configuration)
 
@@ -56,7 +56,7 @@ def test_dock_board_writes_the_block(tmp_path, monkeypatch):
         shutil.copytree(ROOT / path, tmp_path / path)
     monkeypatch.setattr(ship, "ROOT", tmp_path)
     ship.initialize(argparse.Namespace(user="coder", home="/home/coder", container=False, board=True))
-    assert ship.load_config(tmp_path / ".local/host.yml")["factory"]["board"] == {}
+    assert ship.load_config(tmp_path / ".local/host.yml")["crewship"]["board"] == {}
 
 
 # A stand-in for cargo, so the test never compiles; CI builds the crate itself.
@@ -79,17 +79,17 @@ def _apply(tmp_path, home, board, check=False):
             "handlers": [{"name": name, "ansible.builtin.debug": {"msg": name}, "listen": name}
                          for name in ("reload user systemd", "restart crewboard")],
         }]))
-    factory_cfg = {"user": "coder", "home": str(home)}
+    crewship_cfg = {"user": "coder", "home": str(home)}
     if board is not None:
-        factory_cfg["board"] = board
+        crewship_cfg["board"] = board
     variables = {
-        "factory_cfg": factory_cfg,
-        "factory_local_bin": str(home / ".local/bin"),
-        "factory_user_units": str(home / ".config/systemd/user"),
-        "factory_board_dir": str(home / ".local/share/code-factory/crewboard"),
-        "code_factory_repo": str(ROOT),
-        "factory_manage_services": False,
-        "factory_user_systemd_env": {},
+        "crewship_cfg": crewship_cfg,
+        "crewship_local_bin": str(home / ".local/bin"),
+        "crewship_user_units": str(home / ".config/systemd/user"),
+        "crewship_board_dir": str(home / ".local/share/code-factory/crewboard"),
+        "crewship_repo": str(ROOT),
+        "crewship_manage_services": False,
+        "crewship_user_systemd_env": {},
     }
     result = subprocess.run(
         [Path(sys.executable).parent / "ansible-playbook", "-i", "localhost,", str(playbook),

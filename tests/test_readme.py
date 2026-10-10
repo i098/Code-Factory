@@ -17,38 +17,38 @@ SPEC.loader.exec_module(ci_pool)
 
 # Host config switch -> the doc its Features line links.
 FEATURES = {
-    "factory.profiles.agents": "docs/omp.md",
-    "factory.profiles.chat": "docs/chat.md",
-    "factory.profiles.tailscale": "docs/security.md#remote-access",
-    "factory.profiles.desktop": "docs/recovery.md#desktop-access",
-    "factory.profiles.fleet_guards": "docs/fleet-guards.md",
-    "factory.profiles.shared_supabase": "docs/fleet-guards.md#shared-supabase",
-    "factory.profiles.fleet_browsers": "docs/fleet-guards.md#browser-ladder",
-    "factory.data_dir": "docs/configuration.md#data-disk",
-    "factory.firstmate.checklist": "docs/configuration.md#new-host-questions",
-    "factory.mac_ssh": "docs/security.md#ssh-to-a-mac",
-    "factory.skills": "docs/omp.md#skills",
-    "factory.imessage": "docs/imessage.md",
-    "factory.github_board": "docs/github-board.md",
-    "factory.board": "docs/board.md",
-    "factory.ci_pool": "docs/ci-pool.md",
+    "crewship.profiles.agents": "docs/omp.md",
+    "crewship.profiles.chat": "docs/chat.md",
+    "crewship.profiles.tailscale": "docs/security.md#remote-access",
+    "crewship.profiles.desktop": "docs/recovery.md#desktop-access",
+    "crewship.profiles.fleet_guards": "docs/fleet-guards.md",
+    "crewship.profiles.shared_supabase": "docs/fleet-guards.md#shared-supabase",
+    "crewship.profiles.fleet_browsers": "docs/fleet-guards.md#browser-ladder",
+    "crewship.data_dir": "docs/configuration.md#data-disk",
+    "crewship.firstmate.checklist": "docs/configuration.md#new-host-questions",
+    "crewship.mac_ssh": "docs/security.md#ssh-to-a-mac",
+    "crewship.skills": "docs/omp.md#skills",
+    "crewship.imessage": "docs/imessage.md",
+    "crewship.github_board": "docs/github-board.md",
+    "crewship.board": "docs/board.md",
+    "crewship.ci_pool": "docs/ci-pool.md",
 }
 EXCLUDED = {
     # Base installs, listed under "Profiles on" in Default config.
-    "factory.profiles.development",
-    "factory.profiles.firstmate",
-    "factory.profiles.docker",
+    "crewship.profiles.development",
+    "crewship.profiles.firstmate",
+    "crewship.profiles.docker",
     # Settings of a feature that another switch turns on.
-    "factory.docker",
-    "factory.fleet",
-    "factory.fleet.docker_guard",
-    "factory.browsers",
-    "factory.imessage.bluebubbles",
+    "crewship.docker",
+    "crewship.fleet",
+    "crewship.fleet.docker_guard",
+    "crewship.browsers",
+    "crewship.imessage.bluebubbles",
 }
 
 
 def switches(node=SCHEMA, path=()):
-    """Every profile, optional `factory` key and optional block: path -> off by default."""
+    """Every profile, optional `crewship` key and optional block: path -> off by default."""
     for key, sub in node.get("properties", {}).items():
         here = path + (key,)
         optional = key not in node.get("required", ())
@@ -95,9 +95,9 @@ def test_default_config_lists_the_current_defaults():
         if isinstance(value, str) and "/.omp/agent/extensions/" in value
     }
     patches = {path.stem for path in (ROOT / "patches/firstmate").glob("*.patch")}
-    profiles = DEFAULT["factory"]["profiles"]
+    profiles = DEFAULT["crewship"]["profiles"]
     unset = [
-        path.removeprefix("factory.")
+        path.removeprefix("crewship.")
         for path, off in switches()
         if off and ".profiles." not in path and path not in EXCLUDED
     ]

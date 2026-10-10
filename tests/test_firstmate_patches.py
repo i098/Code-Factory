@@ -84,14 +84,14 @@ def apply(host):
     variables = {
         # The dispatch-settings tasks ask for root; nothing here needs it.
         "ansible_become": False,
-        "code_factory_repo": str(ROOT),
-        "factory_become_target": False,
-        "factory_user_env": {},
-        "factory_group": grp.getgrgid(os.getgid()).gr_name,
-        "factory_firstmate_dir": str(host["checkout"]),
-        "factory_firstmate_patch_dir": str(host["patches"]),
-        "factory_firstmate_config_names": [],
-        "factory_cfg": {"user": getpass.getuser(), "firstmate": {"url": str(host["upstream"])}},
+        "crewship_repo": str(ROOT),
+        "crewship_become_target": False,
+        "crewship_user_env": {},
+        "crewship_group": grp.getgrgid(os.getgid()).gr_name,
+        "crewship_firstmate_dir": str(host["checkout"]),
+        "crewship_firstmate_patch_dir": str(host["patches"]),
+        "crewship_firstmate_config_names": [],
+        "crewship_cfg": {"user": getpass.getuser(), "firstmate": {"url": str(host["upstream"])}},
     }
     result = subprocess.run(
         [

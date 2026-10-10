@@ -7,7 +7,7 @@
     "schema_version": {
       "const": 1
     },
-    "factory": {
+    "crewship": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -538,6 +538,6 @@
   },
   "required": [
     "schema_version",
-    "factory"
+    "crewship"
   ]
 }

@@ -1013,9 +1013,9 @@ def load_ship():
 )
 def test_config_rejects_a_bridge_it_cannot_run(change, error):
     document = yaml.safe_load((ROOT / "config/default.yml").read_text())
-    document["factory"]["imessage"] = {"owner": "+10000000000"}
+    document["crewship"]["imessage"] = {"owner": "+10000000000"}
     load_ship().validate_config(document)
-    change(document["factory"])
+    change(document["crewship"])
     with pytest.raises(ValueError, match=error):
         load_ship().validate_config(document)
 
@@ -1035,16 +1035,16 @@ def test_config_rejects_a_bridge_it_cannot_run(change, error):
 def test_config_takes_a_bluebubbles_relay_set(change):
     document = yaml.safe_load((ROOT / "config/default.yml").read_text())
     relays = [{"url": "http://relay-a:1234"}, {"url": "https://relay-b/bb/", "password_env": "RELAY_B_PASSWORD"}]
-    document["factory"]["imessage"] = {
+    document["crewship"]["imessage"] = {
         "owner": "+10000000000",
         "transports": ["photon", "bluebubbles"],
         "bluebubbles": {"relays": relays, "webhook_listen": "relay-net-address:8766"},
     }
     load_ship().validate_config(document)
-    bluebubbles = document["factory"]["imessage"]["bluebubbles"]
+    bluebubbles = document["crewship"]["imessage"]["bluebubbles"]
     change(bluebubbles)
     if not bluebubbles:
-        document["factory"]["imessage"].pop("bluebubbles")
+        document["crewship"]["imessage"].pop("bluebubbles")
     with pytest.raises(ValueError, match="imessage"):
         load_ship().validate_config(document)
 OUTBOX = json.dumps(str(ROOT / "imessage/outbox.ts"))

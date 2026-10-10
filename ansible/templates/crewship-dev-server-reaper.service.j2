@@ -5,11 +5,11 @@
 
 [Unit]
 Description=Fleet dev-server reaper - drop dev servers that outlived their lane (Crewship managed)
-ConditionPathExists={{ factory_fleet_doctor_dir }}/dev-server-reaper.sh
+ConditionPathExists={{ crewship_fleet_doctor_dir }}/dev-server-reaper.sh
 
 [Service]
 Type=oneshot
 Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart={{ factory_fleet_doctor_dir }}/dev-server-reaper.sh
+ExecStart={{ crewship_fleet_doctor_dir }}/dev-server-reaper.sh
 TimeoutStartSec=120
 Nice=5

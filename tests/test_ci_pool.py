@@ -242,7 +242,7 @@ def test_a_failed_apply_keeps_the_old_config_so_the_rerun_restarts_idle_slots(sl
 @pytest.fixture
 def configuration():
     document = yaml.safe_load((ROOT / "config/default.yml").read_text())
-    document["factory"]["ci_pool"] = {
+    document["crewship"]["ci_pool"] = {
         "data_dir": "/srv/ci",
         "repos": [{"repo": "o/repo", "slots": 2, "labels": ["pool"]}],
     }
@@ -250,7 +250,7 @@ def configuration():
 
 
 def test_two_repositories_that_share_a_unit_name_are_rejected(configuration):
-    configuration["factory"]["ci_pool"]["repos"].append(
+    configuration["crewship"]["ci_pool"]["repos"].append(
         {"repo": "O/Repo", "slots": 1, "labels": ["pool"]}
     )
     with pytest.raises(ValueError, match="twice"):
@@ -258,8 +258,8 @@ def test_two_repositories_that_share_a_unit_name_are_rejected(configuration):
 
 
 def test_pool_requires_the_docker_profile(configuration):
-    configuration["factory"]["profiles"]["docker"] = False
-    configuration["factory"]["profiles"]["fleet_guards"] = False
+    configuration["crewship"]["profiles"]["docker"] = False
+    configuration["crewship"]["profiles"]["fleet_guards"] = False
     with pytest.raises(ValueError, match="docker profile"):
         ship.validate_config(configuration)
 

@@ -26,13 +26,78 @@ def test_valid_configuration_is_accepted_by_real_schema(configuration):
     assert ship.validate_config(configuration) is configuration
 
 
+def test_old_host_config_is_rewritten_once_with_private_backup(configuration, tmp_path, capsys):
+    old_key, new_key = ship.OLD_ROOT, ship.NEW_ROOT
+    original = "# Host settings\n" + yaml.safe_dump(
+        {"schema_version": 1, old_key: configuration[new_key]}, sort_keys=False
+    )
+    host = tmp_path / "host.yml"
+    host.write_text(original)
+    host.chmod(0o600)
+    assert ship.load_config(host) == configuration
+    backup = host.with_name("host.yml.bak")
+    assert backup.read_text() == original
+    assert host.stat().st_mode & 0o777 == backup.stat().st_mode & 0o777 == 0o600
+    assert yaml.safe_load(host.read_text()) == configuration
+    assert len(capsys.readouterr().err.splitlines()) == 1
+    first = host.read_bytes(), host.stat().st_mtime_ns, backup.stat().st_mtime_ns
+    assert ship.load_config(host) == configuration
+    assert (host.read_bytes(), host.stat().st_mtime_ns, backup.stat().st_mtime_ns) == first
+    assert not capsys.readouterr().err
+
+
+def test_config_rewrite_preserves_unknown_keys_and_values(tmp_path):
+    old_key, new_key = ship.OLD_ROOT, ship.NEW_ROOT
+    document = {
+        old_key: {"custom": {"key": "keep"}, "workspace": "/srv/custom"},
+        old_key + "_future": {"key": 7},
+        "unknown": [False, "keep"],
+    }
+    host = tmp_path / "host.yml"
+    host.write_text(yaml.safe_dump(document))
+    expected = {new_key: document[old_key], **{k: v for k, v in document.items() if k != old_key}}
+    assert ship.migrate_config(host, document) == expected
+    assert yaml.safe_load(host.read_text()) == expected
+
+
+@pytest.mark.parametrize("obstacle", ["conflicting_keys", "existing_backup"])
+def test_config_rewrite_refuses_to_discard_config_or_backup(configuration, tmp_path, obstacle):
+    old_key, new_key = ship.OLD_ROOT, ship.NEW_ROOT
+    document = {"schema_version": 1, old_key: configuration[new_key]}
+    if obstacle == "conflicting_keys":
+        document[new_key] = {"custom": "keep"}
+    host = tmp_path / "host.yml"
+    host.write_text(yaml.safe_dump(document))
+    original = host.read_bytes()
+    backup = host.with_name("host.yml.bak")
+    if obstacle == "existing_backup":
+        backup.write_bytes(b"original backup")
+    with pytest.raises(ValueError):
+        ship.load_config(host)
+    assert host.read_bytes() == original
+    if backup.exists():
+        assert backup.read_bytes() == b"original backup"
+
+
+def test_failed_rewrite_keeps_original_and_backup(configuration, tmp_path, monkeypatch):
+    old_key, new_key = ship.OLD_ROOT, ship.NEW_ROOT
+    host = tmp_path / "host.yml"
+    host.write_text(yaml.safe_dump({"schema_version": 1, old_key: configuration[new_key]}))
+    original = host.read_bytes()
+    monkeypatch.setattr(ship.yaml, "safe_dump", lambda *a, **k: (_ for _ in ()).throw(OSError("full")))
+    with pytest.raises(OSError, match="full"):
+        ship.load_config(host)
+    assert host.read_bytes() == host.with_name("host.yml.bak").read_bytes() == original
+    assert not list(tmp_path.glob(".host.yml.*"))
+
+
 def test_legacy_obscura_keys_are_ignored_with_one_warning_and_apply_proceeds(
     configuration, tmp_path, monkeypatch, capsys
 ):
     legacy = tmp_path / "legacy.yml"
     current = tmp_path / "current.yml"
     current.write_text(yaml.safe_dump(configuration))
-    configuration["factory"]["browsers"].update(obscura_version="0.2.2", obscura_sha256="c" * 64)
+    configuration["crewship"]["browsers"].update(obscura_version="0.2.2", obscura_sha256="c" * 64)
     legacy.write_text(yaml.safe_dump(configuration))
     provisioned = []
     monkeypatch.setattr(
@@ -53,21 +118,21 @@ def test_legacy_obscura_keys_are_ignored_with_one_warning_and_apply_proceeds(
     "workspace", ["/home/other/Dev", "/home/coder/../other/Dev", "/home/coder"]
 )
 def test_workspace_cannot_escape_operator_home(configuration, workspace):
-    configuration["factory"]["workspace"] = workspace
+    configuration["crewship"]["workspace"] = workspace
     with pytest.raises(ValueError, match="workspace"):
         ship.validate_config(configuration)
 
 
 def test_invalid_secret_field_is_rejected_without_echoing_value(configuration):
     private_value = "PRIVATE_VALUE_MUST_NOT_APPEAR_IN_DIAGNOSTICS"
-    configuration["factory"]["api_key"] = private_value
+    configuration["crewship"]["api_key"] = private_value
     with pytest.raises(ValueError) as failure:
         ship.validate_config(configuration)
     assert private_value not in str(failure.value)
 
 
 def test_firstmate_cannot_silently_omit_its_agent_dependencies(configuration):
-    configuration["factory"]["profiles"]["agents"] = False
+    configuration["crewship"]["profiles"]["agents"] = False
     with pytest.raises(ValueError, match="Firstmate requires"):
         ship.validate_config(configuration)
 
@@ -75,47 +140,47 @@ def test_firstmate_cannot_silently_omit_its_agent_dependencies(configuration):
 def test_firstmate_revision_pin_is_rejected(configuration):
     # The checkout tracks upstream main; a sha pin would silently freeze a
     # host on an old Firstmate, so the schema refuses the key outright.
-    configuration["factory"]["firstmate"]["revision"] = "0" * 40
+    configuration["crewship"]["firstmate"]["revision"] = "0" * 40
     with pytest.raises(ValueError):
         ship.validate_config(configuration)
 
 
 def test_fleet_guards_require_docker_and_firstmate(configuration):
-    configuration["factory"]["profiles"]["fleet_guards"] = True
-    configuration["factory"]["profiles"]["docker"] = False
+    configuration["crewship"]["profiles"]["fleet_guards"] = True
+    configuration["crewship"]["profiles"]["docker"] = False
     with pytest.raises(ValueError, match="fleet guards require"):
         ship.validate_config(configuration)
 
 
 def test_fleet_guards_accept_the_default_document_when_enabled(configuration):
-    configuration["factory"]["profiles"]["fleet_guards"] = True
+    configuration["crewship"]["profiles"]["fleet_guards"] = True
     assert ship.validate_config(configuration) is configuration
 
 
 @pytest.mark.parametrize("enabled", [False, True])
 def test_shared_supabase_profile_accepts_booleans(configuration, enabled):
-    configuration["factory"]["profiles"]["shared_supabase"] = enabled
+    configuration["crewship"]["profiles"]["shared_supabase"] = enabled
     assert ship.validate_config(configuration) is configuration
 
 
 def test_shared_supabase_is_off_for_new_and_legacy_host_configs(configuration):
-    assert configuration["factory"]["profiles"]["shared_supabase"] is False
-    configuration["factory"]["profiles"].pop("shared_supabase")
-    configuration["factory"]["profiles"]["fleet_guards"] = True
+    assert configuration["crewship"]["profiles"]["shared_supabase"] is False
+    configuration["crewship"]["profiles"].pop("shared_supabase")
+    configuration["crewship"]["profiles"]["fleet_guards"] = True
     assert ship.validate_config(configuration) is configuration
 
 
 @pytest.mark.parametrize("value", ["true", 1, None])
 def test_shared_supabase_profile_rejects_non_booleans(configuration, value):
-    configuration["factory"]["profiles"]["shared_supabase"] = value
+    configuration["crewship"]["profiles"]["shared_supabase"] = value
     with pytest.raises(ValueError, match="profiles.shared_supabase"):
         ship.validate_config(configuration)
 
 
 @pytest.mark.parametrize("dependency", ["docker", "firstmate"])
 def test_shared_supabase_requires_its_runtime_profiles(configuration, dependency):
-    configuration["factory"]["profiles"]["shared_supabase"] = True
-    configuration["factory"]["profiles"][dependency] = False
+    configuration["crewship"]["profiles"]["shared_supabase"] = True
+    configuration["crewship"]["profiles"][dependency] = False
     with pytest.raises(ValueError, match="shared Supabase requires"):
         ship.validate_config(configuration)
 
@@ -126,14 +191,14 @@ def test_browsers_valid_block_accepted(configuration):
 
 
 def test_fleet_fixture_archive_cannot_traverse(configuration):
-    configuration["factory"]["profiles"]["shared_supabase"] = True
-    configuration["factory"]["fleet"]["fixture_archive"] = "/home/coder/../root/db.tgz"
+    configuration["crewship"]["profiles"]["shared_supabase"] = True
+    configuration["crewship"]["fleet"]["fixture_archive"] = "/home/coder/../root/db.tgz"
     with pytest.raises(ValueError, match="traverse"):
         ship.validate_config(configuration)
 
 
 def test_unknown_fleet_field_is_rejected(configuration):
-    configuration["factory"]["fleet"]["allow_migrations"] = True
+    configuration["crewship"]["fleet"]["allow_migrations"] = True
     with pytest.raises(ValueError):
         ship.validate_config(configuration)
 
@@ -149,7 +214,7 @@ def test_unknown_fleet_field_is_rejected(configuration):
     ],
 )
 def test_private_skills_source_is_accepted(configuration, skills):
-    configuration["factory"]["skills"] = skills
+    configuration["crewship"]["skills"] = skills
     assert ship.validate_config(configuration) is configuration
 
 
@@ -167,20 +232,20 @@ def test_private_skills_source_is_accepted(configuration, skills):
     ],
 )
 def test_bad_private_skills_source_is_rejected(configuration, skills):
-    configuration["factory"]["skills"] = skills
+    configuration["crewship"]["skills"] = skills
     with pytest.raises(ValueError):
         ship.validate_config(configuration)
 
 
 def test_private_ref_with_local_path_is_rejected(configuration):
-    configuration["factory"]["skills"] = {"private_source": "/srv/skills", "private_ref": "main"}
+    configuration["crewship"]["skills"] = {"private_source": "/srv/skills", "private_ref": "main"}
     with pytest.raises(ValueError, match="private_ref"):
         ship.validate_config(configuration)
 
 
 @pytest.mark.parametrize("data_dir", ["data", "/", "/srv/../root", "/srv/data/"])
 def test_data_dir_must_be_a_plain_absolute_path(configuration, data_dir):
-    configuration["factory"]["data_dir"] = data_dir
+    configuration["crewship"]["data_dir"] = data_dir
     with pytest.raises(ValueError):
         ship.validate_config(configuration)
 
@@ -197,11 +262,11 @@ def _data_disk_vars(tmp_path, data_dir):
         "-m",
         "ansible.builtin.debug",
         "-a",
-        "msg={{ [factory_data_cache_env, factory_docker_data_root] }}",
+        "msg={{ [crewship_data_cache_env, crewship_docker_data_root] }}",
         "-e",
         f"@{ROOT / 'ansible/group_vars/all.yml'}",
         "-e",
-        json.dumps({"factory_cfg": {"data_dir": data_dir}}),
+        json.dumps({"crewship_cfg": {"data_dir": data_dir}}),
     )
     assert result.returncode == 0, result.stdout
     return json.loads(result.stdout.split("=>", 1)[1])["msg"]
@@ -223,7 +288,7 @@ def test_data_dir_moves_docker_and_only_the_caches_that_never_hardlink(tmp_path)
 
 
 def test_bad_polling_window_cannot_disable_idle_accrual(configuration):
-    configuration["factory"]["browser_prune"]["max_gap_seconds"] = 120
+    configuration["crewship"]["browser_prune"]["max_gap_seconds"] = 120
     with pytest.raises(ValueError, match="observation intervals"):
         ship.validate_config(configuration)
 
@@ -236,7 +301,7 @@ def test_init_preserves_existing_local_configuration(tmp_path, monkeypatch):
     ship.initialize(args)
     local = tmp_path / ".local/host.yml"
     first = local.read_bytes()
-    config = ship.load_config(local)["factory"]
+    config = ship.load_config(local)["crewship"]
     assert not config["start_services"] and not config["profiles"]["docker"]
     assert config["profiles"]["agents"]
     with pytest.raises(FileExistsError):
@@ -271,12 +336,12 @@ def fake_omp(launches, models=json.dumps({"models": [{"id": "model"}]}), exits=l
 def test_questions_launch_only_on_an_interactive_terminal_outside_ci(
     configuration, tmp_path, monkeypatch, capsys, tty, ci, launched
 ):
-    configuration["factory"].update(
+    configuration["crewship"].update(
         user=ship.pwd.getpwuid(ship.os.getuid()).pw_name,
         home=str(tmp_path),
         workspace=str(tmp_path / "Dev"),
     )
-    configuration["factory"]["firstmate"].pop("checklist", None)
+    configuration["crewship"]["firstmate"].pop("checklist", None)
     launches = []
     monkeypatch.setattr(ship.sys.stdin, "isatty", lambda: tty)
     monkeypatch.setenv("CI", ci)
@@ -291,12 +356,12 @@ def test_questions_launch_only_on_an_interactive_terminal_outside_ci(
 def test_second_apply_does_not_reopen_the_questions(
     configuration, tmp_path, monkeypatch, capsys, config_source
 ):
-    configuration["factory"].update(
+    configuration["crewship"].update(
         user=ship.pwd.getpwuid(ship.os.getuid()).pw_name,
         home=str(tmp_path),
         workspace=str(tmp_path / "Dev"),
     )
-    configuration["factory"]["firstmate"].pop("checklist", None)
+    configuration["crewship"]["firstmate"].pop("checklist", None)
     launches = []
     monkeypatch.setattr(ship, "ROOT", tmp_path)
     monkeypatch.setattr(ship, "load_config", lambda path: yaml.safe_load(path.read_text()))
@@ -322,7 +387,7 @@ def test_second_apply_does_not_reopen_the_questions(
     assert ship.main() == 0
     assert not marker.exists()
     assert "New-host questions did not complete (omp exited 1)" in capsys.readouterr().out
-    assert f"factory.profiles.shared_supabase to true in {host.resolve()} " in launches[0][1]
+    assert f"crewship.profiles.shared_supabase to true in {host.resolve()} " in launches[0][1]
     assert ship.main() == 0
     assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"] * 2
     assert marker.is_file()
@@ -333,7 +398,7 @@ def test_second_apply_does_not_reopen_the_questions(
 
 
 def test_questions_wait_for_an_omp_sign_in(configuration, tmp_path, monkeypatch, capsys):
-    configuration["factory"].update(
+    configuration["crewship"].update(
         user=ship.pwd.getpwuid(ship.os.getuid()).pw_name,
         home=str(tmp_path),
         workspace=str(tmp_path / "Dev"),
@@ -355,7 +420,7 @@ def test_another_accounts_apply_skips_questions_without_reading_the_unreadable_h
 ):
     home = tmp_path / "coder"
     home.mkdir(mode=0o000)
-    configuration["factory"].update(user="another-account", home=str(home))
+    configuration["crewship"].update(user="another-account", home=str(home))
     monkeypatch.setattr(ship.sys.stdin, "isatty", lambda: True)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(ship.subprocess, "run", lambda *a, **k: pytest.fail("launched"))
@@ -369,7 +434,7 @@ def test_another_accounts_apply_skips_questions_without_reading_the_unreadable_h
 def test_apply_warns_when_firstmate_still_tracks_the_stale_fork(
     configuration, tmp_path, monkeypatch, capsys
 ):
-    configuration["factory"]["firstmate"]["url"] = ship.STALE_FIRSTMATE_URL
+    configuration["crewship"]["firstmate"]["url"] = ship.STALE_FIRSTMATE_URL
     host = tmp_path / "host.yml"
     host.write_text(yaml.safe_dump(configuration))
     monkeypatch.setattr(ship, "provision", lambda document, check: 0)
@@ -406,18 +471,18 @@ def _verify_firstmate(tmp_path, origin, configured):
         )
     )
     variables = {
-        "code_factory_repo": str(ROOT),
-        "factory_account_ready": True,
-        "factory_become_target": False,
-        "factory_user_env": {},
-        "factory_manage_services": False,
-        "factory_user_units": str(tmp_path),
-        "factory_docker_group_users": [],
-        "factory_firstmate_dir": str(checkout),
+        "crewship_repo": str(ROOT),
+        "crewship_account_ready": True,
+        "crewship_become_target": False,
+        "crewship_user_env": {},
+        "crewship_manage_services": False,
+        "crewship_user_units": str(tmp_path),
+        "crewship_docker_group_users": [],
+        "crewship_firstmate_dir": str(checkout),
         # No patches: the expected head is origin/main itself.
-        "factory_firstmate_patch_dir": str(tmp_path),
-        "factory_firstmate_target": head,
-        "factory_cfg": {
+        "crewship_firstmate_patch_dir": str(tmp_path),
+        "crewship_firstmate_target": head,
+        "crewship_cfg": {
             "user": "coder",
             "profiles": {
                 "agents": False,
@@ -504,14 +569,14 @@ def _ensure_status_row(tmp_path, config):
     return _run_agents(
         tmp_path,
         "Read the omp config for the status row keys",
-        factory_omp_config=str(config),
-        factory_acpx_config=str(tmp_path / "absent-acpx.json"),
+        crewship_omp_config=str(config),
+        crewship_acpx_config=str(tmp_path / "absent-acpx.json"),
     )
 
 
 def _ensure_acpx_default(tmp_path, config):
     return _run_agents(
-        tmp_path, "Read the acpx config for the default agent", factory_acpx_config=str(config)
+        tmp_path, "Read the acpx config for the default agent", crewship_acpx_config=str(config)
     )
 
 
@@ -617,11 +682,11 @@ def _set_pipeline_agent(tmp_path, rc):
     return _run_agents(
         tmp_path,
         "Read the no-mistakes config for the pipeline agent",
-        factory_cfg={"home": str(tmp_path)},
-        factory_omp_as_pi_dir="/w",
-        factory_pi_adapter={"rc": rc, "stdout": "pi.go changed"},
-        factory_omp_config=str(tmp_path / "absent-omp.yml"),
-        factory_acpx_config=str(tmp_path / "absent-acpx.json"),
+        crewship_cfg={"home": str(tmp_path)},
+        crewship_omp_as_pi_dir="/w",
+        crewship_pi_adapter={"rc": rc, "stdout": "pi.go changed"},
+        crewship_omp_config=str(tmp_path / "absent-omp.yml"),
+        crewship_acpx_config=str(tmp_path / "absent-acpx.json"),
     )
 
 
@@ -702,8 +767,8 @@ def test_operator_chosen_agent_is_left_alone(tmp_path):
 
 def _managed_environment(tmp_path, fleet_guards, release="1.0.0"):
     variables = {
-        "factory_cfg": {"home": str(tmp_path), "profiles": {"fleet_guards": fleet_guards}},
-        "factory_latest": {"chrome-devtools-mcp": release},
+        "crewship_cfg": {"home": str(tmp_path), "profiles": {"fleet_guards": fleet_guards}},
+        "crewship_latest": {"chrome-devtools-mcp": release},
     }
     result = subprocess.run(
         [
@@ -716,7 +781,7 @@ def _managed_environment(tmp_path, fleet_guards, release="1.0.0"):
             "-m",
             "ansible.builtin.debug",
             "-a",
-            "var=factory_managed_shell_env",
+            "var=crewship_managed_shell_env",
             "-e",
             f"@{ROOT / 'ansible/group_vars/all.yml'}",
             "-e",
@@ -727,7 +792,7 @@ def _managed_environment(tmp_path, fleet_guards, release="1.0.0"):
         text=True,
     )
     assert result.returncode == 0, result.stdout
-    return json.loads(result.stdout.split("=>", 1)[1])["factory_managed_shell_env"]
+    return json.loads(result.stdout.split("=>", 1)[1])["crewship_managed_shell_env"]
 
 
 @pytest.mark.parametrize("fleet_guards", [False, True])
@@ -752,17 +817,17 @@ def test_board_environment_reaches_new_shells_and_agents_and_is_removed_on_opt_o
     profile = tmp_path / ".profile"
     unit = tmp_path / "herdr.service"
     variables = {
-        "code_factory_repo": str(ROOT),
-        "factory_cfg": {
+        "crewship_repo": str(ROOT),
+        "crewship_cfg": {
             "home": str(tmp_path),
             "workspace": str(tmp_path),
             "data_dir": str(tmp_path / "data"),
             "profiles": {"agents": True},
         },
-        "factory_user_uid": 12345,
-        "factory_platform": "linux-x86_64",
-        "factory_latest": {"herdr": {"version": "1.0.0"}},
-        "factory_fleet_browsers_enabled": False,
+        "crewship_user_uid": 12345,
+        "crewship_platform": "linux-x86_64",
+        "crewship_latest": {"herdr": {"version": "1.0.0"}},
+        "crewship_fleet_browsers_enabled": False,
         "ansible_managed": "Managed by Crewship",
     }
     modules = [
@@ -776,9 +841,9 @@ def test_board_environment_reaches_new_shells_and_agents_and_is_removed_on_opt_o
     ]
     for board in (None, {}, None):
         if board is None:
-            variables["factory_cfg"].pop("board", None)
+            variables["crewship_cfg"].pop("board", None)
         else:
-            variables["factory_cfg"]["board"] = board
+            variables["crewship_cfg"]["board"] = board
         for repeat in range(2):
             for module, arguments in modules:
                 result = _ansible(
@@ -822,7 +887,7 @@ def _installer_also(
     tmp_path, start_services=True, fleet_guards=False, fleet_browsers=False, shared_supabase=False
 ):
     variables = {
-        "factory_cfg": {
+        "crewship_cfg": {
             "start_services": start_services,
             "profiles": {
                 "agents": False,
@@ -844,14 +909,14 @@ def _installer_also(
         "-m",
         "ansible.builtin.debug",
         "-a",
-        "var=factory_installer_also",
+        "var=crewship_installer_also",
         "-e",
         f"@{ROOT / 'ansible/group_vars/all.yml'}",
         "-e",
         json.dumps(variables),
     )
     assert result.returncode == 0, result.stdout
-    return json.loads(result.stdout.split("=>", 1)[1])["factory_installer_also"]
+    return json.loads(result.stdout.split("=>", 1)[1])["crewship_installer_also"]
 
 
 @pytest.mark.parametrize("start_services", [True, False])
@@ -880,8 +945,8 @@ def _koncreet_settings(tmp_path, tailscale, apply_user):
     variables = {
         "ansible_user_id": apply_user,
         "ansible_user_dir": "/root" if apply_user == "root" else f"/home/{apply_user}",
-        "factory_cfg": {"user": "coder", "profiles": {"tailscale": tailscale}},
-        "factory_koncreet_config": "/etc/koncreet.conf",
+        "crewship_cfg": {"user": "coder", "profiles": {"tailscale": tailscale}},
+        "crewship_koncreet_config": "/etc/koncreet.conf",
     }
     result = _ansible(
         tmp_path,
@@ -960,12 +1025,12 @@ def _run_koncreet_tasks(tmp_path, digest, *flags):
         "ansible_become": False,
         "ansible_user_id": "operator",
         "ansible_user_dir": "/home/operator",
-        "factory_cfg": {"user": "coder", "profiles": {"tailscale": False}},
-        "factory_latest": {"koncreet": {"version": "9.9.9"}},
-        "factory_koncreet": {"url": source.as_uri(), "sha256": digest},
-        "factory_koncreet_patch": str(ROOT / "patches/koncreet/ubuntu-26.04.patch"),
-        "factory_koncreet_prefix": str(tmp_path / "prefix"),
-        "factory_koncreet_config": str(tmp_path / "koncreet.conf"),
+        "crewship_cfg": {"user": "coder", "profiles": {"tailscale": False}},
+        "crewship_latest": {"koncreet": {"version": "9.9.9"}},
+        "crewship_koncreet": {"url": source.as_uri(), "sha256": digest},
+        "crewship_koncreet_patch": str(ROOT / "patches/koncreet/ubuntu-26.04.patch"),
+        "crewship_koncreet_prefix": str(tmp_path / "prefix"),
+        "crewship_koncreet_config": str(tmp_path / "koncreet.conf"),
     }
     # koncreet.yml hands its files to root. Unprivileged, the chown fails before the
     # download is ever checked, so a digest test would pass for the wrong reason.
@@ -1025,12 +1090,12 @@ def test_mac_ssh_keeps_the_existing_key_and_other_host_entries(tmp_path):
         )
     )
     variables = {
-        "factory_cfg": {
+        "crewship_cfg": {
             "user": "coder",
             "home": str(home),
             "mac_ssh": {"host": "mac.example", "user": "operator"},
         },
-        "factory_mac_ssh_key": str(home / ".ssh/id_ed25519_mac"),
+        "crewship_mac_ssh_key": str(home / ".ssh/id_ed25519_mac"),
     }
 
     def apply():

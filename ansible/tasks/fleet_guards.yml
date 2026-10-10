@@ -7,31 +7,31 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
   become: true
   loop:
-    - "{{ factory_fleet_dir }}"
-    - "{{ factory_fleet_doctor_dir }}"
-    - "{{ factory_local_bin }}"
+    - "{{ crewship_fleet_dir }}"
+    - "{{ crewship_fleet_doctor_dir }}"
+    - "{{ crewship_local_bin }}"
 
 # --- scripts and static files (repository-owned, always converged) -----------
 
 - name: Install the fleet scripts
   ansible.builtin.copy:
-    src: "{{ factory_fleet_sources }}/{{ item.src }}"
+    src: "{{ crewship_fleet_sources }}/{{ item.src }}"
     dest: "{{ item.dest }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "{{ item.mode }}"
     remote_src: true
   become: true
   loop:
-    - { src: doctor/docker-guard.sh, dest: "{{ factory_fleet_doctor_dir }}/docker-guard.sh", mode: "0755" }
-    - { src: doctor/dev-server-reaper.sh, dest: "{{ factory_fleet_doctor_dir }}/dev-server-reaper.sh", mode: "0755" }
-    - { src: doctor/storage-guard.sh, dest: "{{ factory_fleet_doctor_dir }}/storage-guard.sh", mode: "0755" }
-    - { src: doctor/devtools-bridge-reaper.sh, dest: "{{ factory_fleet_doctor_dir }}/devtools-bridge-reaper.sh", mode: "0755" }
+    - { src: doctor/docker-guard.sh, dest: "{{ crewship_fleet_doctor_dir }}/docker-guard.sh", mode: "0755" }
+    - { src: doctor/dev-server-reaper.sh, dest: "{{ crewship_fleet_doctor_dir }}/dev-server-reaper.sh", mode: "0755" }
+    - { src: doctor/storage-guard.sh, dest: "{{ crewship_fleet_doctor_dir }}/storage-guard.sh", mode: "0755" }
+    - { src: doctor/devtools-bridge-reaper.sh, dest: "{{ crewship_fleet_doctor_dir }}/devtools-bridge-reaper.sh", mode: "0755" }
   loop_control:
     label: "{{ item.dest }}"
 

@@ -25,7 +25,7 @@
 # latest, checksum-verified agent and development toolchain through scripts/provisions.py
 # (the three omp marketplace plugins are the one unverified exception).
 schema_version: 1
-factory:
+crewship:
   user: coder
   home: /home/coder
   workspace: /home/coder/Dev

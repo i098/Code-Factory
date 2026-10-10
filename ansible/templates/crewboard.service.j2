@@ -1,14 +1,14 @@
 {{ ansible_managed | comment }}
 # Crew board (docs/board.md): host-local, in-memory message board for agents.
 # History lives only in memory; a restart drops it.
-{% set cap_mb = factory_cfg.board.cap_mb | default(64) %}
+{% set cap_mb = crewship_cfg.board.cap_mb | default(64) %}
 
 [Unit]
 Description=Crew board - agent message board on %t/crewboard.sock (Crewship managed)
 
 [Service]
 Type=simple
-ExecStart={{ factory_local_bin }}/crewboard serve --socket %t/crewboard.sock --history {{ factory_cfg.board.history | default(256) }} --cap-bytes {{ cap_mb * 1048576 }} --max-msg {{ (factory_cfg.board.max_msg_kb | default(64)) * 1024 }}
+ExecStart={{ crewship_local_bin }}/crewboard serve --socket %t/crewboard.sock --history {{ crewship_cfg.board.history | default(256) }} --cap-bytes {{ cap_mb * 1048576 }} --max-msg {{ (crewship_cfg.board.max_msg_kb | default(64)) * 1024 }}
 ExecStopPost=/bin/rm -f %t/crewboard.sock
 Restart=always
 RestartSec=2

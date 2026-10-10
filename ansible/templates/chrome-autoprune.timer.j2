@@ -6,7 +6,7 @@ Description=Periodic Chrome AXI bridge pruning (Crewship managed)
 [Timer]
 Unit=chrome-autoprune.service
 OnBootSec=5min
-OnUnitActiveSec={{ factory_cfg.browser_prune.poll_seconds | int }}s
+OnUnitActiveSec={{ crewship_cfg.browser_prune.poll_seconds | int }}s
 AccuracySec=30s
 
 [Install]

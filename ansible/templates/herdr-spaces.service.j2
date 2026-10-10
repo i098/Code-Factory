@@ -6,14 +6,14 @@
 
 [Unit]
 Description=Report per-home rollups to the Herdr Spaces sidebar (Crewship managed)
-ConditionPathExists={{ factory_herdr_spaces_script }}
+ConditionPathExists={{ crewship_herdr_spaces_script }}
 StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
 Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-Environment=HERDR_BIN_PATH={{ factory_herdr_bin }}
-ExecStart=/usr/bin/python3 {{ factory_herdr_spaces_script }}
+Environment=HERDR_BIN_PATH={{ crewship_herdr_bin }}
+ExecStart=/usr/bin/python3 {{ crewship_herdr_spaces_script }}
 # A run that refreshes the 15-minute disk cache walks every home and worktree
 # pool with du; the timer waits for it, so runs never overlap.
 TimeoutStartSec=600

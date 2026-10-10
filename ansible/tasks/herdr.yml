@@ -7,19 +7,19 @@
 
 - name: Ensure the Herdr configuration directory
   ansible.builtin.file:
-    path: "{{ factory_herdr_config_dir }}"
+    path: "{{ crewship_herdr_config_dir }}"
     state: directory
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0700"
   become: true
 
 - name: Render the Herdr static configuration
   ansible.builtin.template:
     src: herdr.toml.j2
-    dest: "{{ factory_herdr_config }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    dest: "{{ crewship_herdr_config }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0600"
   become: true
   notify: restart herdr
@@ -27,9 +27,9 @@
 - name: Render the Herdr user unit
   ansible.builtin.template:
     src: herdr.service.j2
-    dest: "{{ factory_user_units }}/herdr.service"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    dest: "{{ crewship_user_units }}/herdr.service"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0644"
   become: true
   notify:
@@ -38,10 +38,10 @@
 
 - name: Ensure the user default.target.wants directory
   ansible.builtin.file:
-    path: "{{ factory_user_units }}/default.target.wants"
+    path: "{{ crewship_user_units }}/default.target.wants"
     state: directory
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
   become: true
 
@@ -51,11 +51,11 @@
 # sees the unit as already enabled and reports no change.
 - name: Statically enable the Herdr user unit
   ansible.builtin.file:
-    src: "{{ factory_user_units }}/herdr.service"
-    dest: "{{ factory_user_units }}/default.target.wants/herdr.service"
+    src: "{{ crewship_user_units }}/herdr.service"
+    dest: "{{ crewship_user_units }}/default.target.wants/herdr.service"
     state: link
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     force: true
     follow: false
   become: true
@@ -66,29 +66,29 @@
     name: herdr.service
     enabled: true
     state: started
-  become: "{{ factory_become_target | bool }}"
-  become_user: "{{ factory_cfg.user }}"
-  environment: "{{ factory_user_systemd_env }}"
-  when: factory_manage_services | bool
+  become: "{{ crewship_become_target | bool }}"
+  become_user: "{{ crewship_cfg.user }}"
+  environment: "{{ crewship_user_systemd_env }}"
+  when: crewship_manage_services | bool
 
 - name: Report the deferred service start
   ansible.builtin.debug:
     msg: >-
       start_services is false: herdr.service is written and statically enabled
-      at {{ factory_user_units }}/herdr.service but not started. It comes up on
+      at {{ crewship_user_units }}/herdr.service but not started. It comes up on
       the first boot of a host that has lingering enabled for
-      {{ factory_cfg.user }}.
-  when: not (factory_manage_services | bool)
+      {{ crewship_cfg.user }}.
+  when: not (crewship_manage_services | bool)
 
 # Spaces sidebar reporter (docs/herdr.md): a stdlib Python script on a 1 s
 # user timer. Each run is a fresh process, so a rewritten script needs no
 # restart.
 - name: Install the Herdr Spaces reporter
   ansible.builtin.copy:
-    src: "{{ factory_herdr_spaces_source }}"
-    dest: "{{ factory_herdr_spaces_script }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    src: "{{ crewship_herdr_spaces_source }}"
+    dest: "{{ crewship_herdr_spaces_script }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
     remote_src: true
   become: true
@@ -97,10 +97,10 @@
 # Herdr config (docs/herdr.md).
 - name: Install the Herdr sidebar client helper
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/maintenance/herdr-sidebar-to-client.py"
-    dest: "{{ factory_local_bin }}/herdr-sidebar-to-client.py"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    src: "{{ crewship_repo }}/maintenance/herdr-sidebar-to-client.py"
+    dest: "{{ crewship_local_bin }}/herdr-sidebar-to-client.py"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
     remote_src: true
   become: true
@@ -110,10 +110,10 @@
 # mosh login starts a fresh process, so a rewritten script needs no restart.
 - name: Install herdr-patch
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/herdr-patch/herdr-patch"
-    dest: "{{ factory_local_bin }}/herdr-patch"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    src: "{{ crewship_repo }}/herdr-patch/herdr-patch"
+    dest: "{{ crewship_local_bin }}/herdr-patch"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
     remote_src: true
   become: true
@@ -125,7 +125,7 @@
 # chown the targets in ~/.local/bin and the next apply could not rewrite them.
 - name: Link herdr and herdr-patch into /usr/local/bin
   ansible.builtin.file:
-    src: "{{ factory_local_bin }}/{{ item }}"
+    src: "{{ crewship_local_bin }}/{{ item }}"
     dest: "/usr/local/bin/{{ item }}"
     state: link
     force: true
@@ -145,36 +145,36 @@
   become_user: root
   loop:
     - /usr/local/bin/herdr-mosh
-    - "{{ factory_local_bin }}/herdr-mosh"
+    - "{{ crewship_local_bin }}/herdr-mosh"
 
 # btop fitted to its pane (docs/herdr.md#btop): the launcher takes the place of
 # the btop command and runs the installer's btop-bin with a preset of this
 # config. btop rewrites its config on exit; every apply puts the saved one back.
 - name: Install the btop launcher
   ansible.builtin.copy:
-    src: "{{ factory_btop_launcher_source }}"
-    dest: "{{ factory_local_bin }}/btop"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    src: "{{ crewship_btop_launcher_source }}"
+    dest: "{{ crewship_local_bin }}/btop"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
     remote_src: true
   become: true
 
 - name: Ensure the btop configuration directory
   ansible.builtin.file:
-    path: "{{ factory_btop_config | dirname }}"
+    path: "{{ crewship_btop_config | dirname }}"
     state: directory
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
   become: true
 
 - name: Install the btop configuration
   ansible.builtin.copy:
-    src: "{{ code_factory_repo }}/config/btop.conf"
-    dest: "{{ factory_btop_config }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    src: "{{ crewship_repo }}/config/btop.conf"
+    dest: "{{ crewship_btop_config }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0644"
     remote_src: true
   become: true
@@ -182,9 +182,9 @@
 - name: Render the Herdr Spaces reporter unit and timer
   ansible.builtin.template:
     src: "{{ item }}.j2"
-    dest: "{{ factory_user_units }}/{{ item }}"
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    dest: "{{ crewship_user_units }}/{{ item }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0644"
   become: true
   loop:
@@ -194,20 +194,20 @@
 
 - name: Ensure the user timers.target.wants directory
   ansible.builtin.file:
-    path: "{{ factory_user_units }}/timers.target.wants"
+    path: "{{ crewship_user_units }}/timers.target.wants"
     state: directory
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     mode: "0755"
   become: true
 
 - name: Statically enable the Herdr Spaces reporter timer
   ansible.builtin.file:
-    src: "{{ factory_user_units }}/herdr-spaces.timer"
-    dest: "{{ factory_user_units }}/timers.target.wants/herdr-spaces.timer"
+    src: "{{ crewship_user_units }}/herdr-spaces.timer"
+    dest: "{{ crewship_user_units }}/timers.target.wants/herdr-spaces.timer"
     state: link
-    owner: "{{ factory_cfg.user }}"
-    group: "{{ factory_group }}"
+    owner: "{{ crewship_cfg.user }}"
+    group: "{{ crewship_group }}"
     force: true
     follow: false
   become: true
@@ -218,10 +218,10 @@
     name: herdr-spaces.timer
     enabled: true
     state: started
-  become: "{{ factory_become_target | bool }}"
-  become_user: "{{ factory_cfg.user }}"
-  environment: "{{ factory_user_systemd_env }}"
-  when: factory_manage_services | bool
+  become: "{{ crewship_become_target | bool }}"
+  become_user: "{{ crewship_cfg.user }}"
+  environment: "{{ crewship_user_systemd_env }}"
+  when: crewship_manage_services | bool
 
 # Herdr's own omp extension reports each omp pane's state (working, blocked,
 # idle) to the sidebar; without it every omp agent shows as idle. herdr refuses
@@ -230,34 +230,34 @@
 # change only when herdr rewrote the file.
 - name: Install Herdr's omp state integration
   when:
-    - factory_cfg.profiles.agents | bool
+    - crewship_cfg.profiles.agents | bool
     - not ansible_check_mode
   block:
     - name: Ensure the omp extensions directory
       ansible.builtin.file:
-        path: "{{ factory_herdr_omp_integration | dirname }}"
+        path: "{{ crewship_herdr_omp_integration | dirname }}"
         state: directory
-        owner: "{{ factory_cfg.user }}"
-        group: "{{ factory_group }}"
+        owner: "{{ crewship_cfg.user }}"
+        group: "{{ crewship_group }}"
         mode: "0755"
       become: true
 
     - name: Checksum the Herdr omp integration before install
       ansible.builtin.stat:
-        path: "{{ factory_herdr_omp_integration }}"
+        path: "{{ crewship_herdr_omp_integration }}"
       become: true
-      register: factory_herdr_omp_before
+      register: crewship_herdr_omp_before
 
     - name: Run herdr integration install omp
       ansible.builtin.command:
-        argv: ["{{ factory_herdr_bin }}", integration, install, omp]
+        argv: ["{{ crewship_herdr_bin }}", integration, install, omp]
       changed_when: false
 
     - name: Checksum the Herdr omp integration after install
       ansible.builtin.stat:
-        path: "{{ factory_herdr_omp_integration }}"
+        path: "{{ crewship_herdr_omp_integration }}"
       become: true
-      register: factory_herdr_omp_after
+      register: crewship_herdr_omp_after
       changed_when: >-
-        factory_herdr_omp_after.stat.checksum | default('')
-        != factory_herdr_omp_before.stat.checksum | default('')
+        crewship_herdr_omp_after.stat.checksum | default('')
+        != crewship_herdr_omp_before.stat.checksum | default('')

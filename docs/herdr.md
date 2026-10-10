@@ -129,7 +129,7 @@ Herdr learns whether an omp agent is working, blocked or idle from its own omp e
 
 ## Override the layouts or turn parts off
 
-Set these keys under `factory.herdr` in `.local/host.yml`, then run `./ship.sh launch`:
+Set these keys under `crewship.herdr` in `.local/host.yml`, then run `./ship.sh launch`:
 
 | Key | Default | Effect |
 | --- | --- | --- |

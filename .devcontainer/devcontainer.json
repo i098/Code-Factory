@@ -15,11 +15,11 @@
     "dockerfile": "../Dockerfile",
     "target": "worker",
     "args": {
-      "FACTORY_USER": "coder",
-      "FACTORY_UID": "1000",
-      "FACTORY_GID": "1000",
-      "FACTORY_HOME": "/home/coder",
-      "FACTORY_WORKSPACE": "/home/coder/Dev"
+      "CREWSHIP_USER": "coder",
+      "CREWSHIP_UID": "1000",
+      "CREWSHIP_GID": "1000",
+      "CREWSHIP_HOME": "/home/coder",
+      "CREWSHIP_WORKSPACE": "/home/coder/Dev"
     }
   },
   "containerUser": "coder",
@@ -46,8 +46,8 @@
   ],
 
   "containerEnv": {
-    "CODE_FACTORY_ROOT": "/opt/code-factory",
-    "CODE_FACTORY_CONFIG": "/opt/code-factory/containers/crewship.container.yml"
+    "CREWSHIP_ROOT": "/opt/code-factory",
+    "CREWSHIP_CONFIG": "/opt/code-factory/containers/crewship.container.yml"
   },
 
   // Version probes only: no agent login, no first-run profile creation, no

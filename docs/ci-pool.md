@@ -13,10 +13,10 @@ flowchart LR
 
 ## Opt a repository in
 
-1. Add the repository to `factory.ci_pool.repos` in `.local/host.yml`:
+1. Add the repository to `crewship.ci_pool.repos` in `.local/host.yml`:
 
    ```yaml
-   factory:
+   crewship:
      ci_pool:
        data_dir: /mnt/data/ci     # on a data disk, not the system disk
        # total_slots: auto        # or a number; see "Pool size"
@@ -43,7 +43,7 @@ To remove a repository, delete its entry and apply again. Its idle slots stop an
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `data_dir` | required | Parent of the pool's directory `<data_dir>/ci-pool/`, which holds every work directory and cache. Apply creates `data_dir`, owned by `factory.user`. Put it on a data disk. The pool deletes only inside `<data_dir>/ci-pool/`, so `data_dir` may hold other data. |
+| `data_dir` | required | Parent of the pool's directory `<data_dir>/ci-pool/`, which holds every work directory and cache. Apply creates `data_dir`, owned by `crewship.user`. Put it on a data disk. The pool deletes only inside `<data_dir>/ci-pool/`, so `data_dir` may hold other data. |
 | `total_slots` | `auto` | Most slots the pool runs. `auto` computes it at apply (see below). A number fixes it. |
 | `job_cpus` | `4` | `docker --cpus` of each job container. |
 | `job_memory_gb` | `8` | `docker --memory` and `--memory-swap` of each job container, in GiB. |
@@ -121,6 +121,6 @@ echo '{"data_dir": "/mnt/data/ci", "repos": [{"repo": "owner/name", "slots": 2, 
 A self-hosted runner runs the code of the workflow that selects it. On a public repository, a pull request from a fork can change the workflow. The job-started hook ends such a job's container before any of its steps run. That is the first barrier; the trigger rule below is the second. The job container limits CPU, memory, and processes, and has no Docker socket, but it shares the host's network, and its caches stay for the next job of the same repository.
 
 - Opt in private repositories freely. For a public repository, select the pool only in workflows that outside contributors cannot start: `workflow_dispatch` and `push` to protected branches. Never use `pull_request` from forks.
-- This repository's `ci.yml` stays on GitHub-hosted runners. `ci-pool-smoke.yml` runs the same checks on the pool, and only `workflow_dispatch` starts it. It stays queued until `.local/host.yml` has the entry `{ repo: i098/Crewship, slots: N, labels: [code-factory] }` in `factory.ci_pool.repos`.
+- This repository's `ci.yml` stays on GitHub-hosted runners. `ci-pool-smoke.yml` runs the same checks on the pool, and only `workflow_dispatch` starts it. It stays queued until `.local/host.yml` has the entry `{ repo: i098/Crewship, slots: N, labels: [code-factory] }` in `crewship.ci_pool.repos`.
 - Do not opt in a repository whose jobs need secrets that a fork pull request could reach.
 - A job can change the repository's caches (`<data_dir>/ci-pool/cache/<owner>-<name>/`), which later jobs of that repository read, including jobs on the default branch. Each JIT runner is registered to one repository only, so other repositories' jobs never run in its slots or read its caches.
