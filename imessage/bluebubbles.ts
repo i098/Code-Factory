@@ -1,8 +1,8 @@
 // The BlueBubbles transport of the iMessage bridge (bridge.ts, docs/imessage.md): self-hosted BlueBubbles servers,
 // "relays", on Macs signed into the same Apple Account, used as one line in config order.
-// Outbound: each call goes to the first healthy relay and fails over in order. A send that may have reached a
-//   relay (a timeout or a server error after the request went out) is retried on the next relay only after no
-//   relay shows it as sent, so one text is never sent twice. The bridge's outbox (outbox.ts) retries what fails.
+// Outbound: calls fail over in config order; relay eligibility is described in docs/imessage.md.
+//   A send that may have reached a relay is retried on the next relay only after no relay shows it as sent.
+//   The bridge's outbox (outbox.ts) retries what fails.
 // Inbound: every relay posts its webhook here, and a catch-up query fills any gap. A webhook is only a hint: the
 //   message itself is read back from a relay with the password, so a forged webhook can only name a real message.
 //   Messages are de-duplicated by GUID with a bounded seen-set on disk. A failed attachment download is retried by
@@ -60,6 +60,7 @@ type BBMessage = {
 export class BlueBubbles implements AsyncIterable<Bubble> {
   private opts: typeof DEFAULTS;
   private health = new Map<Relay, { ok: boolean; at: number }>();
+  private privateApi = new Map<Relay, { enabled: boolean; at: number }>();
   private seen = new Set<string>(); // message GUIDs handled by the bridge, oldest first, kept on disk
   private pending = new Set<string>(); // message GUIDs queued for the bridge and not handled yet
   private suspects = new Set<Relay>(); // relays whose last send may have gone out without an answer, to ask first
@@ -171,8 +172,8 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
     }
   }
 
-  // Send one text into a chat, as a threaded reply when `replyTo` is a message GUID. `guid` is the client GUID
-  // (BlueBubbles tempGuid). A later relay in one call sends only after no relay shows the text as sent; a retry of
+  // `guid` is the client GUID (BlueBubbles tempGuid). Reply behavior is described in docs/imessage.md.
+  // A later relay in one call sends only after no relay shows the text as sent; a retry of
   // a failed call is the bridge's to check first (`sent`), because the outbox item keeps what may have gone out.
   async send(chat: string, text: string, replyTo?: string, guid?: string) {
     const started = Date.now();
@@ -182,7 +183,7 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
       try {
         if (!maybeSent || !(await this.sent(chat, text, started))) {
           await this.call(r, "POST", "message/text", undefined,
-            { chatGuid: chat, tempGuid: guid ?? crypto.randomUUID(), message: text, ...(replyTo ? { selectedMessageGuid: replyTo, partIndex: 0 } : {}) }, this.opts.sendMs)
+            { chatGuid: chat, tempGuid: guid ?? crypto.randomUUID(), message: text, ...(replyTo && this.privateApi.get(r)?.enabled ? { selectedMessageGuid: replyTo, partIndex: 0 } : {}) }, this.opts.sendMs)
             .catch((e) => { if (e instanceof RelayError && e.maybeSent) this.suspects.add(r); throw e; });
         }
         this.suspects.clear();
@@ -201,7 +202,7 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
   async react(chat: string, guid: string, emoji: string) {
     const reaction = TAPBACKS[emoji.trim()];
     if (!reaction) throw Object.assign(new Error(`no BlueBubbles tapback for ${emoji}; use one of ❤️ 👍 👎 😂 ‼️ ❓`), { permanent: true });
-    await this.first((r) => this.call(r, "POST", "message/react", undefined, { chatGuid: chat, selectedMessageGuid: guid, reaction, partIndex: 0 }));
+    await this.first((r) => this.call(r, "POST", "message/react", undefined, { chatGuid: chat, selectedMessageGuid: guid, reaction, partIndex: 0 }), true);
   }
 
   // Download an attachment from whichever relay has it. The bridge's download queue retries a failure.
@@ -238,17 +239,19 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
   // Start (POST) or stop (DELETE) the typing bubble in a chat.
   typing(chat: string, method: "POST" | "DELETE"): Promise<void> {
     // A typing error never fails or delays a send: it is logged as one line and dropped.
-    return this.first((r) => this.call(r, method, `chat/${encodeURIComponent(chat)}/typing`)).then(
+    return this.first((r) => this.call(r, method, `chat/${encodeURIComponent(chat)}/typing`), true).then(
       () => undefined,
       (e) => this.log(`typing failed: ${e instanceof Error ? e.message : String(e)}`),
     );
   }
 
-  // Run `fn` on each healthy relay in order until one succeeds. A permanent failure (HTTP 404) is final only when every
+  // Run `fn` on each eligible healthy relay in order until one succeeds. A permanent failure (HTTP 404) is final only when every
   // configured relay was asked and gave one; otherwise a relay that was down or cut off may still have the item, so the
   // error is a transient one and the caller tries again.
-  private async first<T>(fn: (r: Relay) => Promise<T>): Promise<T> {
-    const asked = await this.healthy();
+  private async first<T>(fn: (r: Relay) => Promise<T>, privateApiOnly = false): Promise<T | undefined> {
+    const healthy = await this.healthy();
+    const asked = privateApiOnly ? healthy.filter((r) => this.privateApi.get(r)?.enabled) : healthy;
+    if (privateApiOnly && healthy.length && !asked.length) return;
     const errors: unknown[] = [];
     for (const r of asked) {
       try {
@@ -267,8 +270,20 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
   private async healthy(): Promise<Relay[]> {
     const ok = await Promise.all(this.relays.map(async (r) => {
       const h = this.health.get(r);
-      if (h && Date.now() - h.at < this.opts.healthMs) return h.ok;
-      return this.call(r, "GET", "ping", undefined, undefined, this.opts.pingMs).then(() => true, () => false);
+      const capability = this.privateApi.get(r);
+      if (h && Date.now() - h.at < this.opts.healthMs && (!h.ok || (capability && Date.now() - capability.at < this.opts.healthMs))) return h.ok;
+      try {
+        const info = await this.call(r, "GET", "server/info", undefined, undefined, this.opts.pingMs) as { private_api?: boolean } | undefined;
+        const enabled = info?.private_api === true;
+        const was = this.privateApi.get(r)?.enabled;
+        this.privateApi.set(r, { enabled, at: Date.now() });
+        if (was !== enabled && (was !== undefined || !enabled)) {
+          this.log(`${this.name(r)} Private API ${enabled ? "is on" : "is off; skipping typing and tapbacks, sending replies without a thread"}`);
+        }
+        return true;
+      } catch {
+        return false;
+      }
     }));
     return this.relays.filter((_, i) => ok[i]);
   }

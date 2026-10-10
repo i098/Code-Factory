@@ -75,11 +75,47 @@ A relay is a Mac that runs [BlueBubbles server](https://bluebubbles.app) and is 
 ### Set up a relay
 
 1. Make an Apple Account for the line. An account with only an email address and no phone number works: the owner texts that email address, and `imessage.owner` stays his own phone number.
-2. On each Mac, sign in to Messages with that account, then install BlueBubbles server and follow its setup. Give it Full Disk Access and Accessibility permission.
-3. Enable the BlueBubbles Private API if you want typing bubbles, tapbacks, threaded replies, and read receipts. Plain texts and attachments work without it. The Private API needs System Integrity Protection partly off; read the BlueBubbles docs first.
-4. Set a long random server password, the same on every Mac or one for each. Do not use a proxy or tunnel service: limit the server port to the agent host with the Mac's firewall or your private network.
-5. In the server's API and Webhooks settings, add a webhook to `http://<webhook_listen>/bluebubbles` with the "New Messages" event.
-6. Make sure that the Mac does not sleep and that it signs in and opens BlueBubbles after a restart.
+2. On each Mac, sign in to Messages with that account.
+   Download BlueBubbles server and copy the app into Applications, but **do not open it or enable automatic start**.
+   Copy this repository onto the Mac.
+3. Disconnect the Mac from all networks, then run this command from the repository:
+
+   ```bash
+   bash imessage/bluebubbles-relay prepare
+   ```
+
+   The command creates `bluebubbles.yml` in the account's home directory with a random password and `proxy_service: "lan-url"` (all tunnels off).
+   It refuses to overwrite an existing file or continue while BlueBubbles or a tunnel runs.
+   A fresh server otherwise starts its default public Cloudflare tunnel before you can set the password.
+   BlueBubbles [reads this file before startup](https://github.com/BlueBubblesApp/bluebubbles-server/blob/v1.9.9/packages/server/src/main.ts#L28-L36).
+   `persist-config: false` [applies the settings synchronously](https://github.com/BlueBubblesApp/bluebubbles-server/blob/v1.9.9/packages/server/src/server/databases/server/index.ts#L154-L173), before services start.
+   Do not create `config.db` yourself: [an existing database disables initial schema creation](https://github.com/BlueBubblesApp/bluebubbles-server/blob/v1.9.9/packages/server/src/server/databases/server/index.ts#L37-L50).
+   Keep the file for every launch; its settings override the UI settings.
+   Protect the file and the server logs: BlueBubbles logs configuration values, including the password.
+4. Open BlueBubbles while the Mac remains disconnected.
+   Give it Full Disk Access and Accessibility permission.
+   Keep **Proxy Setup** on **LAN URL** during its setup.
+   Read the password from `bluebubbles.yml`, then run this one-command check and enter the password at its hidden prompt:
+
+   ```bash
+   bash imessage/bluebubbles-relay check
+   ```
+
+   The check requires no `cloudflared`, `ngrok`, or `zrok` process.
+   It requires HTTP 401 without a password and with a wrong password, then HTTP 200 with the password.
+   A failed check exits with a clear error; quit BlueBubbles and keep the Mac disconnected until you fix the cause.
+   Do not continue until the check passes.
+5. Limit port 1234 to the agent host with the Mac's firewall or your private network before reconnecting the Mac.
+   Do not configure port forwarding or select Cloudflare, ngrok, or zrok.
+   Run the same check after reconnecting and after every server update.
+6. Enable the BlueBubbles Private API if you want typing bubbles, tapbacks, threaded replies, and read receipts.
+   Plain texts and attachments work without it.
+   The Private API needs System Integrity Protection partly off; read the BlueBubbles docs first.
+7. On each relay, register a webhook to `http://<webhook_listen>/bluebubbles` with the "New Messages" event.
+   Use the server's API and Webhooks settings or `POST /api/v1/webhook`.
+   Without a webhook on that relay, inbound messages wait for the bridge's per-minute catch-up.
+8. Make sure that the Mac does not sleep.
+   Enable automatic start only after the safety check passes.
 
 Add each password to `~/super.env` as [Shared credentials](secrets.md) describes, for example `BLUEBUBBLES_PASSWORD=...`. The host config names the variable, never the password.
 
@@ -110,8 +146,16 @@ With two transports, the first one is the primary line and the second one is the
 
 ### How the relay set behaves
 
-- **Health.** The bridge pings each relay with its password (3 second timeout) and keeps the result for 10 seconds. A relay that goes down or comes back is logged as one line.
-- **Sends.** A send, typing bubble, tapback, or read receipt goes to the first healthy relay, then to the next one if it fails. A typing error is logged and never fails a send. When all relays are down, the outbox keeps the item and tries again.
+- **Health.** The bridge reads `/api/v1/server/info` on each relay at start and during health checks.
+  Each check uses the relay password, has a 3 second timeout, and keeps the result for 10 seconds.
+  The bridge logs one line when a relay goes down or comes back.
+- **Private API.** Each health check reads the relay's `private_api` flag.
+  When it is off, the bridge sends no typing or tapback request to that relay and sends replies there as plain messages.
+  Typing and tapbacks use the next healthy relay with the Private API on, or send no request if none supports them.
+  The bridge logs one line per relay when it first finds the Private API off or when the flag changes.
+- **Sends.** Text sends and read receipts go to the first healthy relay, then to the next one if it fails.
+  Typing and tapbacks follow the Private API rule above.
+  When all relays are down, the outbox keeps the item and tries again.
 - **No double sends.** Each outbox item keeps a client GUID, and each bubble sends with its own one (BlueBubbles `tempGuid`). If a relay may have sent a text but did not answer (a timeout, a server error, or an answer that cannot be read), the bridge asks the relays whether the text is in the chat before it sends that bubble again, on any relay or transport (see above). It looks for the same text from the line in the last minute or so. The relay that may have sent is asked first, even when its health check says it is down. Known limits: when that relay cannot answer, another relay can still send the text a second time; a text that reaches the other Macs through iCloud late can be sent twice; a text identical to one sent in the same minute counts as sent; and a text that may be out on Photon cannot be checked, so Photon sends it again (at least once).
 - **Inbound.** Every relay posts its webhook. A webhook carries only the message GUID that the bridge acts on: the bridge reads the message back from a relay with the password, so a forged webhook cannot inject text. The bridge keeps the last 1000 message GUIDs in `~/.local/state/fm-imessage/bluebubbles-seen`, so a message from several relays, or after a restart, is filed once. A GUID goes into that file only after the bridge has handled the message: it filed the inbox note, or it ignored the message (another sender, an outbound text, a tapback or other signal). If the bridge stops before that, or fails to handle the message, the message is not in the file, and the next webhook or catch-up files it again. At start and each minute, the bridge also asks every reachable relay for the messages of the last 15 minutes and files each one that it has not seen. Thus a message whose webhook was lost, or that came while the bridge restarted, is still filed if a relay is reachable within 15 minutes. A message that is older than that window and missed its webhook is not recovered.
 - **Attachments.** The bridge downloads a file from whichever relay has it. The first try runs while the bridge handles the message, so it has the short bound of 15 seconds, body included, and never holds up the next message. If it fails or is too slow, the note says that the attachment could not be saved yet, and the download queue tries again with a bound of 10 minutes, like a Photon download. A download that is cut off fails as a timeout, and the queue retries it. The item moves to the dead-letter folder only when every configured relay was asked and every one answered 404 (or another permanent error). If a relay is down, or its download was cut off, the queue retries, so a relay that comes back is asked again. The same rule holds for reading a message.

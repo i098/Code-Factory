@@ -59,8 +59,10 @@
 <summary><b>Default config</b></summary>
 
 - Agent harness: [omp](docs/omp.md), home model `anthropic/claude-opus-5-5:xhigh`, advisor off
-- Models chosen per task: small: Haiku 5.5 or GPT-6 Luna; normal (default): Sonnet 5.5 or GPT-6.1 Sol; hard only: Opus 5.5.
+- Models: dynamic per-task selection; small `anthropic/claude-haiku-5-5`, `openai-codex/gpt-6-luna`; ordinary (default) `anthropic/claude-sonnet-5-5`, `openai-codex/gpt-6.1-sol`; hard only `anthropic/claude-opus-5-5`.
 - The spawning agent picks the thinking level.
+- Codex context: 272K default, 1M maximum, `extendedContext` on.
+  The current bundled omp catalog limits the effective maximum to 872K.
 - omp plugins: `ponytail`, `i-have-adhd`, `caveman`
 - omp extension `code-factory-quality-gate`: [sentrux and fallow check](docs/omp.md#quality-gate) at each turn end
 - omp extension `aa-mode-icons`: [mode and hook icons](docs/omp.md#status-line-icons) on the status line
@@ -72,6 +74,8 @@
 - Firstmate patch `0003-brief-crewboard`: adds the optional [crew board instructions](docs/board.md#firstmate-instructions)
 - Hooks: `code-factory-quality-gate` at omp turn end, SessionStart banners from `ponytail`, `i-have-adhd`, `caveman`, `ACTIONS_RUNNER_HOOK_JOB_STARTED` (opt-in with the [CI pool](docs/ci-pool.md))
 - Pipeline gates: [no-mistakes](docs/omp.md#no-mistakes-pipeline-agent) and `ponytail-review`
+- Gate models: per-run pins; routine `openai-codex/gpt-6.1-sol:medium`; ordinary (default) `anthropic/claude-sonnet-5-5:high`; hard `anthropic/claude-opus-5-5:high`.
+  The verified Pi-only adapter preserves per-run model choices and fails on wrapper refusal.
 - Skills and rules: [`skills/`](skills/) for omp and Claude Code, [`config/AGENTS.md`](config/AGENTS.md) for Claude Code, omp, and Codex; public files install with the `agents` profile and private files take precedence ([omp](docs/omp.md#skills)).
 - omp rules ([TTSR](docs/omp.md#rules)): `always-on-skills`, `asd-ste100`, `use-native-stacked-prs`; with the browser ladder: `drive-the-browser-yourself`, `fleet-browser-default-tier`.
 - Profiles on: `agents`, `development`, `firstmate`, `docker`, `chat`

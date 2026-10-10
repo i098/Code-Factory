@@ -54,6 +54,9 @@ The `firstmate` profile copies each name in `factory_firstmate_config_names` (`a
 
 `config/omp.yml` seeds `~/.omp/agent/config.yml` on first write only. It holds the host's `modelRoles` (`default` is `anthropic/claude-opus-5-5:xhigh`, `task` and `subagent` are `anthropic/claude-opus-5-5:auto`, `memory` is `anthropic/claude-haiku-5-5`, `advisor` is `anthropic/claude-opus-5-5:auto`, `smol` is `anthropic/claude-sonnet-5-5:off`, and `commit` and `tiny` are `anthropic/claude-haiku-5-5`) and `retry.fallbackChains` with no `default` chain. Its `advisor` block keeps the global advisor off (`enabled: false`) with `syncBacklog: '1'`; only crews and the omp the no-mistakes daemon spawns turn it on. Crews do it through the overlay above, which also sets `syncBacklog` to `"off"`; the daemon's omp does it through its own overlay ([no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)). No router or gateway sits between omp and the provider.
 
+Crews use the dispatch policy above, not the host's `modelRoles.default`.
+See [omp setup](omp.md#what-the-recipe-sets-up) for model override merging and context configuration.
+
 Host sizing and every auto pruner are listed in [Capacity and pruners](capacity.md).
 
 ## Reproducibility policy
