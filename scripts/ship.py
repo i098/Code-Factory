@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 STALE_FIRSTMATE_URL = "https://github.com/i098/firstmate.git"
 LEGACY_BROWSER_KEYS = ("obscura_version", "obscura_sha256")
 REMOVED_PROFILE = "shared_supabase"
-REMOVED_PROJECT_KEY = "supabase_project_id"
+REMOVED_FLEET_KEYS = ("supabase_project_id", "fixture_archive", "worktree_pools")
 RETIRED_STACK = "oss-fleet/shared-supabase"
 OLD_ROOT, NEW_ROOT = "factory", "crewship"
 
@@ -38,11 +38,13 @@ def validate_config(document):
     config = document.get("crewship") if isinstance(document, dict) else None
     if isinstance(config, dict) and (
         isinstance(config.get("profiles"), dict) and REMOVED_PROFILE in config["profiles"]
-        or isinstance(config.get("fleet"), dict) and REMOVED_PROJECT_KEY in config["fleet"]
+        or isinstance(config.get("fleet"), dict)
+        and any(key in config["fleet"] for key in REMOVED_FLEET_KEYS)
     ):
         raise ValueError(
-            "Shared Supabase support was removed. Remove profiles.shared_supabase and "
-            "fleet.supabase_project_id from the host config; use profiles.shared_postgres "
+            "Shared Supabase support was removed. Remove profiles.shared_supabase, "
+            "fleet.supabase_project_id, fleet.fixture_archive, and fleet.worktree_pools "
+            "from the host config; use profiles.shared_postgres "
             "(docs/shared-postgres.md). Existing stacks and volumes remain untouched."
         )
     validate_document(document, "crewship.schema.json")

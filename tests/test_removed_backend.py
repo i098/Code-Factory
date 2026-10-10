@@ -17,10 +17,26 @@ ship = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(ship)
 
 
-@pytest.mark.parametrize("enabled", [False, True])
-def test_removed_switch_reports_replacement_without_traceback(tmp_path, enabled):
+@pytest.mark.parametrize(
+    ("enabled", "fleet"),
+    [
+        (False, {}),
+        (True, {}),
+        (False, dict(zip(ship.REMOVED_FLEET_KEYS, ("swarms-shared", "", [".treehouse/project"])))),
+        (None, dict(zip(ship.REMOVED_FLEET_KEYS, ("swarms-shared", "", [".treehouse/project"])))),
+        (None, {"fixture_archive": "", "worktree_pools": [".treehouse/project"]}),
+        (None, {ship.REMOVED_FLEET_KEYS[0]: "swarms-shared"}),
+        (None, {"fixture_archive": ""}),
+        (None, {"worktree_pools": []}),
+    ],
+    ids=["disabled", "enabled", "old-defaults", "old-fleet-defaults", "partial-cleanup",
+         "project-only", "archive-only", "pools-only"],
+)
+def test_removed_switch_reports_replacement_without_traceback(tmp_path, enabled, fleet):
     document = yaml.safe_load((ROOT / "config/default.yml").read_text())
-    document["crewship"]["profiles"][ship.REMOVED_PROFILE] = enabled
+    if enabled is not None:
+        document["crewship"]["profiles"][ship.REMOVED_PROFILE] = enabled
+    document["crewship"]["fleet"].update(fleet)
     host = tmp_path / "host.yml"
     host.write_text(yaml.safe_dump(document))
     before = host.read_bytes()
@@ -31,8 +47,24 @@ def test_removed_switch_reports_replacement_without_traceback(tmp_path, enabled)
     assert result.returncode == 1
     assert "support was removed" in result.stderr
     assert "profiles.shared_postgres (docs/shared-postgres.md)" in result.stderr
+    for key in (f"profiles.{ship.REMOVED_PROFILE}",
+                *(f"fleet.{key}" for key in ship.REMOVED_FLEET_KEYS)):
+        assert key in result.stderr
     assert "Traceback" not in result.stderr
     assert host.read_bytes() == before
+    document["crewship"]["profiles"].pop(ship.REMOVED_PROFILE, None)
+    for key in ship.REMOVED_FLEET_KEYS:
+        document["crewship"]["fleet"].pop(key, None)
+    host.write_text(yaml.safe_dump(document))
+    cleaned = host.read_bytes()
+    result = subprocess.run(
+        [sys.executable, ROOT / "scripts/ship.py", "inspect", "--config", host],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0
+    assert "Valid host configuration:" in result.stdout
+    assert result.stderr == ""
+    assert host.read_bytes() == cleaned
 
 
 @pytest.mark.skipif(os.environ.get("CREWSHIP_POSTGRES_LAB") != "1", reason="disposable Docker lab only")
