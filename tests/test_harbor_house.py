@@ -106,7 +106,7 @@ const element = {
   replaceChildren() {}, getContext: () => ({setTransform() {}, measureText: () => ({width: 6})})
 };
 const document = {getElementById: () => element, querySelectorAll: () => [],
-  documentElement: {}, addEventListener() {}};
+  documentElement: {}, addEventListener() {}, fonts: {load: () => Promise.resolve(), ready: Promise.resolve()}};
 const matchMedia = () => ({matches: false, addEventListener() {}});
 const getComputedStyle = () => ({getPropertyValue: () => 'monospace'});
 const devicePixelRatio = 1, innerWidth = 600;
@@ -229,11 +229,14 @@ for (const roomScene of [false, true]) {
     renderCost = 2;
     const runFrame = () => { dirty = true; last = clock; clock += interval; frame(clock); };
     for (let i = 0; i < 91; i++) runFrame();
-    assert(scale < 1.5, 'a cheap render must recover detail at either display refresh rate');
+    if (roomScene) assert(scale < 1.5, 'a cheap room render must recover detail at either display refresh rate');
+    else assert.equal(scale, 1.5, 'exterior rendering must not change the grid');
     scale = 1; shadows = true; slow = fast = 0;
     renderCost = 25;
     for (let i = 0; i < 42; i++) runFrame();
-    assert(!shadows && scale > 1, 'expensive rendering must still reduce detail');
+    assert.equal(shadows, false, 'expensive rendering must drop shadows');
+    if (roomScene) assert(scale > 1, 'expensive room rendering must reduce detail');
+    else assert.equal(scale, 1, 'expensive exterior rendering must keep the startup grid');
   }
 }
 insideHouse = true; renderCost = 2;
@@ -277,7 +280,16 @@ for (const period of [1000 / 60, 1000 / 30]) {
 }
 """
     subprocess.run(
-        ["node", "-e", setup + source + check],
+        [
+            "node",
+            "-e",
+            "(async () => {\n"
+            + setup
+            + source
+            + "\nawait new Promise(setImmediate);\n"
+            + check
+            + "\n})().catch(error => { console.error(error); process.exit(1); });",
+        ],
         check=True,
         timeout=10,
     )
