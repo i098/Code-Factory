@@ -2,6 +2,9 @@
 
 `harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship at the dock, drawn as text in the browser every frame. Each object opens a floating label for one Crewship feature, an ASCII mini map jumps to any of them, and [how.html](public/how.html) explains how it is built. The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
 
+The plaza fountain has an octagonal stone rim, a central spout, and water that uses the existing animation clock.
+Its basin blocks walking, and a blue `O` marks it on the mini map.
+
 It is plain HTML, CSS and JavaScript in `public/`, with no dependencies. Nothing here is part of a host or an image: `.dockerignore` excludes `harbor/`, the playbook never copies it, and `tests/test_harbor_isolation.py` checks both.
 
 ## Content from the repository

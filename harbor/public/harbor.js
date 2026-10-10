@@ -100,12 +100,12 @@ const hash = (a, b) => { const h = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
 // Harbor: quay, breakwater, the dock and what stands on them.
 // The road network: junctions and the links between them. It is drawn on the island and is the route
 // the mini map walks you along (deck, gangway, dock, avenue, plaza, breakwater path).
-const NODES = [[-0.3, -6], [-0.3, -1.2], [-0.3, 5.5], [1.9, -1.2], [4.2, -1.2], [5, 13.5], [5, 19.6], [5, 24.6], [-5, 19.6],
-  [-16, 19.6], [-28, 19.6], [-30, 10], [-30, -14], [14, 19.6], [20, 19.6]];
-const LINKS = [[0, 1], [1, 2], [1, 3], [3, 4], [4, 5], [5, 6], [6, 7], [6, 8], [8, 9], [9, 10], [10, 11], [11, 12], [6, 13], [13, 14]];
+const NODES = [[-0.3, -6], [-0.3, -1.2], [-0.3, 5.5], [1.9, -1.2], [4.2, -1.2], [5, 13.5], [5, 19.6], [7.1, 24.6], [-5, 19.6],
+  [-16, 19.6], [-28, 19.6], [-30, 10], [-30, -14], [14, 19.6], [20, 19.6], [7.1, 21.7]];
+const LINKS = [[0, 1], [1, 2], [1, 3], [3, 4], [4, 5], [5, 6], [6, 15], [6, 8], [8, 9], [9, 10], [10, 11], [11, 12], [6, 13], [13, 14], [15, 7]];
 // Island ways (the links past the dock): concrete from the dock head to the plaza and along the centre of
 // the avenue, narrow dirt trails beyond. [ax, az, dx, dz, length², concrete]
-const CONCRETE = new Set(["5,6", "6,7", "6,8", "6,13"]);
+const CONCRETE = new Set(["5,6", "6,15", "15,7", "6,8", "6,13"]);
 const ROADS = LINKS.slice(5).map(([a, b]) => {
   const [ax, az] = NODES[a], dx = NODES[b][0] - ax, dz = NODES[b][1] - az;
   return [ax, az, dx, dz, dx * dx + dz * dz, CONCRETE.has(`${a},${b}`)];
@@ -279,6 +279,38 @@ for (const x of [-4, 12]) {
 // A mailbox by the office and a notice board on the quay that leads to how this page is built.
 box(world, -0.55, 1.2, 21.4, -0.45, 2.2, 21.5, "t", { spot: "mailbox" });
 box(world, -0.8, 2.2, 21.2, -0.2, 2.7, 21.7, "r", { spot: "mailbox" });
+
+// Plaza fountain: an octagonal stone basin, a raised rim, and four falling streams.
+// Water changes texture with the existing clock; reduced motion freezes that clock.
+function fountainWater(x, y, z) {
+  if (y > 1.75) return Math.sin(y * 14 - T * 5) > 0.7 ? "m:" : "w|";
+  const ripple = Math.sin(Math.hypot(x - 5, z - 24.6) * 16 - T * 3);
+  return ripple > 0.65 ? "m~" : "w.";
+}
+function fountain() {
+  column(world, 5, 24.6, 1.5, 1.5, 1.2, 1.64, "s",
+    { tex: (x, y, z, nx, ny) => ny < 0.5 && y < 1.38 ? "-" : null });
+  column(world, 5, 24.6, 1.29, 1.29, 1.64, 1.7, "w",
+    { solid: false, dim: 2.4, tex: fountainWater });
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4, b = (i + 1) * Math.PI / 4;
+    const end = (angle, y) => [5 + 1.42 * Math.cos(angle), y, 24.6 + 1.42 * Math.sin(angle)];
+    beam(world, end(a, 1.73), end(b, 1.73), "s", {}, 0.17);
+    beam(world, end(a, 1.94), end(b, 1.94), "t", {}, 0.09);
+  }
+  column(world, 5, 24.6, 0.4, 0.24, 1.7, 2.55, "s",
+    { tex: (x, y) => Math.abs(y - 1.95) < 0.06 || Math.abs(y - 2.4) < 0.04 ? "-" : null });
+  column(world, 5, 24.6, 0.24, 0.5, 2.55, 2.75, "t");
+  column(world, 5, 24.6, 0.065, 0.04, 2.75, 3.35, "m", { solid: false, dim: 2.4, tex: fountainWater });
+  for (let i = 0; i < 4; i++) {
+    const a = i * Math.PI / 2, c = Math.cos(a), s = Math.sin(a);
+    const crest = [5 + c * 0.48, 3.1, 24.6 + s * 0.48];
+    beam(world, [5, 3.35, 24.6], crest, "m", { dim: 2.4, tex: fountainWater }, 0.04);
+    beam(world, crest, [5 + c * 0.95, 1.73, 24.6 + s * 0.95], "m",
+      { dim: 2.4, tex: fountainWater }, 0.04);
+  }
+}
+fountain();
 // Landscaping: hedges round the plaza, round trees, lamps along the avenue, a fence on the quay front.
 for (const [x0, x1, z0, z1] of [[1, 2.2, 22, 27.4], [7.8, 9, 22, 27.4], [2.2, 3.4, 27.6, 28.4], [6.6, 7.8, 27.6, 28.4]]) {
   box(world, x0, 1.2, z0, x1, 1.9, z1, "g", { tex: (x, y, z) => (hash(Math.floor(x * 3), Math.floor(z * 3 + y * 3)) < 0.3 ? "-" : null) });
@@ -745,6 +777,8 @@ function mapMarks() {
   for (const s of ship) footprint(s, s.mat === "l" ? "l" : "o");
   ORDER.forEach(mapPoint);
   if (mapMode === 2) mapLabels();
+  const f = toMap(5, 24.6);
+  if (mapInside(f)) mapPut(f[0] + 1, f[1] + 1, "O", "w");
   const p = toMap(me.x, me.z);
   if (mapInside(p)) mapPut(p[0] + 1, p[1] + 1, "^>v<"[Math.round(((me.yaw % 6.283) + 6.283) / 1.5708) % 4], "k");
 }
@@ -926,6 +960,10 @@ function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
     // Grass is drawn as blades leaning with the wind; everything else picks its glyph from the density ramp.
     const grass = ny > 0.7 && (mat === "g" || mat === "G" || mat === "M") && s === TERRAIN;
     ch = grass && b > 0.03 ? blade(px, pz, odd) : glyph(b, odd);
+    if (s.tex === fountainWater) {
+      ch = tex[1];
+      cls = mat + tier(Math.max(0.34, b), 0);
+    }
   }
   // Floors get a negative id: they outline what stands on them but draw no edges themselves.
   put(c, ch, cls, (ny > 0.7 ? -1 : 1) * (s.id * 16 + (k >= 0 ? k >> 2 : 12 - k)), t);
