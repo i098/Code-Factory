@@ -7,15 +7,21 @@ const ctx = canvas.getContext("2d");
 const card = document.getElementById("card");
 // With JavaScript the scene fills the screen and the plain page stays for screen readers only.
 stage.hidden = false;
-const plain = document.getElementById("page");
-plain.classList.add("sr-only");
-// An uncaught error shows the plain page again instead of a frozen or blank scene.
-addEventListener("error", () => { stage.hidden = true; plain.classList.remove("sr-only"); });
 stage.focus({ preventScroll: true });
 const pad = document.getElementById("pad");
 const knob = pad.firstElementChild;
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 const touchFirst = matchMedia("(pointer: coarse)");
+// The intro changes only glyphs: the camera, grid and canvas stay at their final size.
+let introStart = null, introProgress = reduced.matches ? 1 : 0;
+stage.classList.toggle("loading", introProgress < 1);
+function finishIntro() {
+  introProgress = 1;
+  stage.classList.remove("loading");
+  dirty = true;
+  for (const event of ["keydown", "pointerdown", "touchstart", "click", "wheel"]) removeEventListener(event, finishIntro, true);
+}
+for (const event of ["keydown", "pointerdown", "touchstart", "click", "wheel"]) addEventListener(event, finishIntro, { capture: true, passive: true });
 
 // The features come from the plain list, so the scene and the list never disagree.
 const spots = {};
@@ -748,6 +754,11 @@ function beamOn(x, z) {
 
 // Density ramp of shading glyphs, from empty to solid; letters stay for labels and signs only.
 const RAMP = " .`',:;~-=+*#%@▒▓█";
+// One sparse 8x8 tile keeps intro drawing cheap; frames only shift these cached glyphs.
+const INTRO_NOISE = Array.from({ length: 64 }, (_, c) => {
+  const seed = (c * 37) % 97;
+  return seed % 3 ? " " : RAMP[1 + seed % (RAMP.length - 1)];
+});
 const RANGE = { lighthouse: 400, nest: 30, office: 40, antenna: 50, containers: 40, lifeboat: 25, tender: 25 };
 const MOON = (() => { const v = [0.2, 0.3, 0.93], l = Math.hypot(...v); return v.map((c) => c / l); })();
 // Objects whose feature is not in the page's list are scenery.
@@ -816,6 +827,11 @@ function render() {
     const v = (1 - (2 * j + 1) / rows) * tanV;
     rowWorld = scenery.filter((s) => s.j0 <= j && j <= s.j1); rowShip = vessel.filter((s) => s.j0 <= j && j <= s.j1);
     for (let i = 0; i < cols; i++, c++) {
+      // Cells behind the noise are not visible yet; cast only the live scene revealed by the sweep.
+      if (introProgress < 1 && introDistance(i, j) > 0) {
+        put(c, " ", "f", 0, Infinity); SP[c] = null;
+        continue;
+      }
       const h = ((2 * i + 1) / cols - 1) * tanH;
       const dx = fx + rx * h + ux * v, dy = fy + uy * v, dz = fz + rz * h + uz * v, n = Math.sqrt(dx * dx + dy * dy + dz * dz);
       cast(c, i, (i + j) & 1, dx / n, dy / n, dz / n);
@@ -1326,22 +1342,39 @@ function outline(c, i, j) {
   const off = (n, inside) => !inside || SP[n] !== target;
   return slope(off(c - 1, i > 0), off(c + 1, i < cols - 1), off(c - cols, j > 0), off(c + cols, j < rows - 1));
 }
-// Draws the scene as runs of one colour, then the mini map on its own backing above it.
+// Draws rows, then the mini map after the intro or a dark overlay during it.
 function draw(mid) {
   ctx.fillStyle = "#060a14";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  for (let j = 0; j < rows; j++) {
-    let run = "", cur = C[j * cols], from = 0;
-    for (let i = 0; i < cols; i++) {
-      const c = j * cols + i, aim = c === mid, hud = MAPCELLS.has(c);
-      const mark = hud ? " " : aim ? "+" : LINE.get(c) || outline(c, i, j);
-      const cls = hud ? "" : aim ? (target ? "h" : "k") : mark ? "h" : C[c];
-      if (cls !== cur) { paint(run, cur, from, j); run = ""; cur = cls; from = i; }
-      run += mark || edge(c, i, j) || G[c];
-    }
-    paint(run, cur, from, j);
+  const tick = Math.floor(introProgress * 24);
+  for (let j = 0; j < rows; j++) drawRow(mid, j, tick);
+  if (introProgress === 1) drawMap();
+  else {
+    ctx.fillStyle = "#000";
+    ctx.globalAlpha = 1 - introProgress * introProgress;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1;
   }
-  drawMap();
+}
+function introDistance(i, j) {
+  return i / cols * 0.75 + j / rows * 0.25 - (introProgress * 1.35 - 0.2);
+}
+function drawRow(mid, j, tick) {
+  let run = "", cur = C[j * cols], from = 0;
+  const tileRow = ((j + tick) & 7) << 3;
+  for (let i = 0; i < cols; i++) {
+    const c = j * cols + i, aim = c === mid, hud = introProgress === 1 && MAPCELLS.has(c);
+    const distance = introProgress < 1 ? introDistance(i, j) : -1;
+    const noise = distance > 0;
+    const mark = noise ? null : hud ? " " : aim ? "+" : LINE.get(c) || outline(c, i, j);
+    const cls = noise ? distance < 0.08 ? "h" : "f" : hud ? "" : aim ? (target ? "h" : "k") : mark ? "h" : C[c];
+    const ch = noise ? INTRO_NOISE[tileRow + ((i + tick) & 7)] : mark || edge(c, i, j) || G[c];
+    // The intro reuses desktop colour runs; touch draws only single glyphs without building runs.
+    if (introProgress < 1 && touchFirst.matches) { paint(ch, cls, i, j); continue; }
+    if (cls !== cur) { paint(run, cur, from, j); run = ""; cur = cls; from = i; }
+    run += ch;
+  }
+  paint(run, cur, from, j);
 }
 function drawMap() {
   const b = mapBox;
@@ -1526,6 +1559,12 @@ function roomFrameLate(frameMs) {
   paintedLastFrame = false;
   return late;
 }
+function advanceIntro(now, still) {
+  if (introProgress === 1) return;
+  if (introStart === null) introStart = now;
+  introProgress = Math.min(1, (now - introStart) / 1200);
+  if (still || introProgress === 1) finishIntro();
+}
 function frame(now) {
   const frameMs = now - last;
   const dt = Math.min(0.1, frameMs / 1000);
@@ -1533,6 +1572,7 @@ function frame(now) {
   const late = roomFrameLate(frameMs);
   last = now;
   const still = reduced.matches;
+  advanceIntro(now, still);
   if (!still) T += dt;
   // The ship rides the swell too, gently: it is heavy, so half the wave height and a slow roll.
   if (still) { bob = 0; roll = 0; } else { seaNormal(SX, -2); bob = 0.5 * seaHeight(SX, -2) + 0.08 * Math.sin(T * 0.7); roll = -0.35 * Math.atan2(seaN[0], seaN[1]); }

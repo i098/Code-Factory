@@ -4,7 +4,13 @@
 Exterior objects open floating labels for Crewship features, and an ASCII mini map provides routes to them.
 The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
 See [how.html](public/how.html) for the renderer and controls.
-An uncaught error hides the scene and shows the plain page.
+An uncaught error, a resource load error, or an unhandled promise rejection hides the scene and shows the plain page.
+JavaScript hides the plain page before the first paint; visitors without JavaScript still see it.
+The scene starts with a 1.2-second glyph-noise sweep that fades in from black without moving the camera or resizing the grid.
+Any key, click, touch, or mouse wheel input skips the animation.
+Reduced-motion visitors get the scene immediately.
+Waves, the fountain, and boats keep moving during the intro.
+See [how.html](public/how.html) for the intro's rendering details.
 
 The island has staggered plaza paving, scattered stones and grass tufts, varied tree canopies, textured bark, and foam along the shore.
 
@@ -48,6 +54,7 @@ CI loads the built page in Playwright WebKit as an iPhone, with `webkit-check.mj
 The check also fails if the first 30 slow exterior frames change the grid, cell size, field of view, or canvas layout.
 The check walks through the house door and back with the touch pad.
 It fails on a crash, an uncaught error, a console error, a fallback to the plain page, or a multi-glyph `fillText` call.
+It also checks that the first intro frame is black and that the scene keeps moving during the intro.
 See [how.html](public/how.html) for the rendering limits on touch devices.
 To run the check locally:
 

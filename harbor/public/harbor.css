@@ -12,6 +12,7 @@
 * { box-sizing: border-box; }
 
 html { background: var(--bg); color: var(--fg); }
+html.js { background: #000; }
 
 body {
   margin: 0 auto;
@@ -26,7 +27,7 @@ a:hover { color: #b4f2df; }
 code, kbd { font-family: var(--mono); font-size: 0.9em; }
 
 /* With JavaScript the page below is for screen readers only; the scene fills the screen. */
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.js #page { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .top { padding: clamp(20px, 4vw, 44px) 0 18px; display: grid; gap: 10px; }
 .top h1 { margin: 0; font: 700 clamp(30px, 5vw, 46px)/1.1 var(--mono); letter-spacing: 0.02em; }
@@ -41,7 +42,7 @@ code, kbd { font-family: var(--mono); font-size: 0.9em; }
 .stage {
   position: fixed; inset: 0;
   overflow: hidden;
-  background: #060a14;
+  background: #000;
   cursor: crosshair;
   touch-action: none;
   user-select: none;
@@ -51,6 +52,7 @@ code, kbd { font-family: var(--mono); font-size: 0.9em; }
 .stage.mapping { cursor: default; }
 
 #scene { display: block; width: 100%; height: 100%; }
+.stage.loading .card, .stage.loading .pad { visibility: hidden; }
 
 .card {
   position: absolute; left: 0; top: 0;

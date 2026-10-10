@@ -17,7 +17,7 @@
 </pre>
 <h1>How this harbor is built</h1>
 <ul>
-  <li><b>Renderer.</b> Each rendered frame casts one ray per character cell from your eye.
+  <li><b>Renderer.</b> Each rendered frame casts one ray per character cell from your eye, except cells still covered by intro noise.
   Buildings, the dock and the hull are convex solids made of planes.
   Masts, barrels, tree trunks and the lighthouse are true cones with smooth normals.
   Rocks and tree canopies are ellipsoids.
@@ -47,6 +47,11 @@
   Each door crossing requests the same unloaded sample, so timing from the previous scene does not hide room painting load.
   The room redraws only after movement, looking, resizing, or another change that requires a new frame.
   Reduced motion also stops exterior animation.</li>
+  <li><b>Intro rendering.</b> The sweep shifts a single cached 8x8 glyph tile over cells that still hide the scene.
+  It uses the same canvas without a cached scene.
+  Each intro frame ends with a black canvas fill at opacity <code>1 - progress * progress</code>.
+  Desktop drawing keeps the colour runs; touch drawing sends each glyph directly to the existing single-glyph painter.
+  The mini map, feature labels, and touch pad stay hidden until the intro ends.</li>
   <li><b>Controls.</b> WASD or arrows walk and turn, R and F look up and down, the mouse looks around, Enter opens what you point at. On a phone the pad walks and a drag looks. The label floats beside what you point at, with a leader line in text.</li>
   <li><b>Mini map.</b> Outside, M picks a point on the text map in the corner.
   Press M again to fill the screen with the map.
