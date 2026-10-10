@@ -57,8 +57,9 @@
 <details>
 <summary><b>Default config</b></summary>
 
-- Agent harness: [omp](docs/omp.md), default model `anthropic/claude-opus-5-5:xhigh`, advisor off
-- Models: `anthropic/claude-fable-5-1`, `anthropic/claude-haiku-5-5`, `anthropic/claude-opus-5-5`, `anthropic/claude-sonnet-5-5`, `kimi-code/k3`
+- Agent harness: [omp](docs/omp.md), home model `anthropic/claude-opus-5-5:xhigh`, advisor off
+- Models chosen per task: small: Haiku 5.5 or GPT-6 Luna; normal (default): Sonnet 5.5 or GPT-6.1 Sol; hard only: Opus 5.5.
+- The spawning agent picks the thinking level.
 - omp plugins: `ponytail`, `i-have-adhd`, `caveman`
 - omp extension `code-factory-quality-gate`: [sentrux and fallow check](docs/omp.md#quality-gate) at each turn end
 - omp extension `aa-mode-icons`: [mode and hook icons](docs/omp.md#status-line-icons) on the status line
