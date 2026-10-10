@@ -38,7 +38,7 @@ def test_legacy_obscura_keys_are_ignored_with_one_warning_and_apply_proceeds(
     monkeypatch.setattr(
         ship, "provision", lambda document, check: provisioned.append(check) or 0
     )
-    monkeypatch.setattr(ship, "questions", lambda document: 0)
+    monkeypatch.setattr(ship, "questions", lambda document, config_path: 0)
     for host in (current, legacy):
         monkeypatch.setattr(ship.sys, "argv", ["ship.sh", "launch", "--config", str(host)])
         assert ship.main() == 0
@@ -92,12 +92,41 @@ def test_fleet_guards_accept_the_default_document_when_enabled(configuration):
     assert ship.validate_config(configuration) is configuration
 
 
+@pytest.mark.parametrize("enabled", [False, True])
+def test_shared_supabase_profile_accepts_booleans(configuration, enabled):
+    configuration["factory"]["profiles"]["shared_supabase"] = enabled
+    assert ship.validate_config(configuration) is configuration
+
+
+def test_shared_supabase_is_off_for_new_and_legacy_host_configs(configuration):
+    assert configuration["factory"]["profiles"]["shared_supabase"] is False
+    configuration["factory"]["profiles"].pop("shared_supabase")
+    configuration["factory"]["profiles"]["fleet_guards"] = True
+    assert ship.validate_config(configuration) is configuration
+
+
+@pytest.mark.parametrize("value", ["true", 1, None])
+def test_shared_supabase_profile_rejects_non_booleans(configuration, value):
+    configuration["factory"]["profiles"]["shared_supabase"] = value
+    with pytest.raises(ValueError, match="profiles.shared_supabase"):
+        ship.validate_config(configuration)
+
+
+@pytest.mark.parametrize("dependency", ["docker", "firstmate"])
+def test_shared_supabase_requires_its_runtime_profiles(configuration, dependency):
+    configuration["factory"]["profiles"]["shared_supabase"] = True
+    configuration["factory"]["profiles"][dependency] = False
+    with pytest.raises(ValueError, match="shared Supabase requires"):
+        ship.validate_config(configuration)
+
+
+
 def test_browsers_valid_block_accepted(configuration):
     assert ship.validate_config(configuration) is configuration
 
 
 def test_fleet_fixture_archive_cannot_traverse(configuration):
-    configuration["factory"]["profiles"]["fleet_guards"] = True
+    configuration["factory"]["profiles"]["shared_supabase"] = True
     configuration["factory"]["fleet"]["fixture_archive"] = "/home/coder/../root/db.tgz"
     with pytest.raises(ValueError, match="traverse"):
         ship.validate_config(configuration)
@@ -252,13 +281,16 @@ def test_questions_launch_only_on_an_interactive_terminal_outside_ci(
     monkeypatch.setattr(ship.sys.stdin, "isatty", lambda: tty)
     monkeypatch.setenv("CI", ci)
     monkeypatch.setattr(ship.subprocess, "run", fake_omp(launches))
-    assert ship.questions(configuration) == 0
+    assert ship.questions(configuration, tmp_path / "host.yml") == 0
     assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"] * launched
     skipped = capsys.readouterr().out.count("rerun ./ship.sh launch interactively")
     assert skipped == (0 if launched else 1)
 
 
-def test_second_apply_does_not_reopen_the_questions(configuration, tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize("config_source", ["default", "absolute", "relative", "symlink"])
+def test_second_apply_does_not_reopen_the_questions(
+    configuration, tmp_path, monkeypatch, capsys, config_source
+):
     configuration["factory"].update(
         user=ship.pwd.getpwuid(ship.os.getuid()).pw_name,
         home=str(tmp_path),
@@ -266,20 +298,31 @@ def test_second_apply_does_not_reopen_the_questions(configuration, tmp_path, mon
     )
     configuration["factory"]["firstmate"].pop("checklist", None)
     launches = []
-    monkeypatch.setattr(ship, "load_config", lambda path: configuration)
+    monkeypatch.setattr(ship, "ROOT", tmp_path)
+    monkeypatch.setattr(ship, "load_config", lambda path: yaml.safe_load(path.read_text()))
+    host = tmp_path / ".local/host.yml" if config_source == "default" else tmp_path / "selected.yml"
+    host.parent.mkdir(parents=True, exist_ok=True)
+    host.write_text(yaml.safe_dump(configuration))
+    selected = host
+    if config_source == "symlink":
+        selected = tmp_path / "linked.yml"
+        selected.symlink_to(host)
+    monkeypatch.chdir(tmp_path)
+    if config_source == "relative":
+        selected = selected.relative_to(tmp_path)
     monkeypatch.setattr(ship, "provision", lambda document, check: 0)
     monkeypatch.setattr(ship.sys.stdin, "isatty", lambda: True)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(
         ship.subprocess, "run", fake_omp(launches, exits=lambda n: 0 if n > 1 else 1)
     )
-    monkeypatch.setattr(
-        ship.sys, "argv", ["ship.sh", "launch", "--config", str(tmp_path / "host.yml")]
-    )
+    args = [] if config_source == "default" else ["--config", str(selected)]
+    monkeypatch.setattr(ship.sys, "argv", ["ship.sh", "launch", *args])
     marker = tmp_path / ".local/share/code-factory/new-host-questions-done"
     assert ship.main() == 0
     assert not marker.exists()
     assert "New-host questions did not complete (omp exited 1)" in capsys.readouterr().out
+    assert f"factory.profiles.shared_supabase to true in {host.resolve()} " in launches[0][1]
     assert ship.main() == 0
     assert [command[0] for command in launches] == [tmp_path / ".local/bin/omp"] * 2
     assert marker.is_file()
@@ -301,7 +344,7 @@ def test_questions_wait_for_an_omp_sign_in(configuration, tmp_path, monkeypatch,
     monkeypatch.setattr(
         ship.subprocess, "run", fake_omp(launches, models=json.dumps({"models": []}))
     )
-    assert ship.questions(configuration) == 0
+    assert ship.questions(configuration, tmp_path / "host.yml") == 0
     assert launches == []
     assert not (tmp_path / ".local/share/code-factory/new-host-questions-done").exists()
     assert "sign in to omp with /login" in capsys.readouterr().out
@@ -317,7 +360,7 @@ def test_another_accounts_apply_skips_questions_without_reading_the_unreadable_h
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setattr(ship.subprocess, "run", lambda *a, **k: pytest.fail("launched"))
     try:
-        assert ship.questions(configuration) == 0
+        assert ship.questions(configuration, tmp_path / "host.yml") == 0
     finally:
         home.chmod(0o700)
     assert "rerun ./ship.sh launch interactively as another-account" in capsys.readouterr().out
@@ -762,7 +805,9 @@ def _ansible(tmp_path, *argv, wrapper=()):
     )
 
 
-def _installer_also(tmp_path, start_services=True, fleet_guards=False, fleet_browsers=False):
+def _installer_also(
+    tmp_path, start_services=True, fleet_guards=False, fleet_browsers=False, shared_supabase=False
+):
     variables = {
         "factory_cfg": {
             "start_services": start_services,
@@ -770,6 +815,7 @@ def _installer_also(tmp_path, start_services=True, fleet_guards=False, fleet_bro
                 "agents": False,
                 "fleet_guards": fleet_guards,
                 "fleet_browsers": fleet_browsers,
+                "shared_supabase": shared_supabase,
             },
             "browser_prune": {"enabled": False},
         }
@@ -802,12 +848,18 @@ def test_koncreet_is_resolved_only_on_hosts_that_start_services(tmp_path, start_
 
 @pytest.mark.parametrize("fleet_guards", [False, True])
 @pytest.mark.parametrize("fleet_browsers", [False, True])
-def test_each_fleet_profile_resolves_only_its_own_release(tmp_path, fleet_guards, fleet_browsers):
-    # The browser ladder must not depend on the Supabase CLI resolving, and
-    # fleet_guards keeps provisioning the ladder it always has.
-    also = _installer_also(tmp_path, fleet_guards=fleet_guards, fleet_browsers=fleet_browsers)
+@pytest.mark.parametrize("shared_supabase", [False, True])
+def test_each_fleet_profile_resolves_only_its_own_release(
+    tmp_path, fleet_guards, fleet_browsers, shared_supabase
+):
+    also = _installer_also(
+        tmp_path,
+        fleet_guards=fleet_guards,
+        fleet_browsers=fleet_browsers,
+        shared_supabase=shared_supabase,
+    )
     assert ("obscura" in also) is (fleet_guards or fleet_browsers)
-    assert ("supabase" in also) is fleet_guards
+    assert ("supabase" in also) is shared_supabase
 
 
 def _koncreet_settings(tmp_path, tailscale, apply_user):

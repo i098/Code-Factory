@@ -16,6 +16,7 @@ factory:
     tailscale: false
     desktop: false
     fleet_guards: false
+    shared_supabase: false
     fleet_browsers: false
     chat: true
   herdr:
