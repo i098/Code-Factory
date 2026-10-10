@@ -84,7 +84,245 @@ for (const s of world.filter(s => s.anchor === false)) {
             "node",
             "-e",
             "const spots = {office: {}}; const touchFirst = {matches: false};\n"
-            + scene + shading + put + nearby + check,
+            + scene
+            + shading
+            + put
+            + nearby
+            + check,
+        ],
+        check=True,
+        timeout=10,
+    )
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="needs node")
+def test_house_entry_exit_and_room_collisions():
+    source = (ROOT / "harbor/public/harbor.js").read_text()
+    setup = r"""
+const assert = require('node:assert/strict');
+const element = {
+  hidden: false, classList: {add() {}, remove() {}, toggle() {}}, focus() {}, addEventListener() {},
+  firstElementChild: {style: {}}, clientWidth: 600, clientHeight: 400,
+  replaceChildren() {}, getContext: () => ({setTransform() {}, measureText: () => ({width: 6})})
+};
+const document = {getElementById: () => element, querySelectorAll: () => [],
+  documentElement: {}, addEventListener() {}, fonts: {load: () => Promise.resolve(), ready: Promise.resolve()}};
+const matchMedia = () => ({matches: false, addEventListener() {}});
+const getComputedStyle = () => ({getPropertyValue: () => 'monospace'});
+const devicePixelRatio = 1, innerWidth = 600;
+let clock = 0;
+const performance = {now: () => clock};
+const IntersectionObserver = class {observe() {}}, ResizeObserver = class {observe() {}};
+function requestAnimationFrame() {}
+function addEventListener() {}
+function removeEventListener() {}
+const window = {};
+"""
+    check = r"""
+Object.assign(me, {x: -5, z: 20.6, yaw: 0});
+keys.add('f');
+for (let i = 0; i < 4; i++) step(0.02);
+keys.clear();
+step(0);
+assert(insideHouse, 'walking into the door must enter the room');
+assert.equal(floorAt(me.x, me.z), 0);
+assert(!blocked(me.x, me.z, 0), 'entry must leave the player in a clear aisle');
+assert.equal(walkPath.length, 0);
+mapKey({code: 'KeyM'});
+minimap();
+assert.equal(mapMode, 0, 'the island map must not open inside');
+assert.equal(mapBox, null);
+for (const [x, z] of [[-2, 3], [0, 4]]) {
+  assert(blocked(x, z, 0), 'interior furniture must block walking');
+}
+Object.assign(me, {x: 0, z: 0.8, yaw: 0});
+keys.add('f');
+for (let i = 0; i < 60; i++) step(0.02);
+keys.clear();
+assert(me.z > 2.5 && me.z < 3, 'walking must stop at the bed foot');
+keys.add('r');
+for (let i = 0; i < 24; i++) step(0.02);
+keys.clear();
+keys.add('f');
+for (let i = 0; i < 60; i++) step(0.02);
+keys.clear();
+assert(me.z > 5 && !blocked(me.x, me.z, 0), 'the right aisle must reach the window');
+for (const [x, z, yaw] of [[-2.7, 1, -Math.PI/2], [2.7, 1, Math.PI/2], [1.8, 5.4, 0]]) {
+  Object.assign(me, {x, z, yaw});
+  keys.add('f');
+  for (let i = 0; i < 30; i++) step(0.02);
+  keys.clear();
+  assert(insideHouse, 'walking into a wall must not leave the room');
+  assert.notEqual(floorAt(me.x, me.z), null, 'walking must stay within room bounds');
+  assert(!blocked(me.x, me.z, 0));
+}
+Object.assign(me, {x: 0, z: 0.8, yaw: Math.PI});
+stick.y = 1;
+for (let i = 0; i < 8; i++) step(0.02);
+stick.y = 0;
+step(0);
+assert(!insideHouse, 'the touch stick must exit through the door');
+assert.equal(me.yaw, Math.PI);
+assert(me.z < 20.75 && me.z > 19.8, 'exit must land just outside the door');
+assert(!blocked(me.x, me.z, floorAt(me.x, me.z)));
+Object.assign(me, {x: -5, z: 20.6, yaw: 0});
+stick.y = 1;
+for (let i = 0; i < 4; i++) step(0.02);
+stick.y = 0;
+step(0);
+assert(insideHouse, 'the touch stick must enter through the door');
+Object.assign(me, {x: 0, z: 0.8, yaw: Math.PI});
+keys.add('f');
+for (let i = 0; i < 8; i++) step(0.02);
+keys.clear();
+assert(!insideHouse, 'keyboard walking must exit through the door');
+step(0);
+for (const x of [-5.5, -4.5]) {
+  Object.assign(me, {x, z: 20.6, yaw: 0});
+  keys.add('f');
+  for (let i = 0; i < 20; i++) step(0.02);
+  keys.clear();
+  assert(!insideHouse, 'walking into the door frame must not enter');
+  assert(me.z <= 20.75, 'the exterior wall must still block walking');
+}
+for (const channel of ['keyboard', 'touch', 'combined']) {
+  for (const direction of ['f', 'b', 'l', 'r']) {
+    for (const startInside of [false, true]) {
+      keys.clear(); stick.x = stick.y = 0; step(0);
+      insideHouse = startInside;
+      const yaw = {f: 0, b: Math.PI, l: Math.PI / 2, r: -Math.PI / 2}[direction];
+      Object.assign(me, startInside ? {x: 0, z: 0.8, yaw: yaw + Math.PI} : {x: -5, z: 20.6, yaw});
+      if (channel !== 'touch') keys.add(direction);
+      if (channel !== 'keyboard') {
+        stick.y = direction === 'f' ? 1 : direction === 'b' ? -1 : 0;
+        stick.x = direction === 'r' ? 1 : direction === 'l' ? -1 : 0;
+      }
+      for (let i = 0; i < 100; i++) step(0.02);
+      assert.equal(insideHouse, !startInside, `${channel} ${direction}: held input must cross only once`);
+      assert.equal(me.z, startInside ? 20.35 : 0.8);
+      assert.equal(me.yaw, startInside ? Math.PI : 0);
+      if (channel === 'combined') {
+        const heldX = stick.x, heldY = stick.y;
+        stick.x = stick.y = 0;
+        for (let i = 0; i < 30; i++) step(0.02);
+        assert.equal(insideHouse, !startInside, 'a held key must keep the touch release locked');
+        stick.x = heldX; stick.y = heldY;
+        keys.clear();
+        for (let i = 0; i < 30; i++) step(0.02);
+        assert.equal(insideHouse, !startInside, 'a held touch must keep the keyboard release locked');
+      }
+      keys.clear(); stick.x = stick.y = 0; step(0);
+      if (channel === 'keyboard') keys.add('b');
+      else stick.y = -1;
+      for (let i = 0; i < 100; i++) step(0.02);
+      assert.equal(insideHouse, startInside, 'released input must permit the next crossing');
+    }
+  }
+}
+keys.clear(); stick.x = stick.y = 0; step(0);
+let renderCost = 2;
+render = () => { clock += renderCost; };
+for (const roomScene of [false, true]) {
+  insideHouse = roomScene;
+  for (const interval of [1000 / 60, 1000 / 30]) {
+    refreshMs = Infinity; paintedLastFrame = false;
+    scale = 1.5; shadows = false; slow = fast = 0;
+    renderCost = 2;
+    const runFrame = () => { dirty = true; last = clock; clock += interval; frame(clock); };
+    for (let i = 0; i < 91; i++) runFrame();
+    if (roomScene) assert(scale < 1.5, 'a cheap room render must recover detail at either display refresh rate');
+    else assert.equal(scale, 1.5, 'exterior rendering must not change the grid');
+    scale = 1; shadows = true; slow = fast = 0;
+    renderCost = 25;
+    for (let i = 0; i < 42; i++) runFrame();
+    assert.equal(shadows, false, 'expensive rendering must drop shadows');
+    if (roomScene) assert(scale > 1, 'expensive room rendering must reduce detail');
+    else assert.equal(scale, 1, 'expensive exterior rendering must keep the startup grid');
+  }
+}
+insideHouse = true; renderCost = 2;
+let paintQueued = false;
+render = () => { clock += renderCost; paintQueued = true; };
+const paintFrame = (period, paintDelay = 0) => {
+  const interval = period + (paintQueued ? paintDelay : 0);
+  paintQueued = false;
+  dirty = true; last = clock; clock += interval; frame(clock);
+};
+scale = 1; shadows = false; slow = fast = 0;
+refreshMs = Infinity; paintedLastFrame = false;
+keys.add('tr');
+paintFrame(1000 / 60);
+const startYaw = me.yaw;
+for (let i = 0; i < 126; i++) paintFrame(1000 / 30);
+assert.equal(scale, 1, 'a native 60 Hz to 30 Hz switch during held turning must not reduce detail');
+assert(me.yaw > startYaw, 'cadence sampling must not interrupt held turning');
+scale = 1.5; slow = fast = 0;
+for (let i = 0; i < 100; i++) paintFrame(1000 / 30);
+assert(scale < 1.5, 'detail must recover at the changed native cadence during held turning');
+scale = 1.5; slow = fast = 0;
+for (let i = 0; i < 100; i++) paintFrame(1000 / 60);
+assert(scale < 1.5, 'detail must recover when the display returns to 60 Hz');
+keys.clear();
+scale = 1; shadows = false; slow = fast = 0;
+refreshMs = Infinity; paintedLastFrame = false; paintQueued = false;
+paintFrame(1000 / 60);
+for (let i = 0; i < 12; i++) paintFrame(1000 / 60, 1000 / 60);
+for (let i = 0; i < 126; i++) paintFrame(1000 / 30);
+assert.equal(scale, 1, 'a native cadence change must clear prior painting-overload evidence before coarsening');
+for (const period of [1000 / 60, 1000 / 30]) {
+  scale = 1; shadows = true; slow = fast = 0;
+  refreshMs = Infinity; paintedLastFrame = false; paintQueued = false;
+  paintFrame(period);
+  for (let i = 0; i < 60; i++) paintFrame(period, period);
+  assert(!shadows && scale > 1, 'deferred painting must reduce detail after an unloaded cadence sample');
+  const coarseScale = scale;
+  for (let i = 0; i < 100; i++) paintFrame(period);
+  assert(scale < coarseScale, 'detail must recover when deferred painting stops dropping frames');
+}
+for (const period of [1000 / 60, 1000 / 30]) {
+  for (const entryMode of ['frame', 'step']) {
+    keys.clear(); stick.x = stick.y = 0; step(0);
+    insideHouse = false;
+    scale = 1; shadows = false; slow = fast = 0;
+    refreshMs = Infinity; paintedLastFrame = false; paintQueued = false;
+    Object.assign(me, {x: -5, z: 19, yaw: 0});
+    keys.add('tr');
+    paintFrame(period);
+    for (let i = 0; i < 1000; i++) paintFrame(1000 / 30);
+    assert.equal(scale, 1, 'prolonged exterior callback drift must preserve the startup grid');
+    keys.clear();
+    Object.assign(me, {x: -5, z: 20.6, yaw: 0});
+    keys.add('f');
+    if (entryMode === 'step') for (let i = 0; i < 4; i++) step(0.02);
+    const paintDelay = period < 20 ? period : 0;
+    for (let i = 0; i < 5; i++) paintFrame(period, paintDelay);
+    assert(insideHouse, 'the movement path must enter after prolonged exterior timing drift');
+    keys.clear(); step(0); keys.add('tr');
+    const entryYaw = me.yaw;
+    for (let i = 0; i < 80; i++) paintFrame(period, paintDelay);
+    assert(me.yaw > entryYaw, 'room-entry sampling must preserve continuous turning');
+    if (paintDelay) {
+      assert(scale > 1, 'room entry must detect deferred painting despite inherited exterior timing');
+      const coarseScale = scale;
+      for (let i = 0; i < 100; i++) paintFrame(period);
+      assert(scale < coarseScale, 'room detail must recover after entry painting overload ends');
+    } else {
+      assert.equal(scale, 1, 'room entry on a native 30 Hz display must not reduce detail');
+    }
+  }
+}
+keys.clear();
+"""
+    subprocess.run(
+        [
+            "node",
+            "-e",
+            "(async () => {\n"
+            + setup
+            + source
+            + "\nawait new Promise(setImmediate);\n"
+            + check
+            + "\n})().catch(error => { console.error(error); process.exit(1); });",
         ],
         check=True,
         timeout=10,

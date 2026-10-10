@@ -1,4 +1,4 @@
-// Crewship harbor: a first-person 3D scene ray cast into a grid of text, every frame.
+// Crewship harbor: a first-person 3D scene ray cast into a grid of text.
 // Plain JavaScript, no dependencies. The world is a list of convex solids (sets of planes)
 // plus the water plane; the ship's solids live in a frame that bobs and rolls at the dock.
 const stage = document.getElementById("stage");
@@ -29,6 +29,8 @@ const SX = -1.5; // ship centre line (x) and roll axis
 const DECK = 2; // deck height in the ship frame
 const world = [];
 const ship = [];
+const room = [];
+let insideHouse = false;
 
 function solid(list, planes, bb, mat, o) {
   const P = [];
@@ -36,7 +38,7 @@ function solid(list, planes, bb, mat, o) {
     const l = Math.hypot(nx, ny, nz);
     P.push(nx / l, ny / l, nz / l, (nx * px + ny * py + nz * pz) / l);
   }
-  const s = { id: world.length + ship.length + 1, P: new Float64Array(P), bb, mat, spot: null, solid: true, tex: null, ...o };
+  const s = { id: world.length + ship.length + room.length + 1, P: new Float64Array(P), bb, mat, spot: null, solid: true, tex: null, ...o };
   list.push(s);
   return s;
 }
@@ -472,6 +474,85 @@ const gangway = solid(world, [[0, 1, 0, 0, 0, 0], [0, -1, 0, 0, 0, 0], [1, 0, 0,
   [-1, 0, 0, 0.55, 0, 0], [0, 0, 1, 0, 0, -0.6], [0, 0, -1, 0, 0, -1.8]], [0.55, 0, -1.8, 3.1, 0, -0.6], "o",
 { spot: "gangway", solid: false, tex: (x) => ((x + 9) % 0.5 < 0.07 ? "-" : null) });
 
+// ---- House interior: a separate room, with the same materials and glyph renderer ------------
+function roomFloor(x, y, z) {
+  return (x + 9) % 0.55 < 0.025 || (z + 9) % 2 < 0.025 ? "-" : null;
+}
+function roomWindow(x, y) {
+  return hash(Math.floor(x * 12), Math.floor(y * 12)) > 0.985 ? "*" : ".";
+}
+function buildRoom() {
+  box(room, -3.2, -0.2, -0.2, 3.2, 0, 6.2, "o", { tex: roomFloor, dim: 0.4 });
+  const plaster = { dim: 0.32 };
+  box(room, -3.2, 3.4, -0.2, 3.2, 3.6, 6.2, "s", plaster);
+  for (const [x0, x1] of [[-3.2, -3], [3, 3.2]]) box(room, x0, 0, 0, x1, 3.4, 6, "s", plaster);
+  box(room, -3, 0, 6, 3, 3.4, 6.2, "s", plaster);
+  for (const [x0, x1] of [[-3, -0.7], [0.7, 3]]) box(room, x0, 0, -0.2, x1, 3.4, 0, "s", plaster);
+  box(room, -0.7, 2.4, -0.2, 0.7, 3.4, 0, "s", plaster);
+  box(room, -0.7, 0, -0.15, 0.7, 2.4, -0.1, "d", { solid: false });
+  for (const x of [-0.75, 0.65]) box(room, x, 0, 0, x + 0.1, 2.45, 0.12, "o");
+  box(room, -0.75, 2.4, 0, 0.75, 2.5, 0.12, "o");
+  box(room, -1.5, 1.3, 5.84, 1.5, 2.8, 5.95, "d", { tex: roomWindow });
+  for (const x of [-1.6, -0.04, 1.5]) box(room, x, 1.2, 5.75, x + 0.1, 2.9, 6, "o");
+  for (const y of [1.2, 2.1, 2.8]) box(room, -1.6, y, 5.75, 1.6, y + 0.1, 6, "o");
+  // The bed faces the doorway; the right aisle stays clear for walking to the window.
+  box(room, -2.6, 0.9, 2.4, -1.1, 1.05, 3.6, "o");
+  for (const x of [-2.5, -1.3]) for (const z of [2.5, 3.4]) box(room, x, 0, z, x + 0.12, 0.9, z + 0.12, "o");
+  box(room, -0.6, 0.3, 3.2, 1, 0.6, 5.4, "o");
+  box(room, -0.6, 0.6, 3.2, 1, 0.85, 5.4, "b");
+  box(room, -0.4, 0.85, 4.8, 0.8, 1.05, 5.25, "s");
+  box(room, -0.7, 0.3, 5.4, 1.1, 1.2, 5.52, "o");
+  box(room, -0.7, 0.3, 3.08, 1.1, 0.75, 3.2, "o");
+  for (const x of [-0.55, 0.85]) for (const z of [3.2, 5.3]) box(room, x, 0, z, x + 0.1, 0.3, z + 0.1, "o");
+  column(room, -2.2, 2.9, 0.12, 0.1, 1.05, 1.7, "t");
+  column(room, -2.2, 2.9, 0.35, 0.2, 1.7, 2.1, "l");
+}
+buildRoom();
+
+function roomFloorAt(x, z) {
+  return x >= -2.75 && x <= 2.75 && z >= 0.25 && z <= 5.75 ? 0 : null;
+}
+function roomBlocked(x, z, fy) {
+  return room.some((s) => walkingSolid(s, fy) && x > walkBound(s.bb, 0) && x < walkBound(s.bb, 3) &&
+    z > walkBound(s.bb, 2) && z < walkBound(s.bb, 5));
+}
+function crossHouseDoor(x, z) {
+  const crossing = insideHouse ? me.z >= 0.35 && z < 0.35 && Math.abs(x) < 0.42 :
+    me.z <= 20.75 && z > 20.75 && z < 21.2 && Math.abs(x + 5) < 0.42;
+  if (!crossing) return false;
+  insideHouse = !insideHouse;
+  probeMs = -1;
+  slow = fast = 0;
+  layoutDirty = true;
+  doorInputHeld = true;
+  Object.assign(me, insideHouse ? { x: 0, z: 0.8, yaw: 0, pitch: 0 } : { x: -5, z: 20.35, yaw: Math.PI, pitch: 0 });
+  walkPath = []; walkTo = jumped = null;
+  setMap(0); mapBox = null; MAPCELLS.clear(); LINE.clear();
+  moved = dirty = true;
+  show(null);
+  return true;
+}
+function movePlayer(x, z, here) {
+  if (doorInputHeld) return;
+  if (crossHouseDoor(x, z)) return;
+  const fy = floorAt(x, z);
+  if (fy !== null && Math.abs(fy - here) <= 0.6 && !blocked(x, z, fy)) { me.x = x; me.z = z; }
+}
+function roomLight(x, y, z, nx, ny, nz) {
+  const lx = -2.2 - x, ly = 1.9 - y, lz = 2.9 - z, d = Math.hypot(lx, ly, lz);
+  const warm = 0.28 + 0.85 * Math.max(0, 1 - d / 9) * (0.35 + 0.65 * Math.max(0, (nx * lx + ny * ly + nz * lz) / d));
+  return [warm + 0.06, warm / (warm + 0.06)];
+}
+function castRoom(c, i, odd, dx, dy, dz) {
+  hitT = Infinity; hitS = null; SP[c] = null;
+  trace(rowWorld, i, cam.x, cam.y, cam.z, dx, dy, dz);
+  if (hitS && hitS.tex === roomWindow) {
+    const star = roomWindow(cam.x + dx * hitT, cam.y + dy * hitT) === "*";
+    put(c, star ? "*" : ".", star ? "m5" : "d2", hitS.id * 16 + (hitK >> 2), hitT);
+  } else if (hitS) shadeSolid(c, odd, false, dx, dy, dz, dx, dy);
+  else shadeSky(c, dx, dy, dz);
+}
+
 // ---- Motion state ------------------------------------------------------------------------
 let T = 0, bob = 0, roll = 0, rc = 1, rs = 0;
 const deckAt = (x) => bob + DECK * rc + rs * (x - SX);
@@ -489,6 +570,7 @@ const FLOORS = [
   [3, 7, -16, 14, () => 1.2],
 ];
 function floorAt(x, z) {
+  if (insideHouse) return roomFloorAt(x, z);
   const f = FLOORS.find(([x0, x1, z0, z1]) => x >= x0 && x < x1 && z >= z0 && z < z1);
   if (f) return f[4](x, z);
   const y = terrainY(x, z);
@@ -497,6 +579,7 @@ function floorAt(x, z) {
 const walkBound = (b, k) => b[k] + (k < 3 ? -0.25 : 0.25);
 const walkingSolid = (s, fy, lift = 0) => s.solid && s.bb[1] + lift < fy + 1.7 && s.bb[4] + lift > fy + 0.3;
 function blocked(x, z, fy) {
+  if (insideHouse) return roomBlocked(x, z, fy);
   for (const list of [world, ship]) {
     const lift = list === ship ? bob : 0;
     for (const s of list) {
@@ -512,6 +595,10 @@ const me = { x: 0, z: -7.4, yaw: 0.2, pitch: 0.03 };
 const keys = new Set();
 const stick = { x: 0, y: 0 };
 let moved = false;
+let doorInputHeld = false;
+function releaseDoorInput() {
+  if (!keys.has("f") && !keys.has("b") && !keys.has("l") && !keys.has("r") && !stick.x && !stick.y) doorInputHeld = false;
+}
 
 // ---- Ray casting -------------------------------------------------------------------------
 let hitT, hitS, hitK;
@@ -628,6 +715,7 @@ function moveLights() {
 }
 // Light reaching a point with normal n: [brightness, share of it from lamps].
 function lightAt(x, y, z, nx, ny, nz) {
+  if (insideHouse) return roomLight(x, y, z, nx, ny, nz);
   const moon = 0.035 + 0.17 * Math.max(0, nx * MOON[0] + ny * MOON[1] + nz * MOON[2]) + 0.04 * Math.max(0, ny);
   let warm = 0;
   for (const L of LIGHTGRID.get(Math.floor(x / TILE) * 1000 + Math.floor(z / TILE)) || NONE) {
@@ -675,7 +763,7 @@ for (const [list, lift] of [[world, 0], [ship, 1]]) {
 }
 for (const a of Object.values(anchors)) { a.x /= a.n; a.y /= a.n; a.z /= a.n; }
 
-let cols = 0, rows = 0, cellW = 8, cellH = 13, target = null, padX = 0, padY = 0, aspect = 1, viewW = 0, viewH = 0;
+let cols = 0, rows = 0, cellW = 8, cellH = 13, scale = 1, target = null, padX = 0, padY = 0, aspect = 1, viewW = 0, viewH = 0;
 const safe = { left: 0, right: 0, top: 0, bottom: 0 };
 const MONO = getComputedStyle(document.documentElement).getPropertyValue("--mono");
 const BASE = { "": "#5c6a88", k: "#e9eefb", w: "#3f78b8", d: "#22406a", m: "#a9c8f0", o: "#dba66b", s: "#efe6cf",
@@ -698,7 +786,7 @@ function measure() {
   // Reset the backing store only for a real size change, immediately before drawing.
   if (canvas.width !== Math.round(w * dpr)) canvas.width = Math.round(w * dpr);
   if (canvas.height !== Math.round(h * dpr)) canvas.height = Math.round(h * dpr);
-  const px = Math.max(6.5, Math.min(11, innerWidth * 0.0068));
+  const px = Math.max(6.5, Math.min(11, innerWidth * 0.0068)) * (insideHouse ? scale : 1);
   aspect = w / h;
   viewW = w; viewH = h;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -713,6 +801,7 @@ function measure() {
   stage.style.setProperty("--map-width", `${32 * cellW + 8}px`);
   G = new Array(cols * rows); C = new Array(cols * rows);
   ID = new Int32Array(cols * rows); D = new Float32Array(cols * rows); SP = new Array(cols * rows);
+  dirty = true; // Changing canvas size clears it, including an idle room's last frame.
 }
 
 // Per-cell glyph, colour class, surface id (solid and face) and depth; the edge pass reads them.
@@ -725,17 +814,18 @@ function render() {
   Object.assign(cam, { x: me.x, y: me.eye, z: me.z, f: [fx, fy, fz], r: [rx, 0, rz], u: [ux, uy, uz], tanH, tanV });
   // Camera origin in the ship frame (rotate by -roll about the ship's long axis, after the bob).
   cam.lx = rc * (me.x - SX) + rs * (me.eye - bob) + SX; cam.ly = -rs * (me.x - SX) + rc * (me.eye - bob);
-  cull(world, false); cull(ship, true);
+  const scenery = insideHouse ? room : world, vessel = insideHouse ? NONE : ship;
+  cull(scenery, false); cull(vessel, true);
   for (let j = 0, c = 0; j < rows; j++) {
     const v = (1 - (2 * j + 1) / rows) * tanV;
-    rowWorld = world.filter((s) => s.j0 <= j && j <= s.j1); rowShip = ship.filter((s) => s.j0 <= j && j <= s.j1);
+    rowWorld = scenery.filter((s) => s.j0 <= j && j <= s.j1); rowShip = vessel.filter((s) => s.j0 <= j && j <= s.j1);
     for (let i = 0; i < cols; i++, c++) {
       const h = ((2 * i + 1) / cols - 1) * tanH;
       const dx = fx + rx * h + ux * v, dy = fy + uy * v, dz = fz + rz * h + uz * v, n = Math.sqrt(dx * dx + dy * dy + dz * dz);
       cast(c, i, (i + j) & 1, dx / n, dy / n, dz / n);
     }
   }
-  gulls();
+  if (!insideHouse) gulls();
   const mid = (rows >> 1) * cols + (cols >> 1);
   const spot = SP[mid], looked = spot && D[mid] < (RANGE[spot] || 12);
   show(moved ? jumped || (looked ? spot : nearby()) : null);
@@ -828,6 +918,7 @@ const MAPCELLS = new Map();
 let mapMode = 0, pick = 0, jumped = null, mapBox = null; // mapMode: 0 idle, 1 picking, 2 full screen
 function minimap() {
   MAPCELLS.clear();
+  if (insideHouse) { mapBox = null; return; }
   const left = Math.max(1, Math.ceil((safe.left - padX) / cellW)), right = Math.max(1, Math.ceil((safe.right - padX) / cellW));
   const top = Math.max(1, Math.ceil((safe.top - padY) / cellH)), bottom = Math.max(1, Math.ceil((safe.bottom - padY) / cellH));
   const full = mapMode === 2, w = full ? cols - left - right : Math.min(30, cols - left - right), h = full ? rows - top - bottom : Math.min(15, rows - top - bottom);
@@ -1009,6 +1100,7 @@ function setMap(mode) {
 }
 // M picks on the map, M again fills the screen, M or Escape closes; arrows or the mouse choose, Enter goes.
 function mapKey(e) {
+  if (insideHouse) return e.code === "KeyM";
   if (e.code === "KeyM") setMap((mapMode + 1) % 3);
   else if (!mapMode) return false;
   else if (e.key === "Escape") setMap(0);
@@ -1053,6 +1145,7 @@ function tapMap(cx, cy) {
 
 // One ray: the nearest of the solids, the moving sea surface and the sky decides the cell.
 function cast(c, i, odd, dx, dy, dz) {
+  if (insideHouse) { castRoom(c, i, odd, dx, dy, dz); return; }
   hitT = Infinity; hitS = null;
   trace(rowWorld, i, cam.x, cam.y, cam.z, dx, dy, dz);
   const wS = hitS;
@@ -1100,7 +1193,7 @@ function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
     // Contact shadow: walls darken toward the ground they stand on.
     const ao = ny > 0.7 ? 1 : Math.min(1, 0.55 + 0.5 * (wy - (onShip ? bob + DECK : floorAt(wx, pz) ?? 0)));
     const fog = Math.exp(-t * 0.016), b = (lit * dim * ao * (0.8 + 0.2 * Math.max(0, -(nx * dx + ny * dy + nz * dz)))) * fog + 0.02 * (1 - fog);
-    cls = mat + tier(b, warm);
+    cls = mat + tier(b, insideHouse && mat === "b" ? 0 : warm);
     // Grass blades lean with the wind; fountain water keeps its texture glyphs below.
     const grass = ny > 0.7 && (mat === "g" || mat === "G" || mat === "M") && s === TERRAIN;
     ch = grass && b > 0.03 ? blade(px, pz, odd) : glyph(b, odd);
@@ -1284,6 +1377,7 @@ function paint(run, cls, i, j) {
 }
 
 function nearby() {
+  if (insideHouse) return null;
   let best = null, bd = 2.2;
   for (const [id, a] of Object.entries(anchors)) {
     const d = Math.hypot(a.x - me.x, a.z - me.z);
@@ -1340,8 +1434,8 @@ stage.addEventListener("keydown", (e) => {
   e.preventDefault();
   keys.add(k);
 });
-stage.addEventListener("keyup", (e) => keys.delete(KEYS[e.code]));
-stage.addEventListener("blur", () => keys.clear());
+stage.addEventListener("keyup", (e) => { keys.delete(KEYS[e.code]); releaseDoorInput(); });
+stage.addEventListener("blur", () => { keys.clear(); releaseDoorInput(); });
 const look = (dx, dy, k) => {
   me.yaw += dx * k;
   me.pitch = Math.max(-1.2, Math.min(1.2, me.pitch - dy * k));
@@ -1365,6 +1459,7 @@ function steer(e) {
   const l = Math.hypot(x, y);
   if (l > 1) { x /= l; y /= l; }
   stick.x = x; stick.y = -y;
+  releaseDoorInput();
   knob.style.transform = `translate(${x * half * 0.6}px, ${y * half * 0.6}px)`;
 }
 // The intro card folds away on the first tap or click, as it does on the first step.
@@ -1385,11 +1480,13 @@ stage.addEventListener("pointermove", (e) => {
 const release = (e) => {
   if (e.pointerId === padId) { padId = null; stick.x = stick.y = 0; knob.style.transform = ""; }
   if (e.pointerId === lookId) lookId = null;
+  releaseDoorInput();
 };
 stage.addEventListener("pointerup", release);
 stage.addEventListener("pointercancel", release);
 
 function step(dt) {
+  releaseDoorInput();
   const turn = (keys.has("tr") ? 1 : 0) - (keys.has("tl") ? 1 : 0);
   const tilt = (keys.has("u") ? 1 : 0) - (keys.has("d") ? 1 : 0);
   const fwd = (keys.has("f") ? 1 : 0) - (keys.has("b") ? 1 : 0) + stick.y;
@@ -1400,18 +1497,14 @@ function step(dt) {
   me.pitch = Math.max(-1.2, Math.min(1.2, me.pitch + tilt * 1.2 * dt));
   const c = Math.cos(me.yaw), s = Math.sin(me.yaw), v = 3.4 * dt;
   const here = floorAt(me.x, me.z);
-  const walk = (x, z) => {
-    const fy = floorAt(x, z);
-    if (fy === null || Math.abs(fy - here) > 0.6 || blocked(x, z, fy)) return;
-    me.x = x; me.z = z;
-  };
-  walk(me.x + (s * fwd + c * side) * v, me.z);
-  walk(me.x, me.z + (c * fwd - s * side) * v);
+  movePlayer(me.x + (s * fwd + c * side) * v, me.z, here);
+  movePlayer(me.x, me.z + (c * fwd - s * side) * v, here);
   return true;
 }
 
 // ---- Loop --------------------------------------------------------------------------------
-let last = performance.now(), dirty = true, visible = true, slow = 0, layoutDirty = false, resizeTimer;
+let last = performance.now(), dirty = true, visible = true, slow = 0, fast = 0, layoutDirty = false, resizeTimer;
+let refreshMs = Infinity, paintedLastFrame = false, probeMs = 0;
 new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(stage);
 const resize = new ResizeObserver(() => {
   if (stage.clientWidth === viewW && stage.clientHeight === viewH) return;
@@ -1419,8 +1512,34 @@ const resize = new ResizeObserver(() => {
   resizeTimer = setTimeout(() => { layoutDirty = true; dirty = true; }, 120);
 });
 reduced.addEventListener("change", () => { dirty = true; });
+// Adaptive resolution: drop shadows, then grow glyphs; restore detail when frames run short.
+function adaptResolution(ms, late) {
+  slow = ms > 20 || late ? slow + 1 : 0;
+  fast = ms < 9 && !late ? fast + 1 : 0;
+  if (!insideHouse) {
+    if (slow > 20 && shadows) { shadows = false; slow = 0; dirty = true; }
+    return;
+  }
+  if (slow > 20 && (shadows || scale < 2.2)) {
+    if (shadows) shadows = false;
+    else { scale *= 1.15; layoutDirty = dirty = true; }
+    slow = 0;
+  } else if (fast > 90 && scale > 1) {
+    scale = Math.max(1, scale / 1.1); layoutDirty = dirty = true; fast = 0;
+  }
+}
+function roomFrameLate(frameMs) {
+  if (frameMs > 0) refreshMs = paintedLastFrame ? Math.min(frameMs, refreshMs * 1.001) : frameMs;
+  const late = insideHouse && (paintedLastFrame ? frameMs : probeMs) > refreshMs * 1.5;
+  probeMs = Math.min(0, probeMs);
+  paintedLastFrame = false;
+  return late;
+}
 function frame(now) {
-  const dt = Math.min(0.1, (now - last) / 1000);
+  const frameMs = now - last;
+  const dt = Math.min(0.1, frameMs / 1000);
+  const probing = probeMs > 0;
+  const late = roomFrameLate(frameMs);
   last = now;
   const still = reduced.matches;
   if (!still) T += dt;
@@ -1428,20 +1547,28 @@ function frame(now) {
   if (still) { bob = 0; roll = 0; } else { seaNormal(SX, -2); bob = 0.5 * seaHeight(SX, -2) + 0.08 * Math.sin(T * 0.7); roll = -0.35 * Math.atan2(seaN[0], seaN[1]); }
   rc = Math.cos(roll); rs = Math.sin(roll);
   const walked = step(dt);
-  if (visible && cols && (walked || dirty || !still)) {
+  // The room has no animated objects; repaint only after movement, looking, or resizing.
+  if (visible && cols && (walked || dirty || (!insideHouse && !still))) {
+    if (probeMs < 0 || (late && slow % 20 === 0 && !probing)) {
+      probeMs = frameMs;
+      dirty = true;
+      requestAnimationFrame(frame);
+      return;
+    }
     if (layoutDirty) { measure(); layoutDirty = false; }
     dirty = false;
-    setGangway();
-    moveLights();
-    floatBoats();
-    swayTrees();
+    if (!insideHouse) {
+      setGangway();
+      moveLights();
+      floatBoats();
+      swayTrees();
+    }
     me.eye = floorAt(me.x, me.z) + 1.6;
     const t0 = performance.now();
     render();
     const ms = performance.now() - t0;
-    slow = ms > 20 ? slow + 1 : 0;
-    // Slow frames can drop shadow rays, but never change the grid or clear a drawn frame.
-    if (slow > 20 && shadows) { shadows = false; slow = 0; dirty = true; }
+    adaptResolution(ms, late);
+    paintedLastFrame = true;
   }
   requestAnimationFrame(frame);
 }
