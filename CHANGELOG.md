@@ -11,9 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Optional `skills.private_source` host setting (a local directory or a git URL, with an optional `skills.private_ref`) that fills `skills/private/` before the skills install; git uses the account's own sign-in, without the setting nothing is fetched, and removing it removes the skills an earlier fill added ([#57](https://github.com/i098/Crewship/issues/57)).
 - README: a Built with section that lists each third-party project Crewship installs or builds on, with a link and its license ([#73](https://github.com/i098/Crewship/issues/73)).
 - Eleven public skills in `skills/public/` with general working rules: code navigation, engineering standards, git and PR habits, IEEE documentation, operating rules, Opus speed, process safety, progress bars, quality gates, talk style, and tooling conventions; a test fails when a public skill holds a private detail such as a home path, an email or a host address ([#85](https://github.com/i098/Crewship/issues/85)).
 - Generic global instructions in `config/AGENTS.md`, installed by the `agents` profile as `~/.claude/CLAUDE.md`, `~/.omp/agent/AGENTS.md` and `~/.codex/AGENTS.md`; a file changed on the host is moved to a timestamped backup first, and an unchanged apply changes nothing ([#86](https://github.com/i098/Crewship/issues/86)).
+- Optional crew board (`factory.board`, `./ship.sh dock --board`, or a new-host question): apply builds `crewboard/` with cargo and runs it as the user service `crewboard.service` with a memory limit; without the key, apply stops and removes the service and the binary ([#95](https://github.com/i098/Crewship/issues/95)).
 
 ### Changed
 
