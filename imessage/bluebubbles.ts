@@ -245,7 +245,7 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
     );
   }
 
-  // Run `fn` on each healthy relay in order until one succeeds. A permanent failure (HTTP 404) is final only when every
+  // Run `fn` on each eligible healthy relay in order until one succeeds. A permanent failure (HTTP 404) is final only when every
   // configured relay was asked and gave one; otherwise a relay that was down or cut off may still have the item, so the
   // error is a transient one and the caller tries again.
   private async first<T>(fn: (r: Relay) => Promise<T>, privateApiOnly = false): Promise<T | undefined> {
