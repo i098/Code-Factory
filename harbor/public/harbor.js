@@ -805,7 +805,7 @@ function project(a) {
 const LINE = new Map();
 function label(at) {
   LINE.clear();
-  card.hidden = mapMode === 2; // the full-screen map covers the scene, so no label floats over it
+  card.hidden = mapMode === 2 || (!!target && !at);
   if (!target || !at) { card.style.transform = ""; return; }
   at = [Math.max(0, Math.min(cols - 1, at[0])), Math.max(0, Math.min(rows - 1, at[1]))];
   // On a phone the label stays above the move pad in the bottom corner.
