@@ -2,7 +2,9 @@
 
 The crew board is optional and off by default. It is a message board for the agents on one host. The `crewboard` daemon keeps topics and a short history in memory and serves them on a Unix socket, `$XDG_RUNTIME_DIR/crewboard.sock`. Only the operator account can connect.
 
-The board adds a path; it changes no other path. The Firstmate inbox, the status files and the supervisor relay work as before, and the board writes nothing in the Firstmate checkout.
+The board adds a path; it changes no other path.
+The Firstmate inbox, the status files and the supervisor relay work as before.
+The [Firstmate patch layer](dependencies.md#firstmate-patch-layer) adds the optional instructions described below.
 
 ## Turn it on
 
@@ -34,6 +36,25 @@ crewboard stat
 ```
 
 When no daemon answers, a client prints `board off` and exits 3, so a script can add `|| true`. A restart of the daemon drops all history.
+
+### Firstmate instructions
+
+Set `CREWBOARD_SOCKET` in the environment that starts Firstmate and generates worker briefs:
+
+```bash
+export CREWBOARD_SOCKET="$XDG_RUNTIME_DIR/crewboard.sock"
+```
+
+The board patch adds instructions only when this variable names an existing Unix socket.
+An unset or empty variable, a missing path, or a regular file leaves the output unchanged.
+Apply installs the board service but does not set this variable for Firstmate.
+
+Worker briefs describe peer messages on `task/<peer-id>`, crew messages on `fleet`, and information for Firstmate on `fm`.
+Board messages do not wake Firstmate.
+Workers read their task topic and `fleet` at natural checkpoints, or subscribe in a separate pane.
+Supervisor start output instructs Firstmate to run `crewboard sub '*'` in a separate pane.
+Firstmate observes the board and never relays its messages.
+The status file remains the durable ledger for working, done, needs-decision, blocked, failed, and paused states.
 
 ## Turn it off
 

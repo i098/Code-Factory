@@ -1,8 +1,8 @@
 """tasks/firstmate.yml keeps the checkout at origin/main plus patches/firstmate/.
 
-Each test drives the real task file with ansible-playbook against throwaway local
-repositories: an upstream bare repository, a clone to push upstream changes
-from, and two format-patch files made against upstream main.
+Patch-layer tests drive the real task file with ansible-playbook against
+throwaway repositories and two generated patches.
+Crew board tests apply the carried patch to an exported upstream checkout.
 """
 
 import getpass
@@ -259,6 +259,8 @@ def crewboard_firstmate(tmp_path):
     for script in scripts:
         shutil.copyfile(checkout / "bin" / script, checkout / "bin" / f"baseline-{script}")
     patch = ROOT / "patches/firstmate/0003-brief-crewboard.patch"
+    # Keep git apply from finding a parent repository and skipping these paths.
+    subprocess.run(["git", "init", "-q", str(checkout)], check=True)
     subprocess.run(["git", "apply", "--check", str(patch)], cwd=checkout, check=True)
     subprocess.run(["git", "apply", str(patch)], cwd=checkout, check=True)
     for script in scripts:
@@ -274,7 +276,7 @@ def crewboard_firstmate(tmp_path):
         ["sample", "--secondmate", "--no-projects"],
     ],
 )
-def test_crewboard_brief_output(crewboard_firstmate, tmp_path, arguments):
+def test_crewboard_brief_output(crewboard_firstmate, tmp_path, arguments, monkeypatch):
     checkout = crewboard_firstmate
     home = tmp_path / "home"
     home.mkdir()
@@ -300,7 +302,10 @@ def test_crewboard_brief_output(crewboard_firstmate, tmp_path, arguments):
 
     with socket.socket(socket.AF_UNIX) as board:
         path = tmp_path / "board.sock"
-        board.bind(str(path))
+        # Bind relative to avoid the Unix socket path limit in deep worktrees.
+        with monkeypatch.context() as context:
+            context.chdir(tmp_path)
+            board.bind(path.name)
         board.listen()
         env["CREWBOARD_SOCKET"] = str(path)
         enabled = render("fm-brief.sh")
@@ -320,7 +325,7 @@ def test_crewboard_brief_output(crewboard_firstmate, tmp_path, arguments):
 
 
 @pytest.mark.parametrize("harness", ["claude", "codex", "opencode", "pi", "grok", "cursor", "omp", "unknown"])
-def test_crewboard_supervisor_output(crewboard_firstmate, tmp_path, harness):
+def test_crewboard_supervisor_output(crewboard_firstmate, tmp_path, harness, monkeypatch):
     checkout = crewboard_firstmate
     env = {**os.environ, "FM_HOME": str(tmp_path / "home")}
     env.pop("CREWBOARD_SOCKET", None)
@@ -343,7 +348,10 @@ def test_crewboard_supervisor_output(crewboard_firstmate, tmp_path, harness):
 
     with socket.socket(socket.AF_UNIX) as board:
         path = tmp_path / "board.sock"
-        board.bind(str(path))
+        # Bind relative to avoid the Unix socket path limit in deep worktrees.
+        with monkeypatch.context() as context:
+            context.chdir(tmp_path)
+            board.bind(path.name)
         board.listen()
         env["CREWBOARD_SOCKET"] = str(path)
         enabled = render("fm-supervision-instructions.sh")
