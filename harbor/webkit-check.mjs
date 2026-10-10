@@ -36,7 +36,7 @@ render = function() {
   const start = performance.now();
   renderScene();
   window.frames.push([cols, rows, cellW, cellH, cam.tanH, cam.tanV, canvas.width, canvas.height]);
-  if (window.frames.length <= 30) while (performance.now() - start < 25) {}
+  while (performance.now() - start < 25) {}
 };
     window.harborCheck = {
       place(x, z, yaw) { Object.assign(me, {x, z, yaw, pitch: 0}); moved = dirty = true; },
