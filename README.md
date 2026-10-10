@@ -31,19 +31,50 @@
 
 - [Herdr workspace](docs/herdr.md): a sidebar of spaces and agents, with live status for each lane
 - [omp agents](docs/omp.md): sign-in, model roles, fallbacks, and the advisor
-- [Fleet guards](docs/fleet-guards.md): shared Supabase, Docker guard, dev-server reaper, storage guard, browser ladder
+- [Private skills](docs/omp.md#skills): host-only skills in `skills/private/` (opt-in)
+- [Fleet guards](docs/fleet-guards.md): shared Supabase, Docker guard, dev-server reaper, storage guard (opt-in)
+- [Browser ladder](docs/fleet-guards.md#browser-ladder): Obscura, Chrome, and noVNC tiers for agent browsers (opt-in)
 - [Capacity and auto pruners](docs/capacity.md): host sizing per lane count, and cleanup timers
-- [Self-hosted CI pool](docs/ci-pool.md): GitHub Actions runners, one job per fresh container
+- [Data disk](docs/configuration.md#data-disk): Docker and the npm and pip caches on a second disk (opt-in)
+- [Self-hosted CI pool](docs/ci-pool.md): GitHub Actions runners, one job per fresh container (opt-in)
+- [Crew board](docs/board.md): host-local message board for agents on one host (opt-in)
 - [Chat clients](docs/chat.md): Concord (Discord) and slk (Slack) in the terminal
-- [GitHub board](docs/github-board.md): agent work as issues on a Project board, and a shared message board
-- [iMessage bridge](docs/imessage.md): text Firstmate from your phone
+- [GitHub board](docs/github-board.md): agent work as issues on a Project board, and a shared message board (opt-in)
+- [iMessage bridge](docs/imessage.md): text Firstmate from your phone (opt-in)
+- [Host-move checklist](docs/configuration.md#new-host-questions): new-host questions that follow your own checklist (opt-in)
 - [Shared credentials](docs/secrets.md): `super.env` in Cloudflare Secrets Store
 - [Google Workspace CLI](docs/google-workspace.md): `gws` with several Google accounts on a headless host
 - [herdr-patch](herdr-patch/README.md): Herdr over mosh with real images
 - [Checksum-verified toolchain](docs/dependencies.md): every tool, package, and image the recipe installs
 - [Migration and recovery](docs/recovery.md): new-device sequence, desktop access, upgrades
+- [Review desktop](docs/recovery.md#desktop-access): XFCE through loopback noVNC (opt-in)
+- [Tailscale](docs/security.md#remote-access): the Tailscale daemon for remote access (opt-in)
+- [SSH to a Mac](docs/security.md#ssh-to-a-mac): `ssh mac` from the host to your Mac (opt-in)
 - [Agent host move](docs/agent-host-move.md): move the agents to a new host with parity checks
 - [Security](docs/security.md): credential handling and remote access
+
+</details>
+
+<details>
+<summary><b>Default config</b></summary>
+
+- Agent harness: [omp](docs/omp.md), default model `anthropic/claude-opus-5-5:xhigh`, advisor off
+- Models: `anthropic/claude-fable-5-1`, `anthropic/claude-haiku-5-5`, `anthropic/claude-opus-5-5`, `anthropic/claude-sonnet-5-5`, `kimi-code/k3`
+- omp plugins: `ponytail`, `i-have-adhd`, `caveman`
+- omp extension `code-factory-quality-gate`: [sentrux and fallow check](docs/omp.md#quality-gate) at each turn end
+- omp extension `aa-mode-icons`: [mode and hook icons](docs/omp.md#status-line-icons) on the status line
+- omp extension `code-factory-herdr-sidebar`: topic, pane name, and PR line for the [Herdr sidebar](docs/herdr.md)
+- omp extension `herdr-omp-agent-state`: Herdr's agent-state reporter
+- omp extension `fm-no-pattern-kill`: blocks `pkill`, `killall`, and kill-by-`pgrep` commands
+- Firstmate patch `0001-watch-wake-on-queued-inbox-note`: [wakes Firstmate](docs/dependencies.md#firstmate-patch-layer) on a queued inbox note
+- Firstmate patch `0002-watch-end-idle-wait-for-inbox-note`: ends the idle wait within about 1 s for an inbox note
+- Hooks: `code-factory-quality-gate` at omp turn end, SessionStart banners from `ponytail`, `i-have-adhd`, `caveman`, `ACTIONS_RUNNER_HOOK_JOB_STARTED` (opt-in with the [CI pool](docs/ci-pool.md))
+- Pipeline gates: [no-mistakes](docs/omp.md#no-mistakes-pipeline-agent) and `ponytail-review`
+- Skills and rules: [`skills/`](skills/) for omp and Claude Code, [`config/AGENTS.md`](config/AGENTS.md) for Claude Code, omp, and Codex
+- Profiles on: `agents`, `development`, `firstmate`, `docker`, `chat`
+- Profiles off (opt-in): `tailscale`, `desktop`, `fleet_guards`, `fleet_browsers`
+- Unset (opt-in): `data_dir`, `firstmate.checklist`, `mac_ssh`, `skills`, `imessage`, `github_board`, `board`, `ci_pool`
+- Full files: [`config/default.yml`](config/default.yml), [`config/omp.yml`](config/omp.yml)
 
 </details>
 
