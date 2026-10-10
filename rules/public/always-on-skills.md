@@ -10,10 +10,9 @@ Three projects define how agents on this host write and work, so they apply to
 every session rather than being selected when they happen to look relevant. Two
 mechanisms carry them, and the split is the point:
 
-**Their extensions do the enforcing.** All three are installed as omp plugins
-(`omp plugin list`), so their extensions load at session start. That is the only
-layer that can hold state and show it: `ADHD ON` and `ponytail: FULL` in the
-status line come from `ctx.ui.setStatus`, which a skill cannot do.
+**Extensions hold state.** All three are installed as omp plugins (`omp plugin list`).
+The ponytail and i-have-adhd extensions load at session start; caveman has no omp extension.
+The `ADHD ON` and `ponytail: FULL` status entries come from `ctx.ui.setStatus`, which a skill cannot call.
 `i-have-adhd` injects its own ruleset whenever its settings file sets
 `alwaysOn: true`, and turns off only on "stop adhd mode" or "normal mode".
 It also ships `disable-model-invocation: true`, so it is hidden from

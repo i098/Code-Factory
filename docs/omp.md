@@ -164,7 +164,7 @@ To fill `skills/private/` on every host from one private source, set `skills.pri
 
 Crewship ships general omp rules, including Time Traveling Stream Rules (TTSR), in `rules/`. Each rule is one Markdown file in omp's rule format: YAML frontmatter (`description`, and `alwaysApply`, or a TTSR `condition` and `scope`) and a body.
 
-- `rules/public/<name>.md`: rules that ship with Crewship. Keep them general: no paths, host names, user names, emails, accounts, or project names. `tests/test_skills.py` scans them for these markers.
+- `rules/public/<name>.md`: rules that ship with Crewship. Keep them general: no personal paths, host names, user names, emails, accounts, or project names. `tests/test_skills.py` scans them for these markers.
 - `rules/private/<name>.md`: rules that stay on the host. Git ignores this folder except its README, and Docker builds leave it out.
 
 Every apply copies each rule to `~/.omp/agent/rules/<name>.md` with the skills installer, [`scripts/skills.py`](../scripts/skills.py). A private rule wins over a public rule with the same name. The installer records the rules it installed in the same manifest as the skills, and treats them the same way: it rewrites or removes only those rules, a rule file that the manifest does not list belongs to the operator, and an unchanged apply changes nothing.
@@ -175,7 +175,11 @@ This excludes both public and private copies from installation and removes earli
 Files added by hand remain unchanged.
 The other rules install with the `agents` profile.
 
-The same `skills.private_source` fills `rules/private/` from the `rules/` folder of that source (`rules/<name>.md`), with the same manifest rules under `rules/private`: a rule that leaves the source leaves `rules/private/` and `~/.omp/agent/rules/`, and a private rule put there by hand is never replaced.
+The same `skills.private_source` fills `rules/private/` from the source's `rules/` folder (`rules/<name>.md`).
+The manifest records these files under `rules/private`; it never replaces private rules added by hand.
+If a rule leaves the source or you remove the setting, apply removes its manifest-owned private copy.
+Apply then installs the public rule of the same name, if one exists and is not excluded by `--skip-rule`.
+Otherwise, apply removes the manifest-owned installed rule.
 
 ## Global instructions
 
