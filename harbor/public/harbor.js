@@ -140,7 +140,6 @@ function ground(x, y, z, nx, ny) {
     if (Math.abs(d - 0.22) < 0.06) return "o:";
     return hash(Math.floor(along * 2.5), Math.floor(d * 6)) < 0.18 ? "o," : "o.";
   }
-  // A few flowers and stones, each a small round dot in its half-metre cell.
   const cx = Math.floor(x * 2), cz = Math.floor(z * 2), h = hash(cx, cz);
   if (h < 0.025 && Math.hypot(x * 2 - cx - 0.5, z * 2 - cz - 0.5) < 0.18) return ["r*", "b*", "s*"][Math.floor(h * 120)];
   if (h >= 0.025 && h < 0.13) {
@@ -940,7 +939,7 @@ function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
     const ao = ny > 0.7 ? 1 : Math.min(1, 0.55 + 0.5 * (wy - (onShip ? bob + DECK : floorAt(wx, pz) ?? 0)));
     const fog = Math.exp(-t * 0.016), b = (lit * dim * ao * (0.8 + 0.2 * Math.max(0, -(nx * dx + ny * dy + nz * dz)))) * fog + 0.02 * (1 - fog);
     cls = mat + tier(b, warm);
-    // Grass is drawn as blades leaning with the wind; everything else picks its glyph from the density ramp.
+    // Grass blades lean with the wind.
     const grass = ny > 0.7 && (mat === "g" || mat === "G" || mat === "M") && s === TERRAIN;
     ch = grass && b > 0.03 ? blade(px, pz, odd) : glyph(b, odd);
     // Keep pale mortar, curb stones and shore foam readable without adding light sources.
