@@ -41,7 +41,10 @@ def features(readme):
     section = readme.split("<summary><b>Features</b></summary>", 1)[1].split("</details>", 1)[0]
     rows = re.findall(r"^- \[([^\]]+)\]\(([^)]+)\): (.+)$", section, re.M)
     more_docs = readme.split("\n## More docs:", 1)[1].splitlines()[0]
-    rows.extend((title, link, "Documentation") for title, link in re.findall(r"\[([^\]]+)\]\(([^)]+)\)", more_docs))
+    rows.extend(
+        (title, link, "Documentation")
+        for title, link in re.findall(r"\[([^\]]+)\]\(([^)]+)\)", more_docs)
+    )
     return rows
 
 
@@ -70,8 +73,10 @@ def points(readme, changelog):
                 f"harbor: no scene object for {link}; listing it on the docs board", file=sys.stderr
             )
             extra.append(
-                title.removeprefix("Private ").removeprefix("Shared ")
-                .replace("Browser ladder", "Browsers").lower()
+                title.removeprefix("Private ")
+                .removeprefix("Shared ")
+                .replace("Browser ladder", "Browsers")
+                .lower()
             )
     if extra:
         rows.append(

@@ -39,8 +39,7 @@
   The mouse looks around, and Enter opens the selected object.
   On a phone the pad walks and a drag looks.
   ASCII signs use the scene's grid, font and colors, with a text leader to their object.
-  Click or tap a sign's link to open it.
-  Off-screen HTML links support screen readers and keyboard users.</li>
+  See the <a href="https://github.com/i098/Crewship/tree/main/harbor#content-from-the-repository">harbor README</a> for sign links and keyboard access.</li>
   <li><b>Mini map.</b> M picks a point on the text map in the corner, M again fills the screen with it; arrows choose, Enter jumps there. On a phone, tap a point.</li>
   <li><b>Content.</b> <code>harbor/build.py</code> builds the points of interest with the README's Features list and More docs row, and the changelog.</li>
   <li><b>Deploy.</b> <code>harbor/</code> is plain HTML, CSS and JavaScript with no dependencies. A GitHub Actions workflow builds it and deploys it to Cloudflare Workers static assets on every push to <code>main</code> and on each release; nothing in <code>harbor/</code> ever reaches a Crewship host or image.</li>
