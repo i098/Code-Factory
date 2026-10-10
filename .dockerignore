@@ -93,3 +93,6 @@ compose.*.yml
 
 # Private skills stay on the host; never bake them into an image.
 skills/private/
+
+# The crewship.si landing page is a website, never part of a host or an image
+harbor

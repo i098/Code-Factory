@@ -197,6 +197,66 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 
 Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Support: [SUPPORT.md](SUPPORT.md). Security: [SECURITY.md](SECURITY.md). Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). License: [FSL-1.1-Apache-2.0](LICENSE).
 
+## Built with
+
+Crewship installs or builds on these third-party projects. Each license comes from the project's own repository or package metadata. The full install list is in [Dependencies](docs/dependencies.md).
+
+- [Herdr](https://github.com/herdrdev/herdr) (`herdr`): the terminal workspace that holds the agent panes. License: Apache-2.0.
+- [Firstmate](https://github.com/kunchenguid/firstmate): the orchestrator of the agent fleet, patched by Crewship. Watch: [how Firstmate's author uses it](https://www.youtube.com/watch?v=MSbacZ99E14). License: MIT.
+- [omp](https://github.com/can1357/oh-my-pi) (`omp`): the coding agent. License: MIT.
+- [ponytail](https://github.com/DietrichGebert/ponytail) (`ponytail`): omp marketplace plugin, least-code rules for agents. License: MIT.
+- [i-have-adhd](https://github.com/ayghri/i-have-adhd) (`i-have-adhd`): omp marketplace plugin, short answer-first output. License: MIT.
+- [caveman](https://github.com/JuliusBrussee/caveman) (`caveman`): omp marketplace plugin, compressed agent output. License: Apache-2.0.
+- [no-mistakes](https://github.com/kunchenguid/no-mistakes) (`no-mistakes`): the review, test, and CI pipeline for agent pull requests. License: MIT.
+- [treehouse](https://github.com/kunchenguid/treehouse) (`treehouse`): the pool of git worktrees for agent lanes. License: MIT.
+- [acpx](https://github.com/openclaw/acpx) (`acpx`): the Agent Client Protocol client that runs the fallback gate agent. License: MIT.
+- [gh-axi](https://github.com/kunchenguid/gh-axi) (`gh-axi`): GitHub access for agents. License: MIT.
+- [chrome-devtools-axi](https://github.com/kunchenguid/chrome-devtools-axi) (`chrome-devtools-axi`): browser control for agents. License: MIT.
+- [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp) (`chrome-devtools-mcp`): the DevTools server behind chrome-devtools-axi. License: Apache-2.0.
+- [lavish-axi](https://github.com/kunchenguid/lavish-axi) (`lavish-axi`): HTML plans, tables, and diagrams from agents. License: MIT.
+- [quota-axi](https://github.com/kunchenguid/quota-axi) (`quota-axi`): agent provider quota windows. License: MIT.
+- [tasks-axi](https://github.com/kunchenguid/tasks-axi) (`tasks-axi`): the task backlog of Firstmate. License: MIT.
+- [GitHub CLI](https://github.com/cli/cli) (`gh`): GitHub access. License: MIT.
+- [Google Workspace CLI](https://github.com/googleworkspace/cli) (`gws`): Google Workspace access for agents. License: Apache-2.0.
+- [Sentrux](https://github.com/sentrux/sentrux) (`sentrux`, `sentrux-grammars`): the structural quality gate. License: MIT.
+- [Fallow](https://github.com/fallow-rs/fallow) (`fallow`): JavaScript and TypeScript changed-code checks. License: MIT.
+- [Concord](https://github.com/chojs23/concord) (`concord`): the Discord terminal client. License: GPL-3.0-only.
+- [slk](https://github.com/gammons/slk) (`slk`): the Slack terminal client. License: MIT.
+- [Obscura](https://github.com/h4ckf0r0day/obscura) (`obscura`): the headless browser of the fleet browser ladder. License: Apache-2.0.
+- [Koncreet](https://github.com/jimididit/koncreet) (`koncreet`): host hardening, patched by Crewship. License: MIT.
+- [Bun](https://github.com/oven-sh/bun) (`bun`): the JavaScript runtime and package manager. License: MIT.
+- [Node.js](https://github.com/nodejs/node) (`node`): the runtime of the npm tools. License: MIT.
+- [uv](https://github.com/astral-sh/uv) (`uv`): the Python bootstrap and environments. License: MIT OR Apache-2.0.
+- [btop](https://github.com/aristocratos/btop) (`btop`): the resource monitor pane. License: Apache-2.0.
+- [rustup](https://github.com/rust-lang/rustup) (`rustup-init`): the Rust toolchain of the `development` profile. License: MIT OR Apache-2.0.
+- [Ansible](https://github.com/ansible/ansible): runs the recipe. License: GPL-3.0-or-later.
+- [jsonschema](https://github.com/python-jsonschema/jsonschema): validates the host config. License: MIT.
+- [PyYAML](https://github.com/yaml/pyyaml): reads the host config. License: MIT.
+- [pytest](https://github.com/pytest-dev/pytest): the test suite. License: MIT.
+- [Ruff](https://github.com/astral-sh/ruff): lint and format. License: MIT.
+- [psutil](https://github.com/giampaolo/psutil) (`psutil`): process data for the Chrome autopruner. License: BSD-3-Clause.
+- [Supabase CLI](https://github.com/supabase/cli) (`supabase`): the shared Supabase stack of the fleet guards. License: MIT.
+- [spectrum-ts](https://github.com/photon-hq/spectrum-ts) (`spectrum-ts`): the iMessage bridge SDK. License: MIT.
+- [Docker Engine](https://github.com/moby/moby): containers for the worker, the CI pool, and Supabase. License: Apache-2.0.
+- [Docker Compose](https://github.com/docker/compose): the worker and backing services. License: Apache-2.0.
+- [GitHub Actions Runner](https://github.com/actions/runner): the image of the self-hosted CI pool. License: MIT.
+- [Tailscale](https://github.com/tailscale/tailscale): the private network to the host. License: BSD-3-Clause.
+- [Google Chrome](https://www.google.com/chrome/): the headed browser of the desktop and the browser ladder. License: proprietary.
+- [mosh](https://github.com/mobile-shell/mosh): the roaming shell for Herdr. License: GPL-3.0-or-later.
+- [Xfce](https://www.xfce.org/): the remote desktop. License: GPL-2.0-or-later.
+- [TigerVNC](https://github.com/TigerVNC/tigervnc): the VNC server of the desktop. License: GPL-2.0-or-later.
+- [noVNC](https://github.com/novnc/noVNC): the VNC client in the browser. License: MPL-2.0.
+- [websockify](https://github.com/novnc/websockify): the WebSocket bridge for noVNC. License: LGPL-3.0-only.
+- [ripgrep](https://github.com/BurntSushi/ripgrep): code search in the `development` profile. License: Unlicense OR MIT.
+- [PostgreSQL](https://www.postgresql.org/): an optional compose backing service. License: PostgreSQL.
+- [Redis](https://github.com/redis/redis): an optional compose backing service. License: RSALv2 OR SSPLv1 OR AGPLv3.
+- [Headroom](https://github.com/headroomlabs-ai/headroom): an optional model proxy, patched by Crewship. License: Apache-2.0.
+- [pxpipe](https://github.com/teamchong/pxpipe): an optional model proxy, patched by Crewship. License: MIT.
+- [Ubuntu](https://ubuntu.com/): the host OS, the worker image base, and the other packages in [Dependencies](docs/dependencies.md). License: per package.
+- [cloud-init](https://github.com/canonical/cloud-init): first-boot package setup. License: GPL-3.0-only OR Apache-2.0.
+- [Python](https://github.com/python/cpython): runs the recipe scripts. License: PSF-2.0.
+- [Git](https://github.com/git/git): version control for every lane. License: GPL-2.0-only.
+
 ## Sponsors
 
 If Crewship saves you time, sponsor its development on GitHub.
