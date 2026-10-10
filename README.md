@@ -29,7 +29,7 @@
 ## Features
 
 <details>
-<summary><b>Features</b></summary>
+<summary><b>Show all features</b></summary>
 
 - [Herdr workspace](docs/herdr.md): a sidebar of spaces and agents, with live status for each lane
 - [omp agents](docs/omp.md): sign-in, model roles, fallbacks, and the advisor

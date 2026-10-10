@@ -78,7 +78,7 @@ def ticks(names):
 def test_every_config_switch_has_a_features_line_tagged_opt_in_when_off_by_default():
     found = dict(switches())
     assert set(found) == FEATURES.keys() | EXCLUDED, "map the new switch in FEATURES or EXCLUDED"
-    lines = section("Features")
+    lines = section("Show all features")
     for path, link in FEATURES.items():
         assert (ROOT / link.split("#")[0]).is_file(), link
         matches = [line for line in lines if f"]({link})" in line]
