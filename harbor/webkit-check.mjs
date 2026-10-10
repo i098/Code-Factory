@@ -59,6 +59,7 @@ if (!page.isClosed() && !errors.length) {
   if (lateMeasures) errors.push(`the canvas layout changed ${lateMeasures} times after the first draw`);
 }
 await page.evaluate(() => window.harborCheck.place(-5, 20.6, 0));
+await page.locator("#pad").waitFor({ state: "visible" });
 const pad = await page.locator("#pad").boundingBox();
 const padX = pad.x + pad.width / 2, padY = pad.y + 2;
 await page.touchscreen.tap(padX, padY);
