@@ -233,8 +233,29 @@ def test_opt_in_installs_the_stack_and_a_second_apply_changes_nothing(tmp_path):
     assert {p: p.read_bytes() for p in before} == before
 
 
-@pytest.mark.parametrize("stop_code", [0, 7])
-def test_manual_removal_stops_the_stack_before_deleting_files(home, stop_code):
+@pytest.mark.parametrize(
+    "prefixes, stop_code, systemd_failure",
+    [
+        (("crewship", "flotilla"), 0, ""),
+        (("crewship", "flotilla"), 7, ""),
+        (("crewship",), 0, ""),
+        (("flotilla",), 0, ""),
+        (("crewship", "flotilla"), 0, "unreachable"),
+        *[
+            (("crewship", "flotilla"), 0, f"{prefix}-{suffix}")
+            for prefix in ("crewship", "flotilla")
+            for suffix in (
+                "shared-supabase.service", "shared-supabase-check.service",
+                "shared-supabase-check.timer", "worktree-env-seed.service",
+                "worktree-env-seed.timer", "worktree-env-seed.path",
+            )
+        ],
+    ],
+)
+def test_manual_removal_stops_the_stack_before_deleting_files(
+    tmp_path, prefixes, stop_code, systemd_failure
+):
+    home = tmp_path / "home"
     shared = home / "oss-fleet/shared-supabase"
     cli = shared / "node_modules/.bin/supabase"
     cli.parent.mkdir(parents=True)
@@ -243,13 +264,16 @@ def test_manual_removal_stops_the_stack_before_deleting_files(home, stop_code):
     running = home / "running-units"
     running.mkdir()
     units = home / ".config/systemd/user"
+    for wants in ("default.target.wants", "timers.target.wants"):
+        (units / wants).mkdir(parents=True)
+    (home / "oss-fleet/doctor").mkdir(parents=True)
     suffixes = [
         "shared-supabase.service", "shared-supabase-check.service",
         "shared-supabase-check.timer", "worktree-env-seed.service",
         "worktree-env-seed.timer", "worktree-env-seed.path",
     ]
     installed = []
-    for prefix in ("crewship", "flotilla"):
+    for prefix in prefixes:
         for suffix in suffixes:
             name = f"{prefix}-{suffix}"
             path = units / name
@@ -257,8 +281,7 @@ def test_manual_removal_stops_the_stack_before_deleting_files(home, stop_code):
             installed.append(path)
             wants = "timers.target.wants" if suffix.endswith(".timer") else "default.target.wants"
             link = units / wants / name
-            if not link.is_symlink():
-                link.symlink_to(path)
+            link.symlink_to(path)
             installed.append(link)
             if suffix != "shared-supabase.service":
                 (running / name).touch()
@@ -270,11 +293,13 @@ def test_manual_removal_stops_the_stack_before_deleting_files(home, stop_code):
         installed.append(path)
     cli.write_text(
         '#!/bin/sh\n'
+        'touch "$HOME/cli-called"\n'
         'test "$#" = 3 && test "$1" = stop && test "$2" = --workdir && '
         'test "$3" = "$HOME/oss-fleet/shared-supabase" || exit 8\n'
         'for unit in "$HOME/running-units/"*; do test ! -e "$unit" || exit 9; done\n'
-        'test -f "$HOME/.config/systemd/user/crewship-shared-supabase.service" || exit 10\n'
-        'test -f "$HOME/.config/systemd/user/flotilla-shared-supabase.service" || exit 10\n'
+        f'for prefix in {" ".join(prefixes)}; do\n'
+        '  test -f "$HOME/.config/systemd/user/$prefix-shared-supabase.service" || exit 10\n'
+        'done\n'
         f'exit_code={stop_code}\n'
         'test "$exit_code" = 0 || exit "$exit_code"\n'
         'rm "$HOME/stack-running"\n'
@@ -284,8 +309,16 @@ def test_manual_removal_stops_the_stack_before_deleting_files(home, stop_code):
     systemctl = bin_dir / "systemctl"
     systemctl.write_text(
         '#!/bin/sh\n'
+        'test "$SYSTEMCTL_FAILURE" != unreachable || exit 11\n'
         'test "$1" = --user || exit 1\nshift\n'
         'case "$1" in\n'
+        'show)\n'
+        '  if test -f "$HOME/.config/systemd/user/$2"; then\n'
+        '    echo loaded\n'
+        '  else\n'
+        '    echo not-found\n'
+        '  fi\n'
+        '  exit 0 ;;\n'
         'disable) shift 2\n'
         '  for unit; do\n'
         '    rm -f "$HOME/.config/systemd/user/"*.wants/"$unit"\n'
@@ -293,7 +326,11 @@ def test_manual_removal_stops_the_stack_before_deleting_files(home, stop_code):
         'stop) shift ;;\n'
         'daemon-reload) exit 0 ;;\n'
         '*) exit 1 ;;\nesac\n'
-        'for unit; do rm -f "$HOME/running-units/$unit"; done\n'
+        'for unit; do\n'
+        '  test "$unit" != "$SYSTEMCTL_FAILURE" || exit 12\n'
+        '  test -f "$HOME/.config/systemd/user/$unit" || exit 5\n'
+        '  rm -f "$HOME/running-units/$unit"\n'
+        'done\n'
     )
     systemctl.chmod(0o755)
     stack = home / "stack-running"
@@ -305,13 +342,18 @@ def test_manual_removal_stops_the_stack_before_deleting_files(home, stop_code):
     commands = commands.split("```bash\n", 1)[1].split("```", 1)[0]
     result = subprocess.run(
         ["bash", "-c", commands],
-        env={**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:/usr/bin:/bin"},
+        env={
+            **os.environ, "HOME": str(home), "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "SYSTEMCTL_FAILURE": systemd_failure,
+        },
         capture_output=True,
         text=True,
     )
-    assert result.returncode == stop_code, result.stderr
-    assert stack.exists() == bool(stop_code)
-    if stop_code:
+    expected_code = 11 if systemd_failure == "unreachable" else 12 if systemd_failure else stop_code
+    assert result.returncode == expected_code, result.stderr
+    assert (home / "cli-called").exists() == (not systemd_failure)
+    assert stack.exists() == bool(expected_code)
+    if expected_code:
         assert {path: path.read_bytes() for path in installed} == before
         assert all(path.is_symlink() for path in installed if ".wants" in str(path.parent))
     else:

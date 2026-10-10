@@ -76,11 +76,15 @@ Do not use `--no-backup` or any Docker volume removal command.
 ```bash
 (
 for prefix in crewship flotilla; do
-  systemctl --user stop \
-    "$prefix-shared-supabase-check.timer" \
-    "$prefix-worktree-env-seed.timer" "$prefix-worktree-env-seed.path"
-  systemctl --user stop "$prefix-shared-supabase-check.service" \
-    "$prefix-worktree-env-seed.service" "$prefix-shared-supabase.service"
+  for suffix in shared-supabase-check.timer worktree-env-seed.timer \
+    worktree-env-seed.path shared-supabase-check.service \
+    worktree-env-seed.service shared-supabase.service; do
+    unit="$prefix-$suffix"
+    load_state=$(systemctl --user show "$unit" --property=LoadState --value) || exit
+    if [ "$load_state" != not-found ]; then
+      systemctl --user stop "$unit" || exit
+    fi
+  done
 done
 "$HOME/oss-fleet/shared-supabase/node_modules/.bin/supabase" stop \
   --workdir "$HOME/oss-fleet/shared-supabase" || exit
