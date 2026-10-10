@@ -32,6 +32,10 @@
     crewship_renamed_units: [code-factory-vnc.service, code-factory-novnc.service]
     # The old name in user unit files and in managed block markers.
     crewship_renamed_word: code-factory
+    # Write under the old paths while they run; herdr.yml starts the timer again.
+    crewship_renamed_writer_units: [herdr-spaces.timer, herdr-spaces.service]
+    crewship_renamed_existing: >-
+      {{ crewship_renamed_path_stat.results | selectattr('stat.exists') | map(attribute='item') | list }}
     crewship_renamed_home_re: "^{{ crewship_cfg.home | regex_escape }}/"
   block:
     - name: Find the pre-rename paths and their new names
@@ -53,22 +57,22 @@
           into its new name or remove one of them by hand, then re-run.
         quiet: true
       vars:
-        crewship_renamed_existing: >-
-          {{ crewship_renamed_path_stat.results | selectattr('stat.exists') | map(attribute='item') | list }}
         crewship_renamed_conflicts: >-
           {{ crewship_renamed_paths | selectattr('0', 'in', crewship_renamed_existing)
              | selectattr('1', 'in', crewship_renamed_existing) | map('join', ' and ') | list }}
 
-    - name: Find the pre-rename units
+    - name: Find the units to stop before the move
       ansible.builtin.stat:
         path: "{{ crewship_user_units }}/{{ item }}"
         get_checksum: false
       become: true
-      loop: "{{ crewship_renamed_units }}"
+      loop: >-
+        {{ crewship_renamed_units + (crewship_renamed_writer_units
+           if crewship_renamed_paths | map('first') | select('in', crewship_renamed_existing) | list else []) }}
       register: crewship_renamed_unit_stat
       check_mode: false
 
-    - name: Stop the pre-rename units
+    - name: Stop the units that use the pre-rename paths
       ansible.builtin.systemd_service:
         scope: user
         name: "{{ item.item }}"

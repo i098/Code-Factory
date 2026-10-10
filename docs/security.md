@@ -133,7 +133,7 @@ A new host gets its own key; never copy `~/.ssh/id_ed25519_mac` from the old hos
 1. Run apply on the new host with the same `mac_ssh` values. It generates a new key and writes the new line.
 2. Add the new line to the Mac's `~/.ssh/authorized_keys`: at the Mac, as in step 3 of the setup, or from a host that already has access: `ssh mac 'cat >> ~/.ssh/authorized_keys' < new-host.authorized_keys`, where `new-host.authorized_keys` is a copy of the new host's line file. The line is public, so you can copy it with `scp`.
 3. Run `ssh mac true` on the new host.
-4. At cutover, remove the old host's line from the Mac's `~/.ssh/authorized_keys`. Each line ends with the comment `<user>@<hostname> crewship mac`, which names the host. Keep the old line until the new host works.
+4. At cutover, remove the old host's line from the Mac's `~/.ssh/authorized_keys`. Each line ends with the comment `<user>@<hostname>`, the project name and the word `mac`; the hostname identifies the host. A key made before the Crewship rename carries the earlier project name. Keep the old line until the new host works.
 
 ### From a Mac to the host
 
