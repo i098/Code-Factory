@@ -1161,7 +1161,7 @@ function project(a) {
   return [Math.round(((dot(cam.r) / z / cam.tanH + 1) / 2) * cols), Math.round(((1 - dot(cam.u) / z / cam.tanV) / 2) * rows)];
 }
 
-// Signs use scene cells, including their frame, text and link hit regions.
+// Signs use scene cells; touch links share a row with padded hit regions.
 const LINE = new Map();
 let signBox = null, signRows = [], signLinks = [], signWidth = "", signInset = 2;
 function signLayout(width, mode, available) {
@@ -1185,14 +1185,27 @@ function signLayout(width, mode, available) {
   const body = mode < 3 || available >= links.length + 4;
   wrap(mode >= 2 ? short(card.querySelector("h3").textContent) : card.querySelector("h3").textContent, "l");
   if (body) wrap(mode >= 2 ? short(card.querySelector("p").textContent) : card.querySelector("p").textContent, "k");
+  if (touchFirst.matches) {
+    signRows.push(["", "t"]);
+    const texts = links.map((a) => `[${a.textContent}]`);
+    const inline = texts.join(" ").length <= width;
+    // A stacked link row is at least 12px tall; one blank row makes a 24px target.
+    const rowHeight = inline ? 1 : Math.max(1, 12 / cellH);
+    const height = inline ? Math.ceil(44 / cellH) : rowHeight * 2;
+    let left = signInset;
+    links.forEach((a, n) => {
+      const text = short(texts[n]);
+      const row = signRows.length + (inline ? 0 : n * height + (rowHeight - 1) / 2);
+      signLinks.push({ row, start: row - (height - 1) / 2, height, left, width: text.length, text, a });
+      left = inline ? left + text.length + 1 : signInset;
+    });
+    return;
+  }
   if (!mode) signRows.push(["", "t"]);
-  const linkHeight = Math.min(touchFirst.matches ? Math.ceil(44 / cellH) : 1,
-    mode === 3 ? Math.max(1, Math.floor((available - signRows.length - 2) / links.length)) : Infinity);
   for (const a of links) {
     const start = signRows.length;
     wrap(mode === 3 ? short(`[${a.textContent}]`) : `[${a.textContent}]`, "h");
-    const height = Math.max(signRows.length - start, linkHeight);
-    while (signRows.length < start + height) signRows.push(["", "h"]);
+    const height = signRows.length - start;
     signLinks.push({ start, height, a });
   }
 }
@@ -1233,12 +1246,16 @@ function signFit(at, i0, j0, i1, j1, mode = 0) {
   const width = Math.min(52, i1 - i0 - (mode ? 2 : 4));
   if (width < 1 || j1 <= j0) return null;
   signLayout(width, mode, j1 - j0);
-  const w = Math.max(...signRows.map(([text]) => text.length)) + signInset * 2, h = signRows.length + 2;
-  if (h > j1 - j0) return null;
+  const w = Math.max(...signRows.map(([text]) => text.length + signInset * 2),
+    ...signLinks.map((link) => (link.left || signInset) + (link.width || 0) + signInset));
+  const h = Math.ceil(Math.max(signRows.length, ...signLinks.map((link) => link.row === undefined ? link.start + link.height : link.row + 1))) + 2;
+  const hitTop = Math.min(0, ...signLinks.map((link) => link.start + 1));
+  const hitBottom = Math.max(h, ...signLinks.map((link) => link.start + link.height + 1));
+  if (hitBottom - hitTop > j1 - j0) return null;
   const [ai, aj] = at || [i0, j0];
   const i = at ? ai + 4 + w > i1 ? ai - 4 - w : ai + 4 : i0;
   const j = at ? aj - h - 2 < j0 ? aj + 2 : aj - h - 2 : j0;
-  return { i: Math.max(i0, Math.min(i1 - w, i)), j: Math.max(j0, Math.min(j1 - h, j)), w, h, overlay: mode === 3 };
+  return { i: Math.max(i0, Math.min(i1 - w, i)), j: Math.max(j0 - hitTop, Math.min(j1 - hitBottom, j)), w, h, overlay: mode === 3 };
 }
 function signLeader(ai, aj) {
   const { i, j, w, h } = signBox;
@@ -1260,7 +1277,8 @@ function signHit(x, y) {
   const i = (x - r.left - padX) / cellW - signBox.i;
   const j = (y - r.top - padY) / cellH - signBox.j - 1;
   if (i < 1 || i >= signBox.w - 1) return null;
-  return signLinks.find((link) => j >= link.start && j < link.start + link.height)?.a || null;
+  return signLinks.find((link) => j >= link.start && j < link.start + link.height
+    && (link.left === undefined || i >= link.left && i < link.left + link.width))?.a || null;
 }
 
 // ---- Mini map: the island in text, every point of interest, and you; M picks, M again fills the screen.
@@ -1869,12 +1887,17 @@ function drawSign() {
   ctx.fillRect(padX + i * cellW, padY + j * cellH, w * cellW, h * cellH);
   paint("+" + "-".repeat(w - 2) + "+", "t", i, j);
   const focused = signLinks.find(({ a }) => a.href === document.activeElement?.href);
+  for (let n = 1; n < h - 1; n++) {
+    paint("|", "t", i, j + n);
+    paint("|", "t", i + w - 1, j + n);
+  }
   signRows.forEach(([text, cls], n) => {
-    paint("|", "t", i, j + n + 1);
-    const active = focused && n >= focused.start && n < focused.start + focused.height;
+    const active = !touchFirst.matches && focused && n >= focused.start && n < focused.start + focused.height;
     if (active && signInset === 2) paint(">", "l", i + 1, j + n + 1);
     paint(text, active ? "l" : cls, i + signInset, j + n + 1);
-    paint("|", "t", i + w - 1, j + n + 1);
+  });
+  if (touchFirst.matches) signLinks.forEach((link) => {
+    paint(link.text, focused === link ? "l" : "h", i + link.left, j + 1 + link.row);
   });
   paint("+" + "-".repeat(w - 2) + "+", "t", i, j + h - 1);
 }

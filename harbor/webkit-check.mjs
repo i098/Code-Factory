@@ -8,6 +8,7 @@ const browser = await webkit.launch();
 const errors = [];
 for (const [name, width, height, touch, scale = 1] of [
   ["desktop", 1440, 900, false],
+  ["iphone15pro", 393, 852, true],
   ["portrait", 390, 844, true],
   ["landscape", 844, 390, true],
   ["narrow-portrait", 320, 568, true, 1.15 ** 6],
@@ -16,7 +17,7 @@ for (const [name, width, height, touch, scale = 1] of [
   ["shortest-landscape", 568, 192, true, 1.15 ** 6]
 ]) {
 const page = await browser.newPage({
-  ...(touch ? devices["iPhone 13"] : {}),
+  ...(touch ? devices["iPhone 15 Pro"] : {}),
   viewport: { width, height }
 });
 const expectedInsets = touch ? (width > height ? [0, 47, 21, 47] : [47, 0, 34, 0]) : [0, 0, 0, 0];
@@ -88,14 +89,24 @@ render = function() {
   window.frames.push([cols, rows, cellW, cellH, cam.tanH, cam.tanV, canvas.width, canvas.height]);
   while (performance.now() - start < 25) {}
 };
+let signCheckWidth = Infinity;
+const fitSign = signFit;
+signFit = (at, i0, j0, i1, j1, mode) => fitSign(at, i0, j0, Math.min(i1, i0 + signCheckWidth), j1, mode);
 window.harborCheck = {
   place(x, z, yaw) { Object.assign(me, {x, z, yaw, pitch: 0}); moved = dirty = true; },
   state() { return {inside: insideHouse, x: me.x, z: me.z, yaw: me.yaw, clear: !blocked(me.x, me.z, floorAt(me.x, me.z))}; },
   ids: ORDER,
   go(id) {
+    signCheckWidth = Infinity;
     if (id) go(id);
     else { moved = false; jumped = null; show(null); }
     render(); dirty = false;
+  },
+  stack() {
+    this.go(null);
+    signCheckWidth = 24;
+    render();
+    return this.bounds();
   },
   focusState() {
     step(1 / 60);
@@ -119,20 +130,21 @@ window.harborCheck = {
       glyphs: window.signGlyphs,
       x: padX + signBox.i * cellW, y: padY + signBox.j * cellH,
       width: signBox.w * cellW, height: signBox.h * cellH,
+      cellH, dpr: canvas.width / stage.clientWidth,
       safe: [safe.top, safe.right, safe.bottom, safe.left], screenWidth: stage.clientWidth, screenHeight: stage.clientHeight,
       pad: pad.offsetParent ? pad.getBoundingClientRect().toJSON() : null,
       map: mapBox ? { x: padX + mapBox.oi * cellW, y: padY + mapBox.oj * cellH,
         width: mapBox.w * cellW, height: mapBox.h * cellH } : null,
-      links: signLinks.map(({start, height, a}) => ({
-        x: padX + (signBox.i + 2) * cellW,
+      links: signLinks.map(({start, height, left = 1, width = signBox.w - 2, a}) => ({
+        x: padX + (signBox.i + left + width / 2) * cellW,
         y: padY + (signBox.j + 1 + start + height / 2) * cellH,
         href: a.href, height: height * cellH,
-        hit: signHit(padX + (signBox.i + 2) * cellW,
+        hit: signHit(padX + (signBox.i + left + width / 2) * cellW,
           padY + (signBox.j + 1 + start + height / 2) * cellH)?.href,
         top: padY + (signBox.j + 1 + start) * cellH,
         bottom: padY + (signBox.j + 1 + start + height) * cellH,
-        left: padX + (signBox.i + 1) * cellW,
-        right: padX + (signBox.i + signBox.w - 1) * cellW
+        left: padX + (signBox.i + left) * cellW,
+        right: padX + (signBox.i + left + width) * cellW
       }))
     };
   }
@@ -230,12 +242,23 @@ for (const id of [null, ...await page.evaluate(() => window.harborCheck.ids)]) {
     assert(!overlaps(bounds, bounds.pad), `${name}/${id}: sign covers the move pad`);
   }
   assert.equal(bounds.links.length, id ? 1 : 3, `${id}: a sign link is missing`);
+  if (touch) assert(bounds.dpr <= 2, `${name}/${id}: touch canvas exceeds DPR 2`);
+  if (name === "iphone15pro" && !id) {
+    // Title, description, one blank row, one link row, and two frame rows.
+    assert(bounds.height <= 6 * bounds.cellH, `${name}: welcome sign has excess vertical spacing`);
+  }
   for (const link of bounds.links) {
     assert.equal(link.hit, link.href, `${name}/${id}: link is not hit-testable`);
     assert(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y) === document.getElementById("scene"),
       { x: link.x, y: link.y }), `${name}/${id}: link tap point is covered by an HTML control`);
-    if (touch && !bounds.box.overlay) assert(link.height >= 44, `${id}: touch link is too short`);
-    assert(link.top >= bounds.y && link.bottom <= bounds.y + bounds.height, `${id}: link region extends outside the frame`);
+    const stacked = bounds.links.some((other) => other.y !== link.y);
+    if (touch) assert(link.height >= (stacked ? 24 : 44), `${name}/${id}: touch link is too short`);
+    if (touch) {
+      assert(link.top >= top && link.bottom <= bounds.screenHeight - bottom, `${name}/${id}: link hit padding extends outside the safe area`);
+      const hitBox = { x: link.left, y: link.top, width: link.right - link.left, height: link.height };
+      assert(!overlaps(hitBox, bounds.pad), `${name}/${id}: link hit padding covers the move pad`);
+      if (!bounds.box.overlay) assert(!overlaps(hitBox, bounds.map), `${name}/${id}: link hit padding covers the map`);
+    } else assert(link.top >= bounds.y && link.bottom <= bounds.y + bounds.height, `${id}: link region extends outside the frame`);
     assert(link.left >= bounds.x && link.right <= bounds.x + bounds.width, `${id}: link region extends outside the frame`);
     const popup = page.waitForEvent("popup");
     if (touch) await page.touchscreen.tap(link.x, link.y);
@@ -256,6 +279,25 @@ for (const id of [null, ...await page.evaluate(() => window.harborCheck.ids)]) {
     assert(focus.drawn, `${name}/${id}: focused sign did not draw`);
     assert.equal(focus.highlighted, focus.href, `${name}/${id}: focused sign link was not highlighted`);
   }
+}
+if (name === "iphone15pro") {
+  const stacked = await page.evaluate(() => window.harborCheck.stack());
+  assert(stacked.links.every((link, n) => !n || link.y > stacked.links[n - 1].y), "narrow sign did not stack its links");
+  for (const [n, link] of stacked.links.entries()) {
+    assert(link.height >= 24, "stacked touch target is shorter than 24px");
+    if (n) assert(link.top >= stacked.links[n - 1].bottom - 0.001, "stacked touch targets overlap");
+    for (const offset of [-6, 6]) {
+      assert(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y) === document.getElementById("scene"),
+        { x: link.x, y: link.y + offset }), "stacked tap point is covered by an HTML control");
+      const popup = page.waitForEvent("popup");
+      await page.touchscreen.tap(link.x, link.y + offset);
+      const opened = await popup;
+      await opened.waitForLoadState();
+      assert.equal(opened.url(), link.href, "off-center stacked tap opened the wrong link");
+      await opened.close();
+    }
+  }
+  await page.evaluate(() => window.harborCheck.go(null));
 }
 for (const id of await page.evaluate(() => window.harborCheck.ids)) {
   await page.locator("#stage").focus();

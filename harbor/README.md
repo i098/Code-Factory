@@ -57,7 +57,13 @@ Signs first reflow below or beside the map, clear of the move pad and safe-area 
 If space is limited, signs remove spacing and shorten the visible copy.
 If no clear rectangle fits, compact signs can cover the map but keep their links clear of the move pad.
 Signs remain within the safe area.
-Touch links retain 44-pixel hit regions where space permits.
+Touch links share one row when they fit; otherwise, each link has its own row.
+Inline touch links keep hit regions at least 44 CSS pixels tall without increasing the frame height.
+Stacked links have one blank link row between them and separate hit regions at least 24 CSS pixels tall.
+Each stacked link row is at least 12 CSS pixels tall.
+The invisible hit padding can extend beyond the sign frame, but stays clear of the move pad.
+The frame fits the text, with one blank row before the links.
+Desktop signs keep their original layout.
 Click or tap a sign link to open it.
 Focus a feature-list link to show its sign.
 The sign highlights the focused link without scrolling the scene.
@@ -84,6 +90,8 @@ Inside the house, it checks that manifest focus keeps the player in place and dr
 It checks every sign against safe-area edges and checks map and move pad clearance before the final overlay placement.
 It includes 320×568 phones in both orientations and landscape heights of 256 and 192 pixels.
 It checks measured safe insets, visible signs, link hit regions, and keyboard focus without stage scrolling.
+On iPhone 15 Pro, it limits the welcome sign to six text rows and checks the canvas DPR limit.
+It also taps six pixels above and below each stacked link center to check the separate hit regions.
 It also checks feature-link focus with the full map open and an arrival selection pending.
 It fails if rendering stalls.
 It taps or clicks every link and opens the docs index with the keyboard.
