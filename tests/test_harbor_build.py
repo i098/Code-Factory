@@ -61,7 +61,7 @@ def test_mapped_features_and_docs_index_appear_once(tmp_path, monkeypatch, capsy
     assert {link: hrefs[f"{build.REPO}/blob/main/{link}"] for link in links} == dict.fromkeys(
         links, 1
     )
-    assert hrefs[f"{build.REPO}#more-docs"] == 1
+    assert hrefs[f"{build.REPO}#features"] == 1
     assert hrefs[f"{build.REPO}/blob/main/{unmapped}"] == 0
     assert f"+ {extra_count - 3} more" in manifest.text["docsboard"]
     assert len(manifest.spots) == len(set(manifest.spots))

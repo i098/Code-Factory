@@ -78,7 +78,7 @@ def points(readme, changelog):
             (
                 "docsboard",
                 "More docs",
-                f"{REPO}#more-docs",
+                f"{REPO}#features",
                 inline(", ".join(extra[:3]), 40)
                 + (f", + {len(extra) - 3} more" if len(extra) > 3 else ""),
             )

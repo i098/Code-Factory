@@ -2,14 +2,23 @@
 // error, a fallback to the plain page, or a multi-glyph fillText (WebKit keeps every distinct string
 // it draws, which grew iOS Safari tabs until they were killed), an exterior grid change after the first draw,
 // a bright first intro frame, or a frozen scene during the intro. Run harbor/build.py first.
-import { readFile } from "node:fs/promises";
+import { readFile, mkdir } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { webkit, devices } from "playwright";
 
 const dist = new URL("dist/", import.meta.url);
 const browser = await webkit.launch();
-const page = await browser.newPage({ ...devices["iPhone 13"], viewport: { width: 390, height: 844 } });
+await mkdir(new URL("proof/", dist), { recursive: true });
 const errors = [];
+for (const [name, width, height, touch] of [
+  ["desktop", 1440, 900, false],
+  ["portrait", 390, 844, true],
+  ["landscape", 844, 390, true]
+]) {
+const page = await browser.newPage({
+  ...(touch ? devices["iPhone 13"] : {}),
+  viewport: { width, height }
+});
 page.on("pageerror", (e) => errors.push(`uncaught: ${e.message}`));
 page.on("crash", () => errors.push("the page crashed"));
 page.on("console", (m) => m.type() === "error" && errors.push(`console: ${m.text()}`));
@@ -55,17 +64,24 @@ window.harborCheck = {
   place(x, z, yaw) { Object.assign(me, {x, z, yaw, pitch: 0}); moved = dirty = true; },
   state() { return {inside: insideHouse, x: me.x, z: me.z, yaw: me.yaw, clear: !blocked(me.x, me.z, floorAt(me.x, me.z))}; },
   ids: ORDER,
-  go(id) { go(id); render(); },
+  go(id) {
+    if (id) go(id);
+    else { moved = false; jumped = null; show(null); }
+    render(); dirty = false;
+  },
   bounds() {
     return {
       box: signBox,
       x: padX + signBox.i * cellW, y: padY + signBox.j * cellH,
       width: signBox.w * cellW, height: signBox.h * cellH,
-      padTop: pad.getBoundingClientRect().top,
+      safe: [safe.top, safe.right, safe.bottom, safe.left], screenWidth: stage.clientWidth, screenHeight: stage.clientHeight,
+      pad: pad.offsetParent ? pad.getBoundingClientRect().toJSON() : null,
+      map: { x: padX + mapBox.oi * cellW, y: padY + mapBox.oj * cellH,
+        width: mapBox.w * cellW, height: mapBox.h * cellH },
       links: signLinks.map(({start, height, a}) => ({
         x: padX + (signBox.i + 2) * cellW,
         y: padY + (signBox.j + 1 + start + height / 2) * cellH,
-        href: a.href
+        href: a.href, height: height * cellH
       }))
     };
   }
@@ -82,6 +98,9 @@ try {
   errors.push(`the scene did not draw 30 frames: ${e.message}`);
 }
 if (!page.isClosed() && !errors.length) {
+  const { scene, longest } = await page.evaluate(() => ({ scene: !document.getElementById("stage").hidden, longest: window.longest }));
+  if (!scene) errors.push("the scene fell back to the plain page");
+  if (touch && longest !== 1) errors.push(`fillText drew ${longest} glyphs at once; touch devices must draw one at a time`);
   const { frames, lateMeasures } = await page.evaluate(() => ({ frames: window.frames, lateMeasures: window.lateMeasures }));
   if (frames.some((frame) => frame.some((value, i) => value !== frames[0][i]))) errors.push("the grid or field of view changed after the first draw");
   if (lateMeasures) errors.push(`the canvas layout changed ${lateMeasures} times after the first draw`);
@@ -89,7 +108,7 @@ if (!page.isClosed() && !errors.length) {
   if (!firstFrameBlack) errors.push("the first intro frame was not fully black");
   if (introClocks.length < 2 || introClocks.at(-1) <= introClocks[0]) errors.push("the scene froze during the intro");
 }
-if (!page.isClosed() && !errors.length) {
+if (touch && !page.isClosed() && !errors.length) {
 await page.evaluate(() => window.harborCheck.place(-5, 20.6, 0));
 await page.locator("#pad").waitFor({ state: "visible" });
 const pad = await page.locator("#pad").boundingBox();
@@ -117,23 +136,31 @@ await page.waitForTimeout(1000);
 const outside = await page.evaluate(() => window.harborCheck.state());
 if (outside.inside || !outside.clear || outside.z >= 20.75 || outside.yaw !== Math.PI) errors.push("touch walking did not return outside facing away");
 }
-if (!page.isClosed()) {
-  const { scene, longest } = await page.evaluate(() => ({ scene: !document.getElementById("stage").hidden, longest: window.longest }));
-  if (!scene) errors.push("the scene fell back to the plain page");
-  if (longest !== 1) errors.push(`fillText drew ${longest} glyphs at once; touch devices must draw one at a time`);
-}
 if (!page.isClosed() && !errors.length) {
 await page.emulateMedia({ reducedMotion: "reduce" });
+if (touch) await page.evaluate(() => {
+  const stage = document.getElementById("stage");
+  const insets = innerWidth > innerHeight ? [0, 47, 21, 47] : [47, 0, 34, 0];
+  ["top", "right", "bottom", "left"].forEach((side, n) => stage.style.setProperty(`--safe-${side}`, `${insets[n]}px`));
+});
+const overlaps = (a, b) => b && a.x < b.x + b.width && a.x + a.width > b.x
+  && a.y < b.y + b.height && a.y + a.height > b.y;
 for (const id of [null, ...await page.evaluate(() => window.harborCheck.ids)]) {
-  if (id) await page.evaluate((id) => window.harborCheck.go(id), id);
+  await page.evaluate((id) => window.harborCheck.go(id), id);
   const bounds = await page.evaluate(() => window.harborCheck.bounds());
-  assert(bounds.x >= 0 && bounds.y >= 0, `${id}: sign starts off screen`);
-  assert(bounds.x + bounds.width <= 390, `${id}: sign extends past the screen`);
-  assert(bounds.y + bounds.height < bounds.padTop, `${id}: sign covers the move pad`);
+  const [top, right, bottom, left] = bounds.safe;
+  assert(bounds.x >= left && bounds.y >= top, `${name}/${id}: sign starts outside the safe area`);
+  assert(bounds.x + bounds.width <= bounds.screenWidth - right, `${name}/${id}: sign extends past the safe area: ${JSON.stringify(bounds)}`);
+  assert(bounds.y + bounds.height <= bounds.screenHeight - bottom, `${name}/${id}: sign extends below the safe area`);
+  assert(!overlaps(bounds, bounds.map), `${name}/${id}: sign covers the map`);
+  assert(!overlaps(bounds, bounds.pad), `${name}/${id}: sign covers the move pad`);
+  await page.screenshot({ path: new URL(`proof/${name}-${id || "welcome"}.png`, dist).pathname });
   assert(bounds.links.length >= 1 && bounds.links.length <= 3, `${id}: invalid link count`);
   for (const link of bounds.links) {
+    if (touch) assert(link.height >= 44, `${id}: touch link is too short`);
     const popup = page.waitForEvent("popup");
-    await page.touchscreen.tap(link.x, link.y);
+    if (touch) await page.touchscreen.tap(link.x, link.y);
+    else await page.mouse.click(link.x, link.y);
     const opened = await popup;
     await opened.waitForLoadState();
     assert.equal(opened.url(), link.href, `${id}: grid tap opened the wrong link`);
@@ -145,19 +172,26 @@ const keyboardPopup = page.waitForEvent("popup");
 await page.keyboard.press("Enter");
 const opened = await keyboardPopup;
 await opened.waitForLoadState();
-assert.equal(opened.url(), "https://github.com/i098/Crewship#more-docs");
+assert.equal(opened.url(), "https://github.com/i098/Crewship#features");
 await opened.close();
 await page.locator("#stage").focus();
 const stagePopup = page.waitForEvent("popup");
 await page.keyboard.press("Enter");
 const stageOpened = await stagePopup;
 await stageOpened.waitForLoadState();
-assert.equal(stageOpened.url(), "https://github.com/i098/Crewship#more-docs");
+assert.equal(stageOpened.url(), "https://github.com/i098/Crewship#features");
 await stageOpened.close();
+if (!page.isClosed()) {
+  const { scene, longest } = await page.evaluate(() => ({ scene: !document.getElementById("stage").hidden, longest: window.longest }));
+  if (!scene) errors.push("the scene fell back to the plain page");
+  if (touch && longest !== 1) errors.push(`fillText drew ${longest} glyphs at once; touch devices must draw one at a time`);
+}
+}
+await page.close();
 }
 await browser.close();
 if (errors.length) {
   console.error(errors.join("\n"));
   process.exit(1);
 }
-console.log("harbor: WebKit iPhone check passed");
+console.log("harbor: desktop and WebKit iPhone portrait/landscape checks passed");
