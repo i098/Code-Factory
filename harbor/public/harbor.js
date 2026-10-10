@@ -7,7 +7,10 @@ const ctx = canvas.getContext("2d");
 const card = document.getElementById("card");
 // With JavaScript the scene fills the screen and the plain page stays for screen readers only.
 stage.hidden = false;
-document.getElementById("page").classList.add("sr-only");
+const plain = document.getElementById("page");
+plain.classList.add("sr-only");
+// An uncaught error shows the plain page again instead of a frozen or blank scene.
+addEventListener("error", () => { stage.hidden = true; plain.classList.remove("sr-only"); });
 stage.focus({ preventScroll: true });
 const pad = document.getElementById("pad");
 const knob = pad.firstElementChild;
@@ -628,7 +631,8 @@ for (const [k, c] of Object.entries(BASE)) {
   }
 }
 function measure() {
-  const dpr = devicePixelRatio || 1, w = stage.clientWidth, h = stage.clientHeight;
+  // Phones and tablets draw at most 2 device pixels per CSS pixel: a 3x canvas costs more memory than it shows.
+  const dpr = touchFirst.matches ? Math.min(2, devicePixelRatio || 1) : devicePixelRatio || 1, w = stage.clientWidth, h = stage.clientHeight;
   canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
   const px = Math.max(6.5, Math.min(11, innerWidth * 0.0068)) * scale;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1119,8 +1123,13 @@ function drawMap() {
     paint(run, cur, from, j);
   }
 }
+// WebKit keeps every distinct string fillText draws: on iOS Safari runs of glyphs grow the tab by
+// about 10 MB a second until iOS kills it. Touch devices draw glyph by glyph, a set of strings that stays small.
 function paint(run, cls, i, j) {
-  if (run.trim()) { ctx.fillStyle = COLORS[cls]; ctx.fillText(run, padX + i * cellW, padY + j * cellH); }
+  if (!run.trim()) return;
+  ctx.fillStyle = COLORS[cls];
+  if (!touchFirst.matches) ctx.fillText(run, padX + i * cellW, padY + j * cellH);
+  else for (let k = 0; k < run.length; k++) if (run[k] !== " ") ctx.fillText(run[k], padX + (i + k) * cellW, padY + j * cellH);
 }
 
 function nearby() {

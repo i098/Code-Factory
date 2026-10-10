@@ -22,6 +22,7 @@ FEATURES = {
     "factory.profiles.tailscale": "docs/security.md#remote-access",
     "factory.profiles.desktop": "docs/recovery.md#desktop-access",
     "factory.profiles.fleet_guards": "docs/fleet-guards.md",
+    "factory.profiles.shared_supabase": "docs/fleet-guards.md#shared-supabase",
     "factory.profiles.fleet_browsers": "docs/fleet-guards.md#browser-ladder",
     "factory.data_dir": "docs/configuration.md#data-disk",
     "factory.firstmate.checklist": "docs/configuration.md#new-host-questions",
@@ -102,15 +103,38 @@ def test_default_config_lists_the_current_defaults():
     ]
     lines = section("Default config")
     for line in [
-        f"- Agent harness: [omp](docs/omp.md), default model `{roles['default']}`, "
+        f"- Agent harness: [omp](docs/omp.md), home model `{roles['default']}`, "
         f"advisor {'on' if omp['advisor']['enabled'] else 'off'}",
-        "- Models: " + ticks(sorted({model.split(":")[0] for model in roles.values()})),
         "- omp plugins: " + ticks(provisions.OMP_PLUGINS),
         "- Profiles on: " + ticks(name for name, on in profiles.items() if on),
         "- Profiles off (opt-in): " + ticks(name for name, on in profiles.items() if not on),
         "- Unset (opt-in): " + ticks(unset),
     ]:
         assert line in lines
+
+    dispatch = json.loads((ROOT / "config/crew-dispatch.json").read_text())
+    small, ordinary, hard = [
+        [choice["model"] for choice in rule["use"]] for rule in dispatch["rules"]
+    ]
+    assert (
+        f"- Models: dynamic per-task selection; small {ticks(small)}; "
+        f"ordinary (default) {ticks(ordinary)}; hard only {ticks(hard)}."
+    ) in lines
+    assert dispatch["default"] == dispatch["rules"][1]["use"]
+    assert "- The spawning agent picks the thinking level." in lines
+    model_overrides = yaml.safe_load((ROOT / "config/omp-models.yml").read_text())
+    windows = model_overrides["providers"]["openai-codex"]["modelOverrides"]
+    for window in windows.values():
+        assert (
+            f"- Codex context: {window['contextWindow'] // 1000}K default, "
+            f"{window['maxContextWindow'] // 1000000}M maximum, "
+            f"`extendedContext` {'on' if omp['extendedContext'] else 'off'}."
+        ) in lines
+    gate = yaml.safe_load((ROOT / "config/no-mistakes-omp.yml").read_text())
+    assert (
+        f"- Gate models: per-run pins; routine `{ordinary[1]}:medium`; "
+        f"ordinary (default) `{gate['modelRoles']['default']}`; hard `{hard[0]}:high`."
+    ) in lines
 
     hook_env = ci_pool.HOOK_ENV
     assert (

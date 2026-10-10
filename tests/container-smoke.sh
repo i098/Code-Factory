@@ -724,14 +724,14 @@ check_login_shell_environment() {
 }
 
 # What the no-mistakes gate and the PR review need on a fresh host: omp as the
-# gate agent, through omp-as-pi with acp:omp as the fallback or acp:omp alone
-# when the pi adapter is unverified, acpx mapping omp to `omp acp`, no omp
+# gate agent (docs/omp.md#no-mistakes-pipeline-agent), acpx mapping omp to
+# `omp acp`, no omp
 # registry override, ponytail-review's exit codes against a stub omp, and the
 # fleet's minimum AXI versions. Versions come from RESOLVED_STAMP, which
 # resolved-releases matched against the installed package.json.
 check_agent_gate() {
     local name floor version stub row want omp_rc omp_out rc
-    cf_python -c 'import sys, yaml; c = yaml.safe_load(open(sys.argv[1])); assert "acp_registry_overrides" not in c and (c["agent"] == ["acp:omp"] or (c["agent"] == ["pi", "acp:omp"] and c["agent_path_override"]["pi"] == sys.argv[2]))' \
+    cf_python -c 'import sys, yaml; c = yaml.safe_load(open(sys.argv[1])); assert "acp_registry_overrides" not in c and (c["agent"] == ["acp:omp"] or (c["agent"] == "pi" and c["agent_path_override"]["pi"] == sys.argv[2]))' \
         "${HOME}/.no-mistakes/config.yaml" "${HOME}/.no-mistakes/omp-as-pi/omp-as-pi" || fail "~/.no-mistakes/config.yaml makes neither omp-as-pi nor acp:omp the gate agent"
     "${HOME}/.no-mistakes/omp-as-pi/omp-as-pi" --omp-as-pi-check || fail "the omp-as-pi preflight failed"
     [ -f "${HOME}/.omp/agent/extensions/fm-no-pattern-kill.ts" ] || fail "the pattern-kill guard omp extension is not installed"

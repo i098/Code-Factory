@@ -2,9 +2,7 @@
 # those: the daemon's systemd drop-in sets PI_CONFIG_FILES to this file
 # (installed as ~/.no-mistakes/omp-config.yml). It layers over
 # ~/.omp/agent/config.yml, and no-mistakes' own gate overlay layers over it.
-# no-mistakes cannot pin model or effort for acp:omp, so this file owns both for
-# the acp:omp fallback; the pi path passes its own --model and --thinking from
-# agent_config.pi in ~/.no-mistakes/config.yaml, which override the default role.
+# See docs/omp.md#no-mistakes-pipeline-agent for agent selection and model pinning.
 modelRoles:
   default: anthropic/claude-sonnet-5-5:high
   advisor: anthropic/claude-opus-5-5:medium

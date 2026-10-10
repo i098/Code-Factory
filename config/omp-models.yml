@@ -1,0 +1,22 @@
+providers:
+  openai-codex:
+    # See README.md#default-config for context windows and the effective limit.
+    modelOverrides:
+      gpt-6-astra:
+        contextWindow: 272000
+        maxContextWindow: 1000000
+      gpt-6.1-sol:
+        contextWindow: 272000
+        maxContextWindow: 1000000
+      gpt-6-sol:
+        contextWindow: 272000
+        maxContextWindow: 1000000
+      gpt-6-luna:
+        contextWindow: 272000
+        maxContextWindow: 1000000
+      gpt-5.6-sol:
+        contextWindow: 272000
+        maxContextWindow: 1000000
+      gpt-5.6-luna:
+        contextWindow: 272000
+        maxContextWindow: 1000000
