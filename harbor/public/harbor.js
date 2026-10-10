@@ -1414,12 +1414,41 @@ function slabInterval(a, c, b) {
   return enter < exit ? [enter, exit] : null;
 }
 const alongSegment = (a, c, t) => [a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t];
+function edgeCut(a, c, p, q) {
+  const dx = c[0] - a[0], dz = c[1] - a[1], ex = q[0] - p[0], ez = q[1] - p[1];
+  const det = dx * ez - dz * ex;
+  if (det === 0) return null;
+  const px = p[0] - a[0], pz = p[1] - a[1];
+  const t = (px * ez - pz * ex) / det, u = (px * dz - pz * dx) / det;
+  return u >= 0 && u <= 1 ? t : null;
+}
+function shipFloorEdges() {
+  const edges = [];
+  const sections = [HULL.map(([z, w]) => [z, w - 0.25]),
+    [[-14.6, 2.1 - 0.25], [-9, 2.1 + 5.6 * 0.08 - 0.25]]];
+  for (const stations of sections) {
+    for (let i = 1; i < stations.length; i++) {
+      const [z0, w0] = stations[i - 1], [z1, w1] = stations[i];
+      edges.push([[SX - w0, z0], [SX + w0, z0]], [[SX - w1, z1], [SX + w1, z1]]);
+      for (const side of [-1, 1]) edges.push([[SX + side * w0, z0], [SX + side * w1, z1]]);
+    }
+  }
+  return edges;
+}
+const SHIP_FLOOR_EDGES = shipFloorEdges();
 function floorCuts(a, c, enter = 0, exit = 1) {
   const cuts = [enter, exit];
   for (const f of FLOORS) {
     for (let k = 0; k < 4; k++) {
       const axis = k >> 1, d = c[axis] - a[axis], t = (f[k] - a[axis]) / d;
       if (d !== 0 && t > enter && t < exit) cuts.push(t);
+    }
+  }
+  if (Math.min(a[0], c[0]) <= SX + 3.1 && Math.max(a[0], c[0]) >= SX - 3.1 &&
+      Math.min(a[1], c[1]) <= 13 && Math.max(a[1], c[1]) >= -15) {
+    for (const [p, q] of SHIP_FLOOR_EDGES) {
+      const t = edgeCut(a, c, p, q);
+      if (t !== null && t > enter && t < exit) cuts.push(t);
     }
   }
   return cuts.sort((a, b) => a - b);
@@ -1441,8 +1470,14 @@ function terrainRange(a, c) {
 function floorRange(a, c) {
   const [x, z] = alongSegment(a, c, 0.5);
   const f = FLOORS.find(([x0, x1, z0, z1]) => x >= x0 && x < x1 && z >= z0 && z < z1);
-  if (!f) return terrainRange(a, c);
-  const y0 = f[4](...a), y1 = f[4](...c);
+  let y0, y1;
+  if (f) {
+    y0 = f[4](...a); y1 = f[4](...c);
+  } else if (shipFloor(x, z) !== null) {
+    const roof = z >= -14.6 && z < -9 && Math.abs(x - SX) <= 2.1 + (z + 14.6) * 0.08 - 0.25;
+    y0 = bob + (roof ? 4.8 : shipProfile(a[1])[1]) * rc + rs * (a[0] - SX);
+    y1 = bob + (roof ? 4.8 : shipProfile(c[1])[1]) * rc + rs * (c[0] - SX);
+  } else return terrainRange(a, c);
   return [Math.min(y0, y1), Math.max(y0, y1)];
 }
 function floorIntervalCovered(a, c) {
@@ -1455,6 +1490,9 @@ function floorCovered(a, c) {
   const cuts = floorCuts(a, c);
   for (let i = 1; i < cuts.length; i++) {
     if (floorAt(...alongSegment(a, c, cuts[i])) === null) return false;
+    const before = floorAt(...alongSegment(a, c, Math.max(cuts[i - 1], cuts[i] - 1e-9)));
+    const after = floorAt(...alongSegment(a, c, Math.min(1, cuts[i] + 1e-9)));
+    if (before === null || after === null || Math.abs(after - before) > 0.6) return false;
     if (!floorIntervalCovered(alongSegment(a, c, cuts[i - 1]), alongSegment(a, c, cuts[i]))) return false;
   }
   return true;
@@ -1497,7 +1535,7 @@ function routeObstacle(s, lift) {
   return b[1] + lift < high + 1.7 && b[4] + lift > Math.max(0.1, low) + 0.3;
 }
 function routeObstacles() {
-  return [...world.filter(s => routeObstacle(s, 0)), ...ship.filter(s => routeObstacle(s, bob))];
+  return [...world.filter(s => routeObstacle(s, 0)), ...ship.filter(s => s.solid)];
 }
 function detourCorners(b) {
   const x0 = walkBound(b, 0), x1 = walkBound(b, 3), z0 = walkBound(b, 2), z1 = walkBound(b, 5);
@@ -1516,6 +1554,8 @@ function clearLinks(nodes, obstacles) {
 let approachGraph;
 function rebuildRoutes() {
   const obstacles = routeObstacles(), nodes = NODES.filter(walkable);
+  nodes.push(...[[5, -15], [5, 0], [5, 10],
+    [SX + 1.7, -5.4], [SX + 1.7, -9.2], [SX, -12]].filter(walkable));
   for (const { bb } of obstacles) nodes.push(...detourCorners(bb));
   approachGraph = { obstacles, nodes, edges: routeEdges(nodes, clearLinks(nodes, obstacles)) };
   return approachGraph;

@@ -231,7 +231,8 @@ for (let x = -10; x <= 12; x += 0.5) {
 // Ship height changes must not invalidate island or deck collision-safe routes.
 for (const [lift, tilt] of [[0.2, 0.03], [-0.2, -0.03]]) {
   bob = lift; roll = tilt; rc = Math.cos(roll); rs = Math.sin(roll);
-  for (const start of [[-0.6, 25], [-3.1, -6], [0.3, 5.5]]) {
+  for (const start of [[-0.6, 25], [-3.1, -6], [SX + shipProfile(5.5)[0] - 0.4, 5.5]]) {
+    assert(walkable(start), 'ship-motion start must remain on clear walking ground');
     for (const id of ORDER) walkToSpot(id, start, 1000);
   }
 }
