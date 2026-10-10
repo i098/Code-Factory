@@ -1,6 +1,6 @@
 // Loads the built page (dist/) in Playwright WebKit as an iPhone and fails on a crash, an uncaught
 // error, a fallback to the plain page, or a multi-glyph fillText (WebKit keeps every distinct string
-// it draws, which grew iOS Safari tabs until they were killed), or a grid change after the first draw.
+// it draws, which grew iOS Safari tabs until they were killed), or an exterior grid change after the first draw.
 // Run harbor/build.py first.
 import { readFile } from "node:fs/promises";
 import { webkit, devices } from "playwright";
@@ -24,7 +24,7 @@ await page.route("http://harbor.test/**", async (route) => {
   const path = new URL(route.request().url()).pathname.slice(1) || "index.html";
   const type = { html: "text/html", js: "text/javascript", css: "text/css" }[path.split(".").pop()];
   if (path === "harbor.js") {
-    // Record the real grid and projection. Force slow frames to exercise the old adaptive zoom path.
+    // Force slow frames to check that the exterior grid and projection stay fixed.
     const source = await readFile(new URL(path, dist), "utf8");
     return route.fulfill({ contentType: type, body: source + `
 window.frames = [];
