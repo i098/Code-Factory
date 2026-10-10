@@ -84,7 +84,11 @@ for (const s of world.filter(s => s.anchor === false)) {
             "node",
             "-e",
             "const spots = {office: {}}; const touchFirst = {matches: false};\n"
-            + scene + shading + put + nearby + check,
+            + scene
+            + shading
+            + put
+            + nearby
+            + check,
         ],
         check=True,
         timeout=10,
