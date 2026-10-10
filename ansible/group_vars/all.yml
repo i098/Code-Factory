@@ -93,6 +93,9 @@ factory_imessage_dir: "{{ factory_share_dir }}/imessage"
 factory_imessage_desk_model: "{{ factory_cfg.imessage.desk_model | default('claude-haiku-5-5') }}"
 factory_imessage_supervisor_model: "{{ factory_cfg.imessage.supervisor_model | default('') }}"
 factory_imessage_owner_name: "{{ factory_cfg.imessage.owner_name | default('the owner') }}"
+# Crew board (factory.board, tasks/board.yml, docs/board.md): cargo's target
+# directory and the source checksum of the last build.
+factory_board_dir: "{{ factory_share_dir }}/crewboard"
 
 # Private runtime for the Chrome pruner. The exported pruner calls
 # psutil.Process.net_connections(), which exists from psutil 6 onwards, while

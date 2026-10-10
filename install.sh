@@ -1,11 +1,35 @@
 #!/usr/bin/env bash
 # One command from a fresh Ubuntu 24.04 or 26.04 machine to a Crewship host:
 #   curl -fsSL https://raw.githubusercontent.com/i098/Crewship/main/install.sh | bash
-# Arguments go to `./ship.sh dock` (for example `bash -s -- --container`).
+# Arguments go to `./ship.sh dock` (for example `bash -s -- --container`);
+# `--help` prints the usage and changes nothing.
 # Installs the OS prerequisites, clones the latest release into ~/Crewship,
 # then runs onboard, dock, inspect, chart and launch. Safe to run again: each
 # step skips or reports no change when its work is already done.
 set -euo pipefail
+
+# The same text is in npm/crewship.js; tests/test_install.py keeps the two equal.
+USAGE='Usage: crewship [--container] [--user NAME] [--home DIR]
+Installs Crewship on this Ubuntu 24.04 or 26.04 machine (npx crewship or install.sh).
+The options go to ./ship.sh dock, which writes the host config on the first run.
+  -h, --help  print this help and exit'
+
+# Runs before any install step, so --help and a bad option change nothing.
+check_args() {
+  local arg
+  for arg; do
+    case $arg in -h | --help) printf '%s\n' "$USAGE"; exit 0 ;; esac
+  done
+  while (($#)); do
+    case $1 in
+      --container | --user=?* | --home=?*) shift ;;
+      --user | --home) (($# > 1)) || break; shift 2 ;;
+      *) break ;;
+    esac
+  done
+  (($# == 0)) || { printf 'install.sh: bad option: %s\n%s\n' "$1" "$USAGE" >&2; exit 2; }
+}
+check_args "$@"
 
 main() {
   local repo=${CREWSHIP_REPO:-https://github.com/i098/Crewship.git}

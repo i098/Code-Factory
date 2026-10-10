@@ -1,11 +1,20 @@
 #!/usr/bin/env node
 // Fetch install.sh from the Crewship release that matches this package version and
 // run it; arguments go to `./ship.sh dock`. The package bundles nothing else.
+// --help prints the usage of install.sh here, without a fetch; install.sh rejects bad options.
 const { spawnSync } = require("node:child_process");
 const { version } = require("./package.json");
 
 const ref = `v${version}`;
 const url = `https://raw.githubusercontent.com/i098/Crewship/${ref}/install.sh`;
+
+if (process.argv.slice(2).some((arg) => arg === "-h" || arg === "--help")) {
+  console.log(`Usage: crewship [--container] [--user NAME] [--home DIR]
+Installs Crewship on this Ubuntu 24.04 or 26.04 machine (npx crewship or install.sh).
+The options go to ./ship.sh dock, which writes the host config on the first run.
+  -h, --help  print this help and exit`);
+  process.exit(0);
+}
 
 fetch(url)
   .then((response) => {
