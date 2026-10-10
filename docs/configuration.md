@@ -106,8 +106,8 @@ After a successful `./ship.sh launch` with the `firstmate` profile on, once omp 
 - The questions follow `firstmate.checklist` when it is set and `gh` can read it: `repo` is a GitHub repository (it can be private) and `path` is the checklist file in it. Set it only in `.local/host.yml`, never in `config/default.yml`. Otherwise they follow [Agent host move](agent-host-move.md).
 - When `.local/host.yml` has no `github_board` block, a question asks whether to turn on the [GitHub board](github-board.md). The answer is off unless you choose it.
 - With the `development` profile on and no `board` block in `.local/host.yml`, one more question asks whether to turn on the [crew board](board.md). The answer is off unless you choose it.
-- When `shared_supabase` is off, a question asks whether to enable the shared stack and CLI.
-  They stay off unless you choose them and set `factory.profiles.shared_supabase: true`.
+- When `shared_supabase` is off or omitted, a question asks whether to enable the shared stack and CLI.
+  The prompt names the resolved config path for this apply, including a path supplied through `--config`.
   Follow [Shared Supabase](fleet-guards.md#shared-supabase) before the next apply.
 - They are asked once per host. When the omp session exits successfully, apply writes the marker `~/.local/share/code-factory/new-host-questions-done`; while it exists, later applies skip the questions and print one line naming it. If omp exits non-zero, apply writes no marker and prints one line saying the questions did not complete. To ask again, delete the marker and rerun `./ship.sh launch` interactively.
 - The launch needs an interactive terminal, run as `factory.user`. When stdin is not a TTY, when `CI` is set, or when another account runs apply, apply skips them without writing the marker and prints one line saying to rerun `./ship.sh launch` interactively.
@@ -124,7 +124,7 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 | `firstmate` | on | Firstmate clone tracking upstream `main`, plus seeded Firstmate config: crew dispatch, crew and secondmate harness, the crew omp overlay (crew advisor, see [omp configuration](omp.md#advisor)), Herdr backend selection, startup memory budget, the spawn memory floor, presentation spaces off, and the turn-end pane-churn flag (see [Seeded Firstmate and OMP configuration](architecture.md#seeded-firstmate-and-omp-configuration)). |
 | `docker` | on | Docker engine and Compose v2, with daemon defaults `init` (reaps orphaned children) and `live-restore`. Group membership is opt-in through the Ansible variable `factory_docker_group_users`. |
 | `fleet_guards` | off | Docker guard, dev-server reaper, devtools-bridge reaper, storage guard and browser ladder. See [Fleet guards](fleet-guards.md). |
-| `shared_supabase` | off | Shared Supabase stack and CLI, login service, keeper timer, CLI shim, env seeder and lane heap cap. Needs `docker` and `firstmate`. |
+| `shared_supabase` | off | The [shared Supabase stack and CLI](fleet-guards.md#shared-supabase). |
 | `fleet_browsers` | off | The [browser ladder](fleet-guards.md#browser-ladder): the always-on Obscura CDP tier on `127.0.0.1:9222`, the on-demand `chrome` and `vnc` tiers with the `vnc` tier's TigerVNC and noVNC packages, the cookie sync and gc timers, and the ladder environment in shell profiles and the Herdr unit. `fleet_guards` provisions the same ladder, so a `fleet_guards` host needs no change. Needs no other profile; the ladder needs `iproute2` (`ss`) from the base image, which only `desktop` installs. |
 | `chat` | on | The latest [Concord](https://github.com/chojs23/concord) (Discord) and [slk](https://github.com/gammons/slk) (Slack) terminal clients, their shared libraries, and a first-write config for each. Logins stay manual. See [Chat clients](chat.md). |
 | `tailscale` | off | Tailscale daemon only. Authentication is manual; see [Security](security.md#remote-access). |
@@ -132,11 +132,7 @@ The recipe refuses to overwrite a conflicting unmanaged command or an independen
 
 The latest Herdr release is always installed, with the captured UI preferences, the [Spaces and Agents sidebar layouts](herdr.md) with the reporter timer that feeds Spaces, and one canonical, versioned user-service executable. What each profile installs, and where it comes from, is in [Dependencies](dependencies.md).
 
-An existing host must set `factory.profiles.shared_supabase: true` to keep its shared stack managed.
-An omitted switch is false, including on hosts with `fleet_guards: true`.
-With the switch off, apply leaves existing Supabase files, units, containers and volumes unchanged.
-The existing keeper can still start the stack; disabling the switch does not disable that keeper.
-Use the [manual removal commands](fleet-guards.md#manual-removal) to stop the stack and remove its managed integration without deleting volumes.
+See [Shared Supabase](fleet-guards.md#shared-supabase) for existing-host management and safe removal.
 
 ## Data disk
 

@@ -50,9 +50,8 @@ cd ~/oss-fleet/shared-supabase && ./node_modules/.bin/supabase status
 tail ~/oss-fleet/shared-supabase/check.log
 ```
 
-Stopping on purpose: `systemctl --user stop crewship-shared-supabase-check.timer`
-then `./node_modules/.bin/supabase stop` (volumes are kept). Do NOT `--no-backup`
-unless you mean to lose the fixture.
+Follow the [manual removal steps](https://github.com/i098/Crewship/blob/main/docs/fleet-guards.md#manual-removal) to stop the stack and remove its integration.
+Do not use `--no-backup` or remove Docker volumes.
 
 The fixture volume is `supabase_db_<project id>`. Snapshot before any
 deliberate change:
