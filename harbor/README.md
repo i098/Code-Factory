@@ -6,14 +6,12 @@ The page also lists every feature and link in plain HTML for screen readers and 
 See [how.html](public/how.html) for the renderer and controls.
 An uncaught error in `harbor.js`, or a failure to load it, hides the scene and shows the plain page.
 Errors and rejected promises from other scripts or resources, such as browser add-ons, do not.
-The canvas backing store stays within 4096x4096 device pixels, so large high-DPR windows draw at a lower pixel ratio.
-The background clear and intro overlay use CSS dimensions to cover the canvas, including when the rendering ratio falls below 1.
 JavaScript hides the plain page before the first paint; visitors without JavaScript still see it.
 The scene starts with a 1.2-second glyph-noise sweep that fades in from black without moving the camera or resizing the grid.
 Any key, click, touch, or mouse wheel input skips the animation.
 Reduced-motion visitors get the scene immediately.
 Waves, the fountain, and boats keep moving during the intro.
-See [how.html](public/how.html) for the intro's rendering details.
+See [how.html](public/how.html) for the canvas limits and intro rendering details.
 
 The island has staggered plaza paving, scattered stones and grass tufts, varied tree canopies, textured bark, and foam along the shore.
 
@@ -62,7 +60,8 @@ See [how.html](public/how.html) for the rendering limits on touch devices.
 
 CI also loads the page in Playwright Chromium in a 3651x2160 window at DPR 2, with `chromium-check.mjs`.
 It adds a failing image and a rejected promise, as a browser add-on can.
-It fails on the plain-page fallback, a black canvas 3 s after load, a canvas over 4096x4096 device pixels, or a console error.
+It fails on the plain-page fallback, a black canvas 3 s after load, or a console error.
+It also fails if the backing-store area exceeds the [canvas limit](public/how.html).
 To run the checks locally:
 
 ```bash

@@ -792,7 +792,7 @@ for (const [k, c] of Object.entries(BASE)) {
 }
 function measure() {
   // Phones and tablets draw at most 2 device pixels per CSS pixel: a 3x canvas costs more memory than it shows.
-  // Every canvas stays within 4096x4096 device pixels, the smallest area limit among browsers.
+  // Cap the backing-store area, not each dimension; large high-DPR windows otherwise exceed browser canvas limits.
   const w = stage.clientWidth, h = stage.clientHeight;
   const dpr = Math.min(touchFirst.matches ? 2 : Infinity, devicePixelRatio || 1, Math.sqrt(4096 * 4096 / (w * h)));
   // Reset the backing store only for a real size change, immediately before drawing; flooring keeps the cap.
