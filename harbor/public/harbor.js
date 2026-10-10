@@ -1410,8 +1410,12 @@ function shipFill(s, tex, b, fog) {
   return s.fill ? Math.max(b, s.fill * fog * (tex === "-" ? 0.65 : 1)) : b;
 }
 // Canvas and flags use fixed moon tones, without point-light or shadow work.
-function paintShipCloth(c, odd, s, k, t, tex, ny) {
-  if (!s.flag && s.tex !== sailTexture) return false;
+function paintShipCloth(c, odd, onShip, dx, dy, dz, ldx, ldy) {
+  const s = hitS, P = s.P, k = hitK, t = hitT;
+  const lnx = k >= 0 ? P[k] : hitN[0], lny = k >= 0 ? P[k + 1] : hitN[1], nz = k >= 0 ? P[k + 2] : hitN[2];
+  const ny = onShip ? rs * lnx + rc * lny : lny;
+  const px = onShip ? cam.lx + ldx * t : cam.x + dx * t, py = onShip ? cam.ly + ldy * t : cam.y + dy * t, pz = cam.z + dz * t;
+  const tex = s.tex && s.tex(px, py, pz, lnx, lny, nz);
   let ch, cls;
   if (s.flag) {
     ch = tex ? "@" : "█"; cls = tex ? "s6" : "p";
@@ -1421,15 +1425,17 @@ function paintShipCloth(c, odd, s, k, t, tex, ny) {
   }
   put(c, ch, cls, (ny > 0.7 ? -1 : 1) * (s.id * 16 + (k >= 0 ? k >> 2 : 12 - k)), t);
   SP[c] = s.spot;
-  return true;
 }
 function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
+  if (hitS.flag || hitS.tex === sailTexture) paintShipCloth(c, odd, onShip, dx, dy, dz, ldx, ldy);
+  else shadeLitSolid(c, odd, onShip, dx, dy, dz, ldx, ldy);
+}
+function shadeLitSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
   const s = hitS, P = s.P, k = hitK, t = hitT;
   const lnx = k >= 0 ? P[k] : hitN[0], lny = k >= 0 ? P[k + 1] : hitN[1], nz = k >= 0 ? P[k + 2] : hitN[2];
   const nx = onShip ? rc * lnx - rs * lny : lnx, ny = onShip ? rs * lnx + rc * lny : lny;
   const px = onShip ? cam.lx + ldx * t : cam.x + dx * t, py = onShip ? cam.ly + ldy * t : cam.y + dy * t, pz = cam.z + dz * t;
   const tex = s.tex && s.tex(px, py, pz, lnx, lny, nz);
-  if (paintShipCloth(c, odd, s, k, t, tex, ny)) return;
   const mat = tex && tex !== "-" ? tex[0] : s.mat, grain = tex && tex.length === 2 ? GRAIN[tex[1]] || 1 : 1;
   let ch, cls = mat;
   if (mat === "l") {
