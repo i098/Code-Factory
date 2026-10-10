@@ -115,23 +115,28 @@ for (let k = 1; k < path.length; k++) {
     assert(roadAt(x, z)[2], 'map route leaves the concrete road');
   }
 }
-function walkToSpot(id, start, dt) {
+function walkToSpot(id, start, dt, useMap = false) {
   me.x = start[0]; me.z = start[1]; me.eye = floorAt(...start) + 1.6;
   const stand = standFor(anchors[id]);
-  go(id);
+  if (useMap) {
+    pick = ORDER.indexOf(id); setMap(1);
+    mapKey({key: 'Enter', code: 'Enter'});
+  } else go(id);
+  const obstacles = routeObstacles();
   let frames = 0;
   while (walkPath.length && frames++ < 10000) {
     const x0 = me.x, z0 = me.z;
     autoStep(dt);
+    assert(!obstacles.some(s => segmentBlocked([x0, z0], [me.x, me.z], s.bb)),
+      'auto-walk link crosses an obstacle');
     for (let i = 0; i <= 10; i++) {
       const x = x0 + (me.x - x0) * i / 10, z = z0 + (me.z - z0) * i / 10;
-      if (x >= 0 && x <= 10 && z >= 21 && z <= 30) {
-        assert(!blocked(x, z, floorAt(x, z)), 'auto-walk crosses the basin or plaza hedges');
-      }
+      assert.notEqual(floorAt(x, z), null, 'auto-walk leaves walkable ground');
+      assert(!blocked(x, z, floorAt(x, z)), 'auto-walk crosses an obstacle');
     }
   }
   assert.equal(walkPath.length, 0, 'auto-walk did not finish');
-  assert.equal(jumped, id, 'auto-walk did not face its destination');
+  assert.equal(jumped, id, 'auto-walk did not face ' + id + ' from ' + start);
   assert.deepEqual([me.x, me.z], stand, 'auto-walk missed its destination');
 }
 function stoppedMapWalk(start, id, useMap = false) {
@@ -150,9 +155,9 @@ function stoppedMapWalk(start, id, useMap = false) {
   }
   assert.equal(jumped, null, 'failed map walk reported arrival');
 }
-stoppedMapWalk([-0.6, 25], 'how', true);
+walkToSpot('how', [-0.6, 25], 0.016, true);
 anchors.disconnected = {x: -0.6, y: 1.2, z: 27.5, r: 0, ship: 0};
-stoppedMapWalk([7.1, 24.6], 'disconnected');
+walkToSpot('disconnected', [7.1, 24.6], 0.016);
 const savedRoadLinks = LINKS.slice();
 try {
   LINKS.length = 0;
@@ -195,6 +200,31 @@ for (const start of plazaPoints) {
     anchors.approach = {x: end[0], y: 1.2, z: end[1] + 2.5, r: 0, ship: 0};
     walkToSpot('approach', start, 0.02);
   }
+}
+for (let x = WORLD.x0; x <= WORLD.x1; x += 4) {
+  for (let z = WORLD.z0; z <= WORLD.z1; z += 4) {
+    const start = [x, z], fy = floorAt(x, z);
+    if (fy === null || blocked(x, z, fy)) continue;
+    for (const id of ORDER) walkToSpot(id, start, 1000);
+  }
+}
+for (let x = -10; x <= 12; x += 0.5) {
+  for (let z = 20; z <= 30; z += 0.5) {
+    const start = [x, z], fy = floorAt(x, z);
+    if (fy === null || blocked(x, z, fy)) continue;
+    for (const id of ORDER) walkToSpot(id, start, 1000);
+  }
+}
+const savedWorldLength = world.length;
+try {
+  box(world, 29, 1.2, 39, 31, 3, 39.2, 's');
+  box(world, 29, 1.2, 40.8, 31, 3, 41, 's');
+  box(world, 29, 1.2, 39, 29.2, 3, 41, 's');
+  box(world, 30.8, 1.2, 39, 31, 3, 41, 's');
+  assert.deepEqual(approach([30, 40], [5, 19.6]), [], 'enclosed start must have no route');
+  stoppedMapWalk([30, 40], 'how', true);
+} finally {
+  world.length = savedWorldLength;
 }
 `, context);
 """,
