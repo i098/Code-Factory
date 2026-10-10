@@ -1,0 +1,116 @@
+:root {
+  --bg: #0a0f1c;
+  --panel: #111a2e;
+  --line: #24314f;
+  --fg: #d7deea;
+  --muted: #8d9ab3;
+  --accent: #7ee0c3;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--bg); color: var(--fg); }
+
+body {
+  margin: 0 auto;
+  max-width: 1240px;
+  padding: 0 clamp(8px, 3vw, 40px) 48px;
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+a { color: var(--accent); }
+a:hover { color: #b4f2df; }
+:focus-visible { outline: 3px solid #ffd479; outline-offset: 3px; border-radius: 4px; }
+code, kbd { font-family: var(--mono); font-size: 0.9em; }
+
+/* With JavaScript the page below is for screen readers only; the scene fills the screen. */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.top { padding: clamp(20px, 4vw, 44px) 0 18px; display: grid; gap: 10px; }
+.top h1 { margin: 0; font: 700 clamp(30px, 5vw, 46px)/1.1 var(--mono); letter-spacing: 0.02em; }
+.tagline { margin: 0; max-width: 70ch; color: var(--muted); font-size: clamp(15px, 1.4vw, 18px); }
+.top nav { display: flex; flex-wrap: wrap; gap: 8px 10px; }
+.top nav a {
+  font-family: var(--mono); font-size: 14px; text-decoration: none;
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; background: var(--panel);
+}
+.top nav a:hover { border-color: var(--accent); }
+
+.stage {
+  position: fixed; inset: 0;
+  overflow: hidden;
+  background: #060a14;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.stage:focus-visible { outline: 2px solid rgba(126, 224, 195, 0.6); outline-offset: -2px; border-radius: 0; }
+.stage.mapping { cursor: default; }
+
+#scene { display: block; width: 100%; height: 100%; }
+
+.card {
+  position: absolute; left: 0; top: 0;
+  width: min(340px, calc(100% - 16px));
+  padding: 12px 14px;
+  background: rgba(10, 15, 28, 0.92);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-size: 14px; line-height: 1.45;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
+.card:empty { display: none; }
+.card h3 { margin: 0 0 4px; font: 700 16px/1.3 var(--mono); }
+.card p { margin: 0 0 6px; color: var(--fg); }
+.card .hint { margin: 0; color: var(--muted); font-size: 12px; }
+/* The intro sits in a corner; feature labels float by their object (harbor.js sets the position). */
+.card.intro { top: auto; left: 12px; bottom: 12px; width: min(380px, calc(100% - 24px)); }
+.card .links { display: flex; gap: 14px; margin: 6px 0 0; font-family: var(--mono); font-size: 13px; }
+
+.pad {
+  display: none;
+  position: absolute; right: 10px; bottom: 10px;
+  width: 84px; height: 84px; border-radius: 50%;
+  border: 1px solid rgba(126, 224, 195, 0.35);
+  background: rgba(10, 15, 28, 0.25);
+}
+.pad span {
+  position: absolute; left: 50%; top: 50%;
+  width: 32px; height: 32px; margin: -16px 0 0 -16px; border-radius: 50%;
+  background: rgba(126, 224, 195, 0.4);
+}
+@media (pointer: coarse), (max-width: 700px) {
+  .pad { display: block; }
+  .card { padding: 8px 10px; font-size: 13px; width: min(280px, calc(100% - 16px)); }
+  .card.intro { top: 8px; bottom: auto; width: calc(100% - 16px); }
+  .card h3 { font-size: 14px; }
+}
+
+kbd {
+  display: inline-block; min-width: 1.6em; padding: 0 4px; margin: 0 1px;
+  border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+  background: var(--panel); color: var(--fg); text-align: center; line-height: 1.4;
+}
+
+.manifest { margin-top: 36px; }
+.manifest h2 { font: 700 22px/1.2 var(--mono); margin: 0 0 14px; }
+.manifest ul {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.manifest li { padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.manifest li a { font: 700 16px/1.3 var(--mono); }
+.manifest li p { margin: 6px 0 0; color: var(--muted); font-size: 14.5px; }
+
+.foot { margin-top: 40px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+
+/* how.html */
+.how { max-width: 860px; padding-top: 20px; font-size: 15px; }
+.how pre { margin: 0; color: var(--accent); font: 13px/1.25 var(--mono); overflow-x: auto; }
+.how h1 { margin: 14px 0 10px; font: 700 22px/1.2 var(--mono); }
+.how ul { padding-left: 18px; }
+.how li { margin: 0 0 8px; color: var(--muted); }
+.how b { color: var(--fg); }

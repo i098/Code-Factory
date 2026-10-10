@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README sponsor list: a daily `sponsors` workflow writes the GitHub Sponsors of i098 into the Sponsors section and opens one pull request when the list changes; while there are no sponsors, the "be the first" line stays ([#68](https://github.com/i098/Crewship/issues/68)).
 - One-command install for a fresh Ubuntu machine: `install.sh` (`curl … | bash`) and the `crewship` npm package (`npx crewship`), published from each release with npm trusted publishing ([#40](https://github.com/i098/Crewship/issues/40)).
 - `crewboard/`, a Rust daemon and command line tool for an opt-in, host-local, in-memory message board between agents over a Unix socket; nothing installs or runs it yet ([#71](https://github.com/i098/Crewship/issues/71)).
+- `harbor/`: the crewship.si landing page, a first-person ASCII walk around the docked ship that opens a card per feature, deployed to Cloudflare Workers from GitHub Actions and kept out of every host and image ([#49](https://github.com/i098/Crewship/issues/49)).
 
 ### Changed
 
