@@ -25,7 +25,7 @@ for (const li of document.querySelectorAll("#manifest li[data-spot]")) {
 }
 
 // ---- World -------------------------------------------------------------------------------
-const SX = -1.5; // ship centre line (x) and roll axis
+const SX = -2.4; // ship centre line (x) and roll axis
 const DECK = 2; // deck height in the ship frame
 const world = [];
 const ship = [];
@@ -423,51 +423,226 @@ const docsText = painted("DOCS", -1.9, 0.3, 2.45, 3.25);
 for (const x of [-1.95, 0.25]) box(world, x, 1.2, 16.72, x + 0.15, 2.4, 16.85, "o", { spot: "docsboard" });
 box(world, -2.1, 2.35, 16.6, 0.5, 3.35, 16.72, "o", { spot: "docsboard", tex: (x, y, z, nx, ny, nz) => (nz < -0.5 ? (docsText(x, y) ? "l" : "-") : null) });
 
-// Ship, in its own frame: hull, rails, cabin, helm, mast, sail, crow's nest, hatch, lantern.
-const k = 1 / 3.2;
-solid(ship, [[0, 1, 0, 0, DECK, 0], [0, -1, 0, 0, -1.2, 0], [0, 0, -1, 0, 0, -12],
-  [1, -k, 0, 0.7, DECK, 0], [-1, -k, 0, -3.7, DECK, 0], [4, 0, 2.2, 0.7, 0, 6], [-4, 0, 2.2, -3.7, 0, 6]],
-[-3.7, -1.2, -12, 0.7, DECK, 10], "o", { solid: false,
-  tex: (x, y, z, nx, ny) => (ny > 0.5 ? seam(x) : y > 1.3 && y < 1.6 ? "s" : null) });
-// Low bulwarks along the deck edge, open at the gangway; the deck's walkable area keeps you aboard.
-for (const [x0, x1, z0, z1] of [[-3.7, -3.55, -12, 6], [0.55, 0.7, -12, -2], [0.55, 0.7, -0.4, 6], [-3.7, 0.7, -12, -11.85]]) {
-  box(ship, x0, DECK, z0, x1, 2.5, z1, "o", { solid: false });
+// Ship stations [z, half breadth, sheer height, keel height]. The bow narrows and rises out of the water.
+const HULL = [[-15, 2.35, 3.2, -0.5], [-12, 3.1, 2.8, -1.5], [-8, 3.1, DECK, -1.5],
+  [4, 3.1, DECK, -1.5], [9, 2, 2.5, -0.1], [13, 0.18, 3, 2.7]];
+function hullPortTone(y, z) {
+  if (z > -7.5 && z < 4.5 && y > 0.65 && y < 1.4) {
+    const port = Math.abs((z + 9) % 3 - 0.6);
+    if (port < 0.45) return gunPortTone(y, port);
+  }
+  return null;
 }
-// The ship's name on a board on the starboard bow, facing the dock.
-const nameText = painted("CREWSHIP", 0.2, 6, 0.75, 1.8);
-box(ship, 0.6, 0.7, 0.1, 0.74, 1.85, 6, "o", { spot: "sign", tex: (x, y, z, nx) => (nx > 0.5 ? (nameText(z, y) ? "l" : "-") : null) });
-box(ship, -3.3, DECK, -11.6, 0.1, 4.3, -8.2, "s", { spot: "cabin", tex: (x, y, z, nx, ny, nz) => {
-  if (nz < 0.5) return null;
-  if (x > -1.9 && x < -1.1 && y < 3.8) return "o";
-  return y > 3 && y < 3.6 && ((x > -3 && x < -2.4) || (x > -0.6 && x < 0)) ? "l" : null;
-} });
-box(ship, -3.5, 4.3, -11.8, 0.3, 4.55, -8, "o", { spot: "cabin" });
+function gunPortTone(y, port) {
+  return port > 0.31 || y < 0.78 || y > 1.27 ? "l" : "p";
+}
+function hullTexture(x, y, z, nx, ny, sheer) {
+  if (ny > 0.6) return seam(x);
+  const port = Math.abs(nx) > 0.6 ? hullPortTone(y, z) : null;
+  if (port) return port;
+  return Math.abs(y - sheer + 0.35) < 0.14 ? "s" : (y + 9) % 0.3 < 0.045 ? "-" : null;
+}
+function hullSection(a, b) {
+  const [z0, w0, h0, k0] = a, [z1, w1, h1, k1] = b, dz = z1 - z0;
+  const dh = (h1 - h0) / dz, dw = (w1 - w0) / dz, dk = (k1 - k0) / dz, rake = dw - 0.45 * dh;
+  return solid(ship, [[0, 1, -dh, 0, h0, z0], [0, -1, dk, 0, k0, z0],
+    [1, -0.45, -rake, SX + w0, h0, z0], [-1, -0.45, -rake, SX - w0, h0, z0],
+    [0, 0, -1, 0, 0, z0], [0, 0, 1, 0, 0, z1]],
+  [SX - Math.max(w0, w1), Math.min(k0, k1), z0, SX + Math.max(w0, w1), Math.max(h0, h1), z1],
+  "o", { solid: false, tex: (x, y, z, nx, ny) => hullTexture(x, y, z, nx, ny, h0 + dh * (z - z0)), hull: true, fill: 0.48 });
+}
+function shipProfile(z) {
+  for (let i = 1; i < HULL.length; i++) {
+    const a = HULL[i - 1], b = HULL[i];
+    if (z < a[0] || z > b[0]) continue;
+    const t = (z - a[0]) / (b[0] - a[0]);
+    return [a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  }
+  return null;
+}
+function shipRail(a, b, side) {
+  const [z0, w0, y0] = a, [z1, w1, y1] = b, dz = z1 - z0;
+  const x0 = SX + side * w0, dx = side * (w1 - w0) / dz, dy = (y1 - y0) / dz;
+  solid(ship, [[1, 0, -dx, x0 + 0.06, 0, z0], [-1, 0, dx, x0 - 0.06, 0, z0],
+    [0, 1, -dy, 0, y0 + 0.8, z0], [0, -1, dy, 0, y0, z0],
+    [0, 0, 1, 0, 0, z1], [0, 0, -1, 0, 0, z0]],
+  [Math.min(x0, SX + side * w1) - 0.06, Math.min(y0, y1), z0,
+    Math.max(x0, SX + side * w1) + 0.06, Math.max(y0, y1) + 0.8, z1],
+  "s", { solid: false, thin: true, fill: 0.75, rail: [z0, y0, dy, dz / Math.ceil(dz / 2)] });
+}
+for (let i = 1; i < HULL.length; i++) {
+  const a = HULL[i - 1], b = HULL[i];
+  hullSection(a, b);
+  shipRail(a, b, -1);
+  if (a[0] === -8) {
+    shipRail(a, [-1.8, 3.1, DECK], 1);
+    shipRail([-0.6, 3.1, DECK], b, 1);
+  } else shipRail(a, b, 1);
+}
+beam(ship, [SX - 2.35, 3.95, -15], [SX + 2.35, 3.95, -15], "s", { fill: 0.58 }, 0.065);
+// Recessed dark gun ports and iron barrels share the same gun-deck stations, below the walking deck.
+for (const z of [-5.4, -2.4, 0.6, 3.6]) {
+  for (const side of [-1, 1]) {
+    const x = SX + side * (3.1 - 0.45 * (DECK - 1.02));
+    beam(ship, [x - side * 0.35, 1.02, z], [x + side * 0.5, 1.02, z], "t", { fill: 0.32 }, 0.14);
+  }
+}
+// The stern castle follows the tapered transom, not a box hung over the water.
+solid(ship, [[0, 1, 0, 0, 4.8, 0], [0, -1, 0, 0, DECK, 0],
+  [0, 0, -1, 0, 0, -14.6], [0, 0, 1, 0, 0, -9],
+  [1, 0, -0.08, SX + 2.1, 0, -14.6], [-1, 0, -0.08, SX - 2.1, 0, -14.6]],
+[SX - 2.55, DECK, -14.6, SX + 2.55, 4.8, -9], "o", { spot: "cabin", tex: sternTexture, fill: 0.48 });
+function sternTexture(x, y, z, nx, ny, nz) {
+  if (ny > 0.5) return seam(x);
+  if (nz > 0.5 && Math.abs(x - SX) < 0.5 && y < 4.1) return "f";
+  const u = Math.abs(nz) > 0.5 ? x - SX + 9 : z + 18;
+  return y > 3.2 && y < 4.2 && u % 1.2 < 0.65 ? "l" : seam(y);
+}
+for (const side of [-1, 1]) {
+  shipRail([-14.6, 2.1, 4.8], [-9, 2.55, 4.8], side);
+  shipLantern(SX + side * 2.5, 4.8, -14.3, false, SX + side * 2.1);
+}
+beam(ship, [SX - 2.1, 5.55, -14.6], [SX + 2.1, 5.55, -14.6], "s", { fill: 0.58 }, 0.06);
+function shipLantern(x, y, z, anchor = false, mountX = x) {
+  beam(ship, [mountX, y, z], [mountX, y + 1.13, z], "o", { fill: 0.4 }, 0.045);
+  if (mountX !== x) beam(ship, [mountX, y + 1.13, z], [x, y + 1.13, z], "o", { fill: 0.4 }, 0.045);
+  box(ship, x - 0.2, y + 0.7, z - 0.2, x + 0.2, y + 1.05, z + 0.2, "l", { spot: "lantern", anchor });
+  box(ship, x - 0.25, y + 1.05, z - 0.25, x + 0.25, y + 1.13, z + 0.25, "t", { solid: false });
+}
+shipLantern(1.15, DECK, 3, false, 0.7);
+shipLantern(SX - 3.55, DECK, -4, false, SX - 3.1);
+shipLantern(SX, 2.63, 10, true);
+// Rectangular canvas hangs directly below horizontal yards on each mast.
+function squareSail(z, top, width, drop) {
+  const c = Math.cos(0.6), s = Math.sin(0.6), x = width * c, dz = width * s;
+  beam(ship, [SX - (width + 0.2) * c, top, z - (width + 0.2) * s],
+    [SX + (width + 0.2) * c, top, z + (width + 0.2) * s],
+    "o", { spot: "mast", anchor: false, fill: 0.5 }, 0.075);
+  solid(ship, [[0, 1, 0, 0, top - 0.1, 0], [0, -1, 0, 0, top - drop, 0],
+    [c, 0, s, SX + x, 0, z + dz], [-c, 0, -s, SX - x, 0, z - dz],
+    [-s, 0, c, SX - s * 0.08, 0, z + c * 0.08], [s, 0, -c, SX + s * 0.08, 0, z - c * 0.08]],
+  [SX - x - s * 0.08, top - drop, z - dz - c * 0.08, SX + x + s * 0.08, top, z + dz + c * 0.08],
+  "s", { solid: false, tex: sailTexture, thin: true, fill: 0.8 });
+}
+function sailTexture(x, y) {
+  return (x + 99) % 0.8 < 0.025 || (y + 99) % 1.6 < 0.035 ? "-" : null;
+}
+const RIGGING = [];
+function shipMast(z, foot, height, width) {
+  column(ship, SX, z, 0.16, 0.16, foot, height, "o", { spot: "mast", fill: 0.42 });
+  squareSail(z, height - 2.3, width * 0.7, 3.8);
+  squareSail(z, height - 7.2, width, 5.5);
+  for (const side of [-1, 1]) {
+    for (const dz of [-1.6, 1.6]) {
+      const [w, y] = shipProfile(z + dz);
+      shipRope([SX, height - 3, z], [SX + side * w, y + 0.3, z + dz]);
+    }
+  }
+}
+shipMast(-3, DECK, 20.5, 5.1);
+shipMast(6, 2.2, 18.2, 4.3);
+shipRope([SX, 20, -3], [SX, 17.8, 6]);
+shipRope([SX, 20, -3], [SX, 4.8, -14.3]);
+shipRope([SX, 17.8, 6], [SX, 4.3, 18.5]);
+function shipRope(a, b) {
+  RIGGING.push([a, b]);
+}
+// Project the stays into the depth buffer once, rather than ray-testing their large diagonal boxes.
+function ropePoint(p) {
+  const lx = p[0] - SX, x = SX + rc * lx - rs * p[1] - cam.x;
+  const y = rs * lx + rc * p[1] + bob - cam.y, z = p[2] - cam.z;
+  const d = x * cam.f[0] + y * cam.f[1] + z * cam.f[2], div = Math.max(0.001, d);
+  return [((x * cam.r[0] + z * cam.r[2]) / div / cam.tanH + 1) * cols / 2,
+    (1 - (x * cam.u[0] + y * cam.u[1] + z * cam.u[2]) / div / cam.tanV) * rows / 2, d];
+}
+function ropeEnds(a, b) {
+  let p = ropePoint(a), q = ropePoint(b);
+  if (p[2] < 0.2 && q[2] < 0.2) return null;
+  if (p[2] < 0.2) { const t = (0.2 - p[2]) / (q[2] - p[2]); p = ropePoint(a.map((v, i) => v + (b[i] - v) * t)); }
+  if (q[2] < 0.2) { const t = (0.2 - q[2]) / (p[2] - q[2]); q = ropePoint(b.map((v, i) => v + (a[i] - v) * t)); }
+  return [p, q];
+}
+function ropeSpan(p, q) {
+  let lo = 0, hi = 1;
+  for (let k = 0; k < 2; k++) {
+    const d = q[k] - p[k], max = k ? rows : cols;
+    if (Math.abs(d) < 0.001) { if (p[k] < -1 || p[k] > max) return null; continue; }
+    const a = (-1 - p[k]) / d, b = (max - p[k]) / d;
+    lo = Math.max(lo, Math.min(a, b)); hi = Math.min(hi, Math.max(a, b));
+  }
+  return lo > hi ? null : [lo, hi];
+}
+function ropeCell(i, j, depth, ch) {
+  if (i < 0 || i >= cols || j < 0 || j >= rows) return;
+  const c = j * cols + i, h = ((2 * i + 1) / cols - 1) * cam.tanH, v = (1 - (2 * j + 1) / rows) * cam.tanV;
+  const distance = depth * Math.sqrt(1 + h * h + v * v);
+  if (distance > D[c] + 0.05) return;
+  put(c, ch, "o3", -1, distance); SP[c] = null;
+}
+function drawRope(p, q) {
+  const span = ropeSpan(p, q);
+  if (!span) return;
+  const [lo, hi] = span, dx = q[0] - p[0], dy = q[1] - p[1];
+  const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) * (hi - lo)));
+  const ch = Math.abs(dx) < Math.abs(dy) * 0.5 ? "|" : Math.abs(dy) < Math.abs(dx) * 0.5 ? "-" : dx * dy > 0 ? "\\" : "/";
+  for (let k = 0; k <= n; k++) {
+    const t = lo + (hi - lo) * k / n, depth = 1 / ((1 - t) / p[2] + t / q[2]);
+    ropeCell(Math.floor(p[0] + dx * t), Math.floor(p[1] + dy * t), depth, ch);
+  }
+}
+function drawRigging() {
+  for (const [a, b] of RIGGING) {
+    const ends = ropeEnds(a, b);
+    if (ends) drawRope(...ends);
+  }
+}
+column(ship, SX, -3, 0.8, 0.85, 13.7, 14.4, "o", { spot: "nest", tex: (x, y) => (y < 13.85 ? "-" : null) });
+// The flagstaff and diagonal flag clear the main yard, exposing the black cloth against the sky.
+column(ship, SX, -3, 0.055, 0.055, 20.5, 22.2, "o", { solid: false, fill: 0.42 });
+solid(ship, [[0, 1, 0, 0, 22.1, 0], [0, -1, 0, 0, 20, 0],
+  [1, 0, 0, SX, 0, 0], [-1, 0, 0, SX - 3.4, 0, 0],
+  [0.7, 0, 1, SX, 0, -2.94], [-0.7, 0, -1, SX, 0, -3.06]],
+[SX - 3.4, 20, -3.06, SX, 22.1, -0.56], "p", { solid: false, thin: true, flag: true, tex: pirateFlag });
+function pirateFlag(x, y) {
+  const u = (SX - x - 1.7) / 1.1, v = (y - 21.05) / 0.65;
+  if (u * u + (v - 0.2) * (v - 0.2) < 0.22) return "s";
+  return v < 0 && Math.abs(Math.abs(u) + v + 0.5) < 0.12 ? "s" : null;
+}
+// The bowsprit extends forward along the keel, away from the breakwater tower.
+beam(ship, [SX, 2.6, 10], [SX, 4.3, 18.5], "o", {}, 0.12);
+beam(ship, [SX, 2.8, 12.7], [SX, 4.3, 18.5], "o");
+// A carved figurehead sits under the bowsprit at the stem, facing out to sea.
+blob(ship, SX, 3.1, 13.4, 0.28, 0.65, 0.3, "o", { solid: false, dim: 1.7 });
+blob(ship, SX, 3.8, 13.55, 0.22, 0.23, 0.24, "s", { solid: false });
+beam(ship, [SX - 0.25, 3.4, 13.4], [SX + 0.25, 3.45, 13.9], "o", {}, 0.07);
+const nameText = painted("CREWSHIP", -0.8, 4.2, 1.7, 2.05);
+box(ship, 0.7, 1.62, -0.8, 0.76, 2.1, 4.2, "o", { spot: "sign", tex: (x, y, z, nx) => (nx > 0.5 && nameText(z, y) ? "s" : null) });
 box(ship, SX - 0.1, DECK, -7.05, SX + 0.1, 3.1, -6.85, "o", { spot: "helm" });
 disc(ship, SX, 3.3, -6.85, -6.72, 0.62, "o", { spot: "helm", tex: (x, y) => {
   const dx = x - SX, dy = y - 3.3, rr = Math.hypot(dx, dy);
   return rr > 0.42 || rr < 0.12 || Math.abs(Math.sin(4 * Math.atan2(dy, dx))) < 0.25 ? null : "-";
 } });
-column(ship, SX, -1, 0.22, 0.17, DECK, 14.6, "o", { spot: "mast" });
-box(ship, -5.2, 11.2, -1.1, 2.2, 11.4, -0.9, "o", { spot: "mast" });
-// Docked, so the sail is furled on the yard; the shrouds and stays make the rig read as a ship.
-box(ship, -4.9, 11.4, -1.25, 1.9, 11.85, -0.75, "s", { tex: (x) => ((x + 9) % 0.8 < 0.1 ? "-" : null) });
-for (const x of [-3.6, 0.6]) beam(ship, [SX, 12.3, -1], [x, 2.5, 1.5], "o");
-beam(ship, [SX, 14.2, -1], [SX, 2.3, 13], "o");
-beam(ship, [SX, 14.2, -1], [SX, 4.55, -11.6], "o");
-column(ship, SX, -1, 0.9, 0.95, 12.3, 13.2, "o", { spot: "nest", tex: (x, y) => (y < 12.5 ? "-" : null) });
-box(ship, SX, 14.4, -1.03, SX + 1.2, 15.05, -0.97, "r");
-box(ship, -2.7, DECK, 2.4, -0.3, 2.55, 4.8, "o", { spot: "hold",
+box(ship, -3.6, DECK, 0.8, -1.2, 2.55, 3.2, "o", { spot: "hold",
   tex: (x, y, z, nx, ny) => (ny > 0.5 && ((x + 9) % 0.4 < 0.07 || (z + 9) % 0.4 < 0.07) ? "-" : null) });
-box(ship, -3.3, DECK, 5, -2.5, 2.8, 5.8, "o", { spot: "hold" });
-box(ship, SX - 0.08, DECK, 7.2, SX + 0.08, 3.3, 7.36, "o", { spot: "lantern" });
-box(ship, SX - 0.22, 3.3, 7.07, SX + 0.22, 3.75, 7.5, "l", { spot: "lantern" });
-box(ship, SX - 0.08, 2.2, 9.5, SX + 0.08, 2.35, 13, "o");
-// A spyglass on the cabin roof, the ship's bell at the bow, a strongbox on the port deck.
-beam(ship, [-2.8, 4.55, -10.6], [-2.8, 5.3, -10.6], "o", { spot: "spyglass" }, 0.05);
-beam(ship, [-3.1, 5.2, -11.2], [-2.3, 5.55, -9.9], "t", { spot: "spyglass" }, 0.1);
-box(ship, -2.95, DECK, 6, -2.8, 3.6, 6.15, "o", { spot: "bell" });
-column(ship, -2.87, 6.07, 0.3, 0.12, 2.85, 3.45, "r", { spot: "bell" });
-box(ship, -3.35, DECK, 0.3, -2.85, 2.5, 0.9, "t", { spot: "strongbox", tex: (x, y) => (Math.abs(y - 2.3) < 0.05 ? "-" : null) });
+beam(ship, [-3.5, 4.8, -11.5], [-3.5, 5.55, -11.5], "o", { spot: "spyglass" }, 0.05);
+beam(ship, [-3.8, 5.45, -12.1], [-3, 5.8, -10.8], "t", { spot: "spyglass" }, 0.1);
+box(ship, -3.4, 2.2, 6, -3.25, 3.8, 6.15, "o", { spot: "bell" });
+column(ship, -3.32, 6.07, 0.3, 0.12, 3.05, 3.65, "r", { spot: "bell" });
+box(ship, -4.8, DECK, 0.3, -4.3, 2.5, 0.9, "t", { spot: "strongbox", tex: (x, y) => (Math.abs(y - 2.3) < 0.05 ? "-" : null) });
+// Seven supported steps connect the main deck to the stern castle's roof.
+const STERN_STEPS = [];
+for (let i = 0; i < 7; i++) {
+  const z = -6 - i * 0.5, height = DECK + (i + 1) * 0.4;
+  box(ship, SX + 1.2, DECK, z, SX + 2.2, height, z + 0.5, "o", { solid: false });
+  STERN_STEPS.push([SX + 1.45, SX + 1.95, z, z + 0.5, (x) => bob + height * rc + rs * (x - SX)]);
+}
+const SHIP_BOUNDS = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+for (const { bb } of ship) {
+  for (let k = 0; k < 3; k++) {
+    SHIP_BOUNDS[k] = Math.min(SHIP_BOUNDS[k], bb[k]);
+    SHIP_BOUNDS[k + 3] = Math.max(SHIP_BOUNDS[k + 3], bb[k + 3]);
+  }
+}
 
 // The gangway hinges between the rocking deck and the dock, so its planes are rebuilt per frame.
 const gangway = solid(world, [[0, 1, 0, 0, 0, 0], [0, -1, 0, 0, 0, 0], [1, 0, 0, 3.1, 0, 0],
@@ -563,9 +738,16 @@ function setGangway() {
   P[4] = -nx; P[5] = -ny; P[7] = -(nx * 0.7 + ny * (y0 - 0.12));
   gangway.bb[1] = Math.min(y0, y1) - 0.2; gangway.bb[4] = Math.max(y0, y1) + 0.05;
 }
-// Walkable areas [x0, x1, z0, z1, height at x]: deck, gangway and dock; elsewhere the island above the waterline.
+// Walkable deck uses the same tapered stations as the hull, inset from the rails.
+function shipFloor(x, z) {
+  const p = shipProfile(z);
+  if (!p || Math.abs(x - SX) > p[0] - 0.25) return null;
+  const roof = z >= -14.6 && z < -9 && Math.abs(x - SX) <= 2.1 + (z + 14.6) * 0.08 - 0.25;
+  return bob + (roof ? 4.8 : p[1]) * rc + rs * (x - SX);
+}
+// Walkable areas [x0, x1, z0, z1, height at x]: gangway and dock; elsewhere deck or island.
 const FLOORS = [
-  [-3.45, 0.45, -11.55, 6.6, deckAt],
+  ...STERN_STEPS,
   [0.45, 3.1, -1.8, -0.6, (x) => deckAt(0.7) + (1.2 - deckAt(0.7)) * Math.min(1, Math.max(0, (x - 0.7) / 2.4))],
   [3, 7, -16, 14, () => 1.2],
 ];
@@ -573,6 +755,8 @@ function floorAt(x, z) {
   if (insideHouse) return roomFloorAt(x, z);
   const f = FLOORS.find(([x0, x1, z0, z1]) => x >= x0 && x < x1 && z >= z0 && z < z1);
   if (f) return f[4](x, z);
+  const deck = shipFloor(x, z);
+  if (deck !== null) return deck;
   const y = terrainY(x, z);
   return y > 0.1 ? y : null;
 }
@@ -591,7 +775,7 @@ function blocked(x, z, fy) {
   return false;
 }
 
-const me = { x: 0, z: -7.4, yaw: 0.2, pitch: 0.03 };
+const me = { x: 6.5, z: -15, yaw: -0.6, pitch: 0.4 };
 const keys = new Set();
 const stick = { x: 0, y: 0 };
 let moved = false;
@@ -648,7 +832,15 @@ function coneEntry(cone, ox, oy, oz, dx, dy, dz) {
   }
   return best;
 }
-const hit = (s, ox, oy, oz, dx, dy, dz) => (s.blob ? blobEntry(s.blob, ox, oy, oz, dx, dy, dz) : s.cone ? coneEntry(s.cone, ox, oy, oz, dx, dy, dz) : entry(s.P, ox, oy, oz, dx, dy, dz));
+const hit = (s, ox, oy, oz, dx, dy, dz) => (s.rail ? railEntry(s, ox, oy, oz, dx, dy, dz) : s.blob ? blobEntry(s.blob, ox, oy, oz, dx, dy, dz) : s.cone ? coneEntry(s.cone, ox, oy, oz, dx, dy, dz) : entry(s.P, ox, oy, oz, dx, dy, dz));
+// One perforated slab per railing replaces individual posts without filling the open spaces.
+function railEntry(s, ox, oy, oz, dx, dy, dz) {
+  const t = entry(s.P, ox, oy, oz, dx, dy, dz);
+  if (!Number.isFinite(t)) return t;
+  const [z0, y0, slope, spacing] = s.rail, z = oz + dz * t - z0;
+  const y = oy + dy * t - y0 - slope * z, post = z % spacing;
+  return y < 0.06 || y > 0.7 || Math.abs(y - 0.3) < 0.05 || post < 0.05 || post > spacing - 0.05 ? t : Infinity;
+}
 // Ray against an ellipsoid: solve in the space where it is a unit sphere. Sets entryK -4 and entryN.
 function blobEntry(e, ox, oy, oz, dx, dy, dz) {
   const qx = (ox - e[0]) / e[3], qy = (oy - e[1]) / e[4], qz = (oz - e[2]) / e[5], vx = dx / e[3], vy = dy / e[4], vz = dz / e[5];
@@ -688,7 +880,7 @@ const LIGHTS = [
   ...world.filter((s) => s.mat === "l" && s !== beacon && s !== antennaLamp).map((s) => lamp(...centre(s), 1, 10)),
   ...ship.filter((s) => s.mat === "l").map((s) => lamp(...centre(s), 0.9, 9, true)),
   lamp(-7.4, 3, 20.8, 0.22, 2.3), lamp(-2.6, 3, 20.8, 0.22, 2.3), lamp(-0.8, 3, 23.2, 0.22, 2.3), lamp(-0.8, 3, 25.7, 0.22, 2.3),
-  lamp(-2.7, 3.3, -8, 0.45, 5, true), lamp(-0.3, 3.3, -8, 0.45, 5, true), lamp(...centre(beacon), 1.1, 16),
+  lamp(...centre(beacon), 1.1, 16),
 ];
 const BEAM = { x: -36, y: 13.8, z: -24, reach: 95 };
 // Lights reaching each 8 m tile of the ground plan, so a point checks only the few lamps near it.
@@ -768,7 +960,7 @@ const safe = { left: 0, right: 0, top: 0, bottom: 0 };
 const MONO = getComputedStyle(document.documentElement).getPropertyValue("--mono");
 const BASE = { "": "#5c6a88", k: "#e9eefb", w: "#3f78b8", d: "#22406a", m: "#a9c8f0", o: "#dba66b", s: "#efe6cf",
   t: "#a3adc2", l: "#ffd479", r: "#e0705f", b: "#62a8e0", f: "#3a4562", h: "#7ee0c3", g: "#6fbf73", y: "#e3d3a3", n: "#9b8a62",
-  G: "#a5d36e", M: "#4f8a4a" };
+  G: "#a5d36e", M: "#4f8a4a", p: "#17171c" };
 // Each colour in four tiers for the night lighting: dark, dim, bright, and warmed by lamplight.
 const mix = (a, b, f) => "#" + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - f) + parseInt(b.slice(i, i + 2), 16) * f).toString(16).padStart(2, "0")).join("");
 const COLORS = {};
@@ -825,7 +1017,10 @@ function render() {
       cast(c, i, (i + j) & 1, dx / n, dy / n, dz / n);
     }
   }
-  if (!insideHouse) gulls();
+  if (!insideHouse) {
+    drawRigging();
+    gulls();
+  }
   const mid = (rows >> 1) * cols + (cols >> 1);
   const spot = SP[mid], looked = spot && D[mid] < (RANGE[spot] || 12);
   show(moved ? jumped || (looked ? spot : nearby()) : null);
@@ -964,12 +1159,19 @@ function mapMarks() {
 const mapInside = ([i, j]) => i >= 0 && i < mapBox.iw && j >= 0 && j < mapBox.ih;
 function footprint(s, cls) {
   const b = s.bb;
-  if (s.thin || s === gangway || b[3] - b[0] > 40 || b[4] < 0.5) return;
+  if (s.thin || b[3] - b[0] > 40 || b[4] < 0.5) return;
   const [i0, j0] = toMap(b[0], b[5]), [i1, j1] = toMap(b[3], b[2]);
   const ch = s.blob ? (s.mat === "t" ? "@" : "%") : s.cone ? "@" : s.mat === "o" ? "=" : "#";
   for (let j = Math.max(0, j0); j <= Math.min(mapBox.ih - 1, j1); j++) {
-    for (let i = Math.max(0, i0); i <= Math.min(mapBox.iw - 1, i1); i++) mapPut(i + 1, j + 1, ch, cls);
+    for (let i = Math.max(0, i0); i <= Math.min(mapBox.iw - 1, i1); i++) {
+      if (s.hull && !mapHullCell(i, j)) continue;
+      mapPut(i + 1, j + 1, ch, cls);
+    }
   }
+}
+function mapHullCell(i, j) {
+  const [x, z] = fromMap(i + 0.5, j + 0.5), p = shipProfile(z);
+  return p && Math.abs(x - SX) <= p[0];
 }
 function mapPoint(id, n) {
   const p = toMap(anchors[id].x, anchors[id].z), picked = mapMode && n === pick;
@@ -1150,7 +1352,9 @@ function cast(c, i, odd, dx, dy, dz) {
   trace(rowWorld, i, cam.x, cam.y, cam.z, dx, dy, dz);
   const wS = hitS;
   const ldx = rc * dx + rs * dy, ldy = -rs * dx + rc * dy;
-  trace(rowShip, i, cam.lx, cam.ly, cam.z, ldx, ldy, dz);
+  const shipNear = boxEntry(SHIP_BOUNDS, cam.lx, cam.ly, cam.z, 1 / ldx, 1 / ldy, 1 / dz);
+  // Parallel rays on a box boundary can yield NaN; keep those for the exact part tests.
+  if (shipNear < hitT || Number.isNaN(shipNear)) trace(rowShip, i, cam.lx, cam.ly, cam.z, ldx, ldy, dz);
   const tw = surfaceHit(dx, dy, dz, hitT);
   SP[c] = null;
   if (hitS && hitT < tw) shadeSolid(c, odd, hitS !== wS, dx, dy, dz, ldx, ldy);
@@ -1175,24 +1379,43 @@ function textureColor(s, tex, b, fog, warm) {
   }
   return null;
 }
+function shipFill(s, tex, b, fog) {
+  return s.fill ? Math.max(b, s.fill * fog * (tex === "-" ? 0.65 : 1)) : b;
+}
+// Canvas and flags use fixed moon tones, without point-light or shadow work.
+function paintShipCloth(c, odd, s, k, t, tex, ny) {
+  if (!s.flag && s.tex !== sailTexture) return false;
+  let ch, cls;
+  if (s.flag) {
+    ch = tex ? "@" : "█"; cls = tex ? "s6" : "p";
+  } else {
+    const b = s.fill * Math.exp(-t * 0.016) * (tex === "-" ? 0.65 : 1);
+    ch = glyph(b, odd); cls = "s" + tier(b, 0);
+  }
+  put(c, ch, cls, (ny > 0.7 ? -1 : 1) * (s.id * 16 + (k >= 0 ? k >> 2 : 12 - k)), t);
+  SP[c] = s.spot;
+  return true;
+}
 function shadeSolid(c, odd, onShip, dx, dy, dz, ldx, ldy) {
   const s = hitS, P = s.P, k = hitK, t = hitT;
   const lnx = k >= 0 ? P[k] : hitN[0], lny = k >= 0 ? P[k + 1] : hitN[1], nz = k >= 0 ? P[k + 2] : hitN[2];
   const nx = onShip ? rc * lnx - rs * lny : lnx, ny = onShip ? rs * lnx + rc * lny : lny;
   const px = onShip ? cam.lx + ldx * t : cam.x + dx * t, py = onShip ? cam.ly + ldy * t : cam.y + dy * t, pz = cam.z + dz * t;
   const tex = s.tex && s.tex(px, py, pz, lnx, lny, nz);
+  if (paintShipCloth(c, odd, s, k, t, tex, ny)) return;
   const mat = tex && tex !== "-" ? tex[0] : s.mat, grain = tex && tex.length === 2 ? GRAIN[tex[1]] || 1 : 1;
-  const dim = (tex === "-" ? 0.55 : 1) * (s.dim || 1) * grain;
   let ch, cls = mat;
   if (mat === "l") {
     const flash = s === beacon ? Math.cos(T * 2.2 + Math.atan2(dx, dz) * 2) > 0.3 : s !== antennaLamp || Math.sin(T * 3) > 0;
     ch = flash ? "@" : "*"; cls = "l7";
   } else {
     const wx = onShip ? SX + rc * (px - SX) - rs * py : px, wy = onShip ? rs * (px - SX) + rc * py + bob : py;
+    const dim = (tex === "-" ? 0.55 : 1) * (s.dim || 1) * grain;
     const [lit, warm] = lightAt(wx, wy, pz, nx, ny, nz);
     // Contact shadow: walls darken toward the ground they stand on.
     const ao = ny > 0.7 ? 1 : Math.min(1, 0.55 + 0.5 * (wy - (onShip ? bob + DECK : floorAt(wx, pz) ?? 0)));
-    const fog = Math.exp(-t * 0.016), b = (lit * dim * ao * (0.8 + 0.2 * Math.max(0, -(nx * dx + ny * dy + nz * dz)))) * fog + 0.02 * (1 - fog);
+    const fog = Math.exp(-t * 0.016);
+    const b = shipFill(s, tex, (lit * dim * ao * (0.8 + 0.2 * Math.max(0, -(nx * dx + ny * dy + nz * dz)))) * fog + 0.02 * (1 - fog), fog);
     cls = mat + tier(b, insideHouse && mat === "b" ? 0 : warm);
     // Grass blades lean with the wind; fountain water keeps its texture glyphs below.
     const grass = ny > 0.7 && (mat === "g" || mat === "G" || mat === "M") && s === TERRAIN;

@@ -15,6 +15,13 @@ Keyboard and touch movement share the door transition; walls and furniture block
 Release the movement keys and touch pad after a door crossing to move again.
 See [the frame loop](public/how.html#frame-loop) for adaptive detail and display timing.
 
+The pirate ship has a 28 m tapered hull, a raised stern castle, and two square-rigged masts.
+Its gun ports, railings, figurehead, and warm lanterns follow the hull and deck.
+Walking bounds and the map use the hull's tapered stations; the gangway joins the deck to the dock.
+Steps connect the main deck to the stern castle's roof.
+The sails keep a pale canvas tone at night.
+Outboard lanterns make the gun ports visible.
+
 The plaza fountain has an octagonal stone rim, a central spout, and water that uses the existing animation clock.
 Its basin blocks walking, and a blue `O` marks it on the mini map.
 The fountain marker leaves map labels and selected point markers clear.
