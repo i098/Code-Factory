@@ -66,7 +66,7 @@ packages:
 write_files:
   # Evidence that the prerequisites ran, for support and for `ship.sh survey`.
   # No secret, no host identity, no provider metadata.
-  - path: /var/lib/code-factory/cloud-init-prerequisites
+  - path: /var/lib/crewship/cloud-init-prerequisites
     owner: root:root
     permissions: "0644"
     defer: true

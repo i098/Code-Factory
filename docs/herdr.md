@@ -56,7 +56,7 @@ Without a `machine` workspace, the machine line is the primary home's `$host` li
 
 [`maintenance/herdr-spaces.py`](../maintenance/herdr-spaces.py) is installed as `~/.local/bin/herdr-spaces.py` and run by the user timer `herdr-spaces.timer` every second. It uses only the Python standard library.
 
-For every Herdr workspace it finds the home from its panes' directories: the nearest git top-level that holds both `state/` and `data/`. It then reports the tokens above as workspace metadata under the source `code-factory:spaces`, with `herdr workspace report-metadata`, and clears every token that has no value. Helper spaces and per-task spaces (`└ …`) get `short` only. A space with no home gets `short` and CPU and RAM only. The `machine` workspace gets `machine` only; without one, the primary home gets `host`. It also writes the same data where the phone layout shows it (see [On a phone](#on-a-phone)).
+For every Herdr workspace it finds the home from its panes' directories: the nearest git top-level that holds both `state/` and `data/`. It then reports the tokens above as workspace metadata under the source `crewship:spaces`, with `herdr workspace report-metadata`, and clears every token that has no value. Helper spaces and per-task spaces (`└ …`) get `short` only. A space with no home gets `short` and CPU and RAM only. The `machine` workspace gets `machine` only; without one, the primary home gets `host`. It also writes the same data where the phone layout shows it (see [On a phone](#on-a-phone)).
 
 | Source | Refresh | Cost |
 | --- | --- | --- |
@@ -64,7 +64,7 @@ For every Herdr workspace it finds the home from its panes' directories: the nea
 | Queue | when the backlog changes, else every minute | One `fm-tasks-axi.sh ready` per home, most of a run's cost when it runs. |
 | Disk | every 15 minutes | One `du` over each home and its pools. On a host with large pools this run can take a minute; the other values wait for it. |
 
-The caches live in `~/.cache/code-factory/herdr-spaces.json`. A source that fails keeps its previous value, and a failed run never fails the unit: errors go to the journal (`journalctl --user -u herdr-spaces.service`), which leaves out systemd's own start and finish lines for each run. Herdr drops workspace tokens when its server restarts; the next run reports them again.
+The caches live in `~/.cache/crewship/herdr-spaces.json`. A source that fails keeps its previous value, and a failed run never fails the unit: errors go to the journal (`journalctl --user -u herdr-spaces.service`), which leaves out systemd's own start and finish lines for each run. Herdr drops workspace tokens when its server restarts; the next run reports them again.
 
 Inspect what a space reports:
 
@@ -106,12 +106,12 @@ The issue comes from the worker's task record in its home first: the first `issu
 
 ### The omp extension
 
-Herdr configuration alone cannot drop the `π` (omp puts it at the start of every terminal title) or know about pull requests. With the `agents` profile on, `./ship.sh launch` installs [`config/herdr-sidebar.ts`](../config/herdr-sidebar.ts) as `~/.omp/agent/extensions/code-factory-herdr-sidebar.ts`. omp loads it at startup. Every apply rewrites it, so do not edit the installed copy.
+Herdr configuration alone cannot drop the `π` (omp puts it at the start of every terminal title) or know about pull requests. With the `agents` profile on, `./ship.sh launch` installs [`config/herdr-sidebar.ts`](../config/herdr-sidebar.ts) as `~/.omp/agent/extensions/crewship-herdr-sidebar.ts`. omp loads it at startup. Every apply rewrites it, so do not edit the installed copy.
 
 The extension does nothing outside Herdr (`HERDR_ENV` is not `1`) or in an omp started from another omp's shell (`OMPCODE=1`). Inside a Herdr pane it:
 
 - Sets the terminal title to the bare session topic, and sets it again within a second whenever omp resets it (rename, `/new`, `/resume`, a cwd change). A spawned worker (`FM_TASK_ID` set) gets `└ ` in front; the Agents layout shows a title that starts with `└` on line 1 and hides it on line 2.
-- Reports the pane tokens `who`, `pr`, `issue`, `add`, `del` and `files` under the source `code-factory:sidebar`, and clears the ones without a value.
+- Reports the pane tokens `who`, `pr`, `issue`, `add`, `del` and `files` under the source `crewship:sidebar`, and clears the ones without a value.
 
 It reports when a session starts and when a turn ends. The pull request and the task's issue are looked up then too, at most every 5 minutes; a turn that ends sooner gets its lookup when the 5 minutes are up. The line counts are recomputed on every turn end and every 10 seconds while the session runs, for a worker and for a home while a pull request is open, so they follow edits, stages, and commits inside a long turn; the 10-second refresh runs only the local `git` commands (never rewriting the checkout's index), skips a tick while the previous refresh still runs, and reports only counts not yet reported successfully, so a failed report is retried at the next tick. Lookups run in the background with a timeout. A failed lookup keeps the previous value and never fails or slows a turn. Herdr drops pane tokens when its server restarts; the extension reports them again at the next turn end. All tokens are cleared when omp exits.
 

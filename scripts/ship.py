@@ -279,7 +279,7 @@ def questions(document, config_path):
     config = document["crewship"]
     home = Path(config["home"])
     environment = {**os.environ, "PATH": f"{home / '.local/bin'}:{os.environ.get('PATH', '')}"}
-    marker = home / ".local/share/code-factory/new-host-questions-done"
+    marker = home / ".local/share/crewship/new-host-questions-done"
     if (
         not sys.stdin.isatty()
         or os.environ.get("CI")

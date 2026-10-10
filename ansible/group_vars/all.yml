@@ -46,7 +46,7 @@ crewship_allow_unsupported_os: false
 
 # --- Derived paths ----------------------------------------------------------
 crewship_local_bin: "{{ crewship_cfg.home }}/.local/bin"
-crewship_share_dir: "{{ crewship_cfg.home }}/.local/share/code-factory"
+crewship_share_dir: "{{ crewship_cfg.home }}/.local/share/crewship"
 crewship_tools_root: "{{ crewship_share_dir }}/tools"
 crewship_omp_root: "{{ crewship_share_dir }}/omp/{{ crewship_omp_version }}"
 # AXI must launch the chrome-devtools MCP build the installer installed (the
@@ -117,7 +117,7 @@ crewship_pruner_python: "{{ crewship_pruner_venv }}/bin/python"
 # Written after a successful install; carries the digest of the requirements
 # that produced the runtime, so a new psutil release reinstalls and an
 # unchanged one is a no-op on the second apply.
-crewship_pruner_stamp: "{{ crewship_pruner_venv }}/.code-factory-runtime.json"
+crewship_pruner_stamp: "{{ crewship_pruner_venv }}/.crewship-runtime.json"
 crewship_pruner_requirements: "{{ crewship_share_dir }}/pruner-requirements.txt"
 crewship_pruner_psutil_version: "{{ crewship_latest.psutil.version }}"
 crewship_pruner_requirements_text: >-
@@ -262,13 +262,13 @@ crewship_herdr_update_channel: stable
 crewship_herdr_show_agent_labels: true
 crewship_herdr_theme_auto_switch: false
 crewship_herdr_status_indicators: symbols
-crewship_omp_sidebar_extension: "{{ crewship_cfg.home }}/.omp/agent/extensions/code-factory-herdr-sidebar.ts"
+crewship_omp_sidebar_extension: "{{ crewship_cfg.home }}/.omp/agent/extensions/crewship-herdr-sidebar.ts"
 # The "aa-" name loads it before the plugins whose status it takes over (docs/omp.md).
 crewship_omp_status_icons_extension: "{{ crewship_cfg.home }}/.omp/agent/extensions/aa-mode-icons.ts"
 # Blocks pkill/killall/kill-by-pgrep in every omp session (docs/omp.md).
 crewship_omp_no_pattern_kill_extension: "{{ crewship_cfg.home }}/.omp/agent/extensions/fm-no-pattern-kill.ts"
 # The sentrux/fallow quality gate at the end of every omp agent turn (docs/omp.md#quality-gate).
-crewship_omp_quality_gate_extension: "{{ crewship_cfg.home }}/.omp/agent/extensions/code-factory-quality-gate.ts"
+crewship_omp_quality_gate_extension: "{{ crewship_cfg.home }}/.omp/agent/extensions/crewship-quality-gate.ts"
 # Herdr's own omp state extension; `herdr integration install omp` writes it (docs/herdr.md).
 crewship_herdr_omp_integration: "{{ crewship_cfg.home }}/.omp/agent/extensions/herdr-omp-agent-state.ts"
 # omp as the no-mistakes pi agent, and the omp overlay only daemon-spawned omp
@@ -480,7 +480,7 @@ crewship_tailscale_version: ""
 # a failed lookup, digest, or download skips it with a warning.
 crewship_koncreet: "{{ crewship_latest.koncreet.assets[crewship_platform] }}"
 crewship_koncreet_patch: "{{ crewship_repo }}/patches/koncreet/ubuntu-26.04.patch"
-crewship_koncreet_prefix: /usr/local/lib/code-factory/koncreet
+crewship_koncreet_prefix: /usr/local/lib/crewship/koncreet
 crewship_koncreet_config: /etc/koncreet.conf
 
 # --- Chrome -----------------------------------------------------------------

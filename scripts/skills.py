@@ -33,8 +33,8 @@ KINDS = {
         (".omp/agent/rules",),
     ),
 }
-MANIFEST = ".local/share/code-factory/skills.json"
-CACHE = ".cache/code-factory/private-skills"
+MANIFEST = ".local/share/crewship/skills.json"
+CACHE = ".cache/crewship/private-skills"
 
 
 def fetch(source, ref, cache):

@@ -179,7 +179,7 @@ The desk tells the owner the true models when he asks: `desk_model` for itself, 
 
 Apply installs these items:
 
-- the service in `~/.local/share/code-factory/imessage/`, with the latest spectrum-ts
+- the service in `~/.local/share/crewship/imessage/`, with the latest spectrum-ts
 - the unit `~/.config/systemd/user/fm-imessage.service`, mode `0600` because it holds the owner's number
 - the commands `fm-imessage` and `fm-location` in `~/.local/bin`
 

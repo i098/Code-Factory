@@ -62,6 +62,12 @@ See [Updating an existing host](omp.md#updating-an-existing-host) for omp prefer
 
 A second unchanged provisioning pass should report `changed=0`. Runtime application activity, deliberate self-updates, and changed package indexes can create real drift; investigate it rather than weakening the check or forcing a reset.
 
+### Upgrade from a pre-rename install
+
+The first `./ship.sh launch` after the Crewship rename migrates a host installed before it, once. It stops the old desktop units and deletes their files and links. It moves each old path to its new name, for example `~/.local/share/crewship`, and points command links and user unit files at the new paths. The desktop tasks then install and enable `crewship-vnc.service` and `crewship-novnc.service`. [`ansible/tasks/rename.yml`](../ansible/tasks/rename.yml) holds the full old-to-new table. Run that apply when no agent session is active, because running tools lose their old paths, and do not run `./onboard.sh` before it. If an old path and its new name both exist, the apply stops and changes no data; merge or remove one by hand and run it again. A second apply reports `changed=0`.
+
+The Compose project is now `crewship`, so Compose and the devcontainer use new volume names. The old volumes stay; copy their data by hand if you need it.
+
 ## Resource limits and cleanup
 
 Compose caps CPU, memory, swap, and process counts. Native parallel builds still need a concurrency budget suitable for the machine. Do not globally override Firstmate's task-owned build-cache paths with a shared unlimited Rust target directory; that bypasses normal task teardown.

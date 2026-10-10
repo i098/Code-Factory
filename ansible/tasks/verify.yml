@@ -51,7 +51,7 @@
                  crewship_omp_status_icons_extension, crewship_omp_no_pattern_kill_extension,
                  crewship_omp_quality_gate_extension,
                  crewship_omp_as_pi_dir ~ '/omp-as-pi', crewship_no_mistakes_omp_overlay,
-                 crewship_user_units ~ '/no-mistakes-daemon-.service.d/code-factory.conf']
+                 crewship_user_units ~ '/no-mistakes-daemon-.service.d/crewship.conf']
                 if (crewship_cfg.profiles.agents | bool) else [])
              + ([crewship_pruner_script,
                  crewship_pruner_python,
@@ -70,10 +70,10 @@
                  crewship_vnc_password_file,
                  crewship_vnc_chrome_profile,
                  crewship_local_bin ~ '/vnc-chrome',
-                 crewship_user_units ~ '/code-factory-vnc.service',
-                 crewship_user_units ~ '/code-factory-novnc.service',
-                 crewship_user_units ~ '/default.target.wants/code-factory-vnc.service',
-                 crewship_user_units ~ '/default.target.wants/code-factory-novnc.service']
+                 crewship_user_units ~ '/crewship-vnc.service',
+                 crewship_user_units ~ '/crewship-novnc.service',
+                 crewship_user_units ~ '/default.target.wants/crewship-vnc.service',
+                 crewship_user_units ~ '/default.target.wants/crewship-novnc.service']
                 if (crewship_cfg.profiles.desktop | bool) else [])
              + ([crewship_shared_supabase_dir ~ '/check.sh',
                  crewship_shared_supabase_dir ~ '/guard.sql',
@@ -149,8 +149,8 @@
         get_checksum: false
       become: true
       loop:
-        - code-factory-vnc.service
-        - code-factory-novnc.service
+        - crewship-vnc.service
+        - crewship-novnc.service
       register: crewship_verify_desktop_links
       changed_when: false
       check_mode: false
@@ -164,7 +164,7 @@
           - crewship_verify_desktop_links.results
             | map(attribute='stat.lnk_source', default='')
             | list
-            == (['code-factory-vnc.service', 'code-factory-novnc.service']
+            == (['crewship-vnc.service', 'crewship-novnc.service']
                 | map('regex_replace', '^', crewship_user_units ~ '/') | list)
         fail_msg: >-
           The default.target.wants entries for the desktop must be symlinks to
@@ -308,7 +308,7 @@
     - name: Assert the managed environment block is present
       ansible.builtin.assert:
         that:
-          - (crewship_verify_profile.content | b64decode) is search('code-factory managed environment')
+          - (crewship_verify_profile.content | b64decode) is search('crewship managed environment')
           - (crewship_verify_profile.content | b64decode) is search('\.local/bin')
           - not (crewship_cfg.profiles.agents | bool)
             or ((crewship_verify_profile.content | b64decode) is search('CHROME_DEVTOOLS_AXI_MCP_PATH'))
@@ -462,7 +462,7 @@
            + (['chrome-autoprune.timer']
               if ((crewship_cfg.profiles.agents | bool)
                   and (crewship_cfg.browser_prune.enabled | bool)) else [])
-           + (['code-factory-vnc.service', 'code-factory-novnc.service']
+           + (['crewship-vnc.service', 'crewship-novnc.service']
               if (crewship_cfg.profiles.desktop | bool) else [])
            + (['crewboard.service'] if (crewship_cfg.board is defined) else []) }}
       register: crewship_verify_units

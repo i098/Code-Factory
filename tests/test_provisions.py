@@ -453,7 +453,7 @@ def test_resolve_refuses_a_source_that_does_not_exist(monkeypatch, capsys, tmp_p
 def test_the_dropped_npm_set_loses_its_links_but_keeps_the_prefix_and_other_installs(tmp_path):
     bin_dir = tmp_path / ".local/bin"
     bin_dir.mkdir(parents=True)
-    legacy = tmp_path / ".local/share/code-factory/npm/node_modules"
+    legacy = tmp_path / ".local/share/crewship/npm/node_modules"
     for name in ("codex", "pnpm"):
         script = legacy / name / "bin.js"
         script.parent.mkdir(parents=True)
@@ -529,7 +529,7 @@ def test_sentrux_grammars_replace_its_own_download_with_the_verified_release(tmp
 def test_an_apply_merges_its_resolved_record_into_the_existing_one(
     monkeypatch, tmp_path, argv, expected
 ):
-    record = tmp_path / ".local/share/code-factory/resolved.json"
+    record = tmp_path / ".local/share/crewship/resolved.json"
     record.parent.mkdir(parents=True)
     record.write_text(json.dumps({"herdr": {"version": "1"}, "uv": {"version": "1"}}) + "\n")
     upstream(monkeypatch)

@@ -1,5 +1,5 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Code Factory <noreply@example.invalid>
+From: Crewship <noreply@example.invalid>
 Date: Thu, 8 Oct 2026 06:04:52 +0000
 Subject: [PATCH 1/2] fix(watch): wake firstmate on a queued captain inbox note
 

@@ -111,6 +111,10 @@
     # cannot preview, instead of failing on an unresolvable owner.
     crewship_account_ready: "{{ crewship_uid_probe.rc == 0 }}"
 
+- name: Migrate an install from before the Crewship rename
+  ansible.builtin.import_tasks: rename.yml
+  when: crewship_user_exists | bool
+
 - name: Report the truncated plan when the account does not exist yet
   ansible.builtin.debug:
     msg: >-
@@ -181,7 +185,7 @@
     owner: "{{ crewship_cfg.user }}"
     group: "{{ crewship_group }}"
     mode: "0644"
-    marker: "# {mark} code-factory managed environment"
+    marker: "# {mark} crewship managed environment"
     block: |
       case ":$PATH:" in
         *":$HOME/.local/bin:"*) ;;

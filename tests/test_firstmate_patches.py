@@ -201,9 +201,29 @@ def test_an_unknown_local_commit_is_still_refused(host):
 
     result, _ = apply(host)
     assert result.returncode != 0
-    assert "Code-Factory-Patch" in result.stdout
+    assert "Crewship-Patch" in result.stdout
     assert git(host["checkout"], "rev-parse", "HEAD") == before
     assert (host["checkout"] / "mine.txt").exists()
+
+
+def test_a_layer_built_before_the_rename_is_rebuilt(host):
+    assert apply(host)[0].returncode == 0
+    checkout = host["checkout"]
+    tip = git(checkout, "rev-parse", "HEAD~2")
+    for sha in git(checkout, "rev-list", "--reverse", "HEAD~2..HEAD").splitlines():
+        message = git(checkout, "log", "-1", "--format=%B", sha)
+        old = message.replace("Crewship-Patch:", "Code-Factory-Patch:")
+        tip = subprocess.run(
+            [*GIT, "-C", str(checkout), "commit-tree", f"{sha}^{{tree}}", "-p", tip],
+            input=old, check=True, capture_output=True, text=True,
+        ).stdout.strip()
+    git(checkout, "reset", "-q", "--hard", tip)
+
+    result, changed = apply(host)
+    assert result.returncode == 0, result.stdout
+    assert changed > 0
+    assert layer(host, 2) == ["fix: first", "fix: second"]
+    assert verify(host).returncode == 0
 
 
 def test_an_edited_patch_rebuilds_the_layer_on_a_host_that_has_the_old_one(host):

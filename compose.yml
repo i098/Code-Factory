@@ -25,7 +25,7 @@
 #
 # Copy containers/worker.env.example to .env (ignored) to override the defaults.
 
-name: code-factory
+name: crewship
 
 services:
   worker:
@@ -40,20 +40,20 @@ services:
         CREWSHIP_GID: ${CREWSHIP_GID:-1000}
         CREWSHIP_HOME: ${CREWSHIP_HOME:-/home/coder}
         CREWSHIP_WORKSPACE: ${CREWSHIP_WORKSPACE:-/home/coder/Dev}
-    image: code-factory/worker:${CREWSHIP_TAG:-dev}
+    image: crewship/worker:${CREWSHIP_TAG:-dev}
     # PID 1 reaper only: this is signal handling, not an init system. The image
     # has no systemd, no user manager and no linger.
     init: true
     command: ["sleep", "infinity"]
     working_dir: ${CREWSHIP_WORKSPACE:-/home/coder/Dev}
     environment:
-      CREWSHIP_CONFIG: /opt/code-factory/containers/crewship.container.yml
-      CREWSHIP_ROOT: /opt/code-factory
+      CREWSHIP_CONFIG: /opt/crewship/containers/crewship.container.yml
+      CREWSHIP_ROOT: /opt/crewship
     volumes:
       - workspace:${CREWSHIP_WORKSPACE:-/home/coder/Dev}
     tmpfs:
       - /tmp:rw,nosuid,nodev,size=1g,mode=1777
-    networks: [factory]
+    networks: [crewship]
     # Bounded resources: a runaway build or agent cannot exhaust the host.
     cpus: "${WORKER_CPUS:-4}"
     mem_limit: ${WORKER_MEMORY:-6g}
@@ -93,7 +93,7 @@ services:
       - "127.0.0.1:${POSTGRES_PORT:-15432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
-    networks: [factory]
+    networks: [crewship]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"${POSTGRES_USER:-developer}\" -d \"${POSTGRES_DB:-developer}\" -h 127.0.0.1"]
       interval: 10s
@@ -128,7 +128,7 @@ services:
       - "127.0.0.1:${REDIS_PORT:-16379}:6379"
     volumes:
       - redis-data:/data
-    networks: [factory]
+    networks: [crewship]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -145,7 +145,7 @@ services:
     restart: unless-stopped
 
 networks:
-  factory:
+  crewship:
     driver: bridge
 
 volumes:
@@ -158,4 +158,4 @@ secrets:
     # Keep credentials outside the checkout: Git/Docker ignores do not protect
     # an editor's runtime workspace bind. Override this directory explicitly
     # when invoking Compose through sudo so HOME cannot change its meaning.
-    file: "${CREWSHIP_SECRET_DIR:-${HOME}/.local/state/code-factory/secrets}/postgres_password"
+    file: "${CREWSHIP_SECRET_DIR:-${HOME}/.local/state/crewship/secrets}/postgres_password"

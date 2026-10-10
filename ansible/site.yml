@@ -338,7 +338,7 @@
     - name: Restart the noVNC bridge
       ansible.builtin.systemd_service:
         scope: user
-        name: code-factory-novnc.service
+        name: crewship-novnc.service
         state: restarted
       become: "{{ crewship_become_target | bool }}"
       become_user: "{{ crewship_cfg.user }}"
@@ -352,7 +352,7 @@
       ansible.builtin.debug:
         msg: >-
           VNC configuration changed. Restart it when the desktop is idle:
-          systemctl --user restart code-factory-vnc.service
+          systemctl --user restart crewship-vnc.service
           (this terminates everything running inside display
           :{{ crewship_cfg.desktop.display }}).
       listen: vnc restart required

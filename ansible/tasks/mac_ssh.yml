@@ -25,7 +25,7 @@
       - -N
       - ""
       - -C
-      - "{{ crewship_cfg.user }}@{{ ansible_facts.hostname }} code-factory mac"
+      - "{{ crewship_cfg.user }}@{{ ansible_facts.hostname }} crewship mac"
       - -f
       - "{{ crewship_mac_ssh_key }}"
     creates: "{{ crewship_mac_ssh_key }}"
@@ -37,7 +37,7 @@
     create: true
     mode: "0600"
     insertbefore: BOF
-    marker: "# {mark} code-factory Host mac"
+    marker: "# {mark} crewship Host mac"
     block: |
       Host mac
         HostName {{ crewship_cfg.mac_ssh.host }}
