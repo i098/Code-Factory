@@ -1,7 +1,7 @@
 {
   "name": "crewship",
   "version": "0.0.0",
-  "description": "Turn a fresh Ubuntu machine into an AI-agent coding host in one command",
+  "description": "Orchestrate hundreds of agents effortlessly - hardware is the limit.",
   "license": "FSL-1.1-ALv2",
   "homepage": "https://github.com/i098/Crewship#readme",
   "repository": {

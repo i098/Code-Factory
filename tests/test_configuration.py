@@ -109,6 +109,46 @@ def test_unknown_fleet_field_is_rejected(configuration):
         factory.validate_config(configuration)
 
 
+@pytest.mark.parametrize(
+    "skills",
+    [
+        {"private_source": "/srv/private-skills"},
+        {"private_source": "git@github.com:owner/skills.git", "private_ref": "main"},
+        {"private_source": "https://github.com/owner/skills.git", "private_ref": "v1.2"},
+        {"private_source": "ssh://git@example.com/owner/skills.git"},
+        {"private_source": "file:///srv/skills.git"},
+    ],
+)
+def test_private_skills_source_is_accepted(configuration, skills):
+    configuration["factory"]["skills"] = skills
+    assert factory.validate_config(configuration) is configuration
+
+
+@pytest.mark.parametrize(
+    "skills",
+    [
+        {},
+        {"private_source": ""},
+        {"private_source": "relative/skills"},
+        {"private_source": "--upload-pack=touch /tmp/x"},
+        {"private_source": "https://token@github.com/owner/skills.git"},
+        {"private_source": "https://user:token@github.com/owner/skills.git"},
+        {"private_source": "git@github.com:owner/skills.git", "private_ref": "-main"},
+        {"private_source": "/srv/skills", "token": "x"},
+    ],
+)
+def test_bad_private_skills_source_is_rejected(configuration, skills):
+    configuration["factory"]["skills"] = skills
+    with pytest.raises(ValueError):
+        factory.validate_config(configuration)
+
+
+def test_private_ref_with_local_path_is_rejected(configuration):
+    configuration["factory"]["skills"] = {"private_source": "/srv/skills", "private_ref": "main"}
+    with pytest.raises(ValueError, match="private_ref"):
+        factory.validate_config(configuration)
+
+
 @pytest.mark.parametrize("data_dir", ["data", "/", "/srv/../root", "/srv/data/"])
 def test_data_dir_must_be_a_plain_absolute_path(configuration, data_dir):
     configuration["factory"]["data_dir"] = data_dir
@@ -163,7 +203,7 @@ def test_init_preserves_existing_local_configuration(tmp_path, monkeypatch):
     for path in ("config", "schemas"):
         shutil.copytree(ROOT / path, tmp_path / path)
     monkeypatch.setattr(factory, "ROOT", tmp_path)
-    args = argparse.Namespace(user="coder", home="/home/coder", container=True)
+    args = argparse.Namespace(user="coder", home="/home/coder", container=True, board=False)
     factory.initialize(args)
     local = tmp_path / ".local/host.yml"
     first = local.read_bytes()
@@ -180,7 +220,9 @@ def test_root_operator_is_rejected_before_config_is_written(tmp_path, monkeypatc
         shutil.copytree(ROOT / path, tmp_path / path)
     monkeypatch.setattr(factory, "ROOT", tmp_path)
     with pytest.raises(ValueError, match="non-root"):
-        factory.initialize(argparse.Namespace(user="root", home="/home/root", container=False))
+        factory.initialize(
+            argparse.Namespace(user="root", home="/home/root", container=False, board=False)
+        )
     assert not (tmp_path / ".local/host.yml").exists()
 
 

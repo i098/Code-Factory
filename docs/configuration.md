@@ -7,7 +7,7 @@
 | New name | Old name | What it does |
 | --- | --- | --- |
 | `./onboard.sh` | `./bootstrap.sh` | Installs the repository tooling: the latest uv, then the locked Python environment with Ansible. Changes nothing else on the host. |
-| `./ship.sh dock` | `./factory init` | Copies `config/default.yml` to `.local/host.yml` with your user, home, and `~/Dev` workspace filled in. Never overwrites an existing file. Options: `--user`, `--home`, `--container`. |
+| `./ship.sh dock` | `./factory init` | Copies `config/default.yml` to `.local/host.yml` with your user, home, and `~/Dev` workspace filled in. Never overwrites an existing file. Options: `--user`, `--home`, `--container`, and `--board`, which turns on the [crew board](board.md). |
 | `./ship.sh inspect` | `./factory validate` | Checks the config against `schemas/factory.schema.json` and the cross-field rules below. |
 | `./ship.sh chart` | `./factory plan` | Runs the Ansible playbook in check mode. Reports what would change; mutates nothing. |
 | `./ship.sh launch` | `./factory apply` | Runs the playbook for real. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, the first successful interactive apply with omp signed in then opens the new-host questions (below). |
@@ -64,6 +64,9 @@ factory:
   # mac_ssh:              # Optional; set only in .local/host.yml. See security.md#ssh-to-a-mac
   #   host: <Mac tailnet name or IP>
   #   user: <Mac login>
+  # skills:               # Optional, off when absent (removing it removes the skills an earlier fill added); set only in .local/host.yml. See omp.md#skills
+  #   private_source: git@github.com:owner/private-skills.git   # or an absolute local path
+  #   private_ref: main   # Optional git branch, tag or commit; the default is the remote HEAD
   # imessage:             # Optional, off when absent; set only in .local/host.yml. See imessage.md
   #   owner: "+<country code><number>"
   #   owner_name: the owner          # the default; how the desk prompt names him
@@ -72,6 +75,10 @@ factory:
   # github_board:         # Optional, off when absent; set only in .local/host.yml. See github-board.md
   #   repo: owner/board
   #   project: 3
+  # board:                # Optional, off when absent; set only in .local/host.yml. See board.md
+  #   history: 256        # the defaults
+  #   cap_mb: 64
+  #   max_msg_kb: 64
   # ci_pool:              # Optional; self-hosted GitHub Actions slots. See ci-pool.md
   #   data_dir: /mnt/data/ci
   #   repos:
@@ -86,6 +93,7 @@ factory:
 - `ci_pool` needs `docker`, and no two `ci_pool.repos` entries may make the same unit name.
 - `imessage` needs `firstmate`, and `imessage.owner` is a phone number in E.164 form (`+` and digits).
 - `github_board` needs `firstmate`, `github_board.repo` is `owner/name`, and `github_board.project` is a Project number.
+- `board` needs `firstmate` and `development`.
 
 The Firstmate checkout tracks the default branch of upstream Firstmate, not a sha. Every apply fetches `origin/main` and puts `main` at that revision plus the [Firstmate patch layer](dependencies.md#firstmate-patch-layer), so tracking it is how a host stays current. Do not re-pin it to a sha. Each run resolves `origin/main` once and reports the sha it installed. To track a fork, set `firstmate.url` in `.local/host.yml`. The URL applies to a fresh clone; verification fails when an existing checkout's `origin` is a different URL, and provisioning never changes it for you. To switch an existing checkout, run `git -C <workspace>/firstmate remote set-url origin <url>` and `git -C <workspace>/firstmate fetch origin`, reconcile any local commits on `main` with `origin/main` by hand, then run `./ship.sh launch`.
 
@@ -95,6 +103,7 @@ After a successful `./ship.sh launch` with the `firstmate` profile on, once omp 
 
 - The questions follow `firstmate.checklist` when it is set and `gh` can read it: `repo` is a GitHub repository (it can be private) and `path` is the checklist file in it. Set it only in `.local/host.yml`, never in `config/default.yml`. Otherwise they follow [Agent host move](agent-host-move.md).
 - When `.local/host.yml` has no `github_board` block, the last question asks whether to turn on the [GitHub board](github-board.md). The answer is off unless you choose it.
+- With the `development` profile on and no `board` block in `.local/host.yml`, one more question asks whether to turn on the [crew board](board.md). The answer is off unless you choose it.
 - They are asked once per host. When the omp session exits successfully, apply writes the marker `~/.local/share/code-factory/new-host-questions-done`; while it exists, later applies skip the questions and print one line naming it. If omp exits non-zero, apply writes no marker and prints one line saying the questions did not complete. To ask again, delete the marker and rerun `./ship.sh launch` interactively.
 - The launch needs an interactive terminal, run as `factory.user`. When stdin is not a TTY, when `CI` is set, or when another account runs apply, apply skips them without writing the marker and prints one line saying to rerun `./ship.sh launch` interactively.
 - They need an omp provider login. Apply checks with `omp models --json`; when it lists no models or fails, apply skips the questions without writing the marker and prints one line saying to sign in to omp with `/login` ([Sign in](omp.md#sign-in)) and rerun `./ship.sh launch` interactively. On a new host the first apply installs omp, so sign in after it and then rerun apply.
