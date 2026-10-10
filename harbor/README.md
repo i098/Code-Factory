@@ -4,8 +4,7 @@
 Exterior objects open floating labels for Crewship features, and an ASCII mini map provides routes to them.
 The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
 See [how.html](public/how.html) for the renderer and controls.
-An uncaught error, a resource load error, or an unhandled promise rejection hides the scene and shows the plain page.
-JavaScript hides the plain page before the first paint; visitors without JavaScript still see it.
+An uncaught error hides the scene and shows the plain page.
 
 The island has staggered plaza paving, scattered stones and grass tufts, varied tree canopies, textured bark, and foam along the shore.
 
