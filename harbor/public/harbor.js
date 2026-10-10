@@ -1,4 +1,4 @@
-// Crewship harbor: a first-person 3D scene ray cast into a grid of text, every frame.
+// Crewship harbor: a first-person 3D scene ray cast into a grid of text.
 // Plain JavaScript, no dependencies. The world is a list of convex solids (sets of planes)
 // plus the water plane; the ship's solids live in a frame that bobs and rolls at the dock.
 const stage = document.getElementById("stage");

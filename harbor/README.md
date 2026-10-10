@@ -1,7 +1,11 @@
 # harbor
 
-`harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship at the dock, drawn as text in the browser every frame. Each object opens a floating label for one Crewship feature, an ASCII mini map jumps to any of them, and [how.html](public/how.html) explains how it is built. The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
-An uncaught error hides the scene and shows the plain page.
+`harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship, dock, island, and house, drawn as text.
+Exterior objects open floating labels for Crewship features, and an ASCII mini map provides routes to them.
+The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
+See [how.html](public/how.html) for the renderer and controls.
+An uncaught error, a resource load error, or an unhandled promise rejection hides the scene and shows the plain page.
+JavaScript hides the plain page before the first paint; visitors without JavaScript still see it.
 
 The island has staggered plaza paving, scattered stones and grass tufts, varied tree canopies, textured bark, and foam along the shore.
 
@@ -10,8 +14,7 @@ The blue bed faces the door; darker walls and floor keep the furniture, lamp, an
 Walk back through the inside door to return just outside, facing the island.
 Keyboard and touch movement share the door transition; walls and furniture block walking, and the map stays hidden inside.
 Release the movement keys and touch pad after a door crossing to move again.
-The renderer adjusts detail from rendering cost and missed room frames, relative to the measured display refresh rate.
-During slower room callbacks, it skips one repaint to measure the display period without painting load.
+See [the frame loop](public/how.html#frame-loop) for adaptive detail and display timing.
 
 The plaza fountain has an octagonal stone rim, a central spout, and water that uses the existing animation clock.
 Its basin blocks walking, and a blue `O` marks it on the mini map.
