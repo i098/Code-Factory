@@ -22,7 +22,12 @@
   Masts, barrels, tree trunks and the lighthouse are true cones with smooth normals.
   Rocks and tree canopies are ellipsoids.
   The sea is a height field of travelling waves, ray marched per cell; the ship and the boats ride it.</li>
-  <li><b>Light.</b> It is night: lamps, lit windows, the lantern and the beacon light what is near them, fall off with distance and cast shadows from the solids around them; the lighthouse beam sweeps; the moon gives a dim fill. The sea shows Fresnel reflection, moon and lamp highlights and foam. Fog and contact shadows add depth.</li>
+  <li><b>Light.</b> Exterior lamps, lit windows, the lantern and the beacon light nearby surfaces, with brightness that decreases with distance.
+  Exterior solids cast shadows when shadow rays are enabled.
+  The lighthouse beam sweeps; the moon gives a dim fill.
+  The room lamp lights nearby surfaces without shadow rays.
+  The sea shows Fresnel reflection, moon and lamp highlights and foam.
+  Fog and contact shadows add depth.</li>
   <li><b>Characters.</b> Brightness usually picks a glyph from the density ramp <code> .`',:;~-=+*#%@▒▓█</code> and one of eight colour levels per material.
   Grass uses blade glyphs; pale paving marks and foam keep their texture glyphs with a minimum brightness that decreases in fog.
   Fountain water uses animated texture glyphs instead of the density ramp.
@@ -34,8 +39,8 @@
   The font is ready before the first grid measurement.
   For a fixed exterior viewport, the glyph size stays fixed; slow frames can disable shadows without changing the view.
   Resizes wait until the viewport settles, then update the canvas immediately before the next draw.
-  Inside the room, slow rendering drops the shadow rays, then uses larger glyphs with fewer cells.
-  Fast rendering restores a finer grid.
+  Slow rendering first disables exterior shadow rays, if enabled, then uses larger room glyphs with fewer cells.
+  Fast room rendering restores a finer grid.
   Inside the room, missed frames also reduce detail relative to the measured display refresh rate.
   Before counting slower callbacks as painting load, the renderer skips one repaint to measure the display period without that load.
   This sample also detects display refresh changes during continuous input.
