@@ -41,12 +41,12 @@ const card = await browser.newPage({ viewport: { width: 1200, height: 630 } });
 await card.setContent(`<!doctype html><style>
   body { margin: 0; width: 1200px; height: 630px; position: relative; overflow: hidden; background: #060a14; }
   img { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); filter: brightness(1.6) saturate(1.15); }
-  .shade { position: absolute; inset: 0; background: radial-gradient(ellipse 62% 60% at 100% 100%, #060a14f5 0%, #060a14e0 55%, #060a1400 100%); }
+  .shade { position: absolute; inset: 0; background: radial-gradient(ellipse 52% 56% at 80% 80%, #060a14fa 0%, #060a14f0 45%, #060a14b0 72%, #060a1400 100%); }
   .text { position: absolute; right: 56px; bottom: 46px; text-align: right; color: #f2f5fc; }
   h1 { margin: 0; font: 700 100px/1 "Liberation Mono", monospace; }
-  p { margin: 14px 0 0; font: 400 40px/1.25 "Liberation Sans", sans-serif; color: #d3dcef; }
+  p { margin: 16px 0 0; font: 400 30px/1.3 "Liberation Mono", monospace; color: #d3dcef; }
   </style><img src="data:image/png;base64,${scene}"><div class="shade"></div>
-  <div class="text"><h1>Crewship</h1><p>${tagline.replace(" - ", " -<br>")}</p></div>`);
+  <div class="text"><h1>Crewship</h1><p>${tagline.replace(" - ", "<br>- ")}</p></div>`);
 await card.screenshot({ path: new URL("og.png", pub).pathname });
 
 // iOS rounds the corners itself, so the icon fills the whole square.
