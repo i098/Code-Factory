@@ -43,7 +43,7 @@ The `firstmate` profile copies each name in `factory_firstmate_config_names` (`a
 
 | File | Value |
 | --- | --- |
-| `crew-dispatch.json` | Default only, no rules: every crewmate spawn (ship and scout) is omp on `anthropic/claude-opus-5-5`, effort `high`, provider `anthropic`. |
+| `crew-dispatch.json` | Mechanical: Haiku 5.5 or gpt-6-luna. Ordinary and default: Sonnet 5.5 or gpt-6.1-sol. Hard only: Opus 5.5. The spawning home chooses the effort. |
 | `secondmate-harness` | `omp anthropic/claude-opus-5-5 xhigh`. |
 | `omp-crew-overlay.yml` | omp overlay Firstmate applies to crewmate and scout launches, never secondmates, ahead of its tracked worker overlay. It sets `modelRoles.advisor: anthropic/claude-fable-5-1:low`, `advisor.enabled: true`, `advisor.immuneTurns: 10` and `advisor.syncBacklog: "off"`, plus `providers.anthropic.serverSideFallback: false`: with the global server-side fallback on, Anthropic rejects every advisor call with a 400. Every omp crewmate runs a fable-5.1 advisor at low thinking (its lowest level). Crews never wait on it, because `syncBacklog: "off"` overrides the global `"1"`. Turns that land during a review batch into the next call instead of one call per turn, and the advisor interrupts at most once per 10 turns. omp has no every-N-turns setting. |
 | `spawn-memory-floor-mb` | `8000`; see [fleet guards](fleet-guards.md). |
@@ -53,6 +53,14 @@ The `firstmate` profile copies each name in `factory_firstmate_config_names` (`a
 | `turnend-churn-absorb` | Present (empty): the watcher may also count a pane that changed as work evidence for a bare turn end. |
 
 `config/omp.yml` seeds `~/.omp/agent/config.yml` on first write only. It holds the host's `modelRoles` (`default` is `anthropic/claude-opus-5-5:xhigh`, `task` and `subagent` are `anthropic/claude-opus-5-5:auto`, `memory` is `anthropic/claude-haiku-5-5`, `advisor` is `anthropic/claude-opus-5-5:auto`, `smol` is `anthropic/claude-sonnet-5-5:off`, and `commit` and `tiny` are `anthropic/claude-haiku-5-5`) and `retry.fallbackChains` with no `default` chain. Its `advisor` block keeps the global advisor off (`enabled: false`) with `syncBacklog: '1'`; only crews and the omp the no-mistakes daemon spawns turn it on. Crews do it through the overlay above, which also sets `syncBacklog` to `"off"`; the daemon's omp does it through its own overlay ([no-mistakes pipeline agent](omp.md#no-mistakes-pipeline-agent)). No router or gateway sits between omp and the provider.
+
+Crews use the dispatch tiers above, not the host's `modelRoles.default`.
+`config/omp.yml` enables `extendedContext: true`.
+Every apply merges `config/omp-models.yml` into `~/.omp/agent/models.yml`.
+The shipped Codex overrides set a 272K default window and a 1M maximum window.
+omp limits the effective window to the provider's supported input window.
+Crewship replaces only the keys it ships; user providers, models, and other model keys stay.
+An unchanged second apply does not rewrite the file.
 
 Host sizing and every auto pruner are listed in [Capacity and pruners](capacity.md).
 

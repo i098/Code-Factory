@@ -1,11 +1,10 @@
 ---
 # Agent harness preferences.
 #
-# These are sanitized preference files, not credential stores. They are written
-# once: an account that already has provider settings or an authenticated
-# harness keeps them (contract: "first-time writes only for OMP"). The
-# harness binaries themselves come from the installer's --npm set, which also
-# carries the gh / no-mistakes / treehouse / gws support binaries.
+# These are sanitized preference files, not credential stores. Harness settings
+# are first-write-only. Model overrides merge on every apply without replacing
+# user providers or unshipped model keys. Harness binaries come from --npm,
+# together with the gh / no-mistakes / treehouse / gws support binaries.
 
 - name: Ensure the harness preference directories
   ansible.builtin.file:
@@ -55,6 +54,9 @@
          | selectattr('stat.exists')
          | map(attribute='item.dest') | list | join(', ') | default('none', true) }}
       already exist and were not rewritten (first-write-only inputs).
+
+- name: Merge the omp model overrides
+  ansible.builtin.import_tasks: omp_models.yml
 
 # The PR-review gate wrapper; it runs the ponytail plugin's own prompt on omp.
 - name: Install ponytail-review
@@ -247,14 +249,14 @@
   failed_when: false
   check_mode: false
 
-# Only the two agent lists Crewship writes are managed; any other agent
-# choice is the operator's and stays.
+# Only Crewship's current and previous agent choices are managed.
+# Other agent choices belong to the user and stay.
 - name: Set the no-mistakes pipeline agent from the pi adapter check
   vars:
     current: "{{ factory_no_mistakes_config_raw.content | b64decode | from_yaml }}"
     wanted: >-
       {{ current | combine({
-           'agent': ['pi', 'acp:omp'],
+           'agent': 'pi',
            'agent_path_override': {'pi': factory_omp_as_pi_dir ~ '/omp-as-pi'},
            'agent_config': {'pi': {'model': 'anthropic/claude-sonnet-5-5', 'effort': 'high'}}}, recursive=true)
          if factory_pi_adapter.rc == 0
@@ -265,7 +267,7 @@
   become: true
   when:
     - factory_no_mistakes_config_raw.content is defined
-    - current.agent | default([]) in [['acp:omp'], ['pi', 'acp:omp']]
+    - current.agent | default([]) in ['pi', ['acp:omp'], ['pi', 'acp:omp']]
     - wanted != current
   notify: no-mistakes daemon restart required
 

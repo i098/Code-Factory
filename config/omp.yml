@@ -4,6 +4,8 @@
 # than one account is never a reason to reintroduce a gateway. A router,
 # gateway, or gateway-prefixed model id comes back only by explicit operator
 # decision. Keep this note in agreement with config/crew-dispatch.json.
+# Crewmates use Haiku or Luna for mechanical work, Sonnet or Sol by default,
+# and Opus only for hard tasks; the spawning home chooses the effort.
 modelRoles:
   designer: anthropic/claude-fable-5-1
   smol: anthropic/claude-sonnet-5-5:off
@@ -32,6 +34,7 @@ theme:
 symbolPreset: nerd
 defaultThinkingLevel: auto
 hideThinkingBlock: true
+extendedContext: true
 autocompleteMaxVisible: 10
 steeringMode: one-at-a-time
 followUpMode: all
