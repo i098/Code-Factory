@@ -2,6 +2,7 @@ import grp
 import json
 import os
 import pwd
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +22,7 @@ def merge_models(home, check=False):
         "vars": {
             "ansible_become": False,
             "code_factory_repo": str(ROOT),
+            "factory_local_bin": str(Path(shutil.which("bun")).parent),
             "factory_cfg": {"home": str(home), "user": pwd.getpwuid(os.getuid()).pw_name},
             "factory_group": grp.getgrgid(os.getgid()).gr_name,
         },
@@ -43,7 +45,10 @@ def test_model_merge_keeps_user_entries_and_is_idempotent(tmp_path, sources):
     target = tmp_path / ".omp/agent/models.yml"
     target.parent.mkdir(parents=True)
     custom = {"providers": {
-        "private-provider": {"baseUrl": "https://example.com", "models": [{"id": "local"}]},
+        "private-provider": {
+            "baseUrl": "https://example.com/path//keep?value=/*literal*/",
+            "models": [{"id": 'local/*literal*/"quoted"\\path//keep'}],
+        },
         "openai-codex": {
             "models": [{"id": "user-model"}],
             "modelOverrides": {
@@ -59,7 +64,11 @@ def test_model_merge_keeps_user_entries_and_is_idempotent(tmp_path, sources):
             **custom["providers"],
             "source": {"baseUrl": f"https://{extension}.example.com"},
         }}
-        source.write_text(json.dumps(entry) if extension == "json" else yaml.safe_dump(entry))
+        source.write_text(
+            "{ // legacy provider configuration\n/* keep user fields */\n"
+            + json.dumps(entry)[1:-1] + ",\n}\n"
+            if extension == "json" else yaml.safe_dump(entry)
+        )
         originals[source] = source.read_bytes()
     before = target.read_bytes() if target.exists() else None
     assert merge_models(tmp_path, check=True) == 1

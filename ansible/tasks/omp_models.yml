@@ -21,9 +21,26 @@
   when: existing | length > 0
   check_mode: false
 
+- name: Parse legacy omp models with the installed JSONC parser
+  ansible.builtin.command:
+    argv:
+      - "{{ factory_local_bin }}/bun"
+      - --eval
+      - 'import { JSONC } from "bun"; console.log(JSON.stringify(JSONC.parse(await Bun.stdin.text())));'
+    stdin: "{{ factory_omp_models_raw.content | b64decode }}"
+  become: true
+  register: factory_omp_models_json
+  when: (factory_omp_models_raw.source | default('')).endswith('.json')
+  changed_when: false
+  check_mode: false
+
 - name: Merge shipped overrides into omp models
   vars:
-    current: "{{ factory_omp_models_raw.content | default('') | b64decode | from_yaml | default({}, true) }}"
+    current: >-
+      {{ (factory_omp_models_json.stdout | from_json
+          if (factory_omp_models_raw.source | default('')).endswith('.json')
+          else factory_omp_models_raw.content | default('') | b64decode | from_yaml)
+         | default({}, true) }}
     overrides: "{{ lookup('ansible.builtin.file', code_factory_repo ~ '/config/omp-models.yml') | from_yaml }}"
     wanted: "{{ current | combine(overrides, recursive=true) }}"
   ansible.builtin.copy:
