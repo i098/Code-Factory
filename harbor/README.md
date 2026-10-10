@@ -4,7 +4,14 @@
 Exterior objects open floating labels for Crewship features, and an ASCII mini map provides routes to them.
 The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
 See [how.html](public/how.html) for the renderer and controls.
-An uncaught error hides the scene and shows the plain page.
+An uncaught error or rejected promise in `harbor.js`, or a failure to load it, hides the scene and shows the plain page.
+Errors and rejected promises from other scripts or resources, such as browser add-ons, do not.
+JavaScript hides the plain page before the first paint; visitors without JavaScript still see it.
+The scene starts with a 1.2-second glyph-noise sweep that fades in from black without moving the camera or resizing the grid.
+Any key, click, touch, or mouse wheel input skips the animation.
+Reduced-motion visitors get the scene immediately.
+Waves, the fountain, and boats keep moving during the intro.
+See [how.html](public/how.html) for the canvas limits and intro rendering details.
 
 The island has staggered plaza paving, scattered stones and grass tufts, varied tree canopies, textured bark, and foam along the shore.
 
@@ -42,21 +49,28 @@ python3 -m http.server --directory harbor/dist 8000
 
 Then open <http://localhost:8000>.
 
-## WebKit check
+## Browser checks
 
 CI loads the built page in Playwright WebKit as an iPhone, with `webkit-check.mjs`.
 The check also fails if the first 30 slow exterior frames change the grid, cell size, field of view, or canvas layout.
 The check walks through the house door and back with the touch pad.
 It fails on a crash, an uncaught error, a console error, a fallback to the plain page, or a multi-glyph `fillText` call.
+It also checks that the first intro frame is black and that the scene keeps moving during the intro.
 See [how.html](public/how.html) for the rendering limits on touch devices.
-To run the check locally:
+
+CI also loads the page in Playwright Chromium in a 3651x2160 window at DPR 2, with `chromium-check.mjs`.
+It adds a failing image and a rejected promise, as a browser add-on can.
+It fails on the plain-page fallback, a black canvas 3 s after load, or a console error.
+It also fails if the backing-store area exceeds the [canvas limit](public/how.html).
+To run the checks locally:
 
 ```bash
 python3 harbor/build.py
 cd harbor
 npm install --no-save --no-package-lock --prefix . playwright
-npx playwright install --with-deps webkit
+npx playwright install --with-deps webkit chromium
 node webkit-check.mjs
+node chromium-check.mjs
 ```
 
 ## Deploy

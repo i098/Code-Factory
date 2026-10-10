@@ -128,6 +128,8 @@ jobs:
 
   # harbor/ (crewship.si) as an iPhone in WebKit: harbor/webkit-check.mjs fails on a crash,
   # an uncaught error, or text drawn in a way that grows iOS Safari until it kills the tab.
+  # harbor/chromium-check.mjs loads it in desktop Chromium in a large DPR 2 window and fails on
+  # the plain-page fallback, a black canvas after 3 s, or a console error.
   # Playwright tracks its latest release, like the other tools.
   harbor-webkit:
     name: harbor webkit iphone check
@@ -144,12 +146,15 @@ jobs:
       - name: Build the page
         run: python3 harbor/build.py
 
-      - name: Install Playwright WebKit
+      - name: Install Playwright WebKit and Chromium
         working-directory: harbor
-        run: npm install --no-save --no-package-lock --prefix . playwright && npx playwright install --with-deps webkit
+        run: npm install --no-save --no-package-lock --prefix . playwright && npx playwright install --with-deps webkit chromium
 
       - name: WebKit iPhone check
         run: node harbor/webkit-check.mjs
+
+      - name: Chromium desktop high-DPR check
+        run: node harbor/chromium-check.mjs
 
   # The repository's own quality gate (docs/omp.md#quality-gate): the same
   # blocking rule the omp extension applies at turn end, against the committed

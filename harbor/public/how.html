@@ -17,7 +17,7 @@
 </pre>
 <h1>How this harbor is built</h1>
 <ul>
-  <li><b>Renderer.</b> Each rendered frame casts one ray per character cell from your eye.
+  <li><b>Renderer.</b> Each rendered frame casts one ray per character cell from your eye, except cells still covered by intro noise.
   Buildings, the dock and the hull are convex solids made of planes.
   Masts, barrels, tree trunks and the lighthouse are true cones with smooth normals.
   Rocks and tree canopies are ellipsoids.
@@ -36,7 +36,10 @@
   Devices with <code>(pointer: coarse)</code> draw one glyph per <code>fillText</code> call to limit WebKit's text cache.
   Their canvas uses at most 2 device pixels per CSS pixel.
   Other devices draw one run of one colour per call.
-  The font is ready before the first grid measurement.
+  The backing-store area stays at or below <code>4096 * 4096</code> device pixels; this does not limit each dimension to 4096.
+  Large high-DPR windows use a lower rendering ratio, which can fall below 1.
+  The background clear and intro overlay use CSS dimensions to cover the transformed canvas at any rendering ratio.
+  The first grid measurement waits for fonts; if the requested font fails to load, the scene uses a fallback font.
   For a fixed exterior viewport, the glyph size stays fixed; slow frames can disable shadows without changing the view.
   Resizes wait until the viewport settles, then update the canvas immediately before the next draw.
   Slow rendering first disables exterior shadow rays, if enabled, then uses larger room glyphs with fewer cells.
@@ -47,6 +50,11 @@
   Each door crossing requests the same unloaded sample, so timing from the previous scene does not hide room painting load.
   The room redraws only after movement, looking, resizing, or another change that requires a new frame.
   Reduced motion also stops exterior animation.</li>
+  <li><b>Intro rendering.</b> The sweep shifts a single cached 8x8 glyph tile over cells that still hide the scene.
+  It uses the same canvas without a cached scene.
+  Each intro frame ends with a black canvas fill at opacity <code>1 - progress * progress</code>.
+  Desktop drawing keeps the colour runs; touch drawing sends each glyph directly to the existing single-glyph painter.
+  The mini map, feature labels, and touch pad stay hidden until the intro ends.</li>
   <li><b>Controls.</b> WASD or arrows walk and turn, R and F look up and down, the mouse looks around, Enter opens what you point at.
   On a phone, the bottom-left pad walks; drag on the right to look around.
   The pad, labels, intro card, and map controls respect safe-area insets.
