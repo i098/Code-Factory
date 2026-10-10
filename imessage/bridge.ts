@@ -81,6 +81,7 @@ type Line = {
   sent?(space: string, text: string, since: number): Promise<boolean>; // whether a text went out since; throws when unknown
   react(ref: Ref, emoji: string): Promise<unknown>;
   markSeen?(id: string): void; // the bridge has handled message `id`; a transport that keeps its own seen-set stores it
+  release?(id: string): void; // the bridge failed to handle message `id`; the transport may deliver it again
   home?: string;
   latest?: Ref;
 };
@@ -106,6 +107,7 @@ for (const name of TRANSPORTS) {
       send: (space, text, reply, guid) => bb.send(space, text, reply, guid),
       sent: (space, text, since) => bb.sent(space, text, since),
       markSeen: (id) => bb.markSeen(id),
+      release: (id) => bb.release(id),
       react: (ref, emoji) => bb.react(ref.space, ref.id, emoji),
       home: `iMessage;-;${OWNER}`,
     });
@@ -474,8 +476,10 @@ function edited(e: EventTypeMap["message.edited"]) {
 
 if (raw) void watchEdits(raw);
 
-// Every transport's messages, each message once even when two transports report it.
-for await (const [line, message] of inbound(lines)) {
+// Every transport's messages, each message once even when two transports report it. A message that fails to be
+// handled is released, so a webhook or catch-up delivers it again.
+const delivered = new Set<string>();
+for await (const [line, message] of inbound(lines, 1000, delivered)) {
   if (message.direction === "outbound") {
     line.markSeen?.(message.id);
     continue;
@@ -487,4 +491,8 @@ for await (const [line, message] of inbound(lines)) {
   }
   const handled = await handle(line, message).then(() => true, (e) => void log("failed to handle a message")(e));
   if (handled) line.markSeen?.(message.id);
+  else {
+    delivered.delete(message.id);
+    line.release?.(message.id);
+  }
 }

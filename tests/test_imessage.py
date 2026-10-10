@@ -503,7 +503,7 @@ function relay(password = "pw-test") {
       if (path === "message/react") { r.sent.push(body); return Response.json({ data: {} }); }
       if (path === "message/query") return Response.json({ data: [...r.messages.values()].filter((m) => m.dateCreated > body.after).sort((a, b) => (body.sort === "DESC" ? b.dateCreated - a.dateCreated : a.dateCreated - b.dateCreated)) });
       let m = path.match(/^chat\\/([^/]+)\\/message$/);
-      if (m) return Response.json({ data: icloud.filter((s) => s.chat === decodeURIComponent(m[1]) && s.at > Number(u.searchParams.get("after"))).map((s) => ({ isFromMe: true, text: s.text })) });
+      if (m) return Response.json({ data: r.blind ? [] : icloud.filter((s) => s.chat === decodeURIComponent(m[1]) && s.at > Number(u.searchParams.get("after"))).map((s) => ({ isFromMe: true, text: s.text })) });
       if (/^chat\\/[^/]+\\/(typing|read)$/.test(path)) return Response.json({ data: null });
       m = path.match(/^attachment\\/([^/]+)\\/download$/);
       if (m && r.slow && r.files.has(m[1])) {
@@ -770,6 +770,27 @@ done({{
 
 
 @pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_bluebubbles_asks_the_relay_that_may_have_sent_even_when_it_is_marked_down():
+    """A send that times out on relay 1 is checked on relay 1, not only on relay 2 whose iCloud copy lags; with no other relay, still."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+{FAKE_BB}
+const a = relay(), b = relay(), c = relay();
+b.blind = true; // iCloud has not shown the text to relay 2 yet
+a.hang = true;
+const bb = line([a, b], {{ healthMs: 10_000 }});
+await bb.send(chat, "slow to answer");
+c.hang = true;
+const solo = line([c], {{ healthMs: 10_000 }});
+const since = Date.now();
+const failed = await solo.send(chat, "only relay").then(() => false, () => true);
+done({{ a: a.sent.map((s) => s.message), b: b.sent.map((s) => s.message), failed, later: await solo.sent(chat, "only relay", since) }});
+""")
+    assert result["a"] == ["slow to answer"]
+    assert result["b"] == []
+    assert result["failed"] and result["later"] is True
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
 def test_bluebubbles_outage_then_recovery():
     """With every relay down a send fails visibly and inbound waits; after recovery both work, each message once."""
     result = bun(f"""
@@ -861,6 +882,29 @@ done({{ got }});
     got = result["got"]
     assert sorted(m for _, m in got) == ["g-icloud", "g-shared", "p-1"]
     assert ["photon", "p-1"] in got and ["bluebubbles", "g-icloud"] in got
+
+
+@pytest.mark.skipif(not shutil.which("bun"), reason="needs bun")
+def test_a_message_the_bridge_failed_to_handle_is_delivered_again():
+    """A released message is not kept as seen, so the next catch-up queues it again; once handled, never again."""
+    result = bun(f"""
+import {{ BlueBubbles }} from {BB};
+import {{ inbound }} from {DESK};
+{FAKE_BB}
+const a = relay();
+a.messages.set("m1", text("m1", "retry me", {{ dateCreated: Date.now() - 60_000 }}));
+const bb = new BlueBubbles([{{ url: a.url, password: a.password }}], mkdtempSync(`${{tmpdir()}}/bb-`), {{ pingMs: 200, healthMs: 0 }}, () => {{}});
+const delivered = new Set(), got = [];
+(async () => {{
+  for await (const [, m] of inbound([{{ messages: bb }}], 1000, delivered)) {{
+    got.push(m.id);
+    if (got.length === 1) {{ delivered.delete(m.id); bb.release(m.id); }} else bb.markSeen(m.id);
+  }}
+}})();
+for (let i = 0; i < 3; i++) {{ await bb.catchUp(); await Bun.sleep(20); }}
+done({{ got }});
+""")
+    assert result["got"] == ["m1", "m1"]
 
 
 

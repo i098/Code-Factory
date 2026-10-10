@@ -116,12 +116,12 @@ export async function failover(routes: Route[], text: string, log: (line: string
 }
 
 // Every line's messages as they come, each tagged with its line, and each message id once: the last `keep` ids
-// are remembered, so a message that two transports report is handled once.
-export async function* inbound<L extends { messages: AsyncIterable<LineMessage> }>(lines: L[], keep = 1000): AsyncGenerator<[L, LineMessage]> {
+// are remembered in `seen`, so a message that two transports report is handled once. The caller deletes the id of a
+// message it failed to handle, so a transport can deliver it again.
+export async function* inbound<L extends { messages: AsyncIterable<LineMessage> }>(lines: L[], keep = 1000, seen = new Set<string>()): AsyncGenerator<[L, LineMessage]> {
   const iterators = lines.map((line) => line.messages[Symbol.asyncIterator]());
   const next = (i: number) => iterators[i]!.next().then((result) => ({ i, result }));
   const pending = new Map(iterators.map((_, i) => [i, next(i)]));
-  const seen = new Set<string>();
   while (pending.size) {
     const { i, result } = await Promise.race(pending.values());
     if (result.done) {

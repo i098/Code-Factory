@@ -62,6 +62,7 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
   private health = new Map<Relay, { ok: boolean; at: number }>();
   private seen = new Set<string>(); // message GUIDs handled by the bridge, oldest first, kept on disk
   private pending = new Set<string>(); // message GUIDs queued for the bridge and not handled yet
+  private suspects = new Set<Relay>(); // relays whose last send may have gone out without an answer, to ask first
   private seenFile: string;
   private appended = 0;
   private queue: Bubble[] = [];
@@ -149,6 +150,11 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
     }
   }
 
+  // The bridge failed to handle the message: forget it, without keeping it as seen, so a later webhook or catch-up queues it again.
+  release(guid: string) {
+    this.pending.delete(guid);
+  }
+
   // Ask every reachable relay for the messages of the last lookbackMs and accept each in order. The seen-set skips what
   // was filed already, so a message whose webhook was lost is found while it is still in the window.
   async catchUp() {
@@ -176,8 +182,10 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
       try {
         if (!maybeSent || !(await this.sent(chat, text, started))) {
           await this.call(r, "POST", "message/text", undefined,
-            { chatGuid: chat, tempGuid: guid ?? crypto.randomUUID(), message: text, ...(replyTo ? { selectedMessageGuid: replyTo, partIndex: 0 } : {}) }, this.opts.sendMs);
+            { chatGuid: chat, tempGuid: guid ?? crypto.randomUUID(), message: text, ...(replyTo ? { selectedMessageGuid: replyTo, partIndex: 0 } : {}) }, this.opts.sendMs)
+            .catch((e) => { if (e instanceof RelayError && e.maybeSent) this.suspects.add(r); throw e; });
         }
+        this.suspects.clear();
         return;
       } catch (e) {
         if (!(e instanceof RelayError)) throw e;
@@ -207,15 +215,17 @@ export class BlueBubbles implements AsyncIterable<Bubble> {
   }
 
   // True when a relay shows `text` as sent into `chat` since `since`. Throws when no relay can be asked, so the
-  // caller does not send again unchecked. A sent text reaches the other Macs through iCloud, which can lag: a relay
-  // that did not send it may not show it yet.
+  // caller does not send again unchecked. The relays that returned a possibly-sent error are asked first, whatever
+  // their health result says: the text is most likely on them. A sent text reaches the other Macs through iCloud, which
+  // can lag: a relay that did not send it may not show it yet.
   async sent(chat: string, text: string, since: number): Promise<boolean> {
     let asked = false;
-    for (const r of await this.healthy()) {
+    for (const r of new Set([...this.suspects, ...(await this.healthy())])) {
       try {
         const recent = (await this.call(r, "GET", `chat/${encodeURIComponent(chat)}/message`,
           { after: String(since - this.opts.skewMs), sort: "DESC", limit: "50" })) as BBMessage[];
         asked = true;
+        this.suspects.delete(r);
         if (recent.some((m) => m.isFromMe && m.text?.trim() === text.trim())) return true;
       } catch {
         // ask the next relay
