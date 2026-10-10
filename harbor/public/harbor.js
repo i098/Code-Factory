@@ -201,16 +201,58 @@ box(world, 9, 1.2, 16, 15, 3.8, 18.5, "r", { spot: "containers", tex: ribs });
 box(world, 9.4, 3.8, 16.2, 15.4, 6.4, 18.7, "b", { spot: "containers", tex: ribs });
 box(world, 16.2, 1.2, 15.6, 22.2, 3.8, 18.1, "b", { spot: "containers", tex: ribs });
 const officeText = painted("HARBOR", -7.6, -2.4, 4.15, 5.05);
-const pane = (u, y, spans) => y > 2.4 && y < 3.6 && spans.some(([a, b]) => u > a && u < b);
-box(world, -9, 1.2, 21, -1, 5.4, 28, "s", { spot: "office", tex: (x, y, z, nx, ny, nz) => {
-  if (nx > 0.5) return pane(z, y, [[22.5, 24], [25, 26.5]]) ? "l" : null;
-  if (nz > -0.5) return null;
-  if (officeText(x, y)) return "r";
-  if (x > -5.6 && x < -4.4 && y < 3.5) return "o";
-  return pane(x, y, [[-8.2, -6.6], [-3.4, -1.8]]) ? "l" : null;
-} });
+const officeFrontWindows = [[-8.2, -6.6], [-3.4, -1.8]];
+const officeSideWindows = [[22.5, 24], [25, 26.5]];
+function officeWindow(u, y, spans) {
+  if (y < 2.28 || y > 3.72) return null;
+  for (const [a, b] of spans) {
+    if (u < a - 0.12 || u > b + 0.12) continue;
+    // The frame and crossbars stay dark; only the four inset panes emit light.
+    if (u < a || u > b || y < 2.4 || y > 3.6 || Math.abs(u - (a + b) / 2) < 0.055 || Math.abs(y - 3) < 0.055) return "o";
+    return "l";
+  }
+  return null;
+}
+function officeWall(x, y, z, nx, ny, nz) {
+  if (ny > 0.5) return null;
+  const front = nz < -0.5, u = Math.abs(nz) > 0.5 ? x : z;
+  if (front && officeText(x, y)) return "r";
+  if (front && x > -5.6 && x < -4.4 && y < 3.6) {
+    if (Math.hypot(x + 4.6, y - 2.35) < 0.07) return "t";
+    return Math.abs(x + 5) > 0.46 || Math.abs(y - 2.35) < 0.08 || y < 1.55 || y > 3.35 ? "o" : "o:";
+  }
+  const window = officeWindow(u, y, Math.abs(nz) > 0.5 ? officeFrontWindows : officeSideWindows);
+  if (window) return window;
+  return (y - 1.2) % 0.32 < 0.025 ? "-" : null;
+}
+box(world, -9, 1.2, 21, -1, 5.4, 28, "s", { spot: "office", tex: officeWall });
 solid(world, [[0, -1, 0, 0, 5.4, 0], [0, 0, 1, 0, 0, 28.4], [0, 0, -1, 0, 0, 20.6],
-  [-2, 4.4, 0, -9.4, 5.4, 0], [2, 4.4, 0, -0.6, 5.4, 0]], [-9.4, 5.4, 20.6, -0.6, 7.4, 28.4], "r", { spot: "office" });
+  [-2, 4.4, 0, -9.4, 5.4, 0], [2, 4.4, 0, -0.6, 5.4, 0]], [-9.4, 5.4, 20.6, -0.6, 7.4, 28.4], "r", { spot: "office",
+  tex: (x, y, z, nx, ny, nz) => {
+    if (Math.abs(nz) > 0.5) return (y - 5.4) % 0.25 < 0.035 ? "o:" : "o";
+    const row = Math.floor((y - 5.4) / 0.22);
+    return (y - 5.4) % 0.22 < 0.035 || (z + 99 + (row % 2) * 0.25) % 0.5 < 0.035 ? "-" : null;
+  } });
+// Raised details do not change the walking bounds, map footprint or feature anchor.
+const officeDetail = { spot: "office", anchor: false, solid: false, thin: true };
+for (const x of [-9, -1]) {
+  for (const z of [21, 28]) beam(world, [x, 1.25, z], [x, 5.4, z], "o", officeDetail, 0.12);
+  for (const y of [1.4, 3.95, 5.3]) beam(world, [x, y, 21], [x, y, 28], "o", officeDetail, 0.09);
+  beam(world, [x < -5 ? -9.4 : -0.6, 5.4, 20.6], [x < -5 ? -9.4 : -0.6, 5.4, 28.4], "s", officeDetail, 0.1);
+  for (const [a, b] of officeSideWindows) box(world, x - 0.2, 2.23, a - 0.18, x + 0.2, 2.4, b + 0.18, "o", officeDetail);
+}
+for (const z of [21, 28]) {
+  for (const y of [1.4, 3.95, 5.3]) beam(world, [-9, y, z], [-1, y, z], "o", officeDetail, 0.09);
+  for (const [a, b] of officeFrontWindows) box(world, a - 0.18, 2.23, z - 0.2, b + 0.18, 2.4, z + 0.2, "o", officeDetail);
+}
+for (const z of [20.6, 28.4]) {
+  beam(world, [-9.4, 5.4, z], [-5, 7.4, z], "s", officeDetail, 0.1);
+  beam(world, [-5, 7.4, z], [-0.6, 5.4, z], "s", officeDetail, 0.1);
+}
+beam(world, [-5, 7.4, 20.6], [-5, 7.4, 28.4], "o", officeDetail, 0.1);
+for (const x of [-5.72, -4.28]) beam(world, [x, 1.4, 20.92], [x, 3.72, 20.92], "o", officeDetail, 0.1);
+beam(world, [-5.82, 3.72, 20.92], [-4.18, 3.72, 20.92], "o", officeDetail, 0.1);
+box(world, -5.85, 1.2, 20.55, -4.15, 1.4, 21.05, "t", officeDetail);
 box(world, -2.6, 6, 24, -2.45, 10.5, 24.15, "t", { spot: "antenna" });
 box(world, -3.3, 9.4, 24, -1.75, 9.52, 24.15, "t", { spot: "antenna" });
 box(world, -3, 8.5, 24, -2.05, 8.62, 24.15, "t", { spot: "antenna" });
@@ -497,7 +539,7 @@ const centre = ({ bb: b }) => [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5
 const LIGHTS = [
   ...world.filter((s) => s.mat === "l" && s !== beacon && s !== antennaLamp).map((s) => lamp(...centre(s), 1, 10)),
   ...ship.filter((s) => s.mat === "l").map((s) => lamp(...centre(s), 0.9, 9, true)),
-  lamp(-7.4, 3, 20.5, 0.6, 6), lamp(-2.6, 3, 20.5, 0.6, 6), lamp(-0.5, 3, 23.2, 0.45, 5), lamp(-0.5, 3, 25.7, 0.45, 5),
+  lamp(-7.4, 3, 20.8, 0.22, 2.3), lamp(-2.6, 3, 20.8, 0.22, 2.3), lamp(-0.8, 3, 23.2, 0.22, 2.3), lamp(-0.8, 3, 25.7, 0.22, 2.3),
   lamp(-2.7, 3.3, -8, 0.45, 5, true), lamp(-0.3, 3.3, -8, 0.45, 5, true), lamp(...centre(beacon), 1.1, 16),
 ];
 const BEAM = { x: -36, y: 13.8, z: -24, reach: 95 };
@@ -564,7 +606,7 @@ for (const s of [...world, ...ship]) if (s.spot && !spots[s.spot]) s.spot = null
 const anchors = {};
 for (const [list, lift] of [[world, 0], [ship, 1]]) {
   for (const s of list) {
-    if (!s.spot) continue;
+    if (!s.spot || s.anchor === false) continue;
     const b = s.bb, a = (anchors[s.spot] ||= { x: 0, y: 0, z: 0, n: 0, r: 0, ship: lift });
     a.x += (b[0] + b[3]) / 2; a.y += (b[1] + b[4]) / 2; a.z += (b[2] + b[5]) / 2; a.n++;
     a.r = Math.max(a.r, (b[3] - b[0]) / 2, (b[5] - b[2]) / 2, (b[4] - b[1]) / 3);
