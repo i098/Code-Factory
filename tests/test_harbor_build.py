@@ -50,9 +50,7 @@ def built(tmp_path, monkeypatch, readme):
 def test_mapped_features_and_docs_index_appear_once(tmp_path, monkeypatch, capsys):
     readme = (ROOT / "README.md").read_text()
     unmapped = "docs/brand-new-page.md"
-    readme = readme.replace(
-        "\n## More docs:", f"\n## More docs: [Brand new]({unmapped})", 1
-    )
+    readme = readme.replace("\n## More docs:", f"\n## More docs: [Brand new]({unmapped})", 1)
     links = [link for _, link, _ in build.features(readme) if link in build.SCENE]
     extra_count = sum(link not in build.SCENE for _, link, _ in build.features(readme))
     manifest = built(tmp_path, monkeypatch, readme)
