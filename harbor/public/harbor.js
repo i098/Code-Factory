@@ -775,6 +775,7 @@ for (const [list, lift] of [[world, 0], [ship, 1]]) {
 for (const a of Object.values(anchors)) { a.x /= a.n; a.y /= a.n; a.z /= a.n; }
 
 let cols = 0, rows = 0, cellW = 8, cellH = 13, scale = 1, target = null, padX = 0, padY = 0, aspect = 1, viewW = 0, viewH = 0;
+const safe = { left: 0, right: 0, top: 0, bottom: 0 };
 const MONO = getComputedStyle(document.documentElement).getPropertyValue("--mono");
 const BASE = { "": "#5c6a88", k: "#e9eefb", w: "#3f78b8", d: "#22406a", m: "#a9c8f0", o: "#dba66b", s: "#efe6cf",
   t: "#a3adc2", l: "#ffd479", r: "#e0705f", b: "#62a8e0", f: "#3a4562", h: "#7ee0c3", g: "#6fbf73", y: "#e3d3a3", n: "#9b8a62",
@@ -808,6 +809,9 @@ function measure() {
   cols = Math.max(20, Math.floor(w / cellW));
   rows = Math.max(12, Math.floor(h / cellH));
   padX = (w - cols * cellW) / 2; padY = (h - rows * cellH) / 2;
+  const style = getComputedStyle(stage);
+  for (const edge of Object.keys(safe)) safe[edge] = parseFloat(style.getPropertyValue(`--safe-${edge}`)) || 0;
+  stage.style.setProperty("--map-width", `${32 * cellW + 8}px`);
   G = new Array(cols * rows); C = new Array(cols * rows);
   ID = new Int32Array(cols * rows); D = new Float32Array(cols * rows); SP = new Array(cols * rows);
   dirty = true; // Changing canvas size clears it, including an idle room's last frame.
@@ -893,18 +897,21 @@ function project(a) {
 const LINE = new Map();
 function label(at) {
   LINE.clear();
-  card.hidden = mapMode === 2; // the full-screen map covers the scene, so no label floats over it
+  card.hidden = mapMode === 2 || (!!target && !at);
   if (!target || !at) { card.style.transform = ""; return; }
   at = [Math.max(0, Math.min(cols - 1, at[0])), Math.max(0, Math.min(rows - 1, at[1]))];
   // On a phone the label stays above the move pad in the bottom corner.
-  const W = stage.clientWidth, H = stage.clientHeight - (pad.offsetParent ? pad.offsetHeight + 12 : 0), w = card.offsetWidth, h = card.offsetHeight;
+  const W = stage.clientWidth, H = pad.offsetParent ? pad.offsetTop : stage.clientHeight;
+  card.style.setProperty("--label-height", `${Math.min(H, stage.clientHeight - safe.bottom) - safe.top - 16}px`);
+  const w = card.offsetWidth, h = card.offsetHeight;
   const px = padX + (at[0] + 0.5) * cellW, py = padY + (at[1] + 0.5) * cellH, gap = 56;
-  let left = px + gap + w > W - 8 ? px - gap - w : px + gap, top = py - gap - h < 8 ? py + gap : py - gap - h;
-  left = Math.max(8, Math.min(W - w - 8, left)); top = Math.max(8, Math.min(H - h - 8, top));
+  const x0 = safe.left + 8, x1 = W - safe.right - 8, y0 = safe.top + 8, y1 = Math.min(H - 8, stage.clientHeight - safe.bottom - 8);
+  let left = px + gap + w > x1 ? px - gap - w : px + gap, top = py - gap - h < y0 ? py + gap : py - gap - h;
+  left = Math.max(x0, Math.min(x1 - w, left)); top = Math.max(y0, Math.min(y1 - h, top));
   // Keep clear of the mini map in the top right corner.
   const mapLeft = mapBox ? padX + mapBox.oi * cellW - 8 : W, mapBottom = mapBox ? padY + (mapBox.oj + mapBox.h) * cellH + 8 : 0;
   if (mapMode !== 2 && left + w > mapLeft && top < mapBottom) {
-    if (mapBottom + h < H - 8) top = mapBottom; else left = Math.max(8, mapLeft - w);
+    if (mapBottom + h < y1) top = mapBottom; else left = Math.max(x0, mapLeft - w);
   }
   card.style.transform = `translate(${left}px, ${top}px)`;
   // Leader from the object to the nearest point of the label's edge, one glyph per cell.
@@ -930,8 +937,10 @@ let mapMode = 0, pick = 0, jumped = null, mapBox = null; // mapMode: 0 idle, 1 p
 function minimap() {
   MAPCELLS.clear();
   if (insideHouse) { mapBox = null; return; }
-  const full = mapMode === 2, w = full ? cols - 2 : Math.min(30, cols - 2), h = full ? rows - 2 : Math.min(15, rows - 2);
-  mapBox = { oi: full ? 1 : cols - w - 1, oj: 1, w, h, iw: w - 2, ih: h - 3 };
+  const left = Math.max(1, Math.ceil((safe.left - padX) / cellW)), right = Math.max(1, Math.ceil((safe.right - padX) / cellW));
+  const top = Math.max(1, Math.ceil((safe.top - padY) / cellH)), bottom = Math.max(1, Math.ceil((safe.bottom - padY) / cellH));
+  const full = mapMode === 2, w = full ? cols - left - right : Math.min(30, cols - left - right), h = full ? rows - top - bottom : Math.min(15, rows - top - bottom);
+  mapBox = { oi: full ? left : cols - w - right, oj: top, w, h, iw: w - 2, ih: h - 3 };
   mapFrame();
   mapTerrain();
   mapMarks();

@@ -55,7 +55,12 @@
   Each intro frame ends with a black canvas fill at opacity <code>1 - progress * progress</code>.
   Desktop drawing keeps the colour runs; touch drawing sends each glyph directly to the existing single-glyph painter.
   The mini map, feature labels, and touch pad stay hidden until the intro ends.</li>
-  <li><b>Controls.</b> WASD or arrows walk and turn, R and F look up and down, the mouse looks around, Enter opens what you point at. On a phone the pad walks and a drag looks. The label floats beside what you point at, with a leader line in text.</li>
+  <li><b>Controls.</b> WASD or arrows walk and turn, R and F look up and down, the mouse looks around, Enter opens what you point at.
+  On a phone, the bottom-left pad walks; drag on the right to look around.
+  The pad, labels, intro card, and map controls respect safe-area insets.
+  In landscape, the intro card leaves the map visible.
+  Feature labels float beside their objects, with a leader line in text, and hide when their objects are behind you.
+  On a phone, feature labels stay above the pad; scroll tall labels to reach their links.</li>
   <li><b>Mini map.</b> Outside, M picks a point on the text map in the corner.
   Press M again to fill the screen with the map.
   Use the arrows to choose a point, then press Enter to walk there.

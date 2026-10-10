@@ -103,6 +103,7 @@ const assert = require('node:assert/strict');
 const element = {
   hidden: false, classList: {add() {}, remove() {}, toggle() {}}, focus() {}, addEventListener() {},
   firstElementChild: {style: {}}, clientWidth: 600, clientHeight: 400,
+  style: {setProperty() {}},
   replaceChildren() {}, getContext: () => ({setTransform() {}, measureText: () => ({width: 6})})
 };
 const document = {getElementById: () => element, querySelectorAll: () => [],
