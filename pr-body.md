@@ -1,7 +1,6 @@
 Closes #161
 
-The scene tests only visible objects and redraws only changed cells.
-Touch devices still draw one glyph per fillText and cap DPR at 2.
+See [the frame loop](https://crewship.si/how.html#frame-loop) for rendering changes and touch-device limits.
 
 Recorded hot-path profile before the change (Chromium CPU profile, full grid):
 - Primary-ray object tests: 32-48%.
