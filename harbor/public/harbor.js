@@ -1025,6 +1025,7 @@ function measure() {
   aspect = w / h;
   viewW = w; viewH = h;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = BACKGROUND; ctx.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
   ctx.font = `${px}px ${MONO}`;
   ctx.textBaseline = "top";
   cellW = ctx.measureText("M").width; cellH = px;
