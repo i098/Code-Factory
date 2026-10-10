@@ -792,10 +792,12 @@ for (const [k, c] of Object.entries(BASE)) {
 }
 function measure() {
   // Phones and tablets draw at most 2 device pixels per CSS pixel: a 3x canvas costs more memory than it shows.
-  const dpr = touchFirst.matches ? Math.min(2, devicePixelRatio || 1) : devicePixelRatio || 1, w = stage.clientWidth, h = stage.clientHeight;
-  // Reset the backing store only for a real size change, immediately before drawing.
-  if (canvas.width !== Math.round(w * dpr)) canvas.width = Math.round(w * dpr);
-  if (canvas.height !== Math.round(h * dpr)) canvas.height = Math.round(h * dpr);
+  // Every canvas stays within 4096x4096 device pixels, the smallest area limit among browsers.
+  const w = stage.clientWidth, h = stage.clientHeight;
+  const dpr = Math.min(touchFirst.matches ? 2 : Infinity, devicePixelRatio || 1, Math.sqrt(4096 * 4096 / (w * h)));
+  // Reset the backing store only for a real size change, immediately before drawing; flooring keeps the cap.
+  if (canvas.width !== Math.floor(w * dpr)) canvas.width = Math.floor(w * dpr);
+  if (canvas.height !== Math.floor(h * dpr)) canvas.height = Math.floor(h * dpr);
   const px = Math.max(6.5, Math.min(11, innerWidth * 0.0068)) * (insideHouse ? scale : 1);
   aspect = w / h;
   viewW = w; viewH = h;
@@ -1603,9 +1605,10 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
-document.fonts.load(`11px ${MONO}`).then(() => document.fonts.ready).then(() => {
+// A font that fails to load does not stop the scene; a startup error stays an uncaught harbor.js error.
+document.fonts.load(`11px ${MONO}`).catch(() => {}).then(() => document.fonts.ready).then(() => requestAnimationFrame(() => {
   measure();
   resize.observe(stage);
   last = performance.now();
   requestAnimationFrame(frame);
-});
+}));
