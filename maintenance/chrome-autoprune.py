@@ -12,7 +12,7 @@ excluded. No SIGKILL, profile deletion, package patching, or dev-server cleanup.
 The bridge drains HTTP requests and closes its own MCP/Chrome children on exit.
 
 Requires Linux pidfds and the hash-verified private psutil runtime. Timer: chrome-autoprune.timer.
-Inspect with ~/.local/share/code-factory/pruner-venv/bin/python ~/.local/bin/chrome-autoprune.py
+Inspect with ~/.local/share/crewship/pruner-venv/bin/python ~/.local/bin/chrome-autoprune.py
 Logs: journalctl --user -u chrome-autoprune.service
 Disable: systemctl --user disable --now chrome-autoprune.timer
 """
@@ -37,9 +37,9 @@ REGISTRY = HOME / ".chrome-devtools-axi"
 # chrome-devtools-axi tracks its latest release, one prefix per version:
 # <AXI_ROOT>/<version>/<BRIDGE>. Bridges from a superseded version stay prunable,
 # as do bridges still running from the retired shared npm prefix.
-AXI_ROOT = HOME / ".local/share/code-factory/chrome-devtools-axi"
+AXI_ROOT = HOME / ".local/share/crewship/chrome-devtools-axi"
 BRIDGE = Path("node_modules/chrome-devtools-axi/dist/bin/chrome-devtools-axi-bridge.js")
-LEGACY_BRIDGE = HOME / ".local/share/code-factory/npm" / BRIDGE
+LEGACY_BRIDGE = HOME / ".local/share/crewship/npm" / BRIDGE
 DEFAULT_STATE = HOME / ".local/state/chrome-autoprune/state.json"
 UID = os.getuid()
 

@@ -22,12 +22,12 @@ def autoprune(tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     ("relative", "expected"),
     [
-        (f".local/share/code-factory/chrome-devtools-axi/0.4.1/{BRIDGE}", True),
-        (f".local/share/code-factory/chrome-devtools-axi/0.3.0/{BRIDGE}", True),
-        (f".local/share/code-factory/npm/{BRIDGE}", True),
-        (f".local/share/code-factory/chrome-devtools-axi/{BRIDGE}", False),
-        (f".local/share/code-factory/other/{BRIDGE}", False),
-        (f".local/share/code-factory/npm/other/{BRIDGE}", False),
+        (f".local/share/crewship/chrome-devtools-axi/0.4.1/{BRIDGE}", True),
+        (f".local/share/crewship/chrome-devtools-axi/0.3.0/{BRIDGE}", True),
+        (f".local/share/crewship/npm/{BRIDGE}", True),
+        (f".local/share/crewship/chrome-devtools-axi/{BRIDGE}", False),
+        (f".local/share/crewship/other/{BRIDGE}", False),
+        (f".local/share/crewship/npm/other/{BRIDGE}", False),
     ],
 )
 def test_only_installed_or_retired_prefix_bridges_are_recognized(

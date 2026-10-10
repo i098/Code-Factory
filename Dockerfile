@@ -97,14 +97,14 @@ RUN set -eux; \
         "${CREWSHIP_HOME}/.config" \
         "${CREWSHIP_HOME}/.cache" \
         "${CREWSHIP_WORKSPACE}" \
-        /opt/code-factory; \
+        /opt/crewship; \
     # Ansible become for the unprivileged Crewship user. The container publishes no
     # ports by default, mounts no host socket and holds no host credentials, so the
     # blast radius of this sudoers entry is the container itself. A real host keeps
     # its own sudo policy; this file is never applied by ansible/**.
-    printf '%s ALL=(ALL) NOPASSWD:ALL\n' "${CREWSHIP_USER}" > /etc/sudoers.d/90-code-factory; \
-    chmod 0440 /etc/sudoers.d/90-code-factory; \
-    visudo -cf /etc/sudoers.d/90-code-factory
+    printf '%s ALL=(ALL) NOPASSWD:ALL\n' "${CREWSHIP_USER}" > /etc/sudoers.d/90-crewship; \
+    chmod 0440 /etc/sudoers.d/90-crewship; \
+    visudo -cf /etc/sudoers.d/90-crewship
 
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
@@ -112,7 +112,7 @@ ENV LANG=C.UTF-8 \
     CREWSHIP_HOME=${CREWSHIP_HOME} \
     HOME=${CREWSHIP_HOME} \
     CREWSHIP_WORKSPACE=${CREWSHIP_WORKSPACE} \
-    CREWSHIP_ROOT=/opt/code-factory \
+    CREWSHIP_ROOT=/opt/crewship \
     PATH=${CREWSHIP_HOME}/.local/bin:${CREWSHIP_HOME}/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # ---------------------------------------------------------------------------
@@ -125,16 +125,16 @@ ARG CREWSHIP_HOME=/home/coder
 ARG CREWSHIP_WORKSPACE=/home/coder/Dev
 ARG CREWSHIP_CONFIG_FILE=containers/crewship.container.yml
 
-COPY --chown=${CREWSHIP_USER}:${CREWSHIP_USER} . /opt/code-factory
+COPY --chown=${CREWSHIP_USER}:${CREWSHIP_USER} . /opt/crewship
 
 RUN set -eux; \
-    printf 'role=worker\nsource=/opt/code-factory\nuser=%s\nhome=%s\nworkspace=%s\nconfig=%s\nsystemd=absent\ntailscale=absent\ndesktop=absent\n' \
+    printf 'role=worker\nsource=/opt/crewship\nuser=%s\nhome=%s\nworkspace=%s\nconfig=%s\nsystemd=absent\ntailscale=absent\ndesktop=absent\n' \
         "${CREWSHIP_USER}" "${CREWSHIP_HOME}" "${CREWSHIP_WORKSPACE}" "${CREWSHIP_CONFIG_FILE}" \
-        > /etc/code-factory-image; \
-    chmod 0444 /etc/code-factory-image
+        > /etc/crewship-image; \
+    chmod 0444 /etc/crewship-image
 
 USER ${CREWSHIP_USER}
-WORKDIR /opt/code-factory
+WORKDIR /opt/crewship
 
 # Executable bits are part of the interface: ./onboard.sh, ./ship.sh and the
 # smoke script are invoked directly, including from a context that lost them.
@@ -165,7 +165,7 @@ RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
     set -eux; ./ship.sh launch --config "${CREWSHIP_CONFIG_FILE}"
 
 ENV CREWSHIP_IMAGE=worker \
-    CREWSHIP_CONFIG=/opt/code-factory/${CREWSHIP_CONFIG_FILE}
+    CREWSHIP_CONFIG=/opt/crewship/${CREWSHIP_CONFIG_FILE}
 
 LABEL org.opencontainers.image.title="crewship-worker" \
       org.opencontainers.image.description="Isolated non-root Crewship worker; no systemd, Tailscale or desktop." \
@@ -186,5 +186,5 @@ ENV CREWSHIP_IMAGE=smoke
 LABEL org.opencontainers.image.title="crewship-smoke" \
       org.opencontainers.image.description="Crewship worker image running tests/container-smoke.sh."
 
-WORKDIR /opt/code-factory
-CMD ["/opt/code-factory/tests/container-smoke.sh", "--in-container"]
+WORKDIR /opt/crewship
+CMD ["/opt/crewship/tests/container-smoke.sh", "--in-container"]

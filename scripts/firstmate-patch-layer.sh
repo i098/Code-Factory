@@ -11,7 +11,7 @@
 # The layer is built to one side, in a temporary index with git commit-tree, and
 # main moves only once the whole layer exists: a patch that stops the run leaves
 # the checkout as it was. Each commit takes its author, committer, date and
-# message from the patch file, plus a Code-Factory-Patch trailer naming it, so
+# message from the patch file, plus a Crewship-Patch trailer naming it, so
 # one target and one set of patches always give the same sha. That is what makes
 # an unchanged host a no-op.
 set -euo pipefail
@@ -56,7 +56,7 @@ for patch in "${patches[@]}"; do
         echo
         cat "$tmp/msg"
       fi
-      printf '\nCode-Factory-Patch: %s\n' "$name"
+      printf '\nCrewship-Patch: %s\n' "$name"
     } | g commit-tree --no-gpg-sign "$tree" -p "$layer")
     echo "applied: $name"
   elif [ -n "${tree:-}" ] ||
@@ -94,14 +94,16 @@ fi
     "provisioning will not move another branch or a detached HEAD."
 
 # Every commit main has beyond upstream must be a layer commit, marked by its
-# Code-Factory-Patch trailer. The rebuilt layer replaces them all, so an edited,
+# Crewship-Patch trailer. The rebuilt layer replaces them all, so an edited,
 # added or dropped patch needs no manual reset and nothing else can be lost.
+# Migration: layers built before the Crewship rename carry Code-Factory-Patch;
+# the first apply replaces them with Crewship-Patch commits.
 base=$(g merge-base "$head" "$target") ||
   die "$dir at $head shares no history with origin/main ($target)."
 for commit in $(g rev-list "$base..$head"); do
-  [ -n "$(g log -1 --format='%(trailers:key=Code-Factory-Patch,valueonly)' "$commit")" ] ||
+  [ -n "$(g log -1 --format='%(trailers:key=Crewship-Patch,valueonly)%(trailers:key=Code-Factory-Patch,valueonly)' "$commit")" ] ||
     die "$dir carries local commit $commit, which is not upstream and not a" \
-      "patch layer commit (no Code-Factory-Patch trailer). Provisioning never" \
+      "patch layer commit (no Crewship-Patch trailer). Provisioning never" \
       "discards local work. Push or move that commit, then re-run."
 done
 

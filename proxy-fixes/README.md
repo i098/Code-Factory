@@ -23,14 +23,14 @@ For a new optional proxy installation in predictable user-owned locations:
 
 ```bash
 uv tool install 'headroom-ai==0.36.3'
-npm install --prefix "$HOME/.local/share/code-factory/proxies" --save-exact 'pxpipe-proxy@0.13.1'
+npm install --prefix "$HOME/.local/share/crewship/proxies" --save-exact 'pxpipe-proxy@0.13.1'
 python3 proxy-fixes/install.py \
   --headroom-python "$HOME/.local/share/uv/tools/headroom-ai/bin/python" \
-  --pxpipe-package "$HOME/.local/share/code-factory/proxies/node_modules/pxpipe-proxy" \
+  --pxpipe-package "$HOME/.local/share/crewship/proxies/node_modules/pxpipe-proxy" \
   --node "$(command -v node)"
 ```
 
-For an existing installation, pass its actual Python and package paths instead. The installer patches and tests software; it does not configure credentials, create proxy services, change routing, or restart services. It installs `ExecStartPre` guards for existing `headroom.service` and `pxpipe.service` units and copies the checks into `~/.local/share/code-factory/proxy-fixes`, independent of this checkout.
+For an existing installation, pass its actual Python and package paths instead. The installer patches and tests software; it does not configure credentials, create proxy services, change routing, or restart services. It installs `ExecStartPre` guards for existing `headroom.service` and `pxpipe.service` units and copies the checks into `~/.local/share/crewship/proxy-fixes`, independent of this checkout.
 
 When both proxy services have no active request connections, restart pxpipe first, then Headroom:
 
@@ -50,7 +50,7 @@ The six Headroom cases exercise both outbound-policy entrypoints, original-body 
 
 ```bash
 "$HOME/.local/share/uv/tools/headroom-ai/bin/python" proxy-fixes/headroom/test_preserved_thinking.py
-node proxy-fixes/pxpipe/check.mjs "$HOME/.local/share/code-factory/proxies/node_modules/pxpipe-proxy"
+node proxy-fixes/pxpipe/check.mjs "$HOME/.local/share/crewship/proxies/node_modules/pxpipe-proxy"
 ```
 
 On the source VPS, these cases failed before the fixes and passed afterward. The saved failing request then remained byte-for-byte unchanged offline. Both restarted listeners were healthy, and an isolated three-turn authenticated Fable conversation returned HTTP 200 with `preserved_thinking_context` passthrough recorded. The live arithmetic responses did not emit signed thinking blocks, so exact opaque-block replay is proven by the offline regressions, not overstated as a live signed-block test.
@@ -61,4 +61,4 @@ Do not blindly retry an identical rejected body. Stop the prefix mutation first.
 
 A package update that loses the preservation behavior fails its startup guard. Review the new release and rerun the regression cases before updating the patch manifest. Do not remove the guard simply to get the service started.
 
-Original patched files are saved under `~/.local/state/code-factory/proxy-backups`. Restoring them also restores the bug; rollback should be deliberate and paired with safe routing. No private request bodies, signatures, credentials, or session logs are included here. Upstream licenses/notices accompany the patches.
+Original patched files are saved under `~/.local/state/crewship/proxy-backups`. Restoring them also restores the bug; rollback should be deliberate and paired with safe routing. No private request bodies, signatures, credentials, or session logs are included here. Upstream licenses/notices accompany the patches.

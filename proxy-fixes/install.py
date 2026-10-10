@@ -86,10 +86,10 @@ def main():
         or package["version"] != manifest["pxpipe"]["version"]
     ):
         raise ValueError("installed proxy versions differ from reviewed patch manifest")
-    backup = Path.home() / ".local/state/code-factory/proxy-backups"
+    backup = Path.home() / ".local/state/crewship/proxy-backups"
     apply_patch("headroom", Path(headroom["root"]), manifest["headroom"], backup)
     apply_patch("pxpipe", args.pxpipe_package.resolve(), manifest["pxpipe"], backup)
-    permanent = Path.home() / ".local/share/code-factory/proxy-fixes"
+    permanent = Path.home() / ".local/share/crewship/proxy-fixes"
     permanent.mkdir(parents=True, exist_ok=True)
     headroom_check = permanent / "headroom-check.py"
     pxpipe_check = permanent / "pxpipe-check.mjs"
@@ -121,7 +121,7 @@ def main():
             directory.mkdir(parents=True, exist_ok=True)
             # systemd accepts double-quoted argv, without invoking a shell.
             command = " ".join(json.dumps(str(item)) for item in argv)
-            (directory / "code-factory-thinking-guard.conf").write_text(
+            (directory / "crewship-thinking-guard.conf").write_text(
                 "[Service]\n# Refuse startup if a package update reintroduces prefix mutation.\nExecStartPre="
                 + command
                 + "\n"

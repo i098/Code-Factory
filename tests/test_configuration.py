@@ -383,7 +383,7 @@ def test_second_apply_does_not_reopen_the_questions(
     )
     args = [] if config_source == "default" else ["--config", str(selected)]
     monkeypatch.setattr(ship.sys, "argv", ["ship.sh", "launch", *args])
-    marker = tmp_path / ".local/share/code-factory/new-host-questions-done"
+    marker = tmp_path / ".local/share/crewship/new-host-questions-done"
     assert ship.main() == 0
     assert not marker.exists()
     assert "New-host questions did not complete (omp exited 1)" in capsys.readouterr().out
@@ -411,7 +411,7 @@ def test_questions_wait_for_an_omp_sign_in(configuration, tmp_path, monkeypatch,
     )
     assert ship.questions(configuration, tmp_path / "host.yml") == 0
     assert launches == []
-    assert not (tmp_path / ".local/share/code-factory/new-host-questions-done").exists()
+    assert not (tmp_path / ".local/share/crewship/new-host-questions-done").exists()
     assert "sign in to omp with /login" in capsys.readouterr().out
 
 
@@ -868,7 +868,7 @@ def test_board_environment_reaches_new_shells_and_agents_and_is_removed_on_opt_o
         )
         assert shell.stdout.splitlines() == [
             socket if board is not None else "unset",
-            f"{tmp_path}/.local/share/code-factory/chrome-devtools-mcp/current/"
+            f"{tmp_path}/.local/share/crewship/chrome-devtools-mcp/current/"
             "node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js",
             f"{tmp_path}/data/cache/npm",
         ]

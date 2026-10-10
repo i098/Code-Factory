@@ -106,8 +106,8 @@
     mode: "0644"
   become: true
   loop:
-    - code-factory-vnc.service
-    - code-factory-novnc.service
+    - crewship-vnc.service
+    - crewship-novnc.service
   notify:
     - reload user systemd
     - restart novnc
@@ -133,8 +133,8 @@
     follow: false
   become: true
   loop:
-    - code-factory-vnc.service
-    - code-factory-novnc.service
+    - crewship-vnc.service
+    - crewship-novnc.service
 
 - name: Enable and start the desktop user units
   ansible.builtin.systemd_service:
@@ -146,8 +146,8 @@
   become_user: "{{ crewship_cfg.user }}"
   environment: "{{ crewship_user_systemd_env }}"
   loop:
-    - code-factory-vnc.service
-    - code-factory-novnc.service
+    - crewship-vnc.service
+    - crewship-novnc.service
   when: crewship_manage_services | bool
 
 - name: Report how to reach the desktop

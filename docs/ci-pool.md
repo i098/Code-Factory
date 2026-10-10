@@ -97,7 +97,7 @@ No token is stored. Each slot reads the host's `gh` login when it starts. When a
 ```bash
 systemctl --user list-units 'ci-runner@*'          # the slots and their state
 journalctl --user -u 'ci-runner@*' -f              # runner names, job progress, errors
-sudo docker ps --filter label=code-factory.ci-pool # one container for each slot
+sudo docker ps --filter label=crewship.ci-pool # one container for each slot
 gh api repos/OWNER/NAME/actions/runners            # the runners GitHub knows
 ```
 

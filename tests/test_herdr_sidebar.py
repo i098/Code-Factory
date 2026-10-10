@@ -389,7 +389,7 @@ def test_reporter_counts_from_a_fixture_home(fixture):
 
 def test_reporter_forgets_status_logs_it_no_longer_reads(fixture):
     home, run = fixture
-    cache_file = home.parent / "cache/code-factory/herdr-spaces.json"
+    cache_file = home.parent / "cache/crewship/herdr-spaces.json"
     run()
     assert str(home / "state/fix-login.status") in json.loads(cache_file.read_text())["folds"]
     (home / "state/fix-login.meta").unlink()
@@ -440,7 +440,7 @@ def test_the_machine_tab_is_pinned_throttled_and_never_takes_over_a_name(fixture
     machine_ws = {"workspace_id": "w0", "label": "machine", "active_tab_id": "w0:t2"}
     workspaces.write_text(json.dumps([machine_ws, *listed]))
     tabs_file = tmp_path / "tabs.json"
-    cache_file = tmp_path / "cache/code-factory/herdr-spaces.json"
+    cache_file = tmp_path / "cache/crewship/herdr-spaces.json"
     calls = tmp_path / "mobile.jsonl"
 
     def renames():
@@ -506,7 +506,7 @@ def test_mobile_layout_carries_the_same_data(fixture, tmp_path):
     home = reports.pop("w1:p2")
     assert home[:6] == [
         "--source",
-        "code-factory:spaces",
+        "crewship:spaces",
         "--agent",
         "omp",
         "--display-agent",
@@ -520,7 +520,7 @@ def test_mobile_layout_carries_the_same_data(fixture, tmp_path):
     assert list(states) == list(spaces.STATES) and len(set(texts)) == 1
     assert re.fullmatch(r"⚑1 ▶3 ◷4 ▤\d+% ⛁\d+% ⚠watcher ⎇1561 \+84 −12 ✎3", texts[0])
     # A worker keeps Firstmate's display agent and shows its size only.
-    source = ["--source", "code-factory:spaces", "--agent", "omp"]
+    source = ["--source", "crewship:spaces", "--agent", "omp"]
     assert reports == {
         "w1:p3": source + labels("⎇1537 +5"),
         "w3:p2": source + ["--clear-state-labels"],
@@ -556,7 +556,7 @@ def test_mobile_reports_settle_and_follow_a_changed_pane(fixture, tmp_path):
     assert list(sent) == ["w1:p2"]
     assert sent["w1:p2"][:6] == [
         "--source",
-        "code-factory:spaces",
+        "crewship:spaces",
         "--agent",
         "omp",
         "--display-agent",
@@ -641,7 +641,7 @@ def test_space_cpu_share_stays_within_0_and_100(fixture, tmp_path, before, share
     _, run = fixture
     worker = subprocess.Popen(["sleep", "30"], env={**os.environ, "HERDR_WORKSPACE_ID": "w1"})
     try:
-        cache = tmp_path / "cache/code-factory/herdr-spaces.json"
+        cache = tmp_path / "cache/crewship/herdr-spaces.json"
         write(
             cache,
             json.dumps({"cpu": {"w1": {str(worker.pid): before}}, "cpu_at": time.time() - 10}),

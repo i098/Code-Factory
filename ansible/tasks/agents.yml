@@ -214,7 +214,7 @@
       {% for key, value in crewship_data_cache_env | dictsort %}
       Environment="{{ key }}={{ value }}"
       {% endfor %}
-    dest: "{{ crewship_user_units }}/no-mistakes-daemon-.service.d/code-factory.conf"
+    dest: "{{ crewship_user_units }}/no-mistakes-daemon-.service.d/crewship.conf"
     owner: "{{ crewship_cfg.user }}"
     group: "{{ crewship_group }}"
     mode: "0644"

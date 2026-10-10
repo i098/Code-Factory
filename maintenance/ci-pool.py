@@ -269,7 +269,7 @@ def run(instance):
             env.flush()
             subprocess.run([
                 *docker(), "create", "--init", "--pull", "always", "--rm", "--name", container,
-                "--label", f"code-factory.ci-pool={instance}",
+                "--label", f"crewship.ci-pool={instance}",
                 "--cpus", str(pool["job_cpus"]),
                 "--memory", f"{pool['job_memory_gb']}g", "--memory-swap", f"{pool['job_memory_gb']}g",
                 "--pids-limit", "8192",

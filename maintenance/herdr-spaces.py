@@ -3,7 +3,7 @@
 
 Run by herdr-spaces.timer every second. For every Herdr workspace it finds
 the orchestrator home from its panes' directories and reports display-only
-workspace tokens under the source `code-factory:spaces`:
+workspace tokens under the source `crewship:spaces`:
 
   short      short name ("webapp" for "2ndmate-webapp-mate-s4")
   decisions  "⚑ N"  fresh open decisions (parked captain-hold-* keys left out):
@@ -20,7 +20,7 @@ workspace tokens under the source `code-factory:spaces`:
   machine    the same line, on the workspace labelled machine
 
 Zero counts are cleared. Disk is cached 15 minutes, and the queue count as
-above, in ~/.cache/code-factory/herdr-spaces.json. A source that fails keeps
+above, in ~/.cache/crewship/herdr-spaces.json. A source that fails keeps
 its previous value, and the script always exits 0.
 
 Herdr's mobile layout ignores sidebar rows, so the same data also goes where
@@ -41,9 +41,9 @@ import time
 import unicodedata
 from pathlib import Path
 
-SOURCE = "code-factory:spaces"
+SOURCE = "crewship:spaces"
 HERDR = os.environ.get("HERDR_BIN_PATH", "herdr")
-CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "code-factory"
+CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "crewship"
 TOKENS = ("short", "decisions", "crew", "queue", "res", "alert", "host", "machine")
 DISK_TTL = 15 * 60
 QUEUE_TTL = 60  # "ready" also moves with date gates, so recount at least once a minute
