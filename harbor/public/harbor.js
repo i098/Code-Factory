@@ -829,9 +829,15 @@ let walkPath = [], walkTo = null;
 function go(id) {
   const stand = standFor(anchors[id]);
   setMap(0); moved = true; dirty = true; jumped = null;
+  walkPath = []; walkTo = null;
   if (reduced.matches) { me.x = stand[0]; me.z = stand[1]; me.eye = floorAt(...stand) + 1.6; face(id); return; }
   const path = route(nearestNode(me.x, me.z), nearestNode(...stand));
-  walkPath = [...approach([me.x, me.z], path[0]), ...path.slice(1), ...approach(path[path.length - 1], stand)];
+  if (!path.length) return;
+  const first = approach([me.x, me.z], path[0]);
+  if (!first.length) return;
+  const last = approach(path[path.length - 1], stand);
+  if (!last.length) return;
+  walkPath = [...first, ...path.slice(1), ...last];
   walkTo = id;
 }
 function face(id) {
@@ -843,7 +849,7 @@ function face(id) {
 const nearestNode = (x, z) => NODES.reduce((b, n, i) => (Math.hypot(n[0] - x, n[1] - z) < Math.hypot(NODES[b][0] - x, NODES[b][1] - z) ? i : b), 0);
 function approach(from, to) {
   const fy = floorAt(5, 24.6);
-  const obstacles = world.filter(s => walkingSolid(s, fy) && walkBound(s.bb, 3) >= 0 &&
+  const obstacles = world.filter(s => walkingSolid(s, fy) && walkBound(s.bb, 3) >= -1 &&
     walkBound(s.bb, 0) <= 10 && walkBound(s.bb, 5) >= 21 && walkBound(s.bb, 2) <= 30);
   const clear = (a, c) => !obstacles.some(({ bb: b }) => {
     let enter = 0, exit = 1;
@@ -884,6 +890,7 @@ function route(from, to, nodes = NODES, links = LINKS) {
       if (v >= 0 && todo.has(v) && d < dist[v]) { dist[v] = d; prev[v] = u; }
     }
   }
+  if (dist[to] === Infinity) return [];
   const path = [];
   for (let v = to; v !== undefined; v = prev[v]) path.unshift(nodes[v]);
   return path;

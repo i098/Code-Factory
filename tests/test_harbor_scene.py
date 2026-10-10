@@ -90,6 +90,32 @@ function walkToSpot(id, start, dt) {
   assert.equal(jumped, id, 'auto-walk did not face its destination');
   assert.deepEqual([me.x, me.z], stand, 'auto-walk missed its destination');
 }
+function stoppedMapWalk(start, id, useMap = false) {
+  me.x = 7.1; me.z = 24.6; me.eye = floorAt(me.x, me.z) + 1.6;
+  go('how');
+  me.x = start[0]; me.z = start[1]; me.eye = floorAt(...start) + 1.6;
+  assert(!blocked(me.x, me.z, floorAt(me.x, me.z)), 'disconnected start must be walkable');
+  if (useMap) {
+    pick = ORDER.indexOf(id); setMap(1);
+    mapKey({key: 'Enter', code: 'Enter'});
+  } else go(id);
+  for (let i = 0; i < 100; i++) {
+    step(0.016);
+    assert.deepEqual([me.x, me.z], start, 'failed map walk moved the player');
+    assert(!blocked(me.x, me.z, floorAt(me.x, me.z)), 'failed map walk entered a blocked cell');
+  }
+  assert.equal(jumped, null, 'failed map walk reported arrival');
+}
+stoppedMapWalk([-0.6, 25], 'how', true);
+anchors.disconnected = {x: -0.6, y: 1.2, z: 27.5, r: 0, ship: 0};
+stoppedMapWalk([7.1, 24.6], 'disconnected');
+const savedRoadLinks = LINKS.slice();
+try {
+  LINKS.length = 0;
+  stoppedMapWalk([7.1, 24.6], 'how');
+} finally {
+  LINKS.push(...savedRoadLinks);
+}
 const corner = [6.876, 26.5], cornerTarget = [7.1, 24.6];
 assert(!blocked(...corner, floorAt(...corner)), 'corner start must be walkable');
 assert.notDeepEqual(approach(corner, cornerTarget), [cornerTarget], 'corner-crossing link was accepted');
