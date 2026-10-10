@@ -3,7 +3,7 @@
 `harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship, dock, island, and house, drawn as text.
 Each object shows an ASCII sign anchored to its surface.
 The sign uses the scene's character grid, font and colors, with clickable links.
-An ASCII mini map leads to each object.
+Selecting a destination on the ASCII mini map walks you there around obstacles; with reduced motion, you jump there instead.
 See [how.html](public/how.html) for the renderer and controls.
 The off-screen HTML list and current sign keep links available to screen readers and keyboard users.
 An uncaught error or rejected promise in `harbor.js`, or a failure to load it, hides the scene and shows the plain page.
@@ -38,7 +38,7 @@ Its basin blocks walking, and a blue `O` marks it on the mini map.
 The fountain marker leaves map labels and selected point markers clear.
 Map walks check each road and approach segment against the walking collision bounds.
 Detour corners come from every walking obstacle, including trees, hedges, the basin, the house, dock cargo, and ship fixtures.
-The page builds the corner graph before animation starts and rebuilds it only when the scene's obstacle count changes.
+The page builds the corner graph before animation starts and rebuilds it only when the world or ship object count changes.
 Ship bob and roll do not rebuild the graph during a map click.
 If a road route or any segment has no clear path, the map walk stops without moving the player.
 

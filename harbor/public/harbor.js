@@ -1479,7 +1479,7 @@ function routeEdges(nodes, links) {
   }
   return edges;
 }
-// Shortest route between two nodes (Dijkstra over the clear-link graph).
+// Shortest route between two nodes (Dijkstra over weighted edges).
 function route(from, to, nodes = NODES, edges = routeEdges(nodes, LINKS)) {
   const dist = nodes.map(() => Infinity), prev = [], todo = new Set(nodes.keys());
   dist[from] = 0;
