@@ -231,7 +231,7 @@ solid(world, [[0, -1, 0, 0, 5.4, 0], [0, 0, 1, 0, 0, 28.4], [0, 0, -1, 0, 0, 20.
     return (y - 5.4) % 0.22 < 0.035 || (z + 99 + (row % 2) * 0.25) % 0.5 < 0.035 ? "-" : null;
   } });
 // Raised details do not change the walking bounds, map footprint or feature anchor.
-const officeDetail = { solid: false, thin: true };
+const officeDetail = { spot: "office", anchor: false, solid: false, thin: true };
 for (const x of [-9, -1]) {
   for (const z of [21, 28]) beam(world, [x, 1.25, z], [x, 5.4, z], "o", officeDetail, 0.12);
   for (const y of [1.4, 3.95, 5.3]) beam(world, [x, y, 21], [x, y, 28], "o", officeDetail, 0.09);
@@ -603,7 +603,7 @@ for (const s of [...world, ...ship]) if (s.spot && !spots[s.spot]) s.spot = null
 const anchors = {};
 for (const [list, lift] of [[world, 0], [ship, 1]]) {
   for (const s of list) {
-    if (!s.spot) continue;
+    if (!s.spot || s.anchor === false) continue;
     const b = s.bb, a = (anchors[s.spot] ||= { x: 0, y: 0, z: 0, n: 0, r: 0, ship: lift });
     a.x += (b[0] + b[3]) / 2; a.y += (b[1] + b[4]) / 2; a.z += (b[2] + b[5]) / 2; a.n++;
     a.r = Math.max(a.r, (b[3] - b[0]) / 2, (b[5] - b[2]) / 2, (b[4] - b[1]) / 3);

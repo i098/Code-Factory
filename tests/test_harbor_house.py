@@ -30,3 +30,62 @@ assert.equal(blocked(-0.7, 23, 1.2), false); // side approach
 assert.equal(blocked(-0.8, 23, 1.2), true);
 """
     subprocess.run(["node", "-e", world + check], check=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="needs node")
+def test_house_trim_targets_office_without_moving_anchor():
+    source = (ROOT / "harbor/public/harbor.js").read_text()
+    scene = source[source.index("const SX =") : source.index("const MONO =")]
+    shading = source[source.index("const GRAIN =") : source.index("// ---- The sea:")]
+    put = source[source.index("function put(") : source.index("// Is neighbour")]
+    nearby = source[source.index("function nearby(") : source.index("// Cards are built")]
+    check = r"""
+const assert = require('node:assert/strict');
+for (const [key, value] of Object.entries({x: -5, y: 4.85, z: 24.5, r: 4.4})) {
+  assert.ok(Math.abs(anchors.office[key] - value) < 1e-12);
+}
+assert.equal(anchors.office.n, 2);
+assert.equal(anchors.office.ship, 0);
+const cam = {};
+let G = [], C = [], ID = [], D = [], SP = [];
+moveLights();
+Object.assign(me, {x: -5, z: 19.6, eye: 2.8});
+assert.equal(nearby(), null);
+function aim(list, origin, point) {
+  Object.assign(cam, {x: origin[0], y: origin[1], z: origin[2]});
+  const delta = point.map((v, i) => v - origin[i]);
+  const length = Math.hypot(...delta);
+  const [dx, dy, dz] = delta.map(v => v / length);
+  hitT = Infinity; hitS = null;
+  trace(list, 0, ...origin, dx, dy, dz);
+  assert.ok(hitS);
+  shadeSolid(0, 0, false, dx, dy, dz, dx, dy);
+  assert.equal(SP[0], 'office');
+  assert.ok(D[0] < RANGE.office);
+}
+aim(world, [-5, 2.8, 19.6], [-5, 3.95, 20.91]);
+assert.equal(hitS.solid, false);
+aim(world, [-5, 2.8, 19.6], [-7.9, 2.7, 21]);
+assert.equal(hitS.solid, true);
+aim(world, [0, 2.8, 24.5], [-0.91, 3.95, 24.5]);
+assert.equal(hitS.solid, false);
+for (const s of world.filter(s => s.anchor === false)) {
+  const b = s.bb;
+  const point = [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2];
+  for (const axis of [0, 1, 2]) for (const direction of [-1, 1]) {
+    const origin = [...point];
+    origin[axis] = b[axis + (direction > 0 ? 3 : 0)] + direction;
+    aim([s], origin, point);
+  }
+}
+"""
+    subprocess.run(
+        [
+            "node",
+            "-e",
+            "const spots = {office: {}}; const touchFirst = {matches: false};\n"
+            + scene + shading + put + nearby + check,
+        ],
+        check=True,
+        timeout=10,
+    )
