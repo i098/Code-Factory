@@ -32,7 +32,7 @@
 - [Herdr workspace](docs/herdr.md): a sidebar of spaces and agents, with live status for each lane
 - [omp agents](docs/omp.md): sign-in, model roles, fallbacks, and the advisor
 - [Private skills](docs/omp.md#skills): host-only skills in `skills/private/` (opt-in)
-- [Fleet guards](docs/fleet-guards.md): shared Supabase, Docker guard, dev-server reaper, storage guard (opt-in)
+- [Fleet guards](docs/fleet-guards.md): shared Supabase, Docker guard, dev-server reaper, storage guard, spawn memory floor (opt-in)
 - [Browser ladder](docs/fleet-guards.md#browser-ladder): Obscura, Chrome, and noVNC tiers for agent browsers (opt-in)
 - [Capacity and auto pruners](docs/capacity.md): host sizing per lane count, and cleanup timers
 - [Data disk](docs/configuration.md#data-disk): Docker and the npm and pip caches on a second disk (opt-in)
@@ -52,6 +52,8 @@
 - [SSH to a Mac](docs/security.md#ssh-to-a-mac): `ssh mac` from the host to your Mac (opt-in)
 - [Agent host move](docs/agent-host-move.md): move the agents to a new host with parity checks
 - [Security](docs/security.md): credential handling and remote access
+- [Configuration](docs/configuration.md): `.local/host.yml`, the `./ship.sh` commands, and what each profile installs
+- [Architecture](docs/architecture.md): why Ansible, host and container boundary, Docker worker, CI
 
 </details>
 
@@ -204,30 +206,9 @@ Then authenticate the agent CLIs on this account; for omp, follow [Sign in](docs
 
 </details>
 
-## Docs
+## More docs: [Configuration](docs/configuration.md), [Dependencies](docs/dependencies.md), [Architecture](docs/architecture.md)
 
-| Doc | What it covers |
-| --- | --- |
-| [Configuration](docs/configuration.md) | `.local/host.yml`, the `./ship.sh` commands, and what each profile installs |
-| [Dependencies](docs/dependencies.md) | Every tool, package, and image the recipe installs, and what the host must already have |
-| [Fleet guards](docs/fleet-guards.md) | Shared Supabase, Docker guard, dev-server reaper, storage guard, spawn memory floor, browser ladder |
-| [Herdr sidebar](docs/herdr.md) | The Spaces and Agents sidebar layouts, what each line and token shows, the reporter timer and omp extension that feed them, and how to override them or turn parts off |
-| [herdr-patch](herdr-patch/README.md) | Herdr over mosh: no opaque background fill, and real images with `herdr-patch <user>@<host>` |
-| [omp configuration](docs/omp.md) | Signing in, model roles, fallbacks, the advisor, and updating an existing host |
-| [Chat clients](docs/chat.md) | The Concord (Discord) and slk (Slack) terminal clients: install, config, and sign-in |
-| [GitHub board](docs/github-board.md) | Optional: one issue per Firstmate work item, a Project board with its status, progress notes as issue comments, and a shared message board for agents |
-| [Crew board](docs/board.md) | Optional: a host-local, in-memory message board that agents use to send messages to each other, run as a user service |
-| [iMessage bridge](docs/imessage.md) | Optional: text Firstmate over a Photon Spectrum iMessage line, with a front desk that steps in when Firstmate stays quiet, and send, reply, typing, tapback, and location commands |
-| [Capacity and pruners](docs/capacity.md) | Host sizing per lane count and every auto pruner |
-| [CI pool](docs/ci-pool.md) | Self-hosted GitHub Actions slots: one job per fresh container, sized from half of the host's CPU and memory |
-| [Architecture](docs/architecture.md) | Why Ansible, host and container boundary, Docker worker, CI |
-| [Migration and recovery](docs/recovery.md) | New-device sequence, desktop access, troubleshooting, upgrades |
-| [Security](docs/security.md) | What is never exported, how to handle credentials, and remote access, including SSH between the host and a Mac and prompt-free Dia remote debugging on the Mac |
-| [Shared credentials](docs/secrets.md) | `super.env` in Cloudflare Secrets Store: push, fetch on a new host, revoke |
-| [Google Workspace CLI](docs/google-workspace.md) | `gws`: one OAuth client in testing mode, sign-in for several Google accounts, and carrying each login to a headless host |
-| [Agent host move](docs/agent-host-move.md) | Moving the agents to a new host: what to copy by hand, parity checks, cutover |
-
-Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Support: [SUPPORT.md](SUPPORT.md). Security: [SECURITY.md](SECURITY.md). Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). License: [FSL-1.1-Apache-2.0](LICENSE).
+Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Support: [SUPPORT.md](SUPPORT.md). Bug report: [form](../../issues/new?template=bug_report.yml). Feature request: [form](../../issues/new?template=feature_request.yml). Pull request: [template](.github/PULL_REQUEST_TEMPLATE.md). Security: [SECURITY.md](SECURITY.md). Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). License: [FSL-1.1-Apache-2.0](LICENSE).
 
 ## Built with
 
