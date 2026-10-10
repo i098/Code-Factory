@@ -123,13 +123,13 @@ FROM base AS worker
 ARG CREWSHIP_USER=coder
 ARG CREWSHIP_HOME=/home/coder
 ARG CREWSHIP_WORKSPACE=/home/coder/Dev
-ARG CREWSHIP_CONFIG=containers/crewship.container.yml
+ARG CREWSHIP_CONFIG_FILE=containers/crewship.container.yml
 
 COPY --chown=${CREWSHIP_USER}:${CREWSHIP_USER} . /opt/code-factory
 
 RUN set -eux; \
     printf 'role=worker\nsource=/opt/code-factory\nuser=%s\nhome=%s\nworkspace=%s\nconfig=%s\nsystemd=absent\ntailscale=absent\ndesktop=absent\n' \
-        "${CREWSHIP_USER}" "${CREWSHIP_HOME}" "${CREWSHIP_WORKSPACE}" "${CREWSHIP_CONFIG}" \
+        "${CREWSHIP_USER}" "${CREWSHIP_HOME}" "${CREWSHIP_WORKSPACE}" "${CREWSHIP_CONFIG_FILE}" \
         > /etc/code-factory-image; \
     chmod 0444 /etc/code-factory-image
 
@@ -146,12 +146,12 @@ RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
     set -eux; ./onboard.sh
 
 # Schema validation through the repository's own validator.
-RUN set -eux; ./ship.sh inspect --config "${CREWSHIP_CONFIG}"
+RUN set -eux; ./ship.sh inspect --config "${CREWSHIP_CONFIG_FILE}"
 
 # A valid document is not automatically the right document: this guard parses it
 # and compares it with the live image account, then refuses any capability an
 # ordinary container cannot host.
-RUN set -eux; uv run --project . --locked python containers/assert-image-config.py "${CREWSHIP_CONFIG}"
+RUN set -eux; uv run --project . --locked python containers/assert-image-config.py "${CREWSHIP_CONFIG_FILE}"
 
 # The real convergence run. `launch` installs the latest, checksum-verified
 # agent and development toolchain (the three omp marketplace plugins are the one
@@ -162,10 +162,10 @@ RUN set -eux; uv run --project . --locked python containers/assert-image-config.
 # exposed to the lookup steps only (onboard.sh and this one), never as an ARG,
 # ENV, layer file or history entry; without it the lookup runs unauthenticated.
 RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
-    set -eux; ./ship.sh launch --config "${CREWSHIP_CONFIG}"
+    set -eux; ./ship.sh launch --config "${CREWSHIP_CONFIG_FILE}"
 
 ENV CREWSHIP_IMAGE=worker \
-    CREWSHIP_CONFIG=/opt/code-factory/${CREWSHIP_CONFIG}
+    CREWSHIP_CONFIG=/opt/code-factory/${CREWSHIP_CONFIG_FILE}
 
 LABEL org.opencontainers.image.title="crewship-worker" \
       org.opencontainers.image.description="Isolated non-root Crewship worker; no systemd, Tailscale or desktop." \

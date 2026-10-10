@@ -27,7 +27,7 @@ def test_valid_configuration_is_accepted_by_real_schema(configuration):
 
 
 def test_old_host_config_is_rewritten_once_with_private_backup(configuration, tmp_path, capsys):
-    old_key, new_key = next(iter(ship.CONFIG_KEY_RENAMES.items()))
+    old_key, new_key = ship.OLD_ROOT, ship.NEW_ROOT
     original = "# Host settings\n" + yaml.safe_dump(
         {"schema_version": 1, old_key: configuration[new_key]}, sort_keys=False
     )
@@ -47,9 +47,9 @@ def test_old_host_config_is_rewritten_once_with_private_backup(configuration, tm
 
 
 def test_config_rewrite_preserves_unknown_keys_and_values(tmp_path):
-    old_key, new_key = next(iter(ship.CONFIG_KEY_RENAMES.items()))
+    old_key, new_key = ship.OLD_ROOT, ship.NEW_ROOT
     document = {
-        old_key: {"custom": {"key": "keep"}, "workspace": "/srv/code-factory"},
+        old_key: {"custom": {"key": "keep"}, "workspace": "/srv/custom"},
         old_key + "_future": {"key": 7},
         "unknown": [False, "keep"],
     }
@@ -62,7 +62,7 @@ def test_config_rewrite_preserves_unknown_keys_and_values(tmp_path):
 
 @pytest.mark.parametrize("obstacle", ["conflicting_keys", "existing_backup"])
 def test_config_rewrite_refuses_to_discard_config_or_backup(configuration, tmp_path, obstacle):
-    old_key, new_key = next(iter(ship.CONFIG_KEY_RENAMES.items()))
+    old_key, new_key = ship.OLD_ROOT, ship.NEW_ROOT
     document = {"schema_version": 1, old_key: configuration[new_key]}
     if obstacle == "conflicting_keys":
         document[new_key] = {"custom": "keep"}
@@ -80,7 +80,7 @@ def test_config_rewrite_refuses_to_discard_config_or_backup(configuration, tmp_p
 
 
 def test_failed_rewrite_keeps_original_and_backup(configuration, tmp_path, monkeypatch):
-    old_key, new_key = next(iter(ship.CONFIG_KEY_RENAMES.items()))
+    old_key, new_key = ship.OLD_ROOT, ship.NEW_ROOT
     host = tmp_path / "host.yml"
     host.write_text(yaml.safe_dump({"schema_version": 1, old_key: configuration[new_key]}))
     original = host.read_bytes()

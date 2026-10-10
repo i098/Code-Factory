@@ -18,7 +18,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 STALE_FIRSTMATE_URL = "https://github.com/i098/firstmate.git"
 LEGACY_BROWSER_KEYS = ("obscura_version", "obscura_sha256")
-CONFIG_KEY_RENAMES = {"factory": "crewship"}
+OLD_ROOT, NEW_ROOT = "factory", "crewship"
 
 
 def validate_document(document, schema_name):
@@ -89,15 +89,12 @@ def validate_config(document):
 
 
 def migrate_config(path, document):
-    """Rewrite known old config keys; preserve all other keys and values."""
-    if not isinstance(document, dict):
+    """Rewrite the old config root key; preserve all other keys and values."""
+    if not isinstance(document, dict) or OLD_ROOT not in document:
         return document
-    renamed = {old: new for old, new in CONFIG_KEY_RENAMES.items() if old in document}
-    if not renamed:
-        return document
-    if any(new in document for new in renamed.values()):
+    if NEW_ROOT in document:
         raise ValueError("host config contains both old and new keys; resolve them before rewriting")
-    document = {renamed.get(key, key): value for key, value in document.items()}
+    document = {NEW_ROOT if key == OLD_ROOT else key: value for key, value in document.items()}
     backup = path.with_name(path.name + ".bak")
     # Exclusive creation keeps the first backup and refuses an ambiguous retry.
     try:

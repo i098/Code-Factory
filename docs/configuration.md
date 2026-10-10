@@ -10,7 +10,7 @@
 | `./ship.sh dock` | | Copies `config/default.yml` to `.local/host.yml` with your user, home, and `~/Dev` workspace filled in. Never overwrites an existing file. Options: `--user`, `--home`, `--container`, and `--board`, which turns on the [crew board](board.md). |
 | `./ship.sh inspect` | | Does the one-time config rewrite below if needed, then checks the config against `schemas/crewship.schema.json` and the cross-field rules below. |
 | `./ship.sh chart` | | Runs the Ansible playbook in check mode. Reports what would change; mutates nothing except for the one-time config rewrite below. |
-| `./ship.sh launch` | | Runs the playbook for real, after the one-time config rewrite below. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, the first successful interactive apply with omp signed in then opens the new-host questions (below). |
+| `./ship.sh launch` | | Does the one-time config rewrite below if needed, then runs the playbook for real. Asks for the sudo password when passwordless sudo is not available. With the `firstmate` profile on, the first successful interactive apply with omp signed in then opens the new-host questions (below). |
 | `./ship.sh survey` | | Checks that each expected tool runs and reports `gh` authentication. Changes nothing except for the one-time config rewrite below. |
 | `scripts/ship.py` | | The Python program behind `ship.sh`. |
 | `scripts/provisions.py` | `scripts/install_tools.py` | Installs the public tools into the user-owned Crewship prefix. |
