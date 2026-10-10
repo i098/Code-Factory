@@ -12,6 +12,7 @@ export async function checkRedraw(page, origin) {
   const intercept = request => {
     if (request.url() !== `${origin}/harbor.js`) return request.continue();
     return request.respond({ contentType: 'text/javascript', body: source + `
+window.checkRedrawReady = () => introProgress === 1 && cols > 0 && DG[0] !== undefined;
 window.checkRedraw = () => {
   const wasVisible = visible;
   visible = false;
@@ -46,7 +47,7 @@ window.checkRedraw = () => {
   page.on('request', intercept);
   try {
     await page.goto(origin, { waitUntil: 'load' });
-    await page.waitForFunction(() => window.checkRedraw && document.fonts.status === 'loaded');
+    await page.waitForFunction(() => window.checkRedrawReady?.() && document.fonts.status === 'loaded');
     const differences = await page.evaluate(() => window.checkRedraw());
     assert.deepEqual(differences, new Array(12).fill(0), 'incremental pixels differ from full-row pixels');
     return { comparisons: differences.length, differentChannels: 0 };

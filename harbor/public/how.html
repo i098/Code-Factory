@@ -35,9 +35,11 @@
   Fountain water uses animated texture glyphs instead of the density ramp.
   An edge glyph (<code>| - / \ _</code>) is drawn wherever one surface meets a farther one.</li>
   <li id="frame-loop"><b>Frame loop.</b> <code>requestAnimationFrame</code> moves you, the sea and the ship and redraws the grid on a canvas.
-  A ray tests only the solids whose screen box reaches its tile of cells, nearest first, and stops when no solid left can be nearer than its hit.
-  Rows with changed cells are drawn again from their full text-run positions.
+  A ray tests solids whose screen box reaches its tile of cells, nearest first.
+  It stops when no remaining solid can be nearer than its hit.
+  Devices without <code>(pointer: coarse)</code> draw rows with changed cells again from their full text-run positions.
   Touch devices redraw only the changed span and its neighbouring cells.
+  The mini map draws again each frame, even when its cells do not change.
   Devices with <code>(pointer: coarse)</code> draw one glyph per <code>fillText</code> call to limit WebKit's text cache.
   Their canvas uses at most 2 device pixels per CSS pixel.
   Other devices draw one run of one colour per call.
