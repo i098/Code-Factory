@@ -14,7 +14,8 @@ With the `agents` profile on, `./ship.sh launch`:
    The installed Bun parser preserves YAML 1.2 scalar types and reads legacy JSONC comments and trailing commas.
    When an existing model file needs parsing, missing Bun makes check mode report the installation prerequisite and skip the dependent merge.
    Normal apply fails if that parser is unavailable.
-   It writes JSON, a YAML 1.2 subset, to `models.yml` to preserve scalar types and leaves the other source files unchanged.
+   When the merge changes the configuration or creates `models.yml`, it writes JSON, a YAML 1.2 subset, to preserve scalar types.
+   It leaves the other source files unchanged.
    See [Default config](../README.md#default-config) for the Codex context windows.
    omp limits the effective window to the provider's supported input window.
    The config seed enables `extendedContext: true`; existing hosts must enable it in their own config.
@@ -42,7 +43,8 @@ No credentials are installed. You sign in on each host.
    omp
    ```
 
-2. Sign in to each provider named in `modelRoles` in `config/omp.yml`. For Anthropic:
+2. Sign in to each provider you use in `modelRoles` or the [crewmate and gate tiers](../README.md#default-config).
+   For Anthropic:
 
    ```text
    /login anthropic
