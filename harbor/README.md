@@ -40,7 +40,8 @@ Map walks check each road and approach segment against the walking collision bou
 Detour corners come from every walking obstacle, including trees, hedges, the basin, the house, dock cargo, and ship fixtures.
 The page builds the corner graph once before animation starts.
 Ship bob and roll do not rebuild the graph during a map click.
-If no free viewing spot or clear route exists, the map walk stops without moving the player.
+If no free viewing spot exists, the map selection stops without moving the player.
+Without reduced motion, a missing clear route also stops the map walk without moving the player.
 
 It is plain HTML, CSS and JavaScript in `public/`, with no dependencies. Nothing here is part of a host or an image: `.dockerignore` excludes `harbor/`, the playbook never copies it, and `tests/test_harbor_isolation.py` checks both.
 
