@@ -17,6 +17,18 @@ python3 -m http.server --directory harbor/dist 8000
 
 Then open <http://localhost:8000>.
 
+## WebKit check
+
+CI loads the built page in Playwright WebKit as an iPhone, with `webkit-check.mjs`. The check fails on a crash, an uncaught error, a fall back to the plain page, or a `fillText` call that draws more than one glyph. WebKit keeps every distinct string that a canvas draws, so on touch devices the scene draws one glyph at a time. To run the check locally:
+
+```bash
+python3 harbor/build.py
+cd harbor
+npm install --no-save --no-package-lock --prefix . playwright
+npx playwright install --with-deps webkit
+node webkit-check.mjs
+```
+
 ## Deploy
 
 Cloudflare Workers serves `dist/` as static assets; `wrangler.jsonc` is the configuration. The [harbor workflow](../.github/workflows/harbor.yml) builds and deploys on every push to `main`, on each published release, and on a manual run. Each run is a GitHub deployment in the `crewship.si` environment, which accepts only `main` and `v*` tags and holds the deploy token as its `CLOUDFLARE_API_TOKEN` secret and the account id as its `CLOUDFLARE_ACCOUNT_ID` variable.
