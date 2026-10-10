@@ -1,7 +1,4 @@
-// Loads the built page (dist/) in Playwright WebKit as an iPhone and fails on a crash, an uncaught
-// error, a fallback to the plain page, or a multi-glyph fillText (WebKit keeps every distinct string
-// it draws, which grew iOS Safari tabs until they were killed), an exterior grid change after the first draw,
-// a bright first intro frame, or a frozen scene during the intro. Run harbor/build.py first.
+// Runs the WebKit browser checks documented in README.md. Run harbor/build.py first.
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { webkit, devices } from "playwright";
