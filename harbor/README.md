@@ -37,7 +37,8 @@ Then open <http://localhost:8000>.
 ## WebKit check
 
 CI loads the built page in Playwright WebKit as an iPhone, with `webkit-check.mjs`.
-The check fails on a crash, an uncaught error, a console error, a fallback to the plain page, or a multi-glyph `fillText` call.
+The check also fails if the first 30 slow frames change the grid, cell size, field of view, or canvas layout.
+It still checks crashes, uncaught errors, console errors, the plain-page fallback, and multi-glyph `fillText` calls.
 See [how.html](public/how.html) for the rendering limits on touch devices.
 To run the check locally:
 

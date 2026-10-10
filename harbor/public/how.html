@@ -31,7 +31,9 @@
   Devices with <code>(pointer: coarse)</code> draw one glyph per <code>fillText</code> call to limit WebKit's text cache.
   Their canvas uses at most 2 device pixels per CSS pixel.
   Other devices draw one run of one colour per call.
-  The grid adapts to the frame time: slow devices drop the shadow rays, then get larger glyphs (fewer cells); fast ones get a finer grid.
+  The font is ready before the first grid measurement.
+  For a fixed viewport, the glyph size stays fixed; slow frames can disable shadows without changing the view.
+  Resizes wait until the viewport settles, then update the canvas immediately before the next draw.
   With reduced motion the scene stands still and redraws only when you move.</li>
   <li><b>Controls.</b> WASD or arrows walk and turn, R and F look up and down, the mouse looks around, Enter opens what you point at. On a phone the pad walks and a drag looks. The label floats beside what you point at, with a leader line in text.</li>
   <li><b>Mini map.</b> M picks a point on the text map in the corner, M again fills the screen with it; arrows choose, Enter jumps there. On a phone, tap a point.</li>

@@ -51,7 +51,7 @@ uv run ansible-playbook -i ansible/inventory.yml ansible/site.yml --syntax-check
 2. Register where it installs: `crewship_core_tools` in `group_vars/all.yml` for every host, `AGENT_TOOLS` in `scripts/provisions.py` for the `agents` profile's native tools (npm tools in `NPM_LATEST` need no step), or `crewship_installer_also` in `group_vars/all.yml` for a source Ansible installs itself.
 3. If it needs a systemd unit, add a `.j2` template in `ansible/templates/` and wire it in the relevant task file.
 4. If it needs environment variables, add them to `group_vars/all.yml` (not to shell rc files).
-5. Update `docs/architecture.md` if the tool changes the host's architecture.
+5. Update `docs/architecture.md` diagrams and `docs/agents/architecture.md` details if the tool changes the host's architecture.
 6. Add or update a test in `tests/`.
 
 ## Adding a new fleet guard
