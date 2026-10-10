@@ -2,6 +2,14 @@
 
 `harbor/` is the website for [crewship.si](https://crewship.si): a full-screen, first-person walk around the ship at the dock, drawn as text in the browser every frame. Each object opens a floating label for one Crewship feature, an ASCII mini map jumps to any of them, and [how.html](public/how.html) explains how it is built. The page also lists every feature and link in plain HTML for screen readers and for visitors without JavaScript.
 An uncaught error hides the scene and shows the plain page.
+JavaScript hides the plain page before the first paint; visitors without JavaScript still see it.
+The scene starts with a 1.2-second glyph-noise sweep that fades in from black without moving the camera or resizing the grid.
+Any key, click, touch, or scroll skips the animation.
+Reduced-motion visitors get the scene immediately.
+Waves, the fountain, and boats keep moving during the intro; the renderer casts only cells that the sweep exposes.
+The intro reuses desktop colour runs and draws one glyph per call on touch devices, without another canvas or a cached scene.
+The intro reuses one 8x8 glyph tile.
+One canvas fill applies the dark fade after each scene frame.
 
 The island has staggered plaza paving, scattered stones and grass tufts, varied tree canopies, textured bark, and foam along the shore.
 
@@ -37,6 +45,7 @@ Then open <http://localhost:8000>.
 CI loads the built page in Playwright WebKit as an iPhone, with `webkit-check.mjs`.
 The check also fails if the first 30 slow frames change the grid, cell size, field of view, or canvas layout.
 It still checks crashes, uncaught errors, console errors, the plain-page fallback, and multi-glyph `fillText` calls.
+It also checks that the first intro frame is black and that the scene keeps moving during the intro.
 See [how.html](public/how.html) for the rendering limits on touch devices.
 To run the check locally:
 
