@@ -58,7 +58,7 @@ Never upload a raw failed HTTP request to a public issue or this repository. Suc
 
 Run `./ship.sh chart` before applying; every apply upgrades each tool to its latest release, and a herdr upgrade restarts `herdr.service`. An unmanaged executable at a managed command path is a refusal, not permission to overwrite it. Firstmate refuses dirty or independently advanced checkouts. Preserve that work and decide whether to update the configuration or move to a separate clean checkout.
 
-Existing OMP settings are first-write-only: provisioning will not replace provider configuration or credentials on a reused account. Review and merge the exported safe preferences manually if deliberately updating an established account.
+See [Updating an existing host](omp.md#updating-an-existing-host) for omp preferences and [omp setup](omp.md#what-the-recipe-sets-up) for model override merging.
 
 A second unchanged provisioning pass should report `changed=0`. Runtime application activity, deliberate self-updates, and changed package indexes can create real drift; investigate it rather than weakening the check or forcing a reset.
 
