@@ -101,9 +101,8 @@ def test_default_config_lists_the_current_defaults():
     ]
     lines = section("Default config")
     for line in [
-        f"- Agent harness: [omp](docs/omp.md), default model `{roles['default']}`, "
+        f"- Agent harness: [omp](docs/omp.md), home model `{roles['default']}`, "
         f"advisor {'on' if omp['advisor']['enabled'] else 'off'}",
-        "- Models: " + ticks(sorted({model.split(":")[0] for model in roles.values()})),
         "- omp plugins: " + ticks(provisions.OMP_PLUGINS),
         "- Profiles on: " + ticks(name for name, on in profiles.items() if on),
         "- Profiles off (opt-in): " + ticks(name for name, on in profiles.items() if not on),
@@ -131,3 +130,29 @@ def test_default_config_lists_the_current_defaults():
     }
     assert set(names) == public_rules
     assert len(names) == len(public_rules)
+
+
+def test_default_config_models_match_task_tiers():
+    dispatch = json.loads((ROOT / "config/crew-dispatch.json").read_text())
+
+    def names(choices):
+        result = []
+        for choice in choices:
+            family, version = choice["model"].split("/")[1].removeprefix("claude-").split("-", 1)
+            if family == "gpt":
+                version, variant = version.split("-", 1)
+                result.append(f"GPT-{version} {variant.title()}")
+            else:
+                result.append(f"{family.title()} {version.replace('-', '.')}")
+        return " or ".join(result)
+
+    tiers = {}
+    for tier, rule in zip(("small", "normal", "hard"), dispatch["rules"], strict=True):
+        tiers[tier] = names(rule["use"])
+    assert dispatch["default"] == dispatch["rules"][1]["use"]
+    lines = section("Default config")
+    assert (
+        f"- Models chosen per task: small: {tiers['small']}; "
+        f"normal (default): {tiers['normal']}; hard only: {tiers['hard']}."
+    ) in lines
+    assert "- The spawning agent picks the thinking level." in lines

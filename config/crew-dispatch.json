@@ -1,9 +1,60 @@
 {
-  "_comment": "Captain order 2026-09-24: every crewmate spawn (ship and scout) defaults to opus 5.5 at high effort; its omp advisor (fable 5.1 at low thinking, interrupting at most once per 10 turns) comes from config/omp-crew-overlay.yml. Supersedes the 2026-09-23 planner-on-fable split. NO ROUTERS: omp talks to Anthropic directly; account rotation is native to omp.",
-  "default": {
-    "harness": "omp",
-    "model": "anthropic/claude-opus-5-5",
-    "effort": "high",
-    "provider": "anthropic"
-  }
+  "_comment": "Select models by task difficulty; the spawning home chooses the effort, and omp connects directly to each provider.",
+  "rules": [
+    {
+      "when": "Mechanical or small, well-specified work: typo and copy fixes, renames, docs-only edits, config or version bumps, moving files, formatting, data collection, simple scripted checks, or a narrow one-file change with an obvious fix.",
+      "use": [
+        {
+          "harness": "omp",
+          "model": "anthropic/claude-haiku-5-5",
+          "provider": "claude"
+        },
+        {
+          "harness": "omp",
+          "model": "openai-codex/gpt-6-luna",
+          "provider": "codex"
+        }
+      ],
+      "why": "Cheapest models; usually low thinking."
+    },
+    {
+      "when": "Ordinary engineering: a normal feature, bug fix with a known or quickly findable cause, UI change, tests, refactors in one area, PR follow-ups and review fixes, release chores, or a routine investigation or scout report.",
+      "use": [
+        {
+          "harness": "omp",
+          "model": "anthropic/claude-sonnet-5-5",
+          "provider": "claude"
+        },
+        {
+          "harness": "omp",
+          "model": "openai-codex/gpt-6.1-sol",
+          "provider": "codex"
+        }
+      ],
+      "why": "The everyday tier; usually medium thinking, high when the change spans several files."
+    },
+    {
+      "when": "Genuinely hard work only: architecture or design across many components, security- or money-sensitive code, concurrency, data migrations, client production paths with a large blast radius, a bug whose cause is unknown after a first look, or a task a cheaper model already failed.",
+      "use": [
+        {
+          "harness": "omp",
+          "model": "anthropic/claude-opus-5-5",
+          "provider": "claude"
+        }
+      ],
+      "why": "Opus 5.5 is reserved for hard tasks; high or xhigh thinking."
+    }
+  ],
+  "default": [
+    {
+      "harness": "omp",
+      "model": "anthropic/claude-sonnet-5-5",
+      "provider": "claude"
+    },
+    {
+      "harness": "omp",
+      "model": "openai-codex/gpt-6.1-sol",
+      "provider": "codex"
+    }
+  ]
 }
